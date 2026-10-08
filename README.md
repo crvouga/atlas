@@ -19,6 +19,13 @@ The spec is the source of truth for the product's behaviour, not for the test co
 what a person sees, an event says what happens in business language ("Adds a todo", "Sync fails"),
 and the implementation says how a driver makes each event happen and recognises each state.
 
+> [!IMPORTANT]
+> **Dogfooding phase:** Atlas is not published to npm yet. Projects currently consume this
+> repository as a pinned Git submodule and a pnpm workspace package, then contribute reusable fixes
+> back from those integrations. Multiple projects and agents may update Atlas concurrently. If you
+> are integrating Atlas—or are an agent working inside a consumer project's submodule—read the
+> [dogfooding and contribution workflow](docs/dogfooding.md) before making changes.
+
 ## Packages
 
 | Package | What it is |
