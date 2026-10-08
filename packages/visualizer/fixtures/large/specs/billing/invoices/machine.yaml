@@ -1,0 +1,830 @@
+# Invoices and payments: generated fixture chart
+id: Invoices and payments
+initial: Handling the monthly invoice
+meta:
+  description: Invoices, receipts, refunds and credits.
+  snapshot: invoices-and-payments
+  events: []
+  confidence: confirmed
+  source:
+    - src/screens/invoices-and-payments
+states:
+  Handling the monthly invoice:
+    id: Handling the monthly invoice
+    initial: Reviewing the monthly invoice
+    meta:
+      description: Everything about the monthly invoice, from review to approval.
+      snapshot: handling-the-monthly-invoice
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-monthly-invoice.tsx
+      owner: Billing team
+    states:
+      Reviewing the monthly invoice:
+        id: Reviewing the monthly invoice
+        meta:
+          description: The user checks the monthly invoice before sending it.
+          snapshot: reviewing-the-monthly-invoice
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-monthly-invoice.tsx
+          gherkin:
+            - features/billing/invoices/monthly-invoice.feature
+        on:
+          Taps edit on the monthly invoice:
+            target: "#Editing the monthly invoice"
+          Submits the monthly invoice:
+            target: "#Waiting for the monthly invoice to be approved"
+      Editing the monthly invoice:
+        id: Editing the monthly invoice
+        initial: Editing the monthly invoice details
+        meta:
+          description: The user changes the monthly invoice, with an optional file.
+          snapshot: editing-the-monthly-invoice
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-monthly-invoice.tsx
+        states:
+          Editing the monthly invoice details:
+            id: Editing the monthly invoice details
+            meta:
+              description: A form with the monthly invoice fields.
+              snapshot: editing-the-monthly-invoice-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-monthly-invoice-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the monthly invoice"
+          Uploading a file for the monthly invoice:
+            id: Uploading a file for the monthly invoice
+            meta:
+              description: A file picker for a document about the monthly invoice.
+              snapshot: uploading-a-file-for-the-monthly-invoice
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-monthly-invoice.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the monthly invoice details"
+        on:
+          Saves the monthly invoice:
+            target: "#Reviewing the monthly invoice"
+          Cancels the changes to the monthly invoice:
+            target: "#Reviewing the monthly invoice"
+          Saving the monthly invoice fails:
+            target: "#Told the monthly invoice could not be saved"
+      Told the monthly invoice could not be saved:
+        id: Told the monthly invoice could not be saved
+        meta:
+          description: A message says the monthly invoice could not be saved, with "Try again".
+          snapshot: told-the-monthly-invoice-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-monthly-invoice-could-not-be-saved.tsx
+        on:
+          Tries saving the monthly invoice again:
+            target: "#Editing the monthly invoice"
+      Waiting for the monthly invoice to be approved:
+        id: Waiting for the monthly invoice to be approved
+        meta:
+          description: A card says the monthly invoice is being checked.
+          snapshot: waiting-for-the-monthly-invoice-to-be-approved
+          events:
+            - Monthly invoice submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-monthly-invoice-to-be-approved.tsx
+          tier: critical
+        on:
+          Billing service approves the monthly invoice:
+            target: "#Told the monthly invoice was approved"
+          Billing service rejects the monthly invoice:
+            target: "#Told the monthly invoice was rejected"
+          Approval of the monthly invoice takes longer than a day:
+            target: "#Told the monthly invoice is still under review"
+      Told the monthly invoice is still under review:
+        id: Told the monthly invoice is still under review
+        meta:
+          description: A card says the monthly invoice is still being checked.
+          snapshot: told-the-monthly-invoice-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-monthly-invoice-is-still-under-review.tsx
+        on:
+          Checks the monthly invoice again:
+            target: "#Waiting for the monthly invoice to be approved"
+      Told the monthly invoice was rejected:
+        id: Told the monthly invoice was rejected
+        meta:
+          description: A message explains why the monthly invoice was not accepted.
+          snapshot: told-the-monthly-invoice-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-monthly-invoice-was-rejected.tsx
+        on:
+          Starts the monthly invoice again:
+            target: "#Reviewing the monthly invoice"
+      Told the monthly invoice was approved:
+        id: Told the monthly invoice was approved
+        meta:
+          description: A message confirms the monthly invoice is approved.
+          snapshot: told-the-monthly-invoice-was-approved
+          events:
+            - Monthly invoice approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-monthly-invoice-was-approved.tsx
+        on:
+          Continues to the paid invoice:
+            target: "#Handling the paid invoice"
+  Handling the paid invoice:
+    id: Handling the paid invoice
+    initial: Reviewing the paid invoice
+    meta:
+      description: Everything about the paid invoice, from review to approval.
+      snapshot: handling-the-paid-invoice
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-paid-invoice.tsx
+      owner: Billing team
+    states:
+      Reviewing the paid invoice:
+        id: Reviewing the paid invoice
+        meta:
+          description: The user checks the paid invoice before sending it.
+          snapshot: reviewing-the-paid-invoice
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-paid-invoice.tsx
+          gherkin:
+            - features/billing/invoices/paid-invoice.feature
+        on:
+          Taps edit on the paid invoice:
+            target: "#Editing the paid invoice"
+          Submits the paid invoice:
+            target: "#Waiting for the paid invoice to be approved"
+      Editing the paid invoice:
+        id: Editing the paid invoice
+        meta:
+          description: A form to change the paid invoice.
+          snapshot: editing-the-paid-invoice
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-paid-invoice.tsx
+        on:
+          Saves the paid invoice:
+            target: "#Reviewing the paid invoice"
+          Cancels the changes to the paid invoice:
+            target: "#Reviewing the paid invoice"
+          Saving the paid invoice fails:
+            target: "#Told the paid invoice could not be saved"
+      Told the paid invoice could not be saved:
+        id: Told the paid invoice could not be saved
+        meta:
+          description: A message says the paid invoice could not be saved, with "Try again".
+          snapshot: told-the-paid-invoice-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-paid-invoice-could-not-be-saved.tsx
+        on:
+          Tries saving the paid invoice again:
+            target: "#Editing the paid invoice"
+      Waiting for the paid invoice to be approved:
+        id: Waiting for the paid invoice to be approved
+        meta:
+          description: A card says the paid invoice is being checked.
+          snapshot: waiting-for-the-paid-invoice-to-be-approved
+          events:
+            - Paid invoice submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-paid-invoice-to-be-approved.tsx
+          tier: critical
+        on:
+          Billing service approves the paid invoice:
+            target: "#Told the paid invoice was approved"
+          Billing service rejects the paid invoice:
+            target: "#Told the paid invoice was rejected"
+          Approval of the paid invoice takes longer than a day:
+            target: "#Told the paid invoice is still under review"
+      Told the paid invoice is still under review:
+        id: Told the paid invoice is still under review
+        meta:
+          description: A card says the paid invoice is still being checked.
+          snapshot: told-the-paid-invoice-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-paid-invoice-is-still-under-review.tsx
+        on:
+          Checks the paid invoice again:
+            target: "#Waiting for the paid invoice to be approved"
+      Told the paid invoice was rejected:
+        id: Told the paid invoice was rejected
+        meta:
+          description: A message explains why the paid invoice was not accepted.
+          snapshot: told-the-paid-invoice-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-paid-invoice-was-rejected.tsx
+        on:
+          Starts the paid invoice again:
+            target: "#Reviewing the paid invoice"
+      Told the paid invoice was approved:
+        id: Told the paid invoice was approved
+        meta:
+          description: A message confirms the paid invoice is approved.
+          snapshot: told-the-paid-invoice-was-approved
+          events:
+            - Paid invoice approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-paid-invoice-was-approved.tsx
+        on:
+          Continues to the tax document:
+            target: "#Handling the tax document"
+  Handling the tax document:
+    id: Handling the tax document
+    initial: Reviewing the tax document
+    meta:
+      description: Everything about the tax document, from review to approval.
+      snapshot: handling-the-tax-document
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-tax-document.tsx
+      owner: Billing team
+    states:
+      Reviewing the tax document:
+        id: Reviewing the tax document
+        meta:
+          description: The user checks the tax document before sending it.
+          snapshot: reviewing-the-tax-document
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-tax-document.tsx
+          gherkin:
+            - features/billing/invoices/tax-document.feature
+        on:
+          Taps edit on the tax document:
+            target: "#Editing the tax document"
+          Submits the tax document:
+            target: "#Waiting for the tax document to be approved"
+      Editing the tax document:
+        id: Editing the tax document
+        meta:
+          description: A form to change the tax document.
+          snapshot: editing-the-tax-document
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-tax-document.tsx
+        on:
+          Saves the tax document:
+            target: "#Reviewing the tax document"
+          Cancels the changes to the tax document:
+            target: "#Reviewing the tax document"
+          Saving the tax document fails:
+            target: "#Told the tax document could not be saved"
+      Told the tax document could not be saved:
+        id: Told the tax document could not be saved
+        meta:
+          description: A message says the tax document could not be saved, with "Try again".
+          snapshot: told-the-tax-document-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-tax-document-could-not-be-saved.tsx
+        on:
+          Tries saving the tax document again:
+            target: "#Editing the tax document"
+      Waiting for the tax document to be approved:
+        id: Waiting for the tax document to be approved
+        meta:
+          description: A card says the tax document is being checked.
+          snapshot: waiting-for-the-tax-document-to-be-approved
+          events:
+            - Tax document submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-tax-document-to-be-approved.tsx
+          tier: critical
+        on:
+          Billing service approves the tax document:
+            target: "#Told the tax document was approved"
+          Billing service rejects the tax document:
+            target: "#Told the tax document was rejected"
+          Approval of the tax document takes longer than a day:
+            target: "#Told the tax document is still under review"
+      Told the tax document is still under review:
+        id: Told the tax document is still under review
+        meta:
+          description: A card says the tax document is still being checked.
+          snapshot: told-the-tax-document-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-tax-document-is-still-under-review.tsx
+        on:
+          Checks the tax document again:
+            target: "#Waiting for the tax document to be approved"
+      Told the tax document was rejected:
+        id: Told the tax document was rejected
+        meta:
+          description: A message explains why the tax document was not accepted.
+          snapshot: told-the-tax-document-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-tax-document-was-rejected.tsx
+        on:
+          Starts the tax document again:
+            target: "#Reviewing the tax document"
+      Told the tax document was approved:
+        id: Told the tax document was approved
+        meta:
+          description: A message confirms the tax document is approved.
+          snapshot: told-the-tax-document-was-approved
+          events:
+            - Tax document approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-tax-document-was-approved.tsx
+        on:
+          Continues to the payment plan:
+            target: "#Handling the payment plan"
+  Handling the payment plan:
+    id: Handling the payment plan
+    initial: Reviewing the payment plan
+    meta:
+      description: Everything about the payment plan, from review to approval.
+      snapshot: handling-the-payment-plan
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-payment-plan.tsx
+      owner: Billing team
+    states:
+      Reviewing the payment plan:
+        id: Reviewing the payment plan
+        meta:
+          description: The user checks the payment plan before sending it.
+          snapshot: reviewing-the-payment-plan
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-payment-plan.tsx
+          gherkin:
+            - features/billing/invoices/payment-plan.feature
+        on:
+          Taps edit on the payment plan:
+            target: "#Editing the payment plan"
+          Submits the payment plan:
+            target: "#Waiting for the payment plan to be approved"
+      Editing the payment plan:
+        id: Editing the payment plan
+        meta:
+          description: A form to change the payment plan.
+          snapshot: editing-the-payment-plan
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-payment-plan.tsx
+        on:
+          Saves the payment plan:
+            target: "#Reviewing the payment plan"
+          Cancels the changes to the payment plan:
+            target: "#Reviewing the payment plan"
+          Saving the payment plan fails:
+            target: "#Told the payment plan could not be saved"
+      Told the payment plan could not be saved:
+        id: Told the payment plan could not be saved
+        meta:
+          description: A message says the payment plan could not be saved, with "Try again".
+          snapshot: told-the-payment-plan-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-payment-plan-could-not-be-saved.tsx
+        on:
+          Tries saving the payment plan again:
+            target: "#Editing the payment plan"
+      Waiting for the payment plan to be approved:
+        id: Waiting for the payment plan to be approved
+        meta:
+          description: A card says the payment plan is being checked.
+          snapshot: waiting-for-the-payment-plan-to-be-approved
+          events:
+            - Payment plan submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-payment-plan-to-be-approved.tsx
+          tier: critical
+        on:
+          Billing service approves the payment plan:
+            target: "#Told the payment plan was approved"
+          Billing service rejects the payment plan:
+            target: "#Told the payment plan was rejected"
+          Approval of the payment plan takes longer than a day:
+            target: "#Told the payment plan is still under review"
+      Told the payment plan is still under review:
+        id: Told the payment plan is still under review
+        meta:
+          description: A card says the payment plan is still being checked.
+          snapshot: told-the-payment-plan-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-payment-plan-is-still-under-review.tsx
+        on:
+          Checks the payment plan again:
+            target: "#Waiting for the payment plan to be approved"
+      Told the payment plan was rejected:
+        id: Told the payment plan was rejected
+        meta:
+          description: A message explains why the payment plan was not accepted.
+          snapshot: told-the-payment-plan-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-payment-plan-was-rejected.tsx
+        on:
+          Starts the payment plan again:
+            target: "#Reviewing the payment plan"
+      Told the payment plan was approved:
+        id: Told the payment plan was approved
+        meta:
+          description: A message confirms the payment plan is approved.
+          snapshot: told-the-payment-plan-was-approved
+          events:
+            - Payment plan approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-payment-plan-was-approved.tsx
+        on:
+          Starts the refund handling:
+            target: "#Going through the refund handling"
+  Going through the refund handling:
+    id: Going through the refund handling
+    meta:
+      description: The refund handling runs as its own chart.
+      snapshot: going-through-the-refund-handling
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/going-through-the-refund-handling.tsx
+    invoke:
+      src: Refund handling
+      id: refund-handling
+    on:
+      Refund handling is completed:
+        target: "#Handling the billing dispute"
+      Refund handling is abandoned:
+        target: "#Reviewing the payment plan"
+  Handling the billing dispute:
+    id: Handling the billing dispute
+    initial: Reviewing the billing dispute
+    meta:
+      description: Everything about the billing dispute, from review to approval.
+      snapshot: handling-the-billing-dispute
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-billing-dispute.tsx
+      owner: Billing team
+    states:
+      Reviewing the billing dispute:
+        id: Reviewing the billing dispute
+        meta:
+          description: The user checks the billing dispute before sending it.
+          snapshot: reviewing-the-billing-dispute
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-billing-dispute.tsx
+          gherkin:
+            - features/billing/invoices/billing-dispute.feature
+        on:
+          Taps edit on the billing dispute:
+            target: "#Editing the billing dispute"
+          Submits the billing dispute:
+            target: "#Waiting for the billing dispute to be approved"
+      Editing the billing dispute:
+        id: Editing the billing dispute
+        meta:
+          description: A form to change the billing dispute.
+          snapshot: editing-the-billing-dispute
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-billing-dispute.tsx
+        on:
+          Saves the billing dispute:
+            target: "#Reviewing the billing dispute"
+          Cancels the changes to the billing dispute:
+            target: "#Reviewing the billing dispute"
+          Saving the billing dispute fails:
+            target: "#Told the billing dispute could not be saved"
+      Told the billing dispute could not be saved:
+        id: Told the billing dispute could not be saved
+        meta:
+          description: A message says the billing dispute could not be saved, with "Try again".
+          snapshot: told-the-billing-dispute-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-billing-dispute-could-not-be-saved.tsx
+        on:
+          Tries saving the billing dispute again:
+            target: "#Editing the billing dispute"
+      Waiting for the billing dispute to be approved:
+        id: Waiting for the billing dispute to be approved
+        meta:
+          description: A card says the billing dispute is being checked.
+          snapshot: waiting-for-the-billing-dispute-to-be-approved
+          events:
+            - Billing dispute submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-billing-dispute-to-be-approved.tsx
+          tier: critical
+        on:
+          Billing service approves the billing dispute:
+            target: "#Told the billing dispute was approved"
+          Billing service rejects the billing dispute:
+            target: "#Told the billing dispute was rejected"
+          Approval of the billing dispute takes longer than a day:
+            target: "#Told the billing dispute is still under review"
+      Told the billing dispute is still under review:
+        id: Told the billing dispute is still under review
+        meta:
+          description: A card says the billing dispute is still being checked.
+          snapshot: told-the-billing-dispute-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-billing-dispute-is-still-under-review.tsx
+        on:
+          Checks the billing dispute again:
+            target: "#Waiting for the billing dispute to be approved"
+      Told the billing dispute was rejected:
+        id: Told the billing dispute was rejected
+        meta:
+          description: A message explains why the billing dispute was not accepted.
+          snapshot: told-the-billing-dispute-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-billing-dispute-was-rejected.tsx
+        on:
+          Starts the billing dispute again:
+            target: "#Reviewing the billing dispute"
+      Told the billing dispute was approved:
+        id: Told the billing dispute was approved
+        meta:
+          description: A message confirms the billing dispute is approved.
+          snapshot: told-the-billing-dispute-was-approved
+          events:
+            - Billing dispute approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-billing-dispute-was-approved.tsx
+        on:
+          Continues to the account credit:
+            target: "#Handling the account credit"
+  Handling the account credit:
+    id: Handling the account credit
+    initial: Reviewing the account credit
+    meta:
+      description: Everything about the account credit, from review to approval.
+      snapshot: handling-the-account-credit
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-account-credit.tsx
+      owner: Billing team
+    states:
+      Reviewing the account credit:
+        id: Reviewing the account credit
+        meta:
+          description: The user checks the account credit before sending it.
+          snapshot: reviewing-the-account-credit
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-account-credit.tsx
+          gherkin:
+            - features/billing/invoices/account-credit.feature
+        on:
+          Taps edit on the account credit:
+            target: "#Editing the account credit"
+          Submits the account credit:
+            target: "#Waiting for the account credit to be approved"
+      Editing the account credit:
+        id: Editing the account credit
+        meta:
+          description: A form to change the account credit.
+          snapshot: editing-the-account-credit
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-account-credit.tsx
+        on:
+          Saves the account credit:
+            target: "#Reviewing the account credit"
+          Cancels the changes to the account credit:
+            target: "#Reviewing the account credit"
+          Saving the account credit fails:
+            target: "#Told the account credit could not be saved"
+      Told the account credit could not be saved:
+        id: Told the account credit could not be saved
+        meta:
+          description: A message says the account credit could not be saved, with "Try again".
+          snapshot: told-the-account-credit-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-account-credit-could-not-be-saved.tsx
+        on:
+          Tries saving the account credit again:
+            target: "#Editing the account credit"
+      Waiting for the account credit to be approved:
+        id: Waiting for the account credit to be approved
+        meta:
+          description: A card says the account credit is being checked.
+          snapshot: waiting-for-the-account-credit-to-be-approved
+          events:
+            - Account credit submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-account-credit-to-be-approved.tsx
+          tier: critical
+        on:
+          Billing service approves the account credit:
+            target: "#Told the account credit was approved"
+          Billing service rejects the account credit:
+            target: "#Told the account credit was rejected"
+          Approval of the account credit takes longer than a day:
+            target: "#Told the account credit is still under review"
+      Told the account credit is still under review:
+        id: Told the account credit is still under review
+        meta:
+          description: A card says the account credit is still being checked.
+          snapshot: told-the-account-credit-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-account-credit-is-still-under-review.tsx
+        on:
+          Checks the account credit again:
+            target: "#Waiting for the account credit to be approved"
+      Told the account credit was rejected:
+        id: Told the account credit was rejected
+        meta:
+          description: A message explains why the account credit was not accepted.
+          snapshot: told-the-account-credit-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-account-credit-was-rejected.tsx
+        on:
+          Starts the account credit again:
+            target: "#Reviewing the account credit"
+      Told the account credit was approved:
+        id: Told the account credit was approved
+        meta:
+          description: A message confirms the account credit is approved.
+          snapshot: told-the-account-credit-was-approved
+          events:
+            - Account credit approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-account-credit-was-approved.tsx
+        on:
+          Continues to the invoices and payments settings:
+            target: "#Invoices and payments settings"
+  Invoices and payments settings:
+    id: Invoices and payments settings
+    type: parallel
+    meta:
+      description: "Settings for invoices and payments: notifications and help side by side."
+      snapshot: invoices-and-payments-settings
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/invoices-and-payments-settings.tsx
+    states:
+      Invoices and payments notifications:
+        id: Invoices and payments notifications
+        initial: Invoices and payments notifications on
+        meta:
+          description: Whether the user gets notifications.
+          snapshot: invoices-and-payments-notifications
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/invoices-and-payments-notifications.tsx
+        states:
+          Invoices and payments notifications on:
+            id: Invoices and payments notifications on
+            meta:
+              description: The notifications switch is on.
+              snapshot: invoices-and-payments-notifications-on
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/invoices-and-payments-notifications-on.tsx
+            on:
+              Turns off invoices and payments notifications:
+                target: "#Invoices and payments notifications off"
+          Invoices and payments notifications off:
+            id: Invoices and payments notifications off
+            meta:
+              description: The notifications switch is off.
+              snapshot: invoices-and-payments-notifications-off
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/invoices-and-payments-notifications-off.tsx
+            on:
+              Turns on invoices and payments notifications:
+                target: "#Invoices and payments notifications on"
+      Invoices and payments help:
+        id: Invoices and payments help
+        initial: No open invoices and payments help request
+        meta:
+          description: Help requests about this part of the product.
+          snapshot: invoices-and-payments-help
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/invoices-and-payments-help.tsx
+        states:
+          No open invoices and payments help request:
+            id: No open invoices and payments help request
+            meta:
+              description: A "Get help" button.
+              snapshot: no-open-invoices-and-payments-help-request
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/no-open-invoices-and-payments-help-request.tsx
+            on:
+              Opens a invoices and payments help request:
+                target: "#Invoices and payments help request open"
+          Invoices and payments help request open:
+            id: Invoices and payments help request open
+            meta:
+              description: A card says the help desk will answer soon.
+              snapshot: invoices-and-payments-help-request-open
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/invoices-and-payments-help-request-open.tsx
+            on:
+              Help desk answers the invoices and payments help request:
+                target: "#Invoices and payments help request answered"
+          Invoices and payments help request answered:
+            id: Invoices and payments help request answered
+            meta:
+              description: The answer shows in the help card.
+              snapshot: invoices-and-payments-help-request-answered
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/invoices-and-payments-help-request-answered.tsx
+            on:
+              Opens another invoices and payments help request:
+                target: "#Invoices and payments help request open"
+    on:
+      Closes the invoices and payments settings:
+        target: "#Invoices and payments finished"
+  Invoices and payments finished:
+    id: Invoices and payments finished
+    type: final
+    meta:
+      description: The user is done with invoices and payments.
+      snapshot: invoices-and-payments-finished
+      events:
+        - Invoices and payments finished
+      confidence: confirmed
+      source:
+        - src/screens/invoices-and-payments-finished.tsx

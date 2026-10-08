@@ -1,0 +1,116 @@
+.dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  background: var(--faint);
+}
+
+.dot[data-status='passed'] {
+  background: var(--passed);
+}
+.dot[data-status='failed'] {
+  background: var(--failed);
+}
+.dot[data-status='flaky'] {
+  background: var(--flaky);
+}
+.dot[data-status='not-reached'] {
+  background: transparent;
+  border: 1.5px dashed var(--faint);
+}
+.dot[data-status='not-yet-run'],
+.dot[data-status='spec-only'] {
+  background: transparent;
+  border: 1.5px solid var(--line-2);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--pill);
+  padding: 0.15rem 0.6rem;
+  background: #eef2f7;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.badge[data-status='passed'] {
+  background: var(--passed-soft);
+  color: var(--passed-ink);
+}
+.badge[data-status='failed'] {
+  background: var(--failed-soft);
+  color: var(--failed-ink);
+}
+.badge[data-status='flaky'] {
+  background: var(--flaky-soft);
+  color: var(--flaky-ink);
+}
+.badge[data-status='not-reached'] {
+  background: var(--bg);
+  border: 1px dashed var(--line-2);
+}
+.badge[data-status='spec-only'],
+.badge[data-status='not-yet-run'] {
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.summaryLabel {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summaryLabel strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.bar {
+  display: flex;
+  height: 0.5rem;
+  border-radius: var(--pill);
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.bar[data-unrun='true'] {
+  background: repeating-linear-gradient(-45deg, #eef2f7, #eef2f7 5px, #e2e8f0 5px, #e2e8f0 10px);
+}
+
+.seg {
+  height: 100%;
+  transition: width var(--fade) var(--ease);
+}
+
+.seg[data-status='passed'] {
+  background: var(--passed);
+}
+.seg[data-status='flaky'] {
+  background: var(--flaky);
+}
+.seg[data-status='failed'] {
+  background: var(--failed);
+}
+.seg[data-status='not-reached'] {
+  background: var(--not-reached);
+}
+.seg[data-status='not-yet-run'],
+.seg[data-status='spec-only'] {
+  background: transparent;
+}

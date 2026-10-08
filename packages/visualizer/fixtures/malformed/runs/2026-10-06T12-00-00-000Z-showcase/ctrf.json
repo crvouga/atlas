@@ -1,0 +1,50 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.0.0",
+  "results": {
+    "tool": {
+      "name": "atlas"
+    },
+    "summary": {
+      "tests": 1,
+      "passed": 1,
+      "failed": 0,
+      "pending": 0,
+      "skipped": 0,
+      "other": 0,
+      "start": 1791288000000,
+      "stop": 1791288120000
+    },
+    "tests": [
+      {
+        "name": "Orders a drink and pays by card",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Picks card",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the card",
+            "status": "passed"
+          },
+          {
+            "name": "Payment provider approves the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment goes through",
+            "status": "passed"
+          }
+        ]
+      }
+    ]
+  }
+}

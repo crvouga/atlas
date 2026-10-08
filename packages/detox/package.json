@@ -1,0 +1,28 @@
+{
+  "name": "@crvouga/atlas-detox",
+  "version": "0.1.0",
+  "description": "Detox driver for Atlas: run statecharts against an iOS or Android app.",
+  "license": "MIT",
+  "type": "module",
+  "repository": { "type": "git", "url": "https://github.com/crvouga/atlas", "directory": "packages/detox" },
+  "exports": { ".": "./src/index.ts" },
+  "publishConfig": { "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } } },
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@crvouga/atlas": "workspace:*"
+  },
+  "peerDependencies": {
+    "detox": ">=20"
+  },
+  "peerDependenciesMeta": { "detox": { "optional": true } },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.6"
+  }
+}

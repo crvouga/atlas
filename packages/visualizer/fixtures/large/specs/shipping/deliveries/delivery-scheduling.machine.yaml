@@ -1,0 +1,397 @@
+# Delivery scheduling: generated child chart
+id: Delivery scheduling
+initial: Handling the delivery slot
+meta:
+  description: The delivery scheduling, a step inside deliveries.
+  snapshot: delivery-scheduling
+  events: []
+  confidence: confirmed
+  source: []
+states:
+  Handling the delivery slot:
+    id: Handling the delivery slot
+    initial: Reviewing the delivery slot
+    meta:
+      description: Everything about the delivery slot, from review to approval.
+      snapshot: handling-the-delivery-slot
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-delivery-slot.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the delivery slot:
+        id: Reviewing the delivery slot
+        meta:
+          description: The user checks the delivery slot before sending it.
+          snapshot: reviewing-the-delivery-slot
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-delivery-slot.tsx
+          gherkin:
+            - features/shipping/deliveries/delivery-slot.feature
+        on:
+          Taps edit on the delivery slot:
+            target: "#Editing the delivery slot"
+          Submits the delivery slot:
+            target: "#Waiting for the delivery slot to be approved"
+          Closes the delivery scheduling:
+            target: "#Delivery scheduling abandoned"
+      Editing the delivery slot:
+        id: Editing the delivery slot
+        initial: Editing the delivery slot details
+        meta:
+          description: The user changes the delivery slot, with an optional file.
+          snapshot: editing-the-delivery-slot
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-delivery-slot.tsx
+        states:
+          Editing the delivery slot details:
+            id: Editing the delivery slot details
+            meta:
+              description: A form with the delivery slot fields.
+              snapshot: editing-the-delivery-slot-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-delivery-slot-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the delivery slot"
+          Uploading a file for the delivery slot:
+            id: Uploading a file for the delivery slot
+            meta:
+              description: A file picker for a document about the delivery slot.
+              snapshot: uploading-a-file-for-the-delivery-slot
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-delivery-slot.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the delivery slot details"
+        on:
+          Saves the delivery slot:
+            target: "#Reviewing the delivery slot"
+          Cancels the changes to the delivery slot:
+            target: "#Reviewing the delivery slot"
+          Saving the delivery slot fails:
+            target: "#Told the delivery slot could not be saved"
+      Told the delivery slot could not be saved:
+        id: Told the delivery slot could not be saved
+        meta:
+          description: A message says the delivery slot could not be saved, with "Try again".
+          snapshot: told-the-delivery-slot-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-slot-could-not-be-saved.tsx
+        on:
+          Tries saving the delivery slot again:
+            target: "#Editing the delivery slot"
+      Waiting for the delivery slot to be approved:
+        id: Waiting for the delivery slot to be approved
+        meta:
+          description: A card says the delivery slot is being checked.
+          snapshot: waiting-for-the-delivery-slot-to-be-approved
+          events:
+            - Delivery slot submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-delivery-slot-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the delivery slot:
+            target: "#Told the delivery slot was approved"
+          Carrier rejects the delivery slot:
+            target: "#Told the delivery slot was rejected"
+          Approval of the delivery slot takes longer than a day:
+            target: "#Told the delivery slot is still under review"
+      Told the delivery slot is still under review:
+        id: Told the delivery slot is still under review
+        meta:
+          description: A card says the delivery slot is still being checked.
+          snapshot: told-the-delivery-slot-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-delivery-slot-is-still-under-review.tsx
+        on:
+          Checks the delivery slot again:
+            target: "#Waiting for the delivery slot to be approved"
+      Told the delivery slot was rejected:
+        id: Told the delivery slot was rejected
+        meta:
+          description: A message explains why the delivery slot was not accepted.
+          snapshot: told-the-delivery-slot-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-slot-was-rejected.tsx
+        on:
+          Starts the delivery slot again:
+            target: "#Reviewing the delivery slot"
+      Told the delivery slot was approved:
+        id: Told the delivery slot was approved
+        meta:
+          description: A message confirms the delivery slot is approved.
+          snapshot: told-the-delivery-slot-was-approved
+          events:
+            - Delivery slot approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-slot-was-approved.tsx
+        on:
+          Continues to the delivery reminder:
+            target: "#Handling the delivery reminder"
+  Handling the delivery reminder:
+    id: Handling the delivery reminder
+    initial: Reviewing the delivery reminder
+    meta:
+      description: Everything about the delivery reminder, from review to approval.
+      snapshot: handling-the-delivery-reminder
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-delivery-reminder.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the delivery reminder:
+        id: Reviewing the delivery reminder
+        meta:
+          description: The user checks the delivery reminder before sending it.
+          snapshot: reviewing-the-delivery-reminder
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-delivery-reminder.tsx
+          gherkin:
+            - features/shipping/deliveries/delivery-reminder.feature
+        on:
+          Taps edit on the delivery reminder:
+            target: "#Editing the delivery reminder"
+          Submits the delivery reminder:
+            target: "#Waiting for the delivery reminder to be approved"
+      Editing the delivery reminder:
+        id: Editing the delivery reminder
+        meta:
+          description: A form to change the delivery reminder.
+          snapshot: editing-the-delivery-reminder
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-delivery-reminder.tsx
+        on:
+          Saves the delivery reminder:
+            target: "#Reviewing the delivery reminder"
+          Cancels the changes to the delivery reminder:
+            target: "#Reviewing the delivery reminder"
+          Saving the delivery reminder fails:
+            target: "#Told the delivery reminder could not be saved"
+      Told the delivery reminder could not be saved:
+        id: Told the delivery reminder could not be saved
+        meta:
+          description: A message says the delivery reminder could not be saved, with "Try again".
+          snapshot: told-the-delivery-reminder-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-reminder-could-not-be-saved.tsx
+        on:
+          Tries saving the delivery reminder again:
+            target: "#Editing the delivery reminder"
+      Waiting for the delivery reminder to be approved:
+        id: Waiting for the delivery reminder to be approved
+        meta:
+          description: A card says the delivery reminder is being checked.
+          snapshot: waiting-for-the-delivery-reminder-to-be-approved
+          events:
+            - Delivery reminder submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-delivery-reminder-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the delivery reminder:
+            target: "#Told the delivery reminder was approved"
+          Carrier rejects the delivery reminder:
+            target: "#Told the delivery reminder was rejected"
+          Approval of the delivery reminder takes longer than a day:
+            target: "#Told the delivery reminder is still under review"
+      Told the delivery reminder is still under review:
+        id: Told the delivery reminder is still under review
+        meta:
+          description: A card says the delivery reminder is still being checked.
+          snapshot: told-the-delivery-reminder-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-delivery-reminder-is-still-under-review.tsx
+        on:
+          Checks the delivery reminder again:
+            target: "#Waiting for the delivery reminder to be approved"
+      Told the delivery reminder was rejected:
+        id: Told the delivery reminder was rejected
+        meta:
+          description: A message explains why the delivery reminder was not accepted.
+          snapshot: told-the-delivery-reminder-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-reminder-was-rejected.tsx
+        on:
+          Starts the delivery reminder again:
+            target: "#Reviewing the delivery reminder"
+      Told the delivery reminder was approved:
+        id: Told the delivery reminder was approved
+        meta:
+          description: A message confirms the delivery reminder is approved.
+          snapshot: told-the-delivery-reminder-was-approved
+          events:
+            - Delivery reminder approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-reminder-was-approved.tsx
+        on:
+          Continues to the delivery confirmation:
+            target: "#Handling the delivery confirmation"
+  Handling the delivery confirmation:
+    id: Handling the delivery confirmation
+    initial: Reviewing the delivery confirmation
+    meta:
+      description: Everything about the delivery confirmation, from review to approval.
+      snapshot: handling-the-delivery-confirmation
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-delivery-confirmation.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the delivery confirmation:
+        id: Reviewing the delivery confirmation
+        meta:
+          description: The user checks the delivery confirmation before sending it.
+          snapshot: reviewing-the-delivery-confirmation
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-delivery-confirmation.tsx
+          gherkin:
+            - features/shipping/deliveries/delivery-confirmation.feature
+        on:
+          Taps edit on the delivery confirmation:
+            target: "#Editing the delivery confirmation"
+          Submits the delivery confirmation:
+            target: "#Waiting for the delivery confirmation to be approved"
+      Editing the delivery confirmation:
+        id: Editing the delivery confirmation
+        meta:
+          description: A form to change the delivery confirmation.
+          snapshot: editing-the-delivery-confirmation
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-delivery-confirmation.tsx
+        on:
+          Saves the delivery confirmation:
+            target: "#Reviewing the delivery confirmation"
+          Cancels the changes to the delivery confirmation:
+            target: "#Reviewing the delivery confirmation"
+          Saving the delivery confirmation fails:
+            target: "#Told the delivery confirmation could not be saved"
+      Told the delivery confirmation could not be saved:
+        id: Told the delivery confirmation could not be saved
+        meta:
+          description: A message says the delivery confirmation could not be saved, with "Try again".
+          snapshot: told-the-delivery-confirmation-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-confirmation-could-not-be-saved.tsx
+        on:
+          Tries saving the delivery confirmation again:
+            target: "#Editing the delivery confirmation"
+      Waiting for the delivery confirmation to be approved:
+        id: Waiting for the delivery confirmation to be approved
+        meta:
+          description: A card says the delivery confirmation is being checked.
+          snapshot: waiting-for-the-delivery-confirmation-to-be-approved
+          events:
+            - Delivery confirmation submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-delivery-confirmation-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the delivery confirmation:
+            target: "#Told the delivery confirmation was approved"
+          Carrier rejects the delivery confirmation:
+            target: "#Told the delivery confirmation was rejected"
+          Approval of the delivery confirmation takes longer than a day:
+            target: "#Told the delivery confirmation is still under review"
+      Told the delivery confirmation is still under review:
+        id: Told the delivery confirmation is still under review
+        meta:
+          description: A card says the delivery confirmation is still being checked.
+          snapshot: told-the-delivery-confirmation-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-delivery-confirmation-is-still-under-review.tsx
+        on:
+          Checks the delivery confirmation again:
+            target: "#Waiting for the delivery confirmation to be approved"
+      Told the delivery confirmation was rejected:
+        id: Told the delivery confirmation was rejected
+        meta:
+          description: A message explains why the delivery confirmation was not accepted.
+          snapshot: told-the-delivery-confirmation-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-confirmation-was-rejected.tsx
+        on:
+          Starts the delivery confirmation again:
+            target: "#Reviewing the delivery confirmation"
+      Told the delivery confirmation was approved:
+        id: Told the delivery confirmation was approved
+        meta:
+          description: A message confirms the delivery confirmation is approved.
+          snapshot: told-the-delivery-confirmation-was-approved
+          events:
+            - Delivery confirmation approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-confirmation-was-approved.tsx
+        on:
+          Finishes the delivery scheduling:
+            target: "#Delivery scheduling completed"
+  Delivery scheduling completed:
+    id: Delivery scheduling completed
+    type: final
+    meta:
+      description: The delivery scheduling is done.
+      snapshot: delivery-scheduling-completed
+      events:
+        - Delivery scheduling completed
+      confidence: confirmed
+      source:
+        - src/screens/delivery-scheduling-completed.tsx
+      doneEvent: Delivery scheduling is completed
+  Delivery scheduling abandoned:
+    id: Delivery scheduling abandoned
+    type: final
+    meta:
+      description: The user left the delivery scheduling before the end.
+      snapshot: delivery-scheduling-abandoned
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/delivery-scheduling-abandoned.tsx
+      doneEvent: Delivery scheduling is abandoned

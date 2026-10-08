@@ -1,0 +1,65 @@
+schemaVersion: 1
+title: Example store atlas (fixture)
+description: A generated atlas with several hundred states, for checking that the map stays fast and readable.
+contexts:
+  - id: accounts
+    name: Accounts
+    description: Signing up and keeping a profile up to date.
+    owner: Accounts team
+    directories:
+      - accounts
+  - id: catalog
+    name: Catalog
+    description: Finding and comparing products.
+    owner: Catalog team
+    directories:
+      - catalog
+  - id: orders
+    name: Orders
+    description: Carts, checkout and order history.
+    owner: Orders team
+    directories:
+      - orders
+  - id: shipping
+    name: Shipping
+    description: Packing, shipping and delivery.
+    owner: Fulfillment team
+    directories:
+      - shipping
+  - id: support
+    name: Support
+    description: Help requests, answers and escalations.
+    owner: Support team
+    directories:
+      - support
+  - id: billing
+    name: Billing
+    description: Invoices, receipts, refunds and credits.
+    owner: Billing team
+    directories:
+      - billing
+handOffs:
+  - from: Sign-up finished
+    to: Reviewing the search filters
+    event: Starts browsing
+    description: A new user moves on to browsing.
+  - from: Product browsing finished
+    to: Reviewing the shopping cart
+    event: Adds a product to the cart
+    description: Browsing ends in the cart.
+  - from: Order checkout finished
+    to: Reviewing the shipping label
+    event: Order is shipped
+    description: A paid order is shipped.
+  - from: Deliveries finished
+    to: Reviewing the help request
+    event: Asks for help with a delivery
+    description: A delivery problem becomes a help request.
+  - from: Order checkout finished
+    to: Reviewing the monthly invoice
+    event: Invoice is issued
+    description: Every order shows up on an invoice.
+excluded:
+  - Marketplace sellers
+  - Gift cards
+  - Business accounts

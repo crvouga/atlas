@@ -1,0 +1,34 @@
+{
+  "name": "@crvouga/atlas-schema",
+  "version": "0.1.0",
+  "description": "The Atlas contract: Zod schemas and JSON Schemas (draft 2020-12) for statechart specs, journeys, run manifests, timelines, CloudEvents and the runs index.",
+  "license": "MIT",
+  "type": "module",
+  "repository": { "type": "git", "url": "https://github.com/crvouga/atlas", "directory": "packages/schema" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./schemas/*": "./schemas/*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "./schemas/*": "./schemas/*"
+    }
+  },
+  "files": ["dist", "schemas", "src", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "schemas": "tsx scripts/emit-json-schemas.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "tsx": "4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.6"
+  }
+}

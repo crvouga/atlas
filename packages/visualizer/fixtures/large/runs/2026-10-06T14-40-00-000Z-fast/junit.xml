@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="atlas" tests="21" failures="2" skipped="0" time="96.300">
+  <testsuite name="2026-10-06T14-40-00-000Z-fast" tests="21" failures="2" skipped="0" timestamp="2026-10-06T14:40:00.000Z">
+    <testcase classname="journey" name="Happy path through sign-up" id="journey-1"><system-out>Passed on retry (flaky)</system-out></testcase>
+    <testcase classname="journey" name="Edits the account details with a file" id="journey-2"><system-out>Passed on retry (flaky)</system-out></testcase>
+    <testcase classname="journey" name="Saving the account details fails, then works" id="journey-3"></testcase>
+    <testcase classname="journey" name="Slow approval of the home address" id="journey-4"><system-out>Passed on retry (flaky)</system-out></testcase>
+    <testcase classname="journey" name="Account details rejected, then approved" id="journey-5"><system-out>Passed on retry (flaky)</system-out></testcase>
+    <testcase classname="journey" name="Leaves the identity check early" id="journey-6"><system-out>Passed on retry (flaky)</system-out></testcase>
+    <testcase classname="journey" name="Changes sign-up settings" id="journey-7"><system-out>Passed on retry (flaky)</system-out></testcase>
+    <testcase classname="journey" name="Happy path through product browsing" id="journey-15"></testcase>
+    <testcase classname="journey" name="Edits the search filters with a file" id="journey-16"></testcase>
+    <testcase classname="journey" name="Saving the search filters fails, then works" id="journey-17"></testcase>
+    <testcase classname="journey" name="Slow approval of the product list" id="journey-18"></testcase>
+    <testcase classname="journey" name="Search filters rejected, then approved" id="journey-19"></testcase>
+    <testcase classname="journey" name="Leaves the product comparison early" id="journey-20"></testcase>
+    <testcase classname="journey" name="Changes product browsing settings" id="journey-21"></testcase>
+    <testcase classname="journey" name="Happy path through order checkout" id="journey-22"><failure message="Expected &quot;Told the payment method was approved&quot;, but the card still says it is being checked"/></testcase>
+    <testcase classname="journey" name="Edits the shopping cart with a file" id="journey-23"></testcase>
+    <testcase classname="journey" name="Saving the shopping cart fails, then works" id="journey-24"></testcase>
+    <testcase classname="journey" name="Slow approval of the delivery address" id="journey-25"></testcase>
+    <testcase classname="journey" name="Shopping cart rejected, then approved" id="journey-26"></testcase>
+    <testcase classname="journey" name="Leaves the payment early" id="journey-27"></testcase>
+    <testcase classname="journey" name="Changes order checkout settings" id="journey-28"><failure message="Expected &quot;Told the payment method was approved&quot;, but the card still says it is being checked"/></testcase>
+  </testsuite>
+</testsuites>

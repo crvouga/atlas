@@ -1,0 +1,142 @@
+import type { CloudEvent } from '../events/cloudevents';
+import type { PlannedPath } from '../plan';
+
+export type RunMode = 'fast' | 'showcase';
+export type Status = 'passed' | 'failed' | 'flaky' | 'not-reached';
+export type EventKind = 'user' | 'system' | 'time' | 'hand-off';
+
+export type Image = { png: string; webp?: string };
+export type Clip = { video: string; poster?: string; durationMs: number };
+
+export type TimelineEntry = {
+  atMs: number;
+  kind: 'tap' | 'type' | 'system' | 'screen' | 'toast' | 'note' | 'time' | 'notification';
+  label: string;
+  x?: number;
+  y?: number;
+  text?: string;
+  system?: { source?: string; endpoint?: string; eventType?: string; payload?: unknown; responseStatus?: number };
+};
+
+/** What a step records while it runs: taps, typing, system calls, the screen change. */
+export class Timeline {
+  private origin = Date.now();
+  entries: TimelineEntry[] = [];
+
+  restart() {
+    this.origin = Date.now();
+    this.entries = [];
+  }
+
+  add(entry: Omit<TimelineEntry, 'atMs'>) {
+    this.entries.push({ atMs: Date.now() - this.origin, ...entry });
+  }
+}
+
+export type RecognizerResult = {
+  matched: boolean;
+  signals: { signal: string; expected: 'visible' | 'hidden' | string; visible: boolean }[];
+};
+
+export type CheckResult = { check: string; passed: boolean; expected?: string; actual?: string };
+
+/** Per-attempt tools handed to every implementation. */
+export type StepTools = {
+  timeline: Timeline;
+  mode: RunMode;
+  /** Pause for the pacing of the current mode (no-op in fast mode for the default pauses). */
+  hold(ms: number): Promise<void>;
+  /** Scratch space shared by the events of one path attempt. */
+  data: Record<string, unknown>;
+};
+
+/**
+ * A driver owns the thing under test for one path attempt: a browser context (Playwright), a
+ * device (Detox), a model or an API client (Vitest). Only `open` and `close` are required; media
+ * hooks are used when present.
+ */
+export type Driver<C> = {
+  name: string;
+  open(input: { path: PlannedPath; attempt: number; mode: RunMode; directory: string; timeline: Timeline }): Promise<C>;
+  close(ctx: C, input: { failed: boolean; traceFile: string }): Promise<{ trace?: string } | void>;
+  /** A settled, deterministic screenshot of the current screen. */
+  screenshot?(ctx: C, file: string): Promise<Image | null>;
+  /** Start recording one transition; `stop` encodes it and returns the clip. */
+  record?(ctx: C, workDirectory: string): Promise<{ stop(output: string): Promise<Clip | null> }>;
+  /** Visible text of the screen, for the privacy scan. */
+  text?(ctx: C): Promise<string>;
+  /** Pause between actions; drivers can show it (a touch overlay idling) or ignore it. */
+  hold?(ctx: C, ms: number): Promise<void>;
+  /** Pacing for showcase mode, in milliseconds. */
+  pacing?: { before: number; after: number };
+  dispose?(): Promise<void>;
+};
+
+/** How one event is made to happen. Keyed by the event's exact name in the spec. */
+export type EventImplementation<C> = {
+  kind: EventKind;
+  /** A plain-language note on how the runner makes it happen (shown to developers). */
+  how: string;
+  /** Test data the event needs before the path starts (a condition modelled as an event). */
+  prepare?(ctx: C, tools: StepTools): Promise<void>;
+  run(ctx: C, tools: StepTools): Promise<void>;
+  /** Set when the event cannot be triggered reliably yet: the path stops before it. */
+  blocked?: string;
+};
+
+/** How one state is recognised from the outside, and what is checked there. */
+export type StateImplementation<C> = {
+  recognize(ctx: C): Promise<RecognizerResult>;
+  /** Shown too briefly to wait for: not seeing it is not a failure. */
+  transient?: boolean;
+  /** States the UI cannot tell apart; never reported as "looks like" each other. */
+  sameAs?: string;
+  /** Where to look when the state changes off-screen (open a tab, reload). */
+  lookIn?(ctx: C): Promise<void>;
+  /** Within-state actions after the screenshot (dismiss a success message). */
+  settle?(ctx: C): Promise<void>;
+  checks?(ctx: C): Promise<CheckResult[]>;
+};
+
+export type Implementation<C> = {
+  events: Record<string, EventImplementation<C>>;
+  states: Record<string, StateImplementation<C>>;
+  /** Put the system in the path's starting configuration (seed data, sign in, navigate). */
+  setup(ctx: C, input: { path: PlannedPath; tools: StepTools }): Promise<void>;
+  /** Whether `setup` can start a path in this configuration; a string is the reason it cannot. */
+  canStart?(active: string[]): true | string;
+};
+
+/** Where business events come from: a CloudEvents endpoint, a log, a message queue. */
+export type EventSource = {
+  name: string;
+  mark(): Promise<void> | void;
+  collect(): Promise<{ events: CloudEvent[]; text?: string }>;
+  close?(): Promise<void>;
+};
+
+/** How a business event named in `meta.events` is recognised in what a source collected. */
+export type EventMatcher = { type: string } | { pattern: RegExp } | ((events: CloudEvent[], text: string) => boolean);
+
+export type PrivacyRules = {
+  /** Patterns that must never appear on screen or in a manifest. */
+  deny?: { name: string; pattern: RegExp }[];
+  /** Emails that may appear (synthetic domains, support addresses). */
+  allowEmails?: RegExp[];
+  /** Hosts the run may target; loopback only by default. */
+  allowHosts?: string[];
+};
+
+/**
+ * A driver for anything you can reach from Node: a domain model, an API client, a CLI. `create`
+ * returns a fresh context per path attempt; recognisers and events work on it directly.
+ */
+export function functionDriver<C>(create: (input: { path: PlannedPath; timeline: Timeline }) => C | Promise<C>, options: { name?: string; dispose?: (ctx: C) => void | Promise<void> } = {}): Driver<C> {
+  return {
+    name: options.name ?? 'function',
+    open: ({ path, timeline }) => Promise.resolve(create({ path, timeline })),
+    close: async (ctx) => {
+      await options.dispose?.(ctx);
+    }
+  };
+}

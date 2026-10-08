@@ -1,0 +1,132 @@
+journeys:
+  Happy path through invoices and payments:
+    description: Everything is approved the first time, through the refund handling and settings.
+    events:
+      - Submits the monthly invoice
+      - Billing service approves the monthly invoice
+      - Continues to the paid invoice
+      - Submits the paid invoice
+      - Billing service approves the paid invoice
+      - Continues to the tax document
+      - Submits the tax document
+      - Billing service approves the tax document
+      - Continues to the payment plan
+      - Submits the payment plan
+      - Billing service approves the payment plan
+      - Starts the refund handling
+      - Submits the refund request
+      - Billing service approves the refund request
+      - Continues to the refund approval
+      - Submits the refund approval
+      - Billing service approves the refund approval
+      - Continues to the refund transfer
+      - Submits the refund transfer
+      - Billing service approves the refund transfer
+      - Finishes the refund handling
+      - Submits the billing dispute
+      - Billing service approves the billing dispute
+      - Continues to the account credit
+      - Submits the account credit
+      - Billing service approves the account credit
+      - Continues to the invoices and payments settings
+      - Closes the invoices and payments settings
+    endsIn:
+      - Invoices and payments finished
+    owner: Billing team
+    tour: true
+  Edits the monthly invoice with a file:
+    description: The user edits the monthly invoice, uploads a file, then sends it.
+    events:
+      - Taps edit on the monthly invoice
+      - Uploads a file
+      - Finishes uploading the file
+      - Saves the monthly invoice
+      - Submits the monthly invoice
+      - Billing service approves the monthly invoice
+    endsIn:
+      - Told the monthly invoice was approved
+  Saving the monthly invoice fails, then works:
+    description: The first save fails and the retry works.
+    events:
+      - Taps edit on the monthly invoice
+      - Saving the monthly invoice fails
+      - Tries saving the monthly invoice again
+      - Saves the monthly invoice
+    endsIn:
+      - Reviewing the monthly invoice
+  Slow approval of the paid invoice:
+    description: Approval of the paid invoice takes more than a day.
+    events:
+      - Submits the monthly invoice
+      - Billing service approves the monthly invoice
+      - Continues to the paid invoice
+      - Submits the paid invoice
+      - Approval of the paid invoice takes longer than a day
+      - Checks the paid invoice again
+      - Billing service approves the paid invoice
+    endsIn:
+      - Told the paid invoice was approved
+  Monthly invoice rejected, then approved:
+    description: The monthly invoice is rejected once, then approved.
+    events:
+      - Submits the monthly invoice
+      - Billing service rejects the monthly invoice
+      - Starts the monthly invoice again
+      - Submits the monthly invoice
+      - Billing service approves the monthly invoice
+    endsIn:
+      - Told the monthly invoice was approved
+  Leaves the refund handling early:
+    description: The user closes the refund handling right away and goes back a step.
+    events:
+      - Submits the monthly invoice
+      - Billing service approves the monthly invoice
+      - Continues to the paid invoice
+      - Submits the paid invoice
+      - Billing service approves the paid invoice
+      - Continues to the tax document
+      - Submits the tax document
+      - Billing service approves the tax document
+      - Continues to the payment plan
+      - Submits the payment plan
+      - Billing service approves the payment plan
+      - Starts the refund handling
+      - Closes the refund handling
+    endsIn:
+      - Reviewing the payment plan
+  Changes invoices and payments settings:
+    description: Notifications off, then a help request that gets answered.
+    events:
+      - Submits the monthly invoice
+      - Billing service approves the monthly invoice
+      - Continues to the paid invoice
+      - Submits the paid invoice
+      - Billing service approves the paid invoice
+      - Continues to the tax document
+      - Submits the tax document
+      - Billing service approves the tax document
+      - Continues to the payment plan
+      - Submits the payment plan
+      - Billing service approves the payment plan
+      - Starts the refund handling
+      - Submits the refund request
+      - Billing service approves the refund request
+      - Continues to the refund approval
+      - Submits the refund approval
+      - Billing service approves the refund approval
+      - Continues to the refund transfer
+      - Submits the refund transfer
+      - Billing service approves the refund transfer
+      - Finishes the refund handling
+      - Submits the billing dispute
+      - Billing service approves the billing dispute
+      - Continues to the account credit
+      - Submits the account credit
+      - Billing service approves the account credit
+      - Continues to the invoices and payments settings
+      - Turns off invoices and payments notifications
+      - Opens a invoices and payments help request
+      - Help desk answers the invoices and payments help request
+    endsIn:
+      - Invoices and payments notifications off
+      - Invoices and payments help request answered

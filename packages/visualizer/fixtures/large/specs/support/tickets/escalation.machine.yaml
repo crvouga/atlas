@@ -1,0 +1,395 @@
+# Escalation: generated child chart
+id: Escalation
+initial: Handling the escalation note
+meta:
+  description: The escalation, a step inside support tickets.
+  snapshot: escalation
+  events: []
+  confidence: confirmed
+  source: []
+states:
+  Handling the escalation note:
+    id: Handling the escalation note
+    initial: Reviewing the escalation note
+    meta:
+      description: Everything about the escalation note, from review to approval.
+      snapshot: handling-the-escalation-note
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-escalation-note.tsx
+      owner: Support team
+    states:
+      Reviewing the escalation note:
+        id: Reviewing the escalation note
+        meta:
+          description: The user checks the escalation note before sending it.
+          snapshot: reviewing-the-escalation-note
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-escalation-note.tsx
+          gherkin:
+            - features/support/tickets/escalation-note.feature
+        on:
+          Taps edit on the escalation note:
+            target: "#Editing the escalation note"
+          Submits the escalation note:
+            target: "#Waiting for the escalation note to be approved"
+          Closes the escalation:
+            target: "#Escalation abandoned"
+      Editing the escalation note:
+        id: Editing the escalation note
+        initial: Editing the escalation note details
+        meta:
+          description: The user changes the escalation note, with an optional file.
+          snapshot: editing-the-escalation-note
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-escalation-note.tsx
+        states:
+          Editing the escalation note details:
+            id: Editing the escalation note details
+            meta:
+              description: A form with the escalation note fields.
+              snapshot: editing-the-escalation-note-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-escalation-note-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the escalation note"
+          Uploading a file for the escalation note:
+            id: Uploading a file for the escalation note
+            meta:
+              description: A file picker for a document about the escalation note.
+              snapshot: uploading-a-file-for-the-escalation-note
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-escalation-note.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the escalation note details"
+        on:
+          Saves the escalation note:
+            target: "#Reviewing the escalation note"
+          Cancels the changes to the escalation note:
+            target: "#Reviewing the escalation note"
+          Saving the escalation note fails:
+            target: "#Told the escalation note could not be saved"
+      Told the escalation note could not be saved:
+        id: Told the escalation note could not be saved
+        meta:
+          description: A message says the escalation note could not be saved, with "Try again".
+          snapshot: told-the-escalation-note-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-escalation-note-could-not-be-saved.tsx
+        on:
+          Tries saving the escalation note again:
+            target: "#Editing the escalation note"
+      Waiting for the escalation note to be approved:
+        id: Waiting for the escalation note to be approved
+        meta:
+          description: A card says the escalation note is being checked.
+          snapshot: waiting-for-the-escalation-note-to-be-approved
+          events:
+            - Escalation note submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-escalation-note-to-be-approved.tsx
+          tier: critical
+        on:
+          Support desk approves the escalation note:
+            target: "#Told the escalation note was approved"
+          Support desk rejects the escalation note:
+            target: "#Told the escalation note was rejected"
+          Approval of the escalation note takes longer than a day:
+            target: "#Told the escalation note is still under review"
+      Told the escalation note is still under review:
+        id: Told the escalation note is still under review
+        meta:
+          description: A card says the escalation note is still being checked.
+          snapshot: told-the-escalation-note-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-escalation-note-is-still-under-review.tsx
+        on:
+          Checks the escalation note again:
+            target: "#Waiting for the escalation note to be approved"
+      Told the escalation note was rejected:
+        id: Told the escalation note was rejected
+        meta:
+          description: A message explains why the escalation note was not accepted.
+          snapshot: told-the-escalation-note-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-escalation-note-was-rejected.tsx
+        on:
+          Starts the escalation note again:
+            target: "#Reviewing the escalation note"
+      Told the escalation note was approved:
+        id: Told the escalation note was approved
+        meta:
+          description: A message confirms the escalation note is approved.
+          snapshot: told-the-escalation-note-was-approved
+          events:
+            - Escalation note approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-escalation-note-was-approved.tsx
+        on:
+          Continues to the specialist review:
+            target: "#Handling the specialist review"
+  Handling the specialist review:
+    id: Handling the specialist review
+    initial: Reviewing the specialist review
+    meta:
+      description: Everything about the specialist review, from review to approval.
+      snapshot: handling-the-specialist-review
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-specialist-review.tsx
+      owner: Support team
+    states:
+      Reviewing the specialist review:
+        id: Reviewing the specialist review
+        meta:
+          description: The user checks the specialist review before sending it.
+          snapshot: reviewing-the-specialist-review
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-specialist-review.tsx
+          gherkin:
+            - features/support/tickets/specialist-review.feature
+        on:
+          Taps edit on the specialist review:
+            target: "#Editing the specialist review"
+          Submits the specialist review:
+            target: "#Waiting for the specialist review to be approved"
+      Editing the specialist review:
+        id: Editing the specialist review
+        meta:
+          description: A form to change the specialist review.
+          snapshot: editing-the-specialist-review
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-specialist-review.tsx
+        on:
+          Saves the specialist review:
+            target: "#Reviewing the specialist review"
+          Cancels the changes to the specialist review:
+            target: "#Reviewing the specialist review"
+          Saving the specialist review fails:
+            target: "#Told the specialist review could not be saved"
+      Told the specialist review could not be saved:
+        id: Told the specialist review could not be saved
+        meta:
+          description: A message says the specialist review could not be saved, with "Try again".
+          snapshot: told-the-specialist-review-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-specialist-review-could-not-be-saved.tsx
+        on:
+          Tries saving the specialist review again:
+            target: "#Editing the specialist review"
+      Waiting for the specialist review to be approved:
+        id: Waiting for the specialist review to be approved
+        meta:
+          description: A card says the specialist review is being checked.
+          snapshot: waiting-for-the-specialist-review-to-be-approved
+          events:
+            - Specialist review submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-specialist-review-to-be-approved.tsx
+          tier: critical
+        on:
+          Support desk approves the specialist review:
+            target: "#Told the specialist review was approved"
+          Support desk rejects the specialist review:
+            target: "#Told the specialist review was rejected"
+          Approval of the specialist review takes longer than a day:
+            target: "#Told the specialist review is still under review"
+      Told the specialist review is still under review:
+        id: Told the specialist review is still under review
+        meta:
+          description: A card says the specialist review is still being checked.
+          snapshot: told-the-specialist-review-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-specialist-review-is-still-under-review.tsx
+        on:
+          Checks the specialist review again:
+            target: "#Waiting for the specialist review to be approved"
+      Told the specialist review was rejected:
+        id: Told the specialist review was rejected
+        meta:
+          description: A message explains why the specialist review was not accepted.
+          snapshot: told-the-specialist-review-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-specialist-review-was-rejected.tsx
+        on:
+          Starts the specialist review again:
+            target: "#Reviewing the specialist review"
+      Told the specialist review was approved:
+        id: Told the specialist review was approved
+        meta:
+          description: A message confirms the specialist review is approved.
+          snapshot: told-the-specialist-review-was-approved
+          events:
+            - Specialist review approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-specialist-review-was-approved.tsx
+        on:
+          Continues to the escalation answer:
+            target: "#Handling the escalation answer"
+  Handling the escalation answer:
+    id: Handling the escalation answer
+    initial: Reviewing the escalation answer
+    meta:
+      description: Everything about the escalation answer, from review to approval.
+      snapshot: handling-the-escalation-answer
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-escalation-answer.tsx
+      owner: Support team
+    states:
+      Reviewing the escalation answer:
+        id: Reviewing the escalation answer
+        meta:
+          description: The user checks the escalation answer before sending it.
+          snapshot: reviewing-the-escalation-answer
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-escalation-answer.tsx
+          gherkin:
+            - features/support/tickets/escalation-answer.feature
+        on:
+          Taps edit on the escalation answer:
+            target: "#Editing the escalation answer"
+          Submits the escalation answer:
+            target: "#Waiting for the escalation answer to be approved"
+      Editing the escalation answer:
+        id: Editing the escalation answer
+        meta:
+          description: A form to change the escalation answer.
+          snapshot: editing-the-escalation-answer
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-escalation-answer.tsx
+        on:
+          Saves the escalation answer:
+            target: "#Reviewing the escalation answer"
+          Cancels the changes to the escalation answer:
+            target: "#Reviewing the escalation answer"
+          Saving the escalation answer fails:
+            target: "#Told the escalation answer could not be saved"
+      Told the escalation answer could not be saved:
+        id: Told the escalation answer could not be saved
+        meta:
+          description: A message says the escalation answer could not be saved, with "Try again".
+          snapshot: told-the-escalation-answer-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-escalation-answer-could-not-be-saved.tsx
+        on:
+          Tries saving the escalation answer again:
+            target: "#Editing the escalation answer"
+      Waiting for the escalation answer to be approved:
+        id: Waiting for the escalation answer to be approved
+        meta:
+          description: A card says the escalation answer is being checked.
+          snapshot: waiting-for-the-escalation-answer-to-be-approved
+          events:
+            - Escalation answer submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-escalation-answer-to-be-approved.tsx
+          tier: critical
+        on:
+          Support desk approves the escalation answer:
+            target: "#Told the escalation answer was approved"
+          Support desk rejects the escalation answer:
+            target: "#Told the escalation answer was rejected"
+          Approval of the escalation answer takes longer than a day:
+            target: "#Told the escalation answer is still under review"
+      Told the escalation answer is still under review:
+        id: Told the escalation answer is still under review
+        meta:
+          description: A card says the escalation answer is still being checked.
+          snapshot: told-the-escalation-answer-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-escalation-answer-is-still-under-review.tsx
+        on:
+          Checks the escalation answer again:
+            target: "#Waiting for the escalation answer to be approved"
+      Told the escalation answer was rejected:
+        id: Told the escalation answer was rejected
+        meta:
+          description: A message explains why the escalation answer was not accepted.
+          snapshot: told-the-escalation-answer-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-escalation-answer-was-rejected.tsx
+        on:
+          Starts the escalation answer again:
+            target: "#Reviewing the escalation answer"
+      Told the escalation answer was approved:
+        id: Told the escalation answer was approved
+        meta:
+          description: A message confirms the escalation answer is approved.
+          snapshot: told-the-escalation-answer-was-approved
+          events:
+            - Escalation answer approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-escalation-answer-was-approved.tsx
+        on:
+          Finishes the escalation:
+            target: "#Escalation completed"
+  Escalation completed:
+    id: Escalation completed
+    type: final
+    meta:
+      description: The escalation is done.
+      snapshot: escalation-completed
+      events:
+        - Escalation completed
+      confidence: confirmed
+      source:
+        - src/screens/escalation-completed.tsx
+  Escalation abandoned:
+    id: Escalation abandoned
+    type: final
+    meta:
+      description: The user left the escalation before the end.
+      snapshot: escalation-abandoned
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/escalation-abandoned.tsx

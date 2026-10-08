@@ -1,0 +1,720 @@
+# Support tickets: generated fixture chart
+id: Support tickets
+initial: Handling the help request
+meta:
+  description: Help requests, answers and escalations.
+  snapshot: support-tickets
+  events: []
+  confidence: confirmed
+  source:
+    - src/screens/support-tickets
+states:
+  Handling the help request:
+    id: Handling the help request
+    initial: Reviewing the help request
+    meta:
+      description: Everything about the help request, from review to approval.
+      snapshot: handling-the-help-request
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-help-request.tsx
+      owner: Support team
+    states:
+      Reviewing the help request:
+        id: Reviewing the help request
+        meta:
+          description: The user checks the help request before sending it.
+          snapshot: reviewing-the-help-request
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-help-request.tsx
+          gherkin:
+            - features/support/tickets/help-request.feature
+        on:
+          Taps edit on the help request:
+            target: "#Editing the help request"
+          Submits the help request:
+            target: "#Waiting for the help request to be approved"
+      Editing the help request:
+        id: Editing the help request
+        initial: Editing the help request details
+        meta:
+          description: The user changes the help request, with an optional file.
+          snapshot: editing-the-help-request
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-help-request.tsx
+        states:
+          Editing the help request details:
+            id: Editing the help request details
+            meta:
+              description: A form with the help request fields.
+              snapshot: editing-the-help-request-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-help-request-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the help request"
+          Uploading a file for the help request:
+            id: Uploading a file for the help request
+            meta:
+              description: A file picker for a document about the help request.
+              snapshot: uploading-a-file-for-the-help-request
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-help-request.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the help request details"
+        on:
+          Saves the help request:
+            target: "#Reviewing the help request"
+          Cancels the changes to the help request:
+            target: "#Reviewing the help request"
+          Saving the help request fails:
+            target: "#Told the help request could not be saved"
+      Told the help request could not be saved:
+        id: Told the help request could not be saved
+        meta:
+          description: A message says the help request could not be saved, with "Try again".
+          snapshot: told-the-help-request-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-help-request-could-not-be-saved.tsx
+        on:
+          Tries saving the help request again:
+            target: "#Editing the help request"
+      Waiting for the help request to be approved:
+        id: Waiting for the help request to be approved
+        meta:
+          description: A card says the help request is being checked.
+          snapshot: waiting-for-the-help-request-to-be-approved
+          events:
+            - Help request submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-help-request-to-be-approved.tsx
+          tier: critical
+        on:
+          Support desk approves the help request:
+            target: "#Told the help request was approved"
+          Support desk rejects the help request:
+            target: "#Told the help request was rejected"
+          Approval of the help request takes longer than a day:
+            target: "#Told the help request is still under review"
+      Told the help request is still under review:
+        id: Told the help request is still under review
+        meta:
+          description: A card says the help request is still being checked.
+          snapshot: told-the-help-request-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-help-request-is-still-under-review.tsx
+        on:
+          Checks the help request again:
+            target: "#Waiting for the help request to be approved"
+      Told the help request was rejected:
+        id: Told the help request was rejected
+        meta:
+          description: A message explains why the help request was not accepted.
+          snapshot: told-the-help-request-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-help-request-was-rejected.tsx
+        on:
+          Starts the help request again:
+            target: "#Reviewing the help request"
+      Told the help request was approved:
+        id: Told the help request was approved
+        meta:
+          description: A message confirms the help request is approved.
+          snapshot: told-the-help-request-was-approved
+          events:
+            - Help request approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-help-request-was-approved.tsx
+        on:
+          Continues to the request details:
+            target: "#Handling the request details"
+  Handling the request details:
+    id: Handling the request details
+    initial: Reviewing the request details
+    meta:
+      description: Everything about the request details, from review to approval.
+      snapshot: handling-the-request-details
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-request-details.tsx
+      owner: Support team
+    states:
+      Reviewing the request details:
+        id: Reviewing the request details
+        meta:
+          description: The user checks the request details before sending it.
+          snapshot: reviewing-the-request-details
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-request-details.tsx
+          gherkin:
+            - features/support/tickets/request-details.feature
+        on:
+          Taps edit on the request details:
+            target: "#Editing the request details"
+          Submits the request details:
+            target: "#Waiting for the request details to be approved"
+      Editing the request details:
+        id: Editing the request details
+        meta:
+          description: A form to change the request details.
+          snapshot: editing-the-request-details
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-request-details.tsx
+        on:
+          Saves the request details:
+            target: "#Reviewing the request details"
+          Cancels the changes to the request details:
+            target: "#Reviewing the request details"
+          Saving the request details fails:
+            target: "#Told the request details could not be saved"
+      Told the request details could not be saved:
+        id: Told the request details could not be saved
+        meta:
+          description: A message says the request details could not be saved, with "Try again".
+          snapshot: told-the-request-details-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-request-details-could-not-be-saved.tsx
+        on:
+          Tries saving the request details again:
+            target: "#Editing the request details"
+      Waiting for the request details to be approved:
+        id: Waiting for the request details to be approved
+        meta:
+          description: A card says the request details is being checked.
+          snapshot: waiting-for-the-request-details-to-be-approved
+          events:
+            - Request details submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-request-details-to-be-approved.tsx
+          tier: critical
+        on:
+          Support desk approves the request details:
+            target: "#Told the request details was approved"
+          Support desk rejects the request details:
+            target: "#Told the request details was rejected"
+          Approval of the request details takes longer than a day:
+            target: "#Told the request details is still under review"
+      Told the request details is still under review:
+        id: Told the request details is still under review
+        meta:
+          description: A card says the request details is still being checked.
+          snapshot: told-the-request-details-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-request-details-is-still-under-review.tsx
+        on:
+          Checks the request details again:
+            target: "#Waiting for the request details to be approved"
+      Told the request details was rejected:
+        id: Told the request details was rejected
+        meta:
+          description: A message explains why the request details was not accepted.
+          snapshot: told-the-request-details-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-request-details-was-rejected.tsx
+        on:
+          Starts the request details again:
+            target: "#Reviewing the request details"
+      Told the request details was approved:
+        id: Told the request details was approved
+        meta:
+          description: A message confirms the request details is approved.
+          snapshot: told-the-request-details-was-approved
+          events:
+            - Request details approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-request-details-was-approved.tsx
+        on:
+          Continues to the attached screenshot:
+            target: "#Handling the attached screenshot"
+  Handling the attached screenshot:
+    id: Handling the attached screenshot
+    initial: Reviewing the attached screenshot
+    meta:
+      description: Everything about the attached screenshot, from review to approval.
+      snapshot: handling-the-attached-screenshot
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-attached-screenshot.tsx
+      owner: Support team
+    states:
+      Reviewing the attached screenshot:
+        id: Reviewing the attached screenshot
+        meta:
+          description: The user checks the attached screenshot before sending it.
+          snapshot: reviewing-the-attached-screenshot
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-attached-screenshot.tsx
+          gherkin:
+            - features/support/tickets/attached-screenshot.feature
+        on:
+          Taps edit on the attached screenshot:
+            target: "#Editing the attached screenshot"
+          Submits the attached screenshot:
+            target: "#Waiting for the attached screenshot to be approved"
+      Editing the attached screenshot:
+        id: Editing the attached screenshot
+        meta:
+          description: A form to change the attached screenshot.
+          snapshot: editing-the-attached-screenshot
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-attached-screenshot.tsx
+        on:
+          Saves the attached screenshot:
+            target: "#Reviewing the attached screenshot"
+          Cancels the changes to the attached screenshot:
+            target: "#Reviewing the attached screenshot"
+          Saving the attached screenshot fails:
+            target: "#Told the attached screenshot could not be saved"
+      Told the attached screenshot could not be saved:
+        id: Told the attached screenshot could not be saved
+        meta:
+          description: A message says the attached screenshot could not be saved, with "Try again".
+          snapshot: told-the-attached-screenshot-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-attached-screenshot-could-not-be-saved.tsx
+        on:
+          Tries saving the attached screenshot again:
+            target: "#Editing the attached screenshot"
+      Waiting for the attached screenshot to be approved:
+        id: Waiting for the attached screenshot to be approved
+        meta:
+          description: A card says the attached screenshot is being checked.
+          snapshot: waiting-for-the-attached-screenshot-to-be-approved
+          events:
+            - Attached screenshot submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-attached-screenshot-to-be-approved.tsx
+          tier: critical
+        on:
+          Support desk approves the attached screenshot:
+            target: "#Told the attached screenshot was approved"
+          Support desk rejects the attached screenshot:
+            target: "#Told the attached screenshot was rejected"
+          Approval of the attached screenshot takes longer than a day:
+            target: "#Told the attached screenshot is still under review"
+      Told the attached screenshot is still under review:
+        id: Told the attached screenshot is still under review
+        meta:
+          description: A card says the attached screenshot is still being checked.
+          snapshot: told-the-attached-screenshot-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-attached-screenshot-is-still-under-review.tsx
+        on:
+          Checks the attached screenshot again:
+            target: "#Waiting for the attached screenshot to be approved"
+      Told the attached screenshot was rejected:
+        id: Told the attached screenshot was rejected
+        meta:
+          description: A message explains why the attached screenshot was not accepted.
+          snapshot: told-the-attached-screenshot-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-attached-screenshot-was-rejected.tsx
+        on:
+          Starts the attached screenshot again:
+            target: "#Reviewing the attached screenshot"
+      Told the attached screenshot was approved:
+        id: Told the attached screenshot was approved
+        meta:
+          description: A message confirms the attached screenshot is approved.
+          snapshot: told-the-attached-screenshot-was-approved
+          events:
+            - Attached screenshot approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-attached-screenshot-was-approved.tsx
+        on:
+          Starts the escalation:
+            target: "#Going through the escalation"
+  Going through the escalation:
+    id: Going through the escalation
+    meta:
+      description: The escalation runs as its own chart.
+      snapshot: going-through-the-escalation
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/going-through-the-escalation.tsx
+      childMachine: Escalation
+      childFinalEvents:
+        Escalation completed: Escalation is completed
+        Escalation abandoned: Escalation is abandoned
+    on:
+      Escalation is completed:
+        target: "#Handling the reply draft"
+      Escalation is abandoned:
+        target: "#Reviewing the attached screenshot"
+  Handling the reply draft:
+    id: Handling the reply draft
+    initial: Reviewing the reply draft
+    meta:
+      description: Everything about the reply draft, from review to approval.
+      snapshot: handling-the-reply-draft
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-reply-draft.tsx
+      owner: Support team
+    states:
+      Reviewing the reply draft:
+        id: Reviewing the reply draft
+        meta:
+          description: The user checks the reply draft before sending it.
+          snapshot: reviewing-the-reply-draft
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-reply-draft.tsx
+          gherkin:
+            - features/support/tickets/reply-draft.feature
+        on:
+          Taps edit on the reply draft:
+            target: "#Editing the reply draft"
+          Submits the reply draft:
+            target: "#Waiting for the reply draft to be approved"
+      Editing the reply draft:
+        id: Editing the reply draft
+        meta:
+          description: A form to change the reply draft.
+          snapshot: editing-the-reply-draft
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-reply-draft.tsx
+        on:
+          Saves the reply draft:
+            target: "#Reviewing the reply draft"
+          Cancels the changes to the reply draft:
+            target: "#Reviewing the reply draft"
+          Saving the reply draft fails:
+            target: "#Told the reply draft could not be saved"
+      Told the reply draft could not be saved:
+        id: Told the reply draft could not be saved
+        meta:
+          description: A message says the reply draft could not be saved, with "Try again".
+          snapshot: told-the-reply-draft-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-reply-draft-could-not-be-saved.tsx
+        on:
+          Tries saving the reply draft again:
+            target: "#Editing the reply draft"
+      Waiting for the reply draft to be approved:
+        id: Waiting for the reply draft to be approved
+        meta:
+          description: A card says the reply draft is being checked.
+          snapshot: waiting-for-the-reply-draft-to-be-approved
+          events:
+            - Reply draft submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-reply-draft-to-be-approved.tsx
+          tier: critical
+        on:
+          Support desk approves the reply draft:
+            target: "#Told the reply draft was approved"
+          Support desk rejects the reply draft:
+            target: "#Told the reply draft was rejected"
+          Approval of the reply draft takes longer than a day:
+            target: "#Told the reply draft is still under review"
+      Told the reply draft is still under review:
+        id: Told the reply draft is still under review
+        meta:
+          description: A card says the reply draft is still being checked.
+          snapshot: told-the-reply-draft-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-reply-draft-is-still-under-review.tsx
+        on:
+          Checks the reply draft again:
+            target: "#Waiting for the reply draft to be approved"
+      Told the reply draft was rejected:
+        id: Told the reply draft was rejected
+        meta:
+          description: A message explains why the reply draft was not accepted.
+          snapshot: told-the-reply-draft-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-reply-draft-was-rejected.tsx
+        on:
+          Starts the reply draft again:
+            target: "#Reviewing the reply draft"
+      Told the reply draft was approved:
+        id: Told the reply draft was approved
+        meta:
+          description: A message confirms the reply draft is approved.
+          snapshot: told-the-reply-draft-was-approved
+          events:
+            - Reply draft approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-reply-draft-was-approved.tsx
+        on:
+          Continues to the satisfaction rating:
+            target: "#Handling the satisfaction rating"
+  Handling the satisfaction rating:
+    id: Handling the satisfaction rating
+    initial: Reviewing the satisfaction rating
+    meta:
+      description: Everything about the satisfaction rating, from review to approval.
+      snapshot: handling-the-satisfaction-rating
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-satisfaction-rating.tsx
+      owner: Support team
+    states:
+      Reviewing the satisfaction rating:
+        id: Reviewing the satisfaction rating
+        meta:
+          description: The user checks the satisfaction rating before sending it.
+          snapshot: reviewing-the-satisfaction-rating
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-satisfaction-rating.tsx
+          gherkin:
+            - features/support/tickets/satisfaction-rating.feature
+        on:
+          Taps edit on the satisfaction rating:
+            target: "#Editing the satisfaction rating"
+          Submits the satisfaction rating:
+            target: "#Waiting for the satisfaction rating to be approved"
+      Editing the satisfaction rating:
+        id: Editing the satisfaction rating
+        meta:
+          description: A form to change the satisfaction rating.
+          snapshot: editing-the-satisfaction-rating
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-satisfaction-rating.tsx
+        on:
+          Saves the satisfaction rating:
+            target: "#Reviewing the satisfaction rating"
+          Cancels the changes to the satisfaction rating:
+            target: "#Reviewing the satisfaction rating"
+          Saving the satisfaction rating fails:
+            target: "#Told the satisfaction rating could not be saved"
+      Told the satisfaction rating could not be saved:
+        id: Told the satisfaction rating could not be saved
+        meta:
+          description: A message says the satisfaction rating could not be saved, with "Try again".
+          snapshot: told-the-satisfaction-rating-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-satisfaction-rating-could-not-be-saved.tsx
+        on:
+          Tries saving the satisfaction rating again:
+            target: "#Editing the satisfaction rating"
+      Waiting for the satisfaction rating to be approved:
+        id: Waiting for the satisfaction rating to be approved
+        meta:
+          description: A card says the satisfaction rating is being checked.
+          snapshot: waiting-for-the-satisfaction-rating-to-be-approved
+          events:
+            - Satisfaction rating submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-satisfaction-rating-to-be-approved.tsx
+          tier: critical
+        on:
+          Support desk approves the satisfaction rating:
+            target: "#Told the satisfaction rating was approved"
+          Support desk rejects the satisfaction rating:
+            target: "#Told the satisfaction rating was rejected"
+          Approval of the satisfaction rating takes longer than a day:
+            target: "#Told the satisfaction rating is still under review"
+      Told the satisfaction rating is still under review:
+        id: Told the satisfaction rating is still under review
+        meta:
+          description: A card says the satisfaction rating is still being checked.
+          snapshot: told-the-satisfaction-rating-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-satisfaction-rating-is-still-under-review.tsx
+        on:
+          Checks the satisfaction rating again:
+            target: "#Waiting for the satisfaction rating to be approved"
+      Told the satisfaction rating was rejected:
+        id: Told the satisfaction rating was rejected
+        meta:
+          description: A message explains why the satisfaction rating was not accepted.
+          snapshot: told-the-satisfaction-rating-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-satisfaction-rating-was-rejected.tsx
+        on:
+          Starts the satisfaction rating again:
+            target: "#Reviewing the satisfaction rating"
+      Told the satisfaction rating was approved:
+        id: Told the satisfaction rating was approved
+        meta:
+          description: A message confirms the satisfaction rating is approved.
+          snapshot: told-the-satisfaction-rating-was-approved
+          events:
+            - Satisfaction rating approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-satisfaction-rating-was-approved.tsx
+        on:
+          Continues to the support tickets settings:
+            target: "#Support tickets settings"
+  Support tickets settings:
+    id: Support tickets settings
+    type: parallel
+    meta:
+      description: "Settings for support tickets: notifications and help side by side."
+      snapshot: support-tickets-settings
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/support-tickets-settings.tsx
+    states:
+      Support tickets notifications:
+        id: Support tickets notifications
+        initial: Support tickets notifications on
+        meta:
+          description: Whether the user gets notifications.
+          snapshot: support-tickets-notifications
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/support-tickets-notifications.tsx
+        states:
+          Support tickets notifications on:
+            id: Support tickets notifications on
+            meta:
+              description: The notifications switch is on.
+              snapshot: support-tickets-notifications-on
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/support-tickets-notifications-on.tsx
+            on:
+              Turns off support tickets notifications:
+                target: "#Support tickets notifications off"
+          Support tickets notifications off:
+            id: Support tickets notifications off
+            meta:
+              description: The notifications switch is off.
+              snapshot: support-tickets-notifications-off
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/support-tickets-notifications-off.tsx
+            on:
+              Turns on support tickets notifications:
+                target: "#Support tickets notifications on"
+      Support tickets help:
+        id: Support tickets help
+        initial: No open support tickets help request
+        meta:
+          description: Help requests about this part of the product.
+          snapshot: support-tickets-help
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/support-tickets-help.tsx
+        states:
+          No open support tickets help request:
+            id: No open support tickets help request
+            meta:
+              description: A "Get help" button.
+              snapshot: no-open-support-tickets-help-request
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/no-open-support-tickets-help-request.tsx
+            on:
+              Opens a support tickets help request:
+                target: "#Support tickets help request open"
+          Support tickets help request open:
+            id: Support tickets help request open
+            meta:
+              description: A card says the help desk will answer soon.
+              snapshot: support-tickets-help-request-open
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/support-tickets-help-request-open.tsx
+            on:
+              Help desk answers the support tickets help request:
+                target: "#Support tickets help request answered"
+          Support tickets help request answered:
+            id: Support tickets help request answered
+            meta:
+              description: The answer shows in the help card.
+              snapshot: support-tickets-help-request-answered
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/support-tickets-help-request-answered.tsx
+            on:
+              Opens another support tickets help request:
+                target: "#Support tickets help request open"
+    on:
+      Closes the support tickets settings:
+        target: "#Support tickets finished"
+  Support tickets finished:
+    id: Support tickets finished
+    type: final
+    meta:
+      description: The user is done with support tickets.
+      snapshot: support-tickets-finished
+      events:
+        - Support tickets finished
+      confidence: confirmed
+      source:
+        - src/screens/support-tickets-finished.tsx

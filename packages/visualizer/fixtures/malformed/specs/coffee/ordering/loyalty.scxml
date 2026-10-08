@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<statechart name="Loyalty">
+  <state id="collecting-stamps"/>
+</statechart>

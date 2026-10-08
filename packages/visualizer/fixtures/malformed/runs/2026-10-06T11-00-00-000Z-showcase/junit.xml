@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="atlas" tests="1" failures="0" skipped="0" time="120.000">
+  <testsuite name="2026-10-06T11-00-00-000Z-showcase" tests="1" failures="0" skipped="0" timestamp="2026-10-06T11:00:00.000Z">
+    <testcase classname="journey" name="Orders a drink and pays by card" id="journey-1"></testcase>
+  </testsuite>
+</testsuites>

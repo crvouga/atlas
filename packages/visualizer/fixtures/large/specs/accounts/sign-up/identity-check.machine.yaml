@@ -1,0 +1,397 @@
+# Identity check: generated child chart
+id: Identity check
+initial: Handling the photo ID
+meta:
+  description: The identity check, a step inside sign-up.
+  snapshot: identity-check
+  events: []
+  confidence: confirmed
+  source: []
+states:
+  Handling the photo ID:
+    id: Handling the photo ID
+    initial: Reviewing the photo ID
+    meta:
+      description: Everything about the photo ID, from review to approval.
+      snapshot: handling-the-photo-id
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-photo-id.tsx
+      owner: Accounts team
+    states:
+      Reviewing the photo ID:
+        id: Reviewing the photo ID
+        meta:
+          description: The user checks the photo ID before sending it.
+          snapshot: reviewing-the-photo-id
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-photo-id.tsx
+          gherkin:
+            - features/accounts/sign-up/photo-id.feature
+        on:
+          Taps edit on the photo ID:
+            target: "#Editing the photo ID"
+          Submits the photo ID:
+            target: "#Waiting for the photo ID to be approved"
+          Closes the identity check:
+            target: "#Identity check abandoned"
+      Editing the photo ID:
+        id: Editing the photo ID
+        initial: Editing the photo ID details
+        meta:
+          description: The user changes the photo ID, with an optional file.
+          snapshot: editing-the-photo-id
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-photo-id.tsx
+        states:
+          Editing the photo ID details:
+            id: Editing the photo ID details
+            meta:
+              description: A form with the photo ID fields.
+              snapshot: editing-the-photo-id-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-photo-id-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the photo ID"
+          Uploading a file for the photo ID:
+            id: Uploading a file for the photo ID
+            meta:
+              description: A file picker for a document about the photo ID.
+              snapshot: uploading-a-file-for-the-photo-id
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-photo-id.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the photo ID details"
+        on:
+          Saves the photo ID:
+            target: "#Reviewing the photo ID"
+          Cancels the changes to the photo ID:
+            target: "#Reviewing the photo ID"
+          Saving the photo ID fails:
+            target: "#Told the photo ID could not be saved"
+      Told the photo ID could not be saved:
+        id: Told the photo ID could not be saved
+        meta:
+          description: A message says the photo ID could not be saved, with "Try again".
+          snapshot: told-the-photo-id-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-photo-id-could-not-be-saved.tsx
+        on:
+          Tries saving the photo ID again:
+            target: "#Editing the photo ID"
+      Waiting for the photo ID to be approved:
+        id: Waiting for the photo ID to be approved
+        meta:
+          description: A card says the photo ID is being checked.
+          snapshot: waiting-for-the-photo-id-to-be-approved
+          events:
+            - Photo ID submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-photo-id-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the photo ID:
+            target: "#Told the photo ID was approved"
+          Identity service rejects the photo ID:
+            target: "#Told the photo ID was rejected"
+          Approval of the photo ID takes longer than a day:
+            target: "#Told the photo ID is still under review"
+      Told the photo ID is still under review:
+        id: Told the photo ID is still under review
+        meta:
+          description: A card says the photo ID is still being checked.
+          snapshot: told-the-photo-id-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-photo-id-is-still-under-review.tsx
+        on:
+          Checks the photo ID again:
+            target: "#Waiting for the photo ID to be approved"
+      Told the photo ID was rejected:
+        id: Told the photo ID was rejected
+        meta:
+          description: A message explains why the photo ID was not accepted.
+          snapshot: told-the-photo-id-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-photo-id-was-rejected.tsx
+        on:
+          Starts the photo ID again:
+            target: "#Reviewing the photo ID"
+      Told the photo ID was approved:
+        id: Told the photo ID was approved
+        meta:
+          description: A message confirms the photo ID is approved.
+          snapshot: told-the-photo-id-was-approved
+          events:
+            - Photo ID approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-photo-id-was-approved.tsx
+        on:
+          Continues to the selfie match:
+            target: "#Handling the selfie match"
+  Handling the selfie match:
+    id: Handling the selfie match
+    initial: Reviewing the selfie match
+    meta:
+      description: Everything about the selfie match, from review to approval.
+      snapshot: handling-the-selfie-match
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-selfie-match.tsx
+      owner: Accounts team
+    states:
+      Reviewing the selfie match:
+        id: Reviewing the selfie match
+        meta:
+          description: The user checks the selfie match before sending it.
+          snapshot: reviewing-the-selfie-match
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-selfie-match.tsx
+          gherkin:
+            - features/accounts/sign-up/selfie-match.feature
+        on:
+          Taps edit on the selfie match:
+            target: "#Editing the selfie match"
+          Submits the selfie match:
+            target: "#Waiting for the selfie match to be approved"
+      Editing the selfie match:
+        id: Editing the selfie match
+        meta:
+          description: A form to change the selfie match.
+          snapshot: editing-the-selfie-match
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-selfie-match.tsx
+        on:
+          Saves the selfie match:
+            target: "#Reviewing the selfie match"
+          Cancels the changes to the selfie match:
+            target: "#Reviewing the selfie match"
+          Saving the selfie match fails:
+            target: "#Told the selfie match could not be saved"
+      Told the selfie match could not be saved:
+        id: Told the selfie match could not be saved
+        meta:
+          description: A message says the selfie match could not be saved, with "Try again".
+          snapshot: told-the-selfie-match-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-selfie-match-could-not-be-saved.tsx
+        on:
+          Tries saving the selfie match again:
+            target: "#Editing the selfie match"
+      Waiting for the selfie match to be approved:
+        id: Waiting for the selfie match to be approved
+        meta:
+          description: A card says the selfie match is being checked.
+          snapshot: waiting-for-the-selfie-match-to-be-approved
+          events:
+            - Selfie match submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-selfie-match-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the selfie match:
+            target: "#Told the selfie match was approved"
+          Identity service rejects the selfie match:
+            target: "#Told the selfie match was rejected"
+          Approval of the selfie match takes longer than a day:
+            target: "#Told the selfie match is still under review"
+      Told the selfie match is still under review:
+        id: Told the selfie match is still under review
+        meta:
+          description: A card says the selfie match is still being checked.
+          snapshot: told-the-selfie-match-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-selfie-match-is-still-under-review.tsx
+        on:
+          Checks the selfie match again:
+            target: "#Waiting for the selfie match to be approved"
+      Told the selfie match was rejected:
+        id: Told the selfie match was rejected
+        meta:
+          description: A message explains why the selfie match was not accepted.
+          snapshot: told-the-selfie-match-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-selfie-match-was-rejected.tsx
+        on:
+          Starts the selfie match again:
+            target: "#Reviewing the selfie match"
+      Told the selfie match was approved:
+        id: Told the selfie match was approved
+        meta:
+          description: A message confirms the selfie match is approved.
+          snapshot: told-the-selfie-match-was-approved
+          events:
+            - Selfie match approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-selfie-match-was-approved.tsx
+        on:
+          Continues to the address proof:
+            target: "#Handling the address proof"
+  Handling the address proof:
+    id: Handling the address proof
+    initial: Reviewing the address proof
+    meta:
+      description: Everything about the address proof, from review to approval.
+      snapshot: handling-the-address-proof
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-address-proof.tsx
+      owner: Accounts team
+    states:
+      Reviewing the address proof:
+        id: Reviewing the address proof
+        meta:
+          description: The user checks the address proof before sending it.
+          snapshot: reviewing-the-address-proof
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-address-proof.tsx
+          gherkin:
+            - features/accounts/sign-up/address-proof.feature
+        on:
+          Taps edit on the address proof:
+            target: "#Editing the address proof"
+          Submits the address proof:
+            target: "#Waiting for the address proof to be approved"
+      Editing the address proof:
+        id: Editing the address proof
+        meta:
+          description: A form to change the address proof.
+          snapshot: editing-the-address-proof
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-address-proof.tsx
+        on:
+          Saves the address proof:
+            target: "#Reviewing the address proof"
+          Cancels the changes to the address proof:
+            target: "#Reviewing the address proof"
+          Saving the address proof fails:
+            target: "#Told the address proof could not be saved"
+      Told the address proof could not be saved:
+        id: Told the address proof could not be saved
+        meta:
+          description: A message says the address proof could not be saved, with "Try again".
+          snapshot: told-the-address-proof-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-address-proof-could-not-be-saved.tsx
+        on:
+          Tries saving the address proof again:
+            target: "#Editing the address proof"
+      Waiting for the address proof to be approved:
+        id: Waiting for the address proof to be approved
+        meta:
+          description: A card says the address proof is being checked.
+          snapshot: waiting-for-the-address-proof-to-be-approved
+          events:
+            - Address proof submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-address-proof-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the address proof:
+            target: "#Told the address proof was approved"
+          Identity service rejects the address proof:
+            target: "#Told the address proof was rejected"
+          Approval of the address proof takes longer than a day:
+            target: "#Told the address proof is still under review"
+      Told the address proof is still under review:
+        id: Told the address proof is still under review
+        meta:
+          description: A card says the address proof is still being checked.
+          snapshot: told-the-address-proof-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-address-proof-is-still-under-review.tsx
+        on:
+          Checks the address proof again:
+            target: "#Waiting for the address proof to be approved"
+      Told the address proof was rejected:
+        id: Told the address proof was rejected
+        meta:
+          description: A message explains why the address proof was not accepted.
+          snapshot: told-the-address-proof-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-address-proof-was-rejected.tsx
+        on:
+          Starts the address proof again:
+            target: "#Reviewing the address proof"
+      Told the address proof was approved:
+        id: Told the address proof was approved
+        meta:
+          description: A message confirms the address proof is approved.
+          snapshot: told-the-address-proof-was-approved
+          events:
+            - Address proof approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-address-proof-was-approved.tsx
+        on:
+          Finishes the identity check:
+            target: "#Identity check completed"
+  Identity check completed:
+    id: Identity check completed
+    type: final
+    meta:
+      description: The identity check is done.
+      snapshot: identity-check-completed
+      events:
+        - Identity check completed
+      confidence: confirmed
+      source:
+        - src/screens/identity-check-completed.tsx
+      doneEvent: Identity check is completed
+  Identity check abandoned:
+    id: Identity check abandoned
+    type: final
+    meta:
+      description: The user left the identity check before the end.
+      snapshot: identity-check-abandoned
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/identity-check-abandoned.tsx
+      doneEvent: Identity check is abandoned

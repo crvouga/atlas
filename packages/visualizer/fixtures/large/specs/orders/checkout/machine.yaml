@@ -1,0 +1,724 @@
+# Order checkout: generated fixture chart
+id: Order checkout
+initial: Handling the shopping cart
+meta:
+  description: Carts, checkout and order history.
+  snapshot: order-checkout
+  events: []
+  confidence: confirmed
+  source:
+    - src/screens/order-checkout
+  timeEvents:
+    Approval of the shopping cart takes longer than a day: 1 day
+  eventKinds:
+    Payment processor approves the shopping cart: system
+    Checks the shopping cart again: user
+states:
+  Handling the shopping cart:
+    id: Handling the shopping cart
+    initial: Reviewing the shopping cart
+    meta:
+      description: Everything about the shopping cart, from review to approval.
+      snapshot: handling-the-shopping-cart
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-shopping-cart.tsx
+      owner: Orders team
+    states:
+      Reviewing the shopping cart:
+        id: Reviewing the shopping cart
+        meta:
+          description: The user checks the shopping cart before sending it.
+          snapshot: reviewing-the-shopping-cart
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-shopping-cart.tsx
+          gherkin:
+            - features/orders/checkout/shopping-cart.feature
+        on:
+          Taps edit on the shopping cart:
+            target: "#Editing the shopping cart"
+          Submits the shopping cart:
+            target: "#Waiting for the shopping cart to be approved"
+      Editing the shopping cart:
+        id: Editing the shopping cart
+        initial: Editing the shopping cart details
+        meta:
+          description: The user changes the shopping cart, with an optional file.
+          snapshot: editing-the-shopping-cart
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-shopping-cart.tsx
+        states:
+          Editing the shopping cart details:
+            id: Editing the shopping cart details
+            meta:
+              description: A form with the shopping cart fields.
+              snapshot: editing-the-shopping-cart-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-shopping-cart-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the shopping cart"
+          Uploading a file for the shopping cart:
+            id: Uploading a file for the shopping cart
+            meta:
+              description: A file picker for a document about the shopping cart.
+              snapshot: uploading-a-file-for-the-shopping-cart
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-shopping-cart.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the shopping cart details"
+        on:
+          Saves the shopping cart:
+            target: "#Reviewing the shopping cart"
+          Cancels the changes to the shopping cart:
+            target: "#Reviewing the shopping cart"
+          Saving the shopping cart fails:
+            target: "#Told the shopping cart could not be saved"
+      Told the shopping cart could not be saved:
+        id: Told the shopping cart could not be saved
+        meta:
+          description: A message says the shopping cart could not be saved, with "Try again".
+          snapshot: told-the-shopping-cart-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-shopping-cart-could-not-be-saved.tsx
+        on:
+          Tries saving the shopping cart again:
+            target: "#Editing the shopping cart"
+      Waiting for the shopping cart to be approved:
+        id: Waiting for the shopping cart to be approved
+        meta:
+          description: A card says the shopping cart is being checked.
+          snapshot: waiting-for-the-shopping-cart-to-be-approved
+          events:
+            - Shopping cart submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-shopping-cart-to-be-approved.tsx
+          tier: critical
+        on:
+          Payment processor approves the shopping cart:
+            target: "#Told the shopping cart was approved"
+          Payment processor rejects the shopping cart:
+            target: "#Told the shopping cart was rejected"
+          Approval of the shopping cart takes longer than a day:
+            target: "#Told the shopping cart is still under review"
+      Told the shopping cart is still under review:
+        id: Told the shopping cart is still under review
+        meta:
+          description: A card says the shopping cart is still being checked.
+          snapshot: told-the-shopping-cart-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-shopping-cart-is-still-under-review.tsx
+        on:
+          Checks the shopping cart again:
+            target: "#Waiting for the shopping cart to be approved"
+      Told the shopping cart was rejected:
+        id: Told the shopping cart was rejected
+        meta:
+          description: A message explains why the shopping cart was not accepted.
+          snapshot: told-the-shopping-cart-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-shopping-cart-was-rejected.tsx
+        on:
+          Starts the shopping cart again:
+            target: "#Reviewing the shopping cart"
+      Told the shopping cart was approved:
+        id: Told the shopping cart was approved
+        meta:
+          description: A message confirms the shopping cart is approved.
+          snapshot: told-the-shopping-cart-was-approved
+          events:
+            - Shopping cart approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-shopping-cart-was-approved.tsx
+        on:
+          Continues to the delivery address:
+            target: "#Handling the delivery address"
+  Handling the delivery address:
+    id: Handling the delivery address
+    initial: Reviewing the delivery address
+    meta:
+      description: Everything about the delivery address, from review to approval.
+      snapshot: handling-the-delivery-address
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-delivery-address.tsx
+      owner: Orders team
+    states:
+      Reviewing the delivery address:
+        id: Reviewing the delivery address
+        meta:
+          description: The user checks the delivery address before sending it.
+          snapshot: reviewing-the-delivery-address
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-delivery-address.tsx
+          gherkin:
+            - features/orders/checkout/delivery-address.feature
+        on:
+          Taps edit on the delivery address:
+            target: "#Editing the delivery address"
+          Submits the delivery address:
+            target: "#Waiting for the delivery address to be approved"
+      Editing the delivery address:
+        id: Editing the delivery address
+        meta:
+          description: A form to change the delivery address.
+          snapshot: editing-the-delivery-address
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-delivery-address.tsx
+        on:
+          Saves the delivery address:
+            target: "#Reviewing the delivery address"
+          Cancels the changes to the delivery address:
+            target: "#Reviewing the delivery address"
+          Saving the delivery address fails:
+            target: "#Told the delivery address could not be saved"
+      Told the delivery address could not be saved:
+        id: Told the delivery address could not be saved
+        meta:
+          description: A message says the delivery address could not be saved, with "Try again".
+          snapshot: told-the-delivery-address-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-address-could-not-be-saved.tsx
+        on:
+          Tries saving the delivery address again:
+            target: "#Editing the delivery address"
+      Waiting for the delivery address to be approved:
+        id: Waiting for the delivery address to be approved
+        meta:
+          description: A card says the delivery address is being checked.
+          snapshot: waiting-for-the-delivery-address-to-be-approved
+          events:
+            - Delivery address submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-delivery-address-to-be-approved.tsx
+          tier: critical
+        on:
+          Payment processor approves the delivery address:
+            target: "#Told the delivery address was approved"
+          Payment processor rejects the delivery address:
+            target: "#Told the delivery address was rejected"
+          Approval of the delivery address takes longer than a day:
+            target: "#Told the delivery address is still under review"
+      Told the delivery address is still under review:
+        id: Told the delivery address is still under review
+        meta:
+          description: A card says the delivery address is still being checked.
+          snapshot: told-the-delivery-address-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-delivery-address-is-still-under-review.tsx
+        on:
+          Checks the delivery address again:
+            target: "#Waiting for the delivery address to be approved"
+      Told the delivery address was rejected:
+        id: Told the delivery address was rejected
+        meta:
+          description: A message explains why the delivery address was not accepted.
+          snapshot: told-the-delivery-address-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-address-was-rejected.tsx
+        on:
+          Starts the delivery address again:
+            target: "#Reviewing the delivery address"
+      Told the delivery address was approved:
+        id: Told the delivery address was approved
+        meta:
+          description: A message confirms the delivery address is approved.
+          snapshot: told-the-delivery-address-was-approved
+          events:
+            - Delivery address approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-address-was-approved.tsx
+        on:
+          Starts the payment:
+            target: "#Going through the payment"
+  Going through the payment:
+    id: Going through the payment
+    meta:
+      description: The payment runs as its own chart.
+      snapshot: going-through-the-payment
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/going-through-the-payment.tsx
+    invoke:
+      src: Payment
+      id: payment
+    on:
+      Payment is completed:
+        target: "#Handling the payment method"
+      Payment is abandoned:
+        target: "#Reviewing the delivery address"
+  Handling the payment method:
+    id: Handling the payment method
+    initial: Reviewing the payment method
+    meta:
+      description: Everything about the payment method, from review to approval.
+      snapshot: handling-the-payment-method
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-payment-method.tsx
+      owner: Orders team
+    states:
+      Reviewing the payment method:
+        id: Reviewing the payment method
+        meta:
+          description: The user checks the payment method before sending it.
+          snapshot: reviewing-the-payment-method
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-payment-method.tsx
+          gherkin:
+            - features/orders/checkout/payment-method.feature
+        on:
+          Taps edit on the payment method:
+            target: "#Editing the payment method"
+          Submits the payment method:
+            target: "#Waiting for the payment method to be approved"
+      Editing the payment method:
+        id: Editing the payment method
+        meta:
+          description: A form to change the payment method.
+          snapshot: editing-the-payment-method
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-payment-method.tsx
+        on:
+          Saves the payment method:
+            target: "#Reviewing the payment method"
+          Cancels the changes to the payment method:
+            target: "#Reviewing the payment method"
+          Saving the payment method fails:
+            target: "#Told the payment method could not be saved"
+      Told the payment method could not be saved:
+        id: Told the payment method could not be saved
+        meta:
+          description: A message says the payment method could not be saved, with "Try again".
+          snapshot: told-the-payment-method-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-payment-method-could-not-be-saved.tsx
+        on:
+          Tries saving the payment method again:
+            target: "#Editing the payment method"
+      Waiting for the payment method to be approved:
+        id: Waiting for the payment method to be approved
+        meta:
+          description: A card says the payment method is being checked.
+          snapshot: waiting-for-the-payment-method-to-be-approved
+          events:
+            - Payment method submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-payment-method-to-be-approved.tsx
+          tier: critical
+        on:
+          Payment processor approves the payment method:
+            target: "#Told the payment method was approved"
+          Payment processor rejects the payment method:
+            target: "#Told the payment method was rejected"
+          Approval of the payment method takes longer than a day:
+            target: "#Told the payment method is still under review"
+      Told the payment method is still under review:
+        id: Told the payment method is still under review
+        meta:
+          description: A card says the payment method is still being checked.
+          snapshot: told-the-payment-method-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-payment-method-is-still-under-review.tsx
+        on:
+          Checks the payment method again:
+            target: "#Waiting for the payment method to be approved"
+      Told the payment method was rejected:
+        id: Told the payment method was rejected
+        meta:
+          description: A message explains why the payment method was not accepted.
+          snapshot: told-the-payment-method-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-payment-method-was-rejected.tsx
+        on:
+          Starts the payment method again:
+            target: "#Reviewing the payment method"
+      Told the payment method was approved:
+        id: Told the payment method was approved
+        meta:
+          description: A message confirms the payment method is approved.
+          snapshot: told-the-payment-method-was-approved
+          events:
+            - Payment method approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-payment-method-was-approved.tsx
+        on:
+          Continues to the promo code:
+            target: "#Handling the promo code"
+  Handling the promo code:
+    id: Handling the promo code
+    initial: Reviewing the promo code
+    meta:
+      description: Everything about the promo code, from review to approval.
+      snapshot: handling-the-promo-code
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-promo-code.tsx
+      owner: Orders team
+    states:
+      Reviewing the promo code:
+        id: Reviewing the promo code
+        meta:
+          description: The user checks the promo code before sending it.
+          snapshot: reviewing-the-promo-code
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-promo-code.tsx
+          gherkin:
+            - features/orders/checkout/promo-code.feature
+        on:
+          Taps edit on the promo code:
+            target: "#Editing the promo code"
+          Submits the promo code:
+            target: "#Waiting for the promo code to be approved"
+      Editing the promo code:
+        id: Editing the promo code
+        meta:
+          description: A form to change the promo code.
+          snapshot: editing-the-promo-code
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-promo-code.tsx
+        on:
+          Saves the promo code:
+            target: "#Reviewing the promo code"
+          Cancels the changes to the promo code:
+            target: "#Reviewing the promo code"
+          Saving the promo code fails:
+            target: "#Told the promo code could not be saved"
+      Told the promo code could not be saved:
+        id: Told the promo code could not be saved
+        meta:
+          description: A message says the promo code could not be saved, with "Try again".
+          snapshot: told-the-promo-code-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-promo-code-could-not-be-saved.tsx
+        on:
+          Tries saving the promo code again:
+            target: "#Editing the promo code"
+      Waiting for the promo code to be approved:
+        id: Waiting for the promo code to be approved
+        meta:
+          description: A card says the promo code is being checked.
+          snapshot: waiting-for-the-promo-code-to-be-approved
+          events:
+            - Promo code submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-promo-code-to-be-approved.tsx
+          tier: critical
+        on:
+          Payment processor approves the promo code:
+            target: "#Told the promo code was approved"
+          Payment processor rejects the promo code:
+            target: "#Told the promo code was rejected"
+          Approval of the promo code takes longer than a day:
+            target: "#Told the promo code is still under review"
+      Told the promo code is still under review:
+        id: Told the promo code is still under review
+        meta:
+          description: A card says the promo code is still being checked.
+          snapshot: told-the-promo-code-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-promo-code-is-still-under-review.tsx
+        on:
+          Checks the promo code again:
+            target: "#Waiting for the promo code to be approved"
+      Told the promo code was rejected:
+        id: Told the promo code was rejected
+        meta:
+          description: A message explains why the promo code was not accepted.
+          snapshot: told-the-promo-code-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-promo-code-was-rejected.tsx
+        on:
+          Starts the promo code again:
+            target: "#Reviewing the promo code"
+      Told the promo code was approved:
+        id: Told the promo code was approved
+        meta:
+          description: A message confirms the promo code is approved.
+          snapshot: told-the-promo-code-was-approved
+          events:
+            - Promo code approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-promo-code-was-approved.tsx
+        on:
+          Continues to the gift message:
+            target: "#Handling the gift message"
+  Handling the gift message:
+    id: Handling the gift message
+    initial: Reviewing the gift message
+    meta:
+      description: Everything about the gift message, from review to approval.
+      snapshot: handling-the-gift-message
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-gift-message.tsx
+      owner: Orders team
+    states:
+      Reviewing the gift message:
+        id: Reviewing the gift message
+        meta:
+          description: The user checks the gift message before sending it.
+          snapshot: reviewing-the-gift-message
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-gift-message.tsx
+          gherkin:
+            - features/orders/checkout/gift-message.feature
+        on:
+          Taps edit on the gift message:
+            target: "#Editing the gift message"
+          Submits the gift message:
+            target: "#Waiting for the gift message to be approved"
+      Editing the gift message:
+        id: Editing the gift message
+        meta:
+          description: A form to change the gift message.
+          snapshot: editing-the-gift-message
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-gift-message.tsx
+        on:
+          Saves the gift message:
+            target: "#Reviewing the gift message"
+          Cancels the changes to the gift message:
+            target: "#Reviewing the gift message"
+          Saving the gift message fails:
+            target: "#Told the gift message could not be saved"
+      Told the gift message could not be saved:
+        id: Told the gift message could not be saved
+        meta:
+          description: A message says the gift message could not be saved, with "Try again".
+          snapshot: told-the-gift-message-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-gift-message-could-not-be-saved.tsx
+        on:
+          Tries saving the gift message again:
+            target: "#Editing the gift message"
+      Waiting for the gift message to be approved:
+        id: Waiting for the gift message to be approved
+        meta:
+          description: A card says the gift message is being checked.
+          snapshot: waiting-for-the-gift-message-to-be-approved
+          events:
+            - Gift message submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-gift-message-to-be-approved.tsx
+          tier: critical
+        on:
+          Payment processor approves the gift message:
+            target: "#Told the gift message was approved"
+          Payment processor rejects the gift message:
+            target: "#Told the gift message was rejected"
+          Approval of the gift message takes longer than a day:
+            target: "#Told the gift message is still under review"
+      Told the gift message is still under review:
+        id: Told the gift message is still under review
+        meta:
+          description: A card says the gift message is still being checked.
+          snapshot: told-the-gift-message-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-gift-message-is-still-under-review.tsx
+        on:
+          Checks the gift message again:
+            target: "#Waiting for the gift message to be approved"
+      Told the gift message was rejected:
+        id: Told the gift message was rejected
+        meta:
+          description: A message explains why the gift message was not accepted.
+          snapshot: told-the-gift-message-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-gift-message-was-rejected.tsx
+        on:
+          Starts the gift message again:
+            target: "#Reviewing the gift message"
+      Told the gift message was approved:
+        id: Told the gift message was approved
+        meta:
+          description: A message confirms the gift message is approved.
+          snapshot: told-the-gift-message-was-approved
+          events:
+            - Gift message approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-gift-message-was-approved.tsx
+        on:
+          Continues to the order checkout settings:
+            target: "#Order checkout settings"
+  Order checkout settings:
+    id: Order checkout settings
+    type: parallel
+    meta:
+      description: "Settings for order checkout: notifications and help side by side."
+      snapshot: order-checkout-settings
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/order-checkout-settings.tsx
+    states:
+      Order checkout notifications:
+        id: Order checkout notifications
+        initial: Order checkout notifications on
+        meta:
+          description: Whether the user gets notifications.
+          snapshot: order-checkout-notifications
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/order-checkout-notifications.tsx
+        states:
+          Order checkout notifications on:
+            id: Order checkout notifications on
+            meta:
+              description: The notifications switch is on.
+              snapshot: order-checkout-notifications-on
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/order-checkout-notifications-on.tsx
+            on:
+              Turns off order checkout notifications:
+                target: "#Order checkout notifications off"
+          Order checkout notifications off:
+            id: Order checkout notifications off
+            meta:
+              description: The notifications switch is off.
+              snapshot: order-checkout-notifications-off
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/order-checkout-notifications-off.tsx
+            on:
+              Turns on order checkout notifications:
+                target: "#Order checkout notifications on"
+      Order checkout help:
+        id: Order checkout help
+        initial: No open order checkout help request
+        meta:
+          description: Help requests about this part of the product.
+          snapshot: order-checkout-help
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/order-checkout-help.tsx
+        states:
+          No open order checkout help request:
+            id: No open order checkout help request
+            meta:
+              description: A "Get help" button.
+              snapshot: no-open-order-checkout-help-request
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/no-open-order-checkout-help-request.tsx
+            on:
+              Opens a order checkout help request:
+                target: "#Order checkout help request open"
+          Order checkout help request open:
+            id: Order checkout help request open
+            meta:
+              description: A card says the help desk will answer soon.
+              snapshot: order-checkout-help-request-open
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/order-checkout-help-request-open.tsx
+            on:
+              Help desk answers the order checkout help request:
+                target: "#Order checkout help request answered"
+          Order checkout help request answered:
+            id: Order checkout help request answered
+            meta:
+              description: The answer shows in the help card.
+              snapshot: order-checkout-help-request-answered
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/order-checkout-help-request-answered.tsx
+            on:
+              Opens another order checkout help request:
+                target: "#Order checkout help request open"
+    on:
+      Closes the order checkout settings:
+        target: "#Order checkout finished"
+  Order checkout finished:
+    id: Order checkout finished
+    type: final
+    meta:
+      description: The user is done with order checkout.
+      snapshot: order-checkout-finished
+      events:
+        - Order checkout finished
+      confidence: confirmed
+      source:
+        - src/screens/order-checkout-finished.tsx

@@ -1,0 +1,395 @@
+# Product comparison: generated child chart
+id: Product comparison
+initial: Handling the comparison list
+meta:
+  description: The product comparison, a step inside product browsing.
+  snapshot: product-comparison
+  events: []
+  confidence: confirmed
+  source: []
+states:
+  Handling the comparison list:
+    id: Handling the comparison list
+    initial: Reviewing the comparison list
+    meta:
+      description: Everything about the comparison list, from review to approval.
+      snapshot: handling-the-comparison-list
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-comparison-list.tsx
+      owner: Catalog team
+    states:
+      Reviewing the comparison list:
+        id: Reviewing the comparison list
+        meta:
+          description: The user checks the comparison list before sending it.
+          snapshot: reviewing-the-comparison-list
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-comparison-list.tsx
+          gherkin:
+            - features/catalog/browsing/comparison-list.feature
+        on:
+          Taps edit on the comparison list:
+            target: "#Editing the comparison list"
+          Submits the comparison list:
+            target: "#Waiting for the comparison list to be approved"
+          Closes the product comparison:
+            target: "#Product comparison abandoned"
+      Editing the comparison list:
+        id: Editing the comparison list
+        initial: Editing the comparison list details
+        meta:
+          description: The user changes the comparison list, with an optional file.
+          snapshot: editing-the-comparison-list
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-comparison-list.tsx
+        states:
+          Editing the comparison list details:
+            id: Editing the comparison list details
+            meta:
+              description: A form with the comparison list fields.
+              snapshot: editing-the-comparison-list-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-comparison-list-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the comparison list"
+          Uploading a file for the comparison list:
+            id: Uploading a file for the comparison list
+            meta:
+              description: A file picker for a document about the comparison list.
+              snapshot: uploading-a-file-for-the-comparison-list
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-comparison-list.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the comparison list details"
+        on:
+          Saves the comparison list:
+            target: "#Reviewing the comparison list"
+          Cancels the changes to the comparison list:
+            target: "#Reviewing the comparison list"
+          Saving the comparison list fails:
+            target: "#Told the comparison list could not be saved"
+      Told the comparison list could not be saved:
+        id: Told the comparison list could not be saved
+        meta:
+          description: A message says the comparison list could not be saved, with "Try again".
+          snapshot: told-the-comparison-list-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-list-could-not-be-saved.tsx
+        on:
+          Tries saving the comparison list again:
+            target: "#Editing the comparison list"
+      Waiting for the comparison list to be approved:
+        id: Waiting for the comparison list to be approved
+        meta:
+          description: A card says the comparison list is being checked.
+          snapshot: waiting-for-the-comparison-list-to-be-approved
+          events:
+            - Comparison list submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-comparison-list-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the comparison list:
+            target: "#Told the comparison list was approved"
+          Catalog service rejects the comparison list:
+            target: "#Told the comparison list was rejected"
+          Approval of the comparison list takes longer than a day:
+            target: "#Told the comparison list is still under review"
+      Told the comparison list is still under review:
+        id: Told the comparison list is still under review
+        meta:
+          description: A card says the comparison list is still being checked.
+          snapshot: told-the-comparison-list-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-comparison-list-is-still-under-review.tsx
+        on:
+          Checks the comparison list again:
+            target: "#Waiting for the comparison list to be approved"
+      Told the comparison list was rejected:
+        id: Told the comparison list was rejected
+        meta:
+          description: A message explains why the comparison list was not accepted.
+          snapshot: told-the-comparison-list-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-list-was-rejected.tsx
+        on:
+          Starts the comparison list again:
+            target: "#Reviewing the comparison list"
+      Told the comparison list was approved:
+        id: Told the comparison list was approved
+        meta:
+          description: A message confirms the comparison list is approved.
+          snapshot: told-the-comparison-list-was-approved
+          events:
+            - Comparison list approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-list-was-approved.tsx
+        on:
+          Continues to the comparison table:
+            target: "#Handling the comparison table"
+  Handling the comparison table:
+    id: Handling the comparison table
+    initial: Reviewing the comparison table
+    meta:
+      description: Everything about the comparison table, from review to approval.
+      snapshot: handling-the-comparison-table
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-comparison-table.tsx
+      owner: Catalog team
+    states:
+      Reviewing the comparison table:
+        id: Reviewing the comparison table
+        meta:
+          description: The user checks the comparison table before sending it.
+          snapshot: reviewing-the-comparison-table
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-comparison-table.tsx
+          gherkin:
+            - features/catalog/browsing/comparison-table.feature
+        on:
+          Taps edit on the comparison table:
+            target: "#Editing the comparison table"
+          Submits the comparison table:
+            target: "#Waiting for the comparison table to be approved"
+      Editing the comparison table:
+        id: Editing the comparison table
+        meta:
+          description: A form to change the comparison table.
+          snapshot: editing-the-comparison-table
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-comparison-table.tsx
+        on:
+          Saves the comparison table:
+            target: "#Reviewing the comparison table"
+          Cancels the changes to the comparison table:
+            target: "#Reviewing the comparison table"
+          Saving the comparison table fails:
+            target: "#Told the comparison table could not be saved"
+      Told the comparison table could not be saved:
+        id: Told the comparison table could not be saved
+        meta:
+          description: A message says the comparison table could not be saved, with "Try again".
+          snapshot: told-the-comparison-table-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-table-could-not-be-saved.tsx
+        on:
+          Tries saving the comparison table again:
+            target: "#Editing the comparison table"
+      Waiting for the comparison table to be approved:
+        id: Waiting for the comparison table to be approved
+        meta:
+          description: A card says the comparison table is being checked.
+          snapshot: waiting-for-the-comparison-table-to-be-approved
+          events:
+            - Comparison table submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-comparison-table-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the comparison table:
+            target: "#Told the comparison table was approved"
+          Catalog service rejects the comparison table:
+            target: "#Told the comparison table was rejected"
+          Approval of the comparison table takes longer than a day:
+            target: "#Told the comparison table is still under review"
+      Told the comparison table is still under review:
+        id: Told the comparison table is still under review
+        meta:
+          description: A card says the comparison table is still being checked.
+          snapshot: told-the-comparison-table-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-comparison-table-is-still-under-review.tsx
+        on:
+          Checks the comparison table again:
+            target: "#Waiting for the comparison table to be approved"
+      Told the comparison table was rejected:
+        id: Told the comparison table was rejected
+        meta:
+          description: A message explains why the comparison table was not accepted.
+          snapshot: told-the-comparison-table-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-table-was-rejected.tsx
+        on:
+          Starts the comparison table again:
+            target: "#Reviewing the comparison table"
+      Told the comparison table was approved:
+        id: Told the comparison table was approved
+        meta:
+          description: A message confirms the comparison table is approved.
+          snapshot: told-the-comparison-table-was-approved
+          events:
+            - Comparison table approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-table-was-approved.tsx
+        on:
+          Continues to the comparison summary:
+            target: "#Handling the comparison summary"
+  Handling the comparison summary:
+    id: Handling the comparison summary
+    initial: Reviewing the comparison summary
+    meta:
+      description: Everything about the comparison summary, from review to approval.
+      snapshot: handling-the-comparison-summary
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-comparison-summary.tsx
+      owner: Catalog team
+    states:
+      Reviewing the comparison summary:
+        id: Reviewing the comparison summary
+        meta:
+          description: The user checks the comparison summary before sending it.
+          snapshot: reviewing-the-comparison-summary
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-comparison-summary.tsx
+          gherkin:
+            - features/catalog/browsing/comparison-summary.feature
+        on:
+          Taps edit on the comparison summary:
+            target: "#Editing the comparison summary"
+          Submits the comparison summary:
+            target: "#Waiting for the comparison summary to be approved"
+      Editing the comparison summary:
+        id: Editing the comparison summary
+        meta:
+          description: A form to change the comparison summary.
+          snapshot: editing-the-comparison-summary
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-comparison-summary.tsx
+        on:
+          Saves the comparison summary:
+            target: "#Reviewing the comparison summary"
+          Cancels the changes to the comparison summary:
+            target: "#Reviewing the comparison summary"
+          Saving the comparison summary fails:
+            target: "#Told the comparison summary could not be saved"
+      Told the comparison summary could not be saved:
+        id: Told the comparison summary could not be saved
+        meta:
+          description: A message says the comparison summary could not be saved, with "Try again".
+          snapshot: told-the-comparison-summary-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-summary-could-not-be-saved.tsx
+        on:
+          Tries saving the comparison summary again:
+            target: "#Editing the comparison summary"
+      Waiting for the comparison summary to be approved:
+        id: Waiting for the comparison summary to be approved
+        meta:
+          description: A card says the comparison summary is being checked.
+          snapshot: waiting-for-the-comparison-summary-to-be-approved
+          events:
+            - Comparison summary submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-comparison-summary-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the comparison summary:
+            target: "#Told the comparison summary was approved"
+          Catalog service rejects the comparison summary:
+            target: "#Told the comparison summary was rejected"
+          Approval of the comparison summary takes longer than a day:
+            target: "#Told the comparison summary is still under review"
+      Told the comparison summary is still under review:
+        id: Told the comparison summary is still under review
+        meta:
+          description: A card says the comparison summary is still being checked.
+          snapshot: told-the-comparison-summary-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-comparison-summary-is-still-under-review.tsx
+        on:
+          Checks the comparison summary again:
+            target: "#Waiting for the comparison summary to be approved"
+      Told the comparison summary was rejected:
+        id: Told the comparison summary was rejected
+        meta:
+          description: A message explains why the comparison summary was not accepted.
+          snapshot: told-the-comparison-summary-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-summary-was-rejected.tsx
+        on:
+          Starts the comparison summary again:
+            target: "#Reviewing the comparison summary"
+      Told the comparison summary was approved:
+        id: Told the comparison summary was approved
+        meta:
+          description: A message confirms the comparison summary is approved.
+          snapshot: told-the-comparison-summary-was-approved
+          events:
+            - Comparison summary approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-comparison-summary-was-approved.tsx
+        on:
+          Finishes the product comparison:
+            target: "#Product comparison completed"
+  Product comparison completed:
+    id: Product comparison completed
+    type: final
+    meta:
+      description: The product comparison is done.
+      snapshot: product-comparison-completed
+      events:
+        - Product comparison completed
+      confidence: confirmed
+      source:
+        - src/screens/product-comparison-completed.tsx
+  Product comparison abandoned:
+    id: Product comparison abandoned
+    type: final
+    meta:
+      description: The user left the product comparison before the end.
+      snapshot: product-comparison-abandoned
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/product-comparison-abandoned.tsx

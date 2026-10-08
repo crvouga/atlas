@@ -1,0 +1,41 @@
+{
+  "name": "@crvouga/atlas-vitest",
+  "version": "0.1.0",
+  "description": "Run an Atlas statechart as a Vitest (or Jest-style) suite: one test per planned path, with any driver.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crvouga/atlas",
+    "directory": "packages/vitest"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@crvouga/atlas": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.6"
+  }
+}

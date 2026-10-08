@@ -1,0 +1,129 @@
+journeys:
+  Happy path through sign-up:
+    description: Everything is approved the first time, through the identity check and settings.
+    events:
+      - Submits the account details
+      - Identity service approves the account details
+      - Continues to the home address
+      - Submits the home address
+      - Identity service approves the home address
+      - Continues to the date of birth
+      - Submits the date of birth
+      - Identity service approves the date of birth
+      - Starts the identity check
+      - Submits the photo ID
+      - Identity service approves the photo ID
+      - Continues to the selfie match
+      - Submits the selfie match
+      - Identity service approves the selfie match
+      - Continues to the address proof
+      - Submits the address proof
+      - Identity service approves the address proof
+      - Finishes the identity check
+      - Submits the profile photo
+      - Identity service approves the profile photo
+      - Continues to the notification preferences
+      - Submits the notification preferences
+      - Identity service approves the notification preferences
+      - Continues to the security questions
+      - Submits the security questions
+      - Identity service approves the security questions
+      - Continues to the sign-up settings
+      - Closes the sign-up settings
+    endsIn:
+      - Sign-up finished
+    owner: Accounts team
+    tour: true
+  Edits the account details with a file:
+    description: The user edits the account details, uploads a file, then sends it.
+    events:
+      - Taps edit on the account details
+      - Uploads a file
+      - Finishes uploading the file
+      - Saves the account details
+      - Submits the account details
+      - Identity service approves the account details
+    endsIn:
+      - Told the account details was approved
+  Saving the account details fails, then works:
+    description: The first save fails and the retry works.
+    events:
+      - Taps edit on the account details
+      - Saving the account details fails
+      - Tries saving the account details again
+      - Saves the account details
+    endsIn:
+      - Reviewing the account details
+  Slow approval of the home address:
+    description: Approval of the home address takes more than a day.
+    events:
+      - Submits the account details
+      - Identity service approves the account details
+      - Continues to the home address
+      - Submits the home address
+      - Approval of the home address takes longer than a day
+      - Checks the home address again
+      - Identity service approves the home address
+    endsIn:
+      - Told the home address was approved
+  Account details rejected, then approved:
+    description: The account details is rejected once, then approved.
+    events:
+      - Submits the account details
+      - Identity service rejects the account details
+      - Starts the account details again
+      - Submits the account details
+      - Identity service approves the account details
+    endsIn:
+      - Told the account details was approved
+  Leaves the identity check early:
+    description: The user closes the identity check right away and goes back a step.
+    events:
+      - Submits the account details
+      - Identity service approves the account details
+      - Continues to the home address
+      - Submits the home address
+      - Identity service approves the home address
+      - Continues to the date of birth
+      - Submits the date of birth
+      - Identity service approves the date of birth
+      - Starts the identity check
+      - Closes the identity check
+    endsIn:
+      - Reviewing the date of birth
+  Changes sign-up settings:
+    description: Notifications off, then a help request that gets answered.
+    events:
+      - Submits the account details
+      - Identity service approves the account details
+      - Continues to the home address
+      - Submits the home address
+      - Identity service approves the home address
+      - Continues to the date of birth
+      - Submits the date of birth
+      - Identity service approves the date of birth
+      - Starts the identity check
+      - Submits the photo ID
+      - Identity service approves the photo ID
+      - Continues to the selfie match
+      - Submits the selfie match
+      - Identity service approves the selfie match
+      - Continues to the address proof
+      - Submits the address proof
+      - Identity service approves the address proof
+      - Finishes the identity check
+      - Submits the profile photo
+      - Identity service approves the profile photo
+      - Continues to the notification preferences
+      - Submits the notification preferences
+      - Identity service approves the notification preferences
+      - Continues to the security questions
+      - Submits the security questions
+      - Identity service approves the security questions
+      - Continues to the sign-up settings
+      - Turns off sign-up notifications
+      - Opens a sign-up help request
+      - Help desk answers the sign-up help request
+    endsIn:
+      - Sign-up notifications off
+      - Sign-up help request answered

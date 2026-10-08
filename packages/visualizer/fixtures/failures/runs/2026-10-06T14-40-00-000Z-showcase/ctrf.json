@@ -1,0 +1,245 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.0.0",
+  "results": {
+    "tool": {
+      "name": "atlas"
+    },
+    "summary": {
+      "tests": 7,
+      "passed": 6,
+      "failed": 1,
+      "pending": 0,
+      "skipped": 0,
+      "other": 0,
+      "start": 1791297600000,
+      "stop": 1791298055000
+    },
+    "tests": [
+      {
+        "name": "Orders a drink and pays by card",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Picks card",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the card",
+            "status": "passed"
+          },
+          {
+            "name": "Payment provider approves the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment goes through",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Pays with a wallet",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Picks wallet",
+            "status": "passed"
+          },
+          {
+            "name": "Confirms with the wallet",
+            "status": "passed"
+          },
+          {
+            "name": "Payment provider approves the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment goes through",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Card declined, then a wallet works",
+        "status": "failed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "message": "Expected \"Told the payment was declined\", the app looks like none of the known screens",
+        "steps": [
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Picks card",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the card",
+            "status": "passed"
+          },
+          {
+            "name": "Payment provider declines the payment",
+            "status": "failed"
+          },
+          {
+            "name": "Tries another way to pay",
+            "status": "skipped"
+          },
+          {
+            "name": "Picks wallet",
+            "status": "skipped"
+          },
+          {
+            "name": "Confirms with the wallet",
+            "status": "skipped"
+          },
+          {
+            "name": "Payment provider approves the payment",
+            "status": "skipped"
+          },
+          {
+            "name": "Payment goes through",
+            "status": "skipped"
+          }
+        ]
+      },
+      {
+        "name": "Slow payment",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Picks card",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the card",
+            "status": "passed"
+          },
+          {
+            "name": "Payment takes longer than a minute",
+            "status": "passed"
+          },
+          {
+            "name": "Checks the payment again",
+            "status": "passed"
+          },
+          {
+            "name": "Payment provider approves the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment goes through",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Leaves checkout and comes back",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Closes checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Leaves checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Drink left too long",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Picks card",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the card",
+            "status": "passed"
+          },
+          {
+            "name": "Payment provider approves the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment goes through",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Turns off updates while waiting",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Starts checkout",
+            "status": "passed"
+          },
+          {
+            "name": "Picks wallet",
+            "status": "passed"
+          },
+          {
+            "name": "Confirms with the wallet",
+            "status": "passed"
+          },
+          {
+            "name": "Payment provider approves the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment goes through",
+            "status": "passed"
+          }
+        ]
+      }
+    ]
+  }
+}

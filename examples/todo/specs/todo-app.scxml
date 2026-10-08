@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The root chart of the todo example, in W3C SCXML.
+
+  SCXML ids are XML IDs and event names are tokens, so every state and event carries its
+  business name in `atlas:name`. Business metadata lives in the `atlas` namespace.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:atlas="https://github.com/crvouga/atlas/ns/1"
+       version="1.0"
+       datamodel="null"
+       name="Todo app"
+       initial="welcome">
+  <atlas:meta>
+    <atlas:description>A todo list that syncs to a server and keeps working when the sync drops.</atlas:description>
+  </atlas:meta>
+
+  <state id="welcome" atlas:name="Welcome">
+    <atlas:meta>
+      <atlas:description>The first screen a person sees before they have a list.</atlas:description>
+      <atlas:snapshot>"Plan your day" with a "Get started" button.</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+    <transition event="starts-setup" atlas:name="Starts setup" target="setting-up"/>
+  </state>
+
+  <state id="setting-up" atlas:name="Setting up">
+    <atlas:meta>
+      <atlas:description>The person names their list. The getting started chart runs here.</atlas:description>
+    </atlas:meta>
+    <invoke id="getting-started" src="getting-started.machine.yaml" atlas:name="Getting started"/>
+    <transition event="done.invoke.getting-started" target="working-on-the-list"/>
+  </state>
+
+  <parallel id="working-on-the-list" atlas:name="Working on the list">
+    <atlas:meta>
+      <atlas:description>The list is open. Syncing and editing happen independently of each other.</atlas:description>
+    </atlas:meta>
+    <transition event="starts-over" atlas:name="Starts over" target="welcome"/>
+
+    <state id="sync" atlas:name="Sync" initial="synced">
+      <atlas:meta>
+        <atlas:description>Whether changes reach the server.</atlas:description>
+      </atlas:meta>
+      <state id="synced" atlas:name="Synced">
+        <atlas:meta>
+          <atlas:description>Every change has reached the server.</atlas:description>
+          <atlas:snapshot>"All changes synced" under the list name.</atlas:snapshot>
+          <atlas:event>Changes synced</atlas:event>
+          <atlas:confidence>confirmed</atlas:confidence>
+        </atlas:meta>
+        <transition event="sync-fails" atlas:name="Sync fails" target="offline"/>
+      </state>
+      <state id="offline" atlas:name="Offline">
+        <atlas:meta>
+          <atlas:description>The server could not be reached. Changes wait on the device and the app retries after 30 seconds.</atlas:description>
+          <atlas:snapshot>"Offline" with a note that changes are kept on this device.</atlas:snapshot>
+          <atlas:event>Sync interrupted</atlas:event>
+          <atlas:check>Says changes are kept on this device</atlas:check>
+          <atlas:confidence>confirmed</atlas:confidence>
+        </atlas:meta>
+        <transition event="retry-timer-elapses" atlas:name="Retry timer elapses" target="synced"/>
+      </state>
+    </state>
+
+    <state id="list" atlas:name="List" initial="no-todos">
+      <atlas:meta>
+        <atlas:description>What is on the list.</atlas:description>
+      </atlas:meta>
+      <state id="no-todos" atlas:name="No todos">
+        <atlas:meta>
+          <atlas:description>The list is empty.</atlas:description>
+          <atlas:snapshot>"Nothing to do yet".</atlas:snapshot>
+          <atlas:confidence>confirmed</atlas:confidence>
+        </atlas:meta>
+        <transition event="adds-a-todo" atlas:name="Adds a todo" target="some-todos-open"/>
+      </state>
+      <state id="some-todos-open" atlas:name="Some todos open">
+        <atlas:meta>
+          <atlas:description>At least one todo is still open.</atlas:description>
+          <atlas:snapshot>The todos and how many are left.</atlas:snapshot>
+          <atlas:confidence>confirmed</atlas:confidence>
+        </atlas:meta>
+        <transition event="adds-a-todo" atlas:name="Adds a todo" target="some-todos-open"/>
+        <transition event="marks-all-done" atlas:name="Marks all done" target="all-todos-done"/>
+      </state>
+      <state id="all-todos-done" atlas:name="All todos done">
+        <atlas:meta>
+          <atlas:description>Every todo on the list is done.</atlas:description>
+          <atlas:snapshot>"All done!" with a "Clear completed" button.</atlas:snapshot>
+          <atlas:confidence>confirmed</atlas:confidence>
+        </atlas:meta>
+        <transition event="adds-a-todo" atlas:name="Adds a todo" target="some-todos-open"/>
+        <transition event="clears-completed-todos" atlas:name="Clears completed todos" target="no-todos"/>
+      </state>
+    </state>
+  </parallel>
+</scxml>

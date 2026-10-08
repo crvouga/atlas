@@ -1,0 +1,126 @@
+journeys:
+  Happy path through product browsing:
+    description: Everything is approved the first time, through the product comparison and settings.
+    events:
+      - Submits the search filters
+      - Catalog service approves the search filters
+      - Continues to the product list
+      - Submits the product list
+      - Catalog service approves the product list
+      - Starts the product comparison
+      - Submits the comparison list
+      - Catalog service approves the comparison list
+      - Continues to the comparison table
+      - Submits the comparison table
+      - Catalog service approves the comparison table
+      - Continues to the comparison summary
+      - Submits the comparison summary
+      - Catalog service approves the comparison summary
+      - Finishes the product comparison
+      - Submits the product details
+      - Catalog service approves the product details
+      - Continues to the saved list
+      - Submits the saved list
+      - Catalog service approves the saved list
+      - Continues to the price alert
+      - Submits the price alert
+      - Catalog service approves the price alert
+      - Continues to the review draft
+      - Submits the review draft
+      - Catalog service approves the review draft
+      - Continues to the product browsing settings
+      - Closes the product browsing settings
+    endsIn:
+      - Product browsing finished
+    owner: Catalog team
+    tour: true
+  Edits the search filters with a file:
+    description: The user edits the search filters, uploads a file, then sends it.
+    events:
+      - Taps edit on the search filters
+      - Uploads a file
+      - Finishes uploading the file
+      - Saves the search filters
+      - Submits the search filters
+      - Catalog service approves the search filters
+    endsIn:
+      - Told the search filters was approved
+  Saving the search filters fails, then works:
+    description: The first save fails and the retry works.
+    events:
+      - Taps edit on the search filters
+      - Saving the search filters fails
+      - Tries saving the search filters again
+      - Saves the search filters
+    endsIn:
+      - Reviewing the search filters
+  Slow approval of the product list:
+    description: Approval of the product list takes more than a day.
+    events:
+      - Submits the search filters
+      - Catalog service approves the search filters
+      - Continues to the product list
+      - Submits the product list
+      - Approval of the product list takes longer than a day
+      - Checks the product list again
+      - Catalog service approves the product list
+    endsIn:
+      - Told the product list was approved
+  Search filters rejected, then approved:
+    description: The search filters is rejected once, then approved.
+    events:
+      - Submits the search filters
+      - Catalog service rejects the search filters
+      - Starts the search filters again
+      - Submits the search filters
+      - Catalog service approves the search filters
+    endsIn:
+      - Told the search filters was approved
+  Leaves the product comparison early:
+    description: The user closes the product comparison right away and goes back a step.
+    events:
+      - Submits the search filters
+      - Catalog service approves the search filters
+      - Continues to the product list
+      - Submits the product list
+      - Catalog service approves the product list
+      - Starts the product comparison
+      - Closes the product comparison
+    endsIn:
+      - Reviewing the product list
+  Changes product browsing settings:
+    description: Notifications off, then a help request that gets answered.
+    events:
+      - Submits the search filters
+      - Catalog service approves the search filters
+      - Continues to the product list
+      - Submits the product list
+      - Catalog service approves the product list
+      - Starts the product comparison
+      - Submits the comparison list
+      - Catalog service approves the comparison list
+      - Continues to the comparison table
+      - Submits the comparison table
+      - Catalog service approves the comparison table
+      - Continues to the comparison summary
+      - Submits the comparison summary
+      - Catalog service approves the comparison summary
+      - Finishes the product comparison
+      - Submits the product details
+      - Catalog service approves the product details
+      - Continues to the saved list
+      - Submits the saved list
+      - Catalog service approves the saved list
+      - Continues to the price alert
+      - Submits the price alert
+      - Catalog service approves the price alert
+      - Continues to the review draft
+      - Submits the review draft
+      - Catalog service approves the review draft
+      - Continues to the product browsing settings
+      - Turns off product browsing notifications
+      - Opens a product browsing help request
+      - Help desk answers the product browsing help request
+    endsIn:
+      - Product browsing notifications off
+      - Product browsing help request answered

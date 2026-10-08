@@ -1,0 +1,831 @@
+# Product browsing: generated fixture chart
+id: Product browsing
+initial: Handling the search filters
+meta:
+  description: Finding and comparing products.
+  snapshot: product-browsing
+  events: []
+  confidence: confirmed
+  source:
+    - src/screens/product-browsing
+states:
+  Handling the search filters:
+    id: Handling the search filters
+    initial: Reviewing the search filters
+    meta:
+      description: Everything about the search filters, from review to approval.
+      snapshot: handling-the-search-filters
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-search-filters.tsx
+      owner: Catalog team
+    states:
+      Reviewing the search filters:
+        id: Reviewing the search filters
+        meta:
+          description: The user checks the search filters before sending it.
+          snapshot: reviewing-the-search-filters
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-search-filters.tsx
+          gherkin:
+            - features/catalog/browsing/search-filters.feature
+        on:
+          Taps edit on the search filters:
+            target: "#Editing the search filters"
+          Submits the search filters:
+            target: "#Waiting for the search filters to be approved"
+      Editing the search filters:
+        id: Editing the search filters
+        initial: Editing the search filters details
+        meta:
+          description: The user changes the search filters, with an optional file.
+          snapshot: editing-the-search-filters
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-search-filters.tsx
+        states:
+          Editing the search filters details:
+            id: Editing the search filters details
+            meta:
+              description: A form with the search filters fields.
+              snapshot: editing-the-search-filters-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-search-filters-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the search filters"
+          Uploading a file for the search filters:
+            id: Uploading a file for the search filters
+            meta:
+              description: A file picker for a document about the search filters.
+              snapshot: uploading-a-file-for-the-search-filters
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-search-filters.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the search filters details"
+        on:
+          Saves the search filters:
+            target: "#Reviewing the search filters"
+          Cancels the changes to the search filters:
+            target: "#Reviewing the search filters"
+          Saving the search filters fails:
+            target: "#Told the search filters could not be saved"
+      Told the search filters could not be saved:
+        id: Told the search filters could not be saved
+        meta:
+          description: A message says the search filters could not be saved, with "Try again".
+          snapshot: told-the-search-filters-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-search-filters-could-not-be-saved.tsx
+        on:
+          Tries saving the search filters again:
+            target: "#Editing the search filters"
+      Waiting for the search filters to be approved:
+        id: Waiting for the search filters to be approved
+        meta:
+          description: A card says the search filters is being checked.
+          snapshot: waiting-for-the-search-filters-to-be-approved
+          events:
+            - Search filters submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-search-filters-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the search filters:
+            target: "#Told the search filters was approved"
+          Catalog service rejects the search filters:
+            target: "#Told the search filters was rejected"
+          Approval of the search filters takes longer than a day:
+            target: "#Told the search filters is still under review"
+      Told the search filters is still under review:
+        id: Told the search filters is still under review
+        meta:
+          description: A card says the search filters is still being checked.
+          snapshot: told-the-search-filters-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-search-filters-is-still-under-review.tsx
+        on:
+          Checks the search filters again:
+            target: "#Waiting for the search filters to be approved"
+      Told the search filters was rejected:
+        id: Told the search filters was rejected
+        meta:
+          description: A message explains why the search filters was not accepted.
+          snapshot: told-the-search-filters-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-search-filters-was-rejected.tsx
+        on:
+          Starts the search filters again:
+            target: "#Reviewing the search filters"
+      Told the search filters was approved:
+        id: Told the search filters was approved
+        meta:
+          description: A message confirms the search filters is approved.
+          snapshot: told-the-search-filters-was-approved
+          events:
+            - Search filters approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-search-filters-was-approved.tsx
+        on:
+          Continues to the product list:
+            target: "#Handling the product list"
+  Handling the product list:
+    id: Handling the product list
+    initial: Reviewing the product list
+    meta:
+      description: Everything about the product list, from review to approval.
+      snapshot: handling-the-product-list
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-product-list.tsx
+      owner: Catalog team
+    states:
+      Reviewing the product list:
+        id: Reviewing the product list
+        meta:
+          description: The user checks the product list before sending it.
+          snapshot: reviewing-the-product-list
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-product-list.tsx
+          gherkin:
+            - features/catalog/browsing/product-list.feature
+        on:
+          Taps edit on the product list:
+            target: "#Editing the product list"
+          Submits the product list:
+            target: "#Waiting for the product list to be approved"
+      Editing the product list:
+        id: Editing the product list
+        meta:
+          description: A form to change the product list.
+          snapshot: editing-the-product-list
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-product-list.tsx
+        on:
+          Saves the product list:
+            target: "#Reviewing the product list"
+          Cancels the changes to the product list:
+            target: "#Reviewing the product list"
+          Saving the product list fails:
+            target: "#Told the product list could not be saved"
+      Told the product list could not be saved:
+        id: Told the product list could not be saved
+        meta:
+          description: A message says the product list could not be saved, with "Try again".
+          snapshot: told-the-product-list-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-product-list-could-not-be-saved.tsx
+        on:
+          Tries saving the product list again:
+            target: "#Editing the product list"
+      Waiting for the product list to be approved:
+        id: Waiting for the product list to be approved
+        meta:
+          description: A card says the product list is being checked.
+          snapshot: waiting-for-the-product-list-to-be-approved
+          events:
+            - Product list submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-product-list-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the product list:
+            target: "#Told the product list was approved"
+          Catalog service rejects the product list:
+            target: "#Told the product list was rejected"
+          Approval of the product list takes longer than a day:
+            target: "#Told the product list is still under review"
+      Told the product list is still under review:
+        id: Told the product list is still under review
+        meta:
+          description: A card says the product list is still being checked.
+          snapshot: told-the-product-list-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-product-list-is-still-under-review.tsx
+        on:
+          Checks the product list again:
+            target: "#Waiting for the product list to be approved"
+      Told the product list was rejected:
+        id: Told the product list was rejected
+        meta:
+          description: A message explains why the product list was not accepted.
+          snapshot: told-the-product-list-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-product-list-was-rejected.tsx
+        on:
+          Starts the product list again:
+            target: "#Reviewing the product list"
+      Told the product list was approved:
+        id: Told the product list was approved
+        meta:
+          description: A message confirms the product list is approved.
+          snapshot: told-the-product-list-was-approved
+          events:
+            - Product list approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-product-list-was-approved.tsx
+        on:
+          Starts the product comparison:
+            target: "#Going through the product comparison"
+  Going through the product comparison:
+    id: Going through the product comparison
+    meta:
+      description: The product comparison runs as its own chart.
+      snapshot: going-through-the-product-comparison
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/going-through-the-product-comparison.tsx
+      childMachine: Product comparison
+      childFinalEvents:
+        Product comparison completed: Product comparison is completed
+        Product comparison abandoned: Product comparison is abandoned
+    on:
+      Product comparison is completed:
+        target: "#Handling the product details"
+      Product comparison is abandoned:
+        target: "#Reviewing the product list"
+  Handling the product details:
+    id: Handling the product details
+    initial: Reviewing the product details
+    meta:
+      description: Everything about the product details, from review to approval.
+      snapshot: handling-the-product-details
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-product-details.tsx
+      owner: Catalog team
+    states:
+      Reviewing the product details:
+        id: Reviewing the product details
+        meta:
+          description: The user checks the product details before sending it.
+          snapshot: reviewing-the-product-details
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-product-details.tsx
+          gherkin:
+            - features/catalog/browsing/product-details.feature
+        on:
+          Taps edit on the product details:
+            target: "#Editing the product details"
+          Submits the product details:
+            target: "#Waiting for the product details to be approved"
+      Editing the product details:
+        id: Editing the product details
+        meta:
+          description: A form to change the product details.
+          snapshot: editing-the-product-details
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-product-details.tsx
+        on:
+          Saves the product details:
+            target: "#Reviewing the product details"
+          Cancels the changes to the product details:
+            target: "#Reviewing the product details"
+          Saving the product details fails:
+            target: "#Told the product details could not be saved"
+      Told the product details could not be saved:
+        id: Told the product details could not be saved
+        meta:
+          description: A message says the product details could not be saved, with "Try again".
+          snapshot: told-the-product-details-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-product-details-could-not-be-saved.tsx
+        on:
+          Tries saving the product details again:
+            target: "#Editing the product details"
+      Waiting for the product details to be approved:
+        id: Waiting for the product details to be approved
+        meta:
+          description: A card says the product details is being checked.
+          snapshot: waiting-for-the-product-details-to-be-approved
+          events:
+            - Product details submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-product-details-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the product details:
+            target: "#Told the product details was approved"
+          Catalog service rejects the product details:
+            target: "#Told the product details was rejected"
+          Approval of the product details takes longer than a day:
+            target: "#Told the product details is still under review"
+      Told the product details is still under review:
+        id: Told the product details is still under review
+        meta:
+          description: A card says the product details is still being checked.
+          snapshot: told-the-product-details-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-product-details-is-still-under-review.tsx
+        on:
+          Checks the product details again:
+            target: "#Waiting for the product details to be approved"
+      Told the product details was rejected:
+        id: Told the product details was rejected
+        meta:
+          description: A message explains why the product details was not accepted.
+          snapshot: told-the-product-details-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-product-details-was-rejected.tsx
+        on:
+          Starts the product details again:
+            target: "#Reviewing the product details"
+      Told the product details was approved:
+        id: Told the product details was approved
+        meta:
+          description: A message confirms the product details is approved.
+          snapshot: told-the-product-details-was-approved
+          events:
+            - Product details approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-product-details-was-approved.tsx
+        on:
+          Continues to the saved list:
+            target: "#Handling the saved list"
+  Handling the saved list:
+    id: Handling the saved list
+    initial: Reviewing the saved list
+    meta:
+      description: Everything about the saved list, from review to approval.
+      snapshot: handling-the-saved-list
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-saved-list.tsx
+      owner: Catalog team
+    states:
+      Reviewing the saved list:
+        id: Reviewing the saved list
+        meta:
+          description: The user checks the saved list before sending it.
+          snapshot: reviewing-the-saved-list
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-saved-list.tsx
+          gherkin:
+            - features/catalog/browsing/saved-list.feature
+        on:
+          Taps edit on the saved list:
+            target: "#Editing the saved list"
+          Submits the saved list:
+            target: "#Waiting for the saved list to be approved"
+      Editing the saved list:
+        id: Editing the saved list
+        meta:
+          description: A form to change the saved list.
+          snapshot: editing-the-saved-list
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-saved-list.tsx
+        on:
+          Saves the saved list:
+            target: "#Reviewing the saved list"
+          Cancels the changes to the saved list:
+            target: "#Reviewing the saved list"
+          Saving the saved list fails:
+            target: "#Told the saved list could not be saved"
+      Told the saved list could not be saved:
+        id: Told the saved list could not be saved
+        meta:
+          description: A message says the saved list could not be saved, with "Try again".
+          snapshot: told-the-saved-list-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-saved-list-could-not-be-saved.tsx
+        on:
+          Tries saving the saved list again:
+            target: "#Editing the saved list"
+      Waiting for the saved list to be approved:
+        id: Waiting for the saved list to be approved
+        meta:
+          description: A card says the saved list is being checked.
+          snapshot: waiting-for-the-saved-list-to-be-approved
+          events:
+            - Saved list submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-saved-list-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the saved list:
+            target: "#Told the saved list was approved"
+          Catalog service rejects the saved list:
+            target: "#Told the saved list was rejected"
+          Approval of the saved list takes longer than a day:
+            target: "#Told the saved list is still under review"
+      Told the saved list is still under review:
+        id: Told the saved list is still under review
+        meta:
+          description: A card says the saved list is still being checked.
+          snapshot: told-the-saved-list-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-saved-list-is-still-under-review.tsx
+        on:
+          Checks the saved list again:
+            target: "#Waiting for the saved list to be approved"
+      Told the saved list was rejected:
+        id: Told the saved list was rejected
+        meta:
+          description: A message explains why the saved list was not accepted.
+          snapshot: told-the-saved-list-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-saved-list-was-rejected.tsx
+        on:
+          Starts the saved list again:
+            target: "#Reviewing the saved list"
+      Told the saved list was approved:
+        id: Told the saved list was approved
+        meta:
+          description: A message confirms the saved list is approved.
+          snapshot: told-the-saved-list-was-approved
+          events:
+            - Saved list approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-saved-list-was-approved.tsx
+        on:
+          Continues to the price alert:
+            target: "#Handling the price alert"
+  Handling the price alert:
+    id: Handling the price alert
+    initial: Reviewing the price alert
+    meta:
+      description: Everything about the price alert, from review to approval.
+      snapshot: handling-the-price-alert
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-price-alert.tsx
+      owner: Catalog team
+    states:
+      Reviewing the price alert:
+        id: Reviewing the price alert
+        meta:
+          description: The user checks the price alert before sending it.
+          snapshot: reviewing-the-price-alert
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-price-alert.tsx
+          gherkin:
+            - features/catalog/browsing/price-alert.feature
+        on:
+          Taps edit on the price alert:
+            target: "#Editing the price alert"
+          Submits the price alert:
+            target: "#Waiting for the price alert to be approved"
+      Editing the price alert:
+        id: Editing the price alert
+        meta:
+          description: A form to change the price alert.
+          snapshot: editing-the-price-alert
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-price-alert.tsx
+        on:
+          Saves the price alert:
+            target: "#Reviewing the price alert"
+          Cancels the changes to the price alert:
+            target: "#Reviewing the price alert"
+          Saving the price alert fails:
+            target: "#Told the price alert could not be saved"
+      Told the price alert could not be saved:
+        id: Told the price alert could not be saved
+        meta:
+          description: A message says the price alert could not be saved, with "Try again".
+          snapshot: told-the-price-alert-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-price-alert-could-not-be-saved.tsx
+        on:
+          Tries saving the price alert again:
+            target: "#Editing the price alert"
+      Waiting for the price alert to be approved:
+        id: Waiting for the price alert to be approved
+        meta:
+          description: A card says the price alert is being checked.
+          snapshot: waiting-for-the-price-alert-to-be-approved
+          events:
+            - Price alert submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-price-alert-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the price alert:
+            target: "#Told the price alert was approved"
+          Catalog service rejects the price alert:
+            target: "#Told the price alert was rejected"
+          Approval of the price alert takes longer than a day:
+            target: "#Told the price alert is still under review"
+      Told the price alert is still under review:
+        id: Told the price alert is still under review
+        meta:
+          description: A card says the price alert is still being checked.
+          snapshot: told-the-price-alert-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-price-alert-is-still-under-review.tsx
+        on:
+          Checks the price alert again:
+            target: "#Waiting for the price alert to be approved"
+      Told the price alert was rejected:
+        id: Told the price alert was rejected
+        meta:
+          description: A message explains why the price alert was not accepted.
+          snapshot: told-the-price-alert-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-price-alert-was-rejected.tsx
+        on:
+          Starts the price alert again:
+            target: "#Reviewing the price alert"
+      Told the price alert was approved:
+        id: Told the price alert was approved
+        meta:
+          description: A message confirms the price alert is approved.
+          snapshot: told-the-price-alert-was-approved
+          events:
+            - Price alert approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-price-alert-was-approved.tsx
+        on:
+          Continues to the review draft:
+            target: "#Handling the review draft"
+  Handling the review draft:
+    id: Handling the review draft
+    initial: Reviewing the review draft
+    meta:
+      description: Everything about the review draft, from review to approval.
+      snapshot: handling-the-review-draft
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-review-draft.tsx
+      owner: Catalog team
+    states:
+      Reviewing the review draft:
+        id: Reviewing the review draft
+        meta:
+          description: The user checks the review draft before sending it.
+          snapshot: reviewing-the-review-draft
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-review-draft.tsx
+          gherkin:
+            - features/catalog/browsing/review-draft.feature
+        on:
+          Taps edit on the review draft:
+            target: "#Editing the review draft"
+          Submits the review draft:
+            target: "#Waiting for the review draft to be approved"
+      Editing the review draft:
+        id: Editing the review draft
+        meta:
+          description: A form to change the review draft.
+          snapshot: editing-the-review-draft
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-review-draft.tsx
+        on:
+          Saves the review draft:
+            target: "#Reviewing the review draft"
+          Cancels the changes to the review draft:
+            target: "#Reviewing the review draft"
+          Saving the review draft fails:
+            target: "#Told the review draft could not be saved"
+      Told the review draft could not be saved:
+        id: Told the review draft could not be saved
+        meta:
+          description: A message says the review draft could not be saved, with "Try again".
+          snapshot: told-the-review-draft-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-review-draft-could-not-be-saved.tsx
+        on:
+          Tries saving the review draft again:
+            target: "#Editing the review draft"
+      Waiting for the review draft to be approved:
+        id: Waiting for the review draft to be approved
+        meta:
+          description: A card says the review draft is being checked.
+          snapshot: waiting-for-the-review-draft-to-be-approved
+          events:
+            - Review draft submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-review-draft-to-be-approved.tsx
+          tier: critical
+        on:
+          Catalog service approves the review draft:
+            target: "#Told the review draft was approved"
+          Catalog service rejects the review draft:
+            target: "#Told the review draft was rejected"
+          Approval of the review draft takes longer than a day:
+            target: "#Told the review draft is still under review"
+      Told the review draft is still under review:
+        id: Told the review draft is still under review
+        meta:
+          description: A card says the review draft is still being checked.
+          snapshot: told-the-review-draft-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-review-draft-is-still-under-review.tsx
+        on:
+          Checks the review draft again:
+            target: "#Waiting for the review draft to be approved"
+      Told the review draft was rejected:
+        id: Told the review draft was rejected
+        meta:
+          description: A message explains why the review draft was not accepted.
+          snapshot: told-the-review-draft-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-review-draft-was-rejected.tsx
+        on:
+          Starts the review draft again:
+            target: "#Reviewing the review draft"
+      Told the review draft was approved:
+        id: Told the review draft was approved
+        meta:
+          description: A message confirms the review draft is approved.
+          snapshot: told-the-review-draft-was-approved
+          events:
+            - Review draft approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-review-draft-was-approved.tsx
+        on:
+          Continues to the product browsing settings:
+            target: "#Product browsing settings"
+  Product browsing settings:
+    id: Product browsing settings
+    type: parallel
+    meta:
+      description: "Settings for product browsing: notifications and help side by side."
+      snapshot: product-browsing-settings
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/product-browsing-settings.tsx
+    states:
+      Product browsing notifications:
+        id: Product browsing notifications
+        initial: Product browsing notifications on
+        meta:
+          description: Whether the user gets notifications.
+          snapshot: product-browsing-notifications
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/product-browsing-notifications.tsx
+        states:
+          Product browsing notifications on:
+            id: Product browsing notifications on
+            meta:
+              description: The notifications switch is on.
+              snapshot: product-browsing-notifications-on
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/product-browsing-notifications-on.tsx
+            on:
+              Turns off product browsing notifications:
+                target: "#Product browsing notifications off"
+          Product browsing notifications off:
+            id: Product browsing notifications off
+            meta:
+              description: The notifications switch is off.
+              snapshot: product-browsing-notifications-off
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/product-browsing-notifications-off.tsx
+            on:
+              Turns on product browsing notifications:
+                target: "#Product browsing notifications on"
+      Product browsing help:
+        id: Product browsing help
+        initial: No open product browsing help request
+        meta:
+          description: Help requests about this part of the product.
+          snapshot: product-browsing-help
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/product-browsing-help.tsx
+        states:
+          No open product browsing help request:
+            id: No open product browsing help request
+            meta:
+              description: A "Get help" button.
+              snapshot: no-open-product-browsing-help-request
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/no-open-product-browsing-help-request.tsx
+            on:
+              Opens a product browsing help request:
+                target: "#Product browsing help request open"
+          Product browsing help request open:
+            id: Product browsing help request open
+            meta:
+              description: A card says the help desk will answer soon.
+              snapshot: product-browsing-help-request-open
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/product-browsing-help-request-open.tsx
+            on:
+              Help desk answers the product browsing help request:
+                target: "#Product browsing help request answered"
+          Product browsing help request answered:
+            id: Product browsing help request answered
+            meta:
+              description: The answer shows in the help card.
+              snapshot: product-browsing-help-request-answered
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/product-browsing-help-request-answered.tsx
+            on:
+              Opens another product browsing help request:
+                target: "#Product browsing help request open"
+    on:
+      Closes the product browsing settings:
+        target: "#Product browsing finished"
+  Product browsing finished:
+    id: Product browsing finished
+    type: final
+    meta:
+      description: The user is done with product browsing.
+      snapshot: product-browsing-finished
+      events:
+        - Product browsing finished
+      confidence: confirmed
+      source:
+        - src/screens/product-browsing-finished.tsx

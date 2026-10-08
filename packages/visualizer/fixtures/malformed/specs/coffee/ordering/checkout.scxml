@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The child chart: W3C SCXML. Readable names travel in atlas:name; a final state's
+     atlas:done-event names the event the parent chart receives when checkout ends there. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:atlas="https://github.com/crvouga/atlas/ns/1" version="1.0" name="Checkout" initial="choosing-how-to-pay" datamodel="null">
+  <atlas:meta>
+    <atlas:description>Paying for the order, by card or with a wallet.</atlas:description>
+    <atlas:timeEvents>{"Payment takes longer than a minute": "1 minute"}</atlas:timeEvents>
+  </atlas:meta>
+  <state id="choosing-how-to-pay" atlas:name="Choosing how to pay">
+    <atlas:meta>
+      <atlas:description>Card and wallet buttons, and the order total.</atlas:description>
+      <atlas:snapshot>pay-options</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:hints>["A card button", "A wallet button", "The order total"]</atlas:hints>
+    </atlas:meta>
+    <transition event="picks-card" atlas:name="Picks card" target="entering-card-details"/>
+    <transition event="picks-wallet" atlas:name="Picks wallet" target="confirming-with-the-wallet"/>
+    <transition event="closes-checkout" atlas:name="Closes checkout" target="checkout-abandoned"/>
+  </state>
+  <state id="entering-card-details" atlas:name="Entering card details">
+    <atlas:meta>
+      <atlas:description>A form for the card number, expiry and code.</atlas:description>
+      <atlas:snapshot>card-form</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:check>The pay button stays off until the card is complete</atlas:check>
+    </atlas:meta>
+    <transition event="submits-the-card" atlas:name="Submits the card" target="waiting-for-the-payment"/>
+    <transition event="goes-back-to-the-payment-options" atlas:name="Goes back to the payment options" target="choosing-how-to-pay"/>
+  </state>
+  <state id="confirming-with-the-wallet" atlas:name="Confirming with the wallet">
+    <atlas:meta>
+      <atlas:description>The wallet sheet asks the customer to confirm the payment.</atlas:description>
+      <atlas:snapshot>wallet-sheet</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+    <transition event="confirms-with-the-wallet" atlas:name="Confirms with the wallet" target="waiting-for-the-payment"/>
+    <transition event="cancels-the-wallet" atlas:name="Cancels the wallet" target="choosing-how-to-pay"/>
+  </state>
+  <state id="waiting-for-the-payment" atlas:name="Waiting for the payment">
+    <atlas:meta>
+      <atlas:description>A spinner while the payment provider answers.</atlas:description>
+      <atlas:snapshot>paying</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:event>Payment requested</atlas:event>
+    </atlas:meta>
+    <transition event="payment-provider-approves-the-payment" atlas:name="Payment provider approves the payment" target="paid"/>
+    <transition event="payment-provider-declines-the-payment" atlas:name="Payment provider declines the payment" target="told-the-payment-was-declined"/>
+    <transition event="payment-takes-longer-than-a-minute" atlas:name="Payment takes longer than a minute" target="told-the-payment-is-slow"/>
+  </state>
+  <state id="told-the-payment-is-slow" atlas:name="Told the payment is slow">
+    <atlas:meta>
+      <atlas:description>A message says the payment is taking longer than usual, with "Check again".</atlas:description>
+      <atlas:snapshot>paying-slow</atlas:snapshot>
+      <atlas:confidence>assumed</atlas:confidence>
+    </atlas:meta>
+    <transition event="checks-the-payment-again" atlas:name="Checks the payment again" target="waiting-for-the-payment"/>
+  </state>
+  <state id="told-the-payment-was-declined" atlas:name="Told the payment was declined">
+    <atlas:meta>
+      <atlas:description>A message says the payment was declined, with "Try another way".</atlas:description>
+      <atlas:snapshot>payment-declined</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:event>Payment declined</atlas:event>
+    </atlas:meta>
+    <transition event="tries-another-way-to-pay" atlas:name="Tries another way to pay" target="choosing-a-tip"/>
+  </state>
+  <final id="paid" atlas:name="Paid" atlas:done-event="Payment goes through">
+    <atlas:meta>
+      <atlas:description>A check mark confirms the payment.</atlas:description>
+      <atlas:snapshot>paid</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:event>Payment captured</atlas:event>
+    </atlas:meta>
+  </final>
+  <final id="checkout-abandoned" atlas:name="Checkout abandoned" atlas:done-event="Leaves checkout">
+    <atlas:meta>
+      <atlas:description>Checkout closes and the cart is kept.</atlas:description>
+      <atlas:snapshot>checkout-closed</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+  </final>
+</scxml>

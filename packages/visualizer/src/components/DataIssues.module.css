@@ -1,0 +1,136 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.trigger:hover {
+  border-color: var(--line-2);
+  color: var(--ink-2);
+}
+
+.trigger[data-has-problems='true'] {
+  color: var(--system-ink);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.18);
+  z-index: 60;
+}
+
+.sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(34rem, 100vw);
+  background: var(--card);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-pop);
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.25rem 0;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--pill);
+}
+
+.close:hover {
+  background: var(--bg-2);
+}
+
+.lead {
+  margin: 0.4rem 0 1rem;
+  color: var(--ink-3);
+  font-size: 0.9rem;
+}
+
+.list {
+  overflow-y: auto;
+  padding-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fileName {
+  margin: 0 0 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  word-break: break-all;
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 4.6rem 1fr;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+}
+
+.severity {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding-top: 0.1rem;
+}
+
+.item[data-severity='error'] .severity {
+  color: var(--failed-ink);
+}
+
+.item[data-severity='warning'] .severity {
+  color: var(--system-ink);
+}
+
+.path {
+  font-weight: 600;
+  color: var(--ink);
+}

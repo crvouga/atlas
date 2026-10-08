@@ -1,0 +1,3701 @@
+{
+  "$schema": "https://github.com/crvouga/atlas/schemas/manifest.schema.json",
+  "schemaVersion": 1,
+  "run": {
+    "id": "2026-10-06T14-40-00-000Z-showcase",
+    "startedAt": "2026-10-06T14:40:00.000Z",
+    "finishedAt": "2026-10-06T14:51:24.600Z",
+    "durationMs": 684600,
+    "commit": "571dc134d087dde25bfff6177c4fdafe794c3a4a",
+    "branch": "main",
+    "environment": {
+      "driver": "playwright",
+      "baseUrl": "http://localhost:3000",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "deviceScaleFactor": 3
+    },
+    "mode": "showcase",
+    "specVersion": "f7ef440c67ed",
+    "specDirectory": "specs",
+    "approvals": [],
+    "scope": {
+      "start": "A customer on the menu"
+    }
+  },
+  "charts": [
+    {
+      "id": "Coffee order",
+      "file": "coffee/ordering/machine.yaml",
+      "description": "A customer picks a drink, pays for it, and picks it up when it is ready.",
+      "parentState": null,
+      "handOffs": {}
+    },
+    {
+      "id": "Checkout",
+      "file": "coffee/ordering/checkout.scxml",
+      "description": "Paying for the order, by card or with a wallet.",
+      "parentState": "Checking out",
+      "handOffs": {
+        "Paid": "Payment goes through",
+        "Checkout abandoned": "Leaves checkout"
+      }
+    }
+  ],
+  "map": {
+    "nodes": [
+      {
+        "id": "Browsing the menu",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Customizing the drink",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "compound",
+        "initial": "Choosing a size",
+        "inScope": true
+      },
+      {
+        "id": "Choosing a size",
+        "parent": "Customizing the drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Choosing the milk",
+        "parent": "Customizing the drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Ready to add the drink",
+        "parent": "Customizing the drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Reviewing the cart",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Checking out",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Order in progress",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "parallel",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Drink",
+        "parent": "Order in progress",
+        "chart": "Coffee order",
+        "type": "compound",
+        "initial": "Paid, waiting for the barista",
+        "inScope": true
+      },
+      {
+        "id": "Paid, waiting for the barista",
+        "parent": "Drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Drink being made",
+        "parent": "Drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Drink ready for pickup",
+        "parent": "Drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Updates",
+        "parent": "Order in progress",
+        "chart": "Coffee order",
+        "type": "compound",
+        "initial": "Updates on",
+        "inScope": true
+      },
+      {
+        "id": "Updates on",
+        "parent": "Updates",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Updates off",
+        "parent": "Updates",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Told the drink was thrown away",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Order complete",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "final",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Choosing how to pay",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Entering card details",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Confirming with the wallet",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Waiting for the payment",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Told the payment is slow",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Told the payment was declined",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Paid",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "final",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Checkout abandoned",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "final",
+        "initial": null,
+        "inScope": true
+      }
+    ],
+    "edges": [
+      {
+        "id": "Browsing the menu :: Picks a drink",
+        "source": "Browsing the menu",
+        "target": "Customizing the drink",
+        "event": "Picks a drink",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Choosing a size :: Picks a size",
+        "source": "Choosing a size",
+        "target": "Choosing the milk",
+        "event": "Picks a size",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Choosing the milk :: Picks a milk",
+        "source": "Choosing the milk",
+        "target": "Ready to add the drink",
+        "event": "Picks a milk",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Ready to add the drink :: Adds the drink to the cart",
+        "source": "Ready to add the drink",
+        "target": "Reviewing the cart",
+        "event": "Adds the drink to the cart",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Customizing the drink :: Goes back to the menu",
+        "source": "Customizing the drink",
+        "target": "Browsing the menu",
+        "event": "Goes back to the menu",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Reviewing the cart :: Removes the last drink",
+        "source": "Reviewing the cart",
+        "target": "Browsing the menu",
+        "event": "Removes the last drink",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Reviewing the cart :: Starts checkout",
+        "source": "Reviewing the cart",
+        "target": "Checking out",
+        "event": "Starts checkout",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Paid, waiting for the barista :: Barista starts the drink",
+        "source": "Paid, waiting for the barista",
+        "target": "Drink being made",
+        "event": "Barista starts the drink",
+        "kind": "system",
+        "inScope": true
+      },
+      {
+        "id": "Drink being made :: Barista finishes the drink",
+        "source": "Drink being made",
+        "target": "Drink ready for pickup",
+        "event": "Barista finishes the drink",
+        "kind": "system",
+        "inScope": true
+      },
+      {
+        "id": "Drink ready for pickup :: Picks up the drink",
+        "source": "Drink ready for pickup",
+        "target": "Order complete",
+        "event": "Picks up the drink",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Drink ready for pickup :: Drink sits ready for ten minutes",
+        "source": "Drink ready for pickup",
+        "target": "Told the drink was thrown away",
+        "event": "Drink sits ready for ten minutes",
+        "kind": "time",
+        "inScope": true
+      },
+      {
+        "id": "Updates on :: Turns off updates",
+        "source": "Updates on",
+        "target": "Updates off",
+        "event": "Turns off updates",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Updates off :: Turns on updates",
+        "source": "Updates off",
+        "target": "Updates on",
+        "event": "Turns on updates",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Told the drink was thrown away :: Orders again",
+        "source": "Told the drink was thrown away",
+        "target": "Browsing the menu",
+        "event": "Orders again",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Choosing how to pay :: Picks card",
+        "source": "Choosing how to pay",
+        "target": "Entering card details",
+        "event": "Picks card",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Choosing how to pay :: Picks wallet",
+        "source": "Choosing how to pay",
+        "target": "Confirming with the wallet",
+        "event": "Picks wallet",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Choosing how to pay :: Closes checkout",
+        "source": "Choosing how to pay",
+        "target": "Checkout abandoned",
+        "event": "Closes checkout",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Entering card details :: Submits the card",
+        "source": "Entering card details",
+        "target": "Waiting for the payment",
+        "event": "Submits the card",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Entering card details :: Goes back to the payment options",
+        "source": "Entering card details",
+        "target": "Choosing how to pay",
+        "event": "Goes back to the payment options",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Confirming with the wallet :: Confirms with the wallet",
+        "source": "Confirming with the wallet",
+        "target": "Waiting for the payment",
+        "event": "Confirms with the wallet",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Confirming with the wallet :: Cancels the wallet",
+        "source": "Confirming with the wallet",
+        "target": "Choosing how to pay",
+        "event": "Cancels the wallet",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Waiting for the payment :: Payment provider approves the payment",
+        "source": "Waiting for the payment",
+        "target": "Paid",
+        "event": "Payment provider approves the payment",
+        "kind": "system",
+        "inScope": true
+      },
+      {
+        "id": "Waiting for the payment :: Payment provider declines the payment",
+        "source": "Waiting for the payment",
+        "target": "Told the payment was declined",
+        "event": "Payment provider declines the payment",
+        "kind": "system",
+        "inScope": true
+      },
+      {
+        "id": "Waiting for the payment :: Payment takes longer than a minute",
+        "source": "Waiting for the payment",
+        "target": "Told the payment is slow",
+        "event": "Payment takes longer than a minute",
+        "kind": "time",
+        "inScope": true
+      },
+      {
+        "id": "Told the payment is slow :: Checks the payment again",
+        "source": "Told the payment is slow",
+        "target": "Waiting for the payment",
+        "event": "Checks the payment again",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Told the payment was declined :: Tries another way to pay",
+        "source": "Told the payment was declined",
+        "target": "Choosing how to pay",
+        "event": "Tries another way to pay",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Paid :: Payment goes through",
+        "source": "Paid",
+        "target": "Order in progress",
+        "event": "Payment goes through",
+        "kind": "hand-off",
+        "inScope": true
+      },
+      {
+        "id": "Checkout abandoned :: Leaves checkout",
+        "source": "Checkout abandoned",
+        "target": "Reviewing the cart",
+        "event": "Leaves checkout",
+        "kind": "hand-off",
+        "inScope": true
+      }
+    ]
+  },
+  "states": {
+    "Browsing the menu": {
+      "name": "Browsing the menu",
+      "chart": "Coffee order",
+      "description": "The menu of drinks, with a cart button.",
+      "snapshot": "menu",
+      "confidence": "confirmed",
+      "source": [
+        "src/screens/menu.tsx"
+      ],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/01.png",
+        "webp": "media/paths/journey-1/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/01.png",
+          "webp": "media/paths/journey-1/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"menu\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Browsing the menu\"",
+          "passed": true,
+          "expected": "test ID \"menu\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-8",
+        "journey-9"
+      ],
+      "notes": []
+    },
+    "Customizing the drink": {
+      "name": "Customizing the drink",
+      "chart": "Coffee order",
+      "description": "The customer sets the drink up before adding it to the cart.",
+      "snapshot": "customizing-the-drink",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": null,
+      "screenshotsByPath": {},
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"customizing-the-drink\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-8",
+        "journey-9"
+      ],
+      "notes": []
+    },
+    "Choosing a size": {
+      "name": "Choosing a size",
+      "chart": "Coffee order",
+      "description": "Small, medium and large buttons.",
+      "snapshot": "size",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/02.png",
+        "webp": "media/paths/journey-1/02.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/02.png",
+          "webp": "media/paths/journey-1/02.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"size\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Choosing a size\"",
+          "passed": true,
+          "expected": "test ID \"size\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-8",
+        "journey-9"
+      ],
+      "notes": []
+    },
+    "Choosing the milk": {
+      "name": "Choosing the milk",
+      "chart": "Coffee order",
+      "description": "A list of milks, with \"No milk\" first.",
+      "snapshot": "milk",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/03.png",
+        "webp": "media/paths/journey-1/03.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/03.png",
+          "webp": "media/paths/journey-1/03.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"milk\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Choosing the milk\"",
+          "passed": true,
+          "expected": "test ID \"milk\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-8",
+        "journey-9"
+      ],
+      "notes": []
+    },
+    "Ready to add the drink": {
+      "name": "Ready to add the drink",
+      "chart": "Coffee order",
+      "description": "A summary of the drink with an \"Add to cart\" button.",
+      "snapshot": "drink-summary",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/04.png",
+        "webp": "media/paths/journey-1/04.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/04.png",
+          "webp": "media/paths/journey-1/04.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"drink-summary\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Ready to add the drink\"",
+          "passed": true,
+          "expected": "test ID \"drink-summary\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-9"
+      ],
+      "notes": []
+    },
+    "Reviewing the cart": {
+      "name": "Reviewing the cart",
+      "chart": "Coffee order",
+      "description": "The drinks in the cart, the total, and a checkout button.",
+      "snapshot": "cart",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/05.png",
+        "webp": "media/paths/journey-1/05.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/05.png",
+          "webp": "media/paths/journey-1/05.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"cart\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Reviewing the cart\"",
+          "passed": true,
+          "expected": "test ID \"cart\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-9"
+      ],
+      "notes": []
+    },
+    "Checking out": {
+      "name": "Checking out",
+      "chart": "Coffee order",
+      "description": "Checkout runs as its own chart.",
+      "snapshot": "checking-out",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": null,
+      "screenshotsByPath": {},
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"checking-out\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Order in progress": {
+      "name": "Order in progress",
+      "chart": "Coffee order",
+      "description": "The drink is made while the customer chooses how to hear about it.",
+      "snapshot": "order-in-progress",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": null,
+      "screenshotsByPath": {},
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"order-in-progress\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7",
+        "generated-1"
+      ],
+      "notes": []
+    },
+    "Drink": {
+      "name": "Drink",
+      "chart": "Coffee order",
+      "description": "Where the drink is.",
+      "snapshot": "drink",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": null,
+      "screenshotsByPath": {},
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"drink\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Paid, waiting for the barista": {
+      "name": "Paid, waiting for the barista",
+      "chart": "Coffee order",
+      "description": "A card says the order is paid and in the queue.",
+      "snapshot": "order-queued",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Order paid"
+      ],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/06.png",
+        "webp": "media/paths/journey-1/06.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/06.png",
+          "webp": "media/paths/journey-1/06.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"order-queued\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Order paid"
+        ],
+        "observed": [
+          "Order paid"
+        ],
+        "missing": [],
+        "noSignal": [],
+        "events": [
+          {
+            "specversion": "1.0",
+            "id": "fa3a6af60ea0ca6cc648",
+            "source": "/fixture/orders",
+            "type": "com.example.order.paid",
+            "time": "2026-10-06T14:41:00.000Z",
+            "subject": "order-fixture-571dc1",
+            "datacontenttype": "application/json",
+            "data": {
+              "name": "Order paid"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Paid, waiting for the barista\"",
+          "passed": true,
+          "expected": "test ID \"order-queued\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Drink being made": {
+      "name": "Drink being made",
+      "chart": "Coffee order",
+      "description": "A progress bar while the barista makes the drink.",
+      "snapshot": "order-making",
+      "confidence": "assumed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/07.png",
+        "webp": "media/paths/journey-1/07.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/07.png",
+          "webp": "media/paths/journey-1/07.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"order-making\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Drink being made\"",
+          "passed": true,
+          "expected": "test ID \"order-making\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Drink ready for pickup": {
+      "name": "Drink ready for pickup",
+      "chart": "Coffee order",
+      "description": "A card says the drink is ready, with the pickup counter.",
+      "snapshot": "order-ready",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Customer notified"
+      ],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/08.png",
+        "webp": "media/paths/journey-1/08.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/08.png",
+          "webp": "media/paths/journey-1/08.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"order-ready\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Customer notified"
+        ],
+        "observed": [
+          "Customer notified"
+        ],
+        "missing": [],
+        "noSignal": [],
+        "events": [
+          {
+            "specversion": "1.0",
+            "id": "2b441cb5e154b722a47f",
+            "source": "/fixture/orders",
+            "type": "com.example.customer.notified",
+            "time": "2026-10-06T14:41:00.000Z",
+            "subject": "order-fixture-571dc1",
+            "datacontenttype": "application/json",
+            "data": {
+              "name": "Customer notified"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Drink ready for pickup\"",
+          "passed": true,
+          "expected": "test ID \"order-ready\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-6"
+      ],
+      "notes": []
+    },
+    "Updates": {
+      "name": "Updates",
+      "chart": "Coffee order",
+      "description": "Whether the customer gets a notification at each step.",
+      "snapshot": "updates",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": null,
+      "screenshotsByPath": {},
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"updates\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7",
+        "generated-1"
+      ],
+      "notes": []
+    },
+    "Updates on": {
+      "name": "Updates on",
+      "chart": "Coffee order",
+      "description": "The updates switch is on.",
+      "snapshot": "updates-on",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/09.png",
+        "webp": "media/paths/journey-1/09.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/09.png",
+          "webp": "media/paths/journey-1/09.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"updates-on\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Updates on\"",
+          "passed": true,
+          "expected": "test ID \"updates-on\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7",
+        "generated-1"
+      ],
+      "notes": []
+    },
+    "Updates off": {
+      "name": "Updates off",
+      "chart": "Coffee order",
+      "description": "The updates switch is off.",
+      "snapshot": "updates-off",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-7/01.png",
+        "webp": "media/paths/journey-7/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-7": {
+          "png": "media/paths/journey-7/01.png",
+          "webp": "media/paths/journey-7/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"updates-off\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Updates off\"",
+          "passed": true,
+          "expected": "test ID \"updates-off\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-7",
+        "generated-1"
+      ],
+      "notes": []
+    },
+    "Told the drink was thrown away": {
+      "name": "Told the drink was thrown away",
+      "chart": "Coffee order",
+      "description": "A message says the drink waited too long and was refunded.",
+      "snapshot": "order-expired",
+      "confidence": "assumed",
+      "source": [],
+      "expectedEvents": [
+        "Order refunded"
+      ],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-6/01.png",
+        "webp": "media/paths/journey-6/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-6": {
+          "png": "media/paths/journey-6/01.png",
+          "webp": "media/paths/journey-6/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"order-expired\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Order refunded"
+        ],
+        "observed": [
+          "Order refunded"
+        ],
+        "missing": [],
+        "noSignal": [],
+        "events": [
+          {
+            "specversion": "1.0",
+            "id": "93ce523cd7dad90725ff",
+            "source": "/fixture/orders",
+            "type": "com.example.order.refunded",
+            "time": "2026-10-06T14:41:00.000Z",
+            "subject": "order-fixture-571dc1",
+            "datacontenttype": "application/json",
+            "data": {
+              "name": "Order refunded"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Told the drink was thrown away\"",
+          "passed": true,
+          "expected": "test ID \"order-expired\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-6"
+      ],
+      "notes": []
+    },
+    "Order complete": {
+      "name": "Order complete",
+      "chart": "Coffee order",
+      "description": "A thank-you screen with the receipt.",
+      "snapshot": "order-complete",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Order completed"
+      ],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/10.png",
+        "webp": "media/paths/journey-1/10.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/10.png",
+          "webp": "media/paths/journey-1/10.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"order-complete\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Order completed"
+        ],
+        "observed": [
+          "Order completed"
+        ],
+        "missing": [],
+        "noSignal": [],
+        "events": [
+          {
+            "specversion": "1.0",
+            "id": "d9e4c71df569fd6948c4",
+            "source": "/fixture/orders",
+            "type": "com.example.order.completed",
+            "time": "2026-10-06T14:41:00.000Z",
+            "subject": "order-fixture-571dc1",
+            "datacontenttype": "application/json",
+            "data": {
+              "name": "Order completed"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Order complete\"",
+          "passed": true,
+          "expected": "test ID \"order-complete\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1"
+      ],
+      "notes": []
+    },
+    "Choosing how to pay": {
+      "name": "Choosing how to pay",
+      "chart": "Checkout",
+      "description": "Card and wallet buttons, and the order total.",
+      "snapshot": "pay-options",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/11.png",
+        "webp": "media/paths/journey-1/11.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/11.png",
+          "webp": "media/paths/journey-1/11.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"pay-options\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Choosing how to pay\"",
+          "passed": true,
+          "expected": "test ID \"pay-options\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "generated-2"
+      ],
+      "notes": []
+    },
+    "Entering card details": {
+      "name": "Entering card details",
+      "chart": "Checkout",
+      "description": "A form for the card number, expiry and code.",
+      "snapshot": "card-form",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/12.png",
+        "webp": "media/paths/journey-1/12.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/12.png",
+          "webp": "media/paths/journey-1/12.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"card-form\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Entering card details\"",
+          "passed": true,
+          "expected": "test ID \"card-form\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "generated-2"
+      ],
+      "notes": []
+    },
+    "Confirming with the wallet": {
+      "name": "Confirming with the wallet",
+      "chart": "Checkout",
+      "description": "The wallet sheet asks the customer to confirm the payment.",
+      "snapshot": "wallet-sheet",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-2/01.png",
+        "webp": "media/paths/journey-2/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-2": {
+          "png": "media/paths/journey-2/01.png",
+          "webp": "media/paths/journey-2/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"wallet-sheet\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Confirming with the wallet\"",
+          "passed": true,
+          "expected": "test ID \"wallet-sheet\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-2",
+        "journey-3",
+        "journey-7",
+        "generated-2"
+      ],
+      "notes": []
+    },
+    "Waiting for the payment": {
+      "name": "Waiting for the payment",
+      "chart": "Checkout",
+      "description": "A spinner while the payment provider answers.",
+      "snapshot": "paying",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Payment requested"
+      ],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/13.png",
+        "webp": "media/paths/journey-1/13.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/13.png",
+          "webp": "media/paths/journey-1/13.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"paying\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Payment requested"
+        ],
+        "observed": [
+          "Payment requested"
+        ],
+        "missing": [],
+        "noSignal": [],
+        "events": [
+          {
+            "specversion": "1.0",
+            "id": "7cb996cc3f5a72fce3c5",
+            "source": "/fixture/orders",
+            "type": "com.example.payment.requested",
+            "time": "2026-10-06T14:41:00.000Z",
+            "subject": "order-fixture-571dc1",
+            "datacontenttype": "application/json",
+            "data": {
+              "name": "Payment requested"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Waiting for the payment\"",
+          "passed": true,
+          "expected": "test ID \"paying\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Told the payment is slow": {
+      "name": "Told the payment is slow",
+      "chart": "Checkout",
+      "description": "A message says the payment is taking longer than usual, with \"Check again\".",
+      "snapshot": "paying-slow",
+      "confidence": "assumed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-4/01.png",
+        "webp": "media/paths/journey-4/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-4": {
+          "png": "media/paths/journey-4/01.png",
+          "webp": "media/paths/journey-4/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"paying-slow\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Told the payment is slow\"",
+          "passed": true,
+          "expected": "test ID \"paying-slow\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-4"
+      ],
+      "notes": []
+    },
+    "Told the payment was declined": {
+      "name": "Told the payment was declined",
+      "chart": "Checkout",
+      "description": "A message says the payment was declined, with \"Try another way\".",
+      "snapshot": "payment-declined",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Payment declined"
+      ],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-3/01.png",
+        "webp": "media/paths/journey-3/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-3": {
+          "png": "media/paths/journey-3/01.png",
+          "webp": "media/paths/journey-3/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"payment-declined\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Payment declined"
+        ],
+        "observed": [
+          "Payment declined"
+        ],
+        "missing": [],
+        "noSignal": [],
+        "events": [
+          {
+            "specversion": "1.0",
+            "id": "7ba4035a20dbd80834ca",
+            "source": "/fixture/orders",
+            "type": "com.example.payment.declined",
+            "time": "2026-10-06T14:41:00.000Z",
+            "subject": "order-fixture-571dc1",
+            "datacontenttype": "application/json",
+            "data": {
+              "name": "Payment declined"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Told the payment was declined\"",
+          "passed": true,
+          "expected": "test ID \"payment-declined\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-3"
+      ],
+      "notes": []
+    },
+    "Paid": {
+      "name": "Paid",
+      "chart": "Checkout",
+      "description": "A check mark confirms the payment.",
+      "snapshot": "paid",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Payment captured"
+      ],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/14.png",
+        "webp": "media/paths/journey-1/14.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/14.png",
+          "webp": "media/paths/journey-1/14.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"paid\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Payment captured"
+        ],
+        "observed": [
+          "Payment captured"
+        ],
+        "missing": [],
+        "noSignal": [],
+        "events": [
+          {
+            "specversion": "1.0",
+            "id": "3556a91551ce991b18f6",
+            "source": "/fixture/orders",
+            "type": "com.example.payment.captured",
+            "time": "2026-10-06T14:41:00.000Z",
+            "subject": "order-fixture-571dc1",
+            "datacontenttype": "application/json",
+            "data": {
+              "name": "Payment captured"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Paid\"",
+          "passed": true,
+          "expected": "test ID \"paid\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Checkout abandoned": {
+      "name": "Checkout abandoned",
+      "chart": "Checkout",
+      "description": "Checkout closes and the cart is kept.",
+      "snapshot": "checkout-closed",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-5/01.png",
+        "webp": "media/paths/journey-5/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-5": {
+          "png": "media/paths/journey-5/01.png",
+          "webp": "media/paths/journey-5/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"checkout-closed\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Checkout abandoned\"",
+          "passed": true,
+          "expected": "test ID \"checkout-closed\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-5"
+      ],
+      "notes": []
+    }
+  },
+  "transitions": {
+    "Browsing the menu :: Picks a drink": {
+      "id": "Browsing the menu :: Picks a drink",
+      "source": "Browsing the menu",
+      "target": "Customizing the drink",
+      "event": "Picks a drink",
+      "kind": "user",
+      "how": "The user picks a drink in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/001.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Pick a drink",
+          "x": 71,
+          "y": 579
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Customizing the drink"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-8",
+        "journey-9"
+      ]
+    },
+    "Choosing a size :: Picks a size": {
+      "id": "Choosing a size :: Picks a size",
+      "source": "Choosing a size",
+      "target": "Choosing the milk",
+      "event": "Picks a size",
+      "kind": "user",
+      "how": "The user picks a size in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/002.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Pick a size",
+          "x": 82,
+          "y": 750
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Choosing the milk"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-8",
+        "journey-9"
+      ]
+    },
+    "Choosing the milk :: Picks a milk": {
+      "id": "Choosing the milk :: Picks a milk",
+      "source": "Choosing the milk",
+      "target": "Ready to add the drink",
+      "event": "Picks a milk",
+      "kind": "user",
+      "how": "The user picks a milk in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/003.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Pick a milk",
+          "x": 321,
+          "y": 731
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Ready to add the drink"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-9"
+      ]
+    },
+    "Ready to add the drink :: Adds the drink to the cart": {
+      "id": "Ready to add the drink :: Adds the drink to the cart",
+      "source": "Ready to add the drink",
+      "target": "Reviewing the cart",
+      "event": "Adds the drink to the cart",
+      "kind": "user",
+      "how": "The user adds the drink to the cart in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/004.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Add the drink to the",
+          "x": 342,
+          "y": 687
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Reviewing the cart"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7",
+        "journey-9"
+      ]
+    },
+    "Customizing the drink :: Goes back to the menu": {
+      "id": "Customizing the drink :: Goes back to the menu",
+      "source": "Customizing the drink",
+      "target": "Browsing the menu",
+      "event": "Goes back to the menu",
+      "kind": "user",
+      "how": "The user goes back to the menu in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/005.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Go back to the menu",
+          "x": 120,
+          "y": 777
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Browsing the menu"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-8"
+      ]
+    },
+    "Reviewing the cart :: Removes the last drink": {
+      "id": "Reviewing the cart :: Removes the last drink",
+      "source": "Reviewing the cart",
+      "target": "Browsing the menu",
+      "event": "Removes the last drink",
+      "kind": "user",
+      "how": "The user removes the last drink in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/006.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Remove the last drink",
+          "x": 284,
+          "y": 563
+        },
+        {
+          "atMs": 1700,
+          "kind": "toast",
+          "label": "Removed from the cart."
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Browsing the menu"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-9"
+      ]
+    },
+    "Reviewing the cart :: Starts checkout": {
+      "id": "Reviewing the cart :: Starts checkout",
+      "source": "Reviewing the cart",
+      "target": "Checking out",
+      "event": "Starts checkout",
+      "kind": "user",
+      "how": "The user starts checkout in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/007.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Start checkout",
+          "x": 57,
+          "y": 738
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Checking out"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7"
+      ]
+    },
+    "Paid, waiting for the barista :: Barista starts the drink": {
+      "id": "Paid, waiting for the barista :: Barista starts the drink",
+      "source": "Paid, waiting for the barista",
+      "target": "Drink being made",
+      "event": "Barista starts the drink",
+      "kind": "system",
+      "how": "The fixture sends POST /api/orders/order-fixture-0008/status as Barista display.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/008.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 400,
+          "kind": "note",
+          "label": "The user waits on this screen"
+        },
+        {
+          "atMs": 900,
+          "kind": "system",
+          "label": "Barista starts the drink",
+          "system": {
+            "source": "Barista display",
+            "endpoint": "POST /api/orders/order-fixture-0008/status",
+            "eventType": "order.started",
+            "payload": {
+              "status": "started"
+            },
+            "responseStatus": 200
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Drink being made"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-6",
+        "journey-7"
+      ]
+    },
+    "Drink being made :: Barista finishes the drink": {
+      "id": "Drink being made :: Barista finishes the drink",
+      "source": "Drink being made",
+      "target": "Drink ready for pickup",
+      "event": "Barista finishes the drink",
+      "kind": "system",
+      "how": "The fixture sends POST /api/orders/order-fixture-0009/status as Barista display.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/009.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 400,
+          "kind": "note",
+          "label": "The user waits on this screen"
+        },
+        {
+          "atMs": 900,
+          "kind": "system",
+          "label": "Barista finishes the drink",
+          "system": {
+            "source": "Barista display",
+            "endpoint": "POST /api/orders/order-fixture-0009/status",
+            "eventType": "order.finished",
+            "payload": {
+              "status": "finished"
+            },
+            "responseStatus": 200
+          }
+        },
+        {
+          "atMs": 1300,
+          "kind": "notification",
+          "label": "Your drink is ready",
+          "notification": {
+            "channel": "push",
+            "title": "Your drink is ready",
+            "body": "Pick it up at the counter."
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Drink ready for pickup"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-6"
+      ]
+    },
+    "Drink ready for pickup :: Picks up the drink": {
+      "id": "Drink ready for pickup :: Picks up the drink",
+      "source": "Drink ready for pickup",
+      "target": "Order complete",
+      "event": "Picks up the drink",
+      "kind": "user",
+      "how": "The user picks up the drink in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/010.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Pick up the drink",
+          "x": 164,
+          "y": 641
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Order complete"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1"
+      ]
+    },
+    "Drink ready for pickup :: Drink sits ready for ten minutes": {
+      "id": "Drink ready for pickup :: Drink sits ready for ten minutes",
+      "source": "Drink ready for pickup",
+      "target": "Told the drink was thrown away",
+      "event": "Drink sits ready for ten minutes",
+      "kind": "time",
+      "how": "The test clock jumps forward; nothing in the app is touched.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/04.mp4",
+        "poster": "media/clips/journey-1/04.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/011.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 300,
+          "kind": "time",
+          "label": "Drink sits ready for ten minutes",
+          "time": {
+            "from": "2026-10-07T00:40:00.000Z",
+            "to": "2026-10-07T00:50:00.000Z",
+            "fired": [
+              {
+                "at": "2026-10-07T00:45:00.000Z",
+                "label": "Pickup reminder is sent"
+              },
+              {
+                "at": "2026-10-07T00:50:00.000Z",
+                "label": "Unclaimed order check runs"
+              }
+            ]
+          }
+        },
+        {
+          "atMs": 1100,
+          "kind": "notification",
+          "label": "Your order was refunded",
+          "notification": {
+            "channel": "email",
+            "title": "Your order was refunded",
+            "body": "The drink waited too long, so we refunded it."
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Told the drink was thrown away"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-6"
+      ]
+    },
+    "Updates on :: Turns off updates": {
+      "id": "Updates on :: Turns off updates",
+      "source": "Updates on",
+      "target": "Updates off",
+      "event": "Turns off updates",
+      "kind": "user",
+      "how": "The user turns off updates in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/012.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Turn off updates",
+          "x": 272,
+          "y": 771
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Updates off"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-7"
+      ]
+    },
+    "Updates off :: Turns on updates": {
+      "id": "Updates off :: Turns on updates",
+      "source": "Updates off",
+      "target": "Updates on",
+      "event": "Turns on updates",
+      "kind": "user",
+      "how": "The user turns on updates in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/013.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Turn on updates",
+          "x": 185,
+          "y": 736
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Updates on"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "generated-1"
+      ]
+    },
+    "Told the drink was thrown away :: Orders again": {
+      "id": "Told the drink was thrown away :: Orders again",
+      "source": "Told the drink was thrown away",
+      "target": "Browsing the menu",
+      "event": "Orders again",
+      "kind": "user",
+      "how": "The user orders again in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/014.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Order again",
+          "x": 278,
+          "y": 646
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Browsing the menu"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-6"
+      ]
+    },
+    "Choosing how to pay :: Picks card": {
+      "id": "Choosing how to pay :: Picks card",
+      "source": "Choosing how to pay",
+      "target": "Entering card details",
+      "event": "Picks card",
+      "kind": "user",
+      "how": "The user picks card in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/015.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Pick card",
+          "x": 331,
+          "y": 749
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Entering card details"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-3",
+        "journey-4",
+        "journey-6"
+      ]
+    },
+    "Choosing how to pay :: Picks wallet": {
+      "id": "Choosing how to pay :: Picks wallet",
+      "source": "Choosing how to pay",
+      "target": "Confirming with the wallet",
+      "event": "Picks wallet",
+      "kind": "user",
+      "how": "The user picks wallet in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/016.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Pick wallet",
+          "x": 82,
+          "y": 568
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Confirming with the wallet"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-2",
+        "journey-3",
+        "journey-7"
+      ]
+    },
+    "Choosing how to pay :: Closes checkout": {
+      "id": "Choosing how to pay :: Closes checkout",
+      "source": "Choosing how to pay",
+      "target": "Checkout abandoned",
+      "event": "Closes checkout",
+      "kind": "user",
+      "how": "The user closes checkout in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/017.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Close checkout",
+          "x": 325,
+          "y": 570
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Checkout abandoned"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-5"
+      ]
+    },
+    "Entering card details :: Submits the card": {
+      "id": "Entering card details :: Submits the card",
+      "source": "Entering card details",
+      "target": "Waiting for the payment",
+      "event": "Submits the card",
+      "kind": "user",
+      "how": "The user submits the card in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/02.mp4",
+        "poster": "media/clips/journey-1/02.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/018.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 300,
+          "kind": "tap",
+          "label": "Card number",
+          "x": 195,
+          "y": 308
+        },
+        {
+          "atMs": 650,
+          "kind": "type",
+          "label": "Card number",
+          "text": "4242 4242 4242 4242"
+        },
+        {
+          "atMs": 1500,
+          "kind": "tap",
+          "label": "Submit the card",
+          "x": 59,
+          "y": 631
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Waiting for the payment"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-3",
+        "journey-4",
+        "journey-6"
+      ]
+    },
+    "Entering card details :: Goes back to the payment options": {
+      "id": "Entering card details :: Goes back to the payment options",
+      "source": "Entering card details",
+      "target": "Choosing how to pay",
+      "event": "Goes back to the payment options",
+      "kind": "user",
+      "how": "The user goes back to the payment options in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/019.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Go back to the payment",
+          "x": 291,
+          "y": 579
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Choosing how to pay"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "generated-2"
+      ]
+    },
+    "Confirming with the wallet :: Confirms with the wallet": {
+      "id": "Confirming with the wallet :: Confirms with the wallet",
+      "source": "Confirming with the wallet",
+      "target": "Waiting for the payment",
+      "event": "Confirms with the wallet",
+      "kind": "user",
+      "how": "The user confirms with the wallet in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/020.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Confirm with the wallet",
+          "x": 179,
+          "y": 586
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Waiting for the payment"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-2",
+        "journey-3",
+        "journey-7"
+      ]
+    },
+    "Confirming with the wallet :: Cancels the wallet": {
+      "id": "Confirming with the wallet :: Cancels the wallet",
+      "source": "Confirming with the wallet",
+      "target": "Choosing how to pay",
+      "event": "Cancels the wallet",
+      "kind": "user",
+      "how": "The user cancels the wallet in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/021.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Cancel the wallet",
+          "x": 286,
+          "y": 704
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Choosing how to pay"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "generated-2"
+      ]
+    },
+    "Waiting for the payment :: Payment provider approves the payment": {
+      "id": "Waiting for the payment :: Payment provider approves the payment",
+      "source": "Waiting for the payment",
+      "target": "Paid",
+      "event": "Payment provider approves the payment",
+      "kind": "system",
+      "how": "The fixture sends POST /webhooks/payments as Payment provider webhook.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/022.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 400,
+          "kind": "note",
+          "label": "The user waits on this screen"
+        },
+        {
+          "atMs": 900,
+          "kind": "system",
+          "label": "Payment provider approves the payment",
+          "system": {
+            "source": "Payment provider webhook",
+            "endpoint": "POST /webhooks/payments",
+            "eventType": "payment.approved",
+            "payload": {
+              "type": "payment.approved",
+              "data": {
+                "paymentId": "pay_fixture_0022",
+                "status": "approved"
+              }
+            },
+            "responseStatus": 200
+          }
+        },
+        {
+          "atMs": 1300,
+          "kind": "notification",
+          "label": "Approved",
+          "notification": {
+            "channel": "push",
+            "title": "Approved",
+            "body": "Next: paid."
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Paid"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ]
+    },
+    "Waiting for the payment :: Payment provider declines the payment": {
+      "id": "Waiting for the payment :: Payment provider declines the payment",
+      "source": "Waiting for the payment",
+      "target": "Told the payment was declined",
+      "event": "Payment provider declines the payment",
+      "kind": "system",
+      "how": "The fixture sends POST /webhooks/payments as Payment provider webhook.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/023.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 400,
+          "kind": "note",
+          "label": "The user waits on this screen"
+        },
+        {
+          "atMs": 900,
+          "kind": "system",
+          "label": "Payment provider declines the payment",
+          "system": {
+            "source": "Payment provider webhook",
+            "endpoint": "POST /webhooks/payments",
+            "eventType": "payment.declined",
+            "payload": {
+              "type": "payment.declined",
+              "data": {
+                "paymentId": "pay_fixture_0023",
+                "status": "declined"
+              }
+            },
+            "responseStatus": 200
+          }
+        },
+        {
+          "atMs": 1300,
+          "kind": "notification",
+          "label": "Payment declined",
+          "notification": {
+            "channel": "in-app",
+            "title": "Payment declined",
+            "body": "Try another way to pay."
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Told the payment was declined"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-3"
+      ]
+    },
+    "Waiting for the payment :: Payment takes longer than a minute": {
+      "id": "Waiting for the payment :: Payment takes longer than a minute",
+      "source": "Waiting for the payment",
+      "target": "Told the payment is slow",
+      "event": "Payment takes longer than a minute",
+      "kind": "time",
+      "how": "The test clock jumps forward; nothing in the app is touched.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/04.mp4",
+        "poster": "media/clips/journey-1/04.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/024.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 300,
+          "kind": "time",
+          "label": "Payment takes longer than a minute",
+          "time": {
+            "from": "2026-10-07T13:40:00.000Z",
+            "to": "2026-10-07T13:41:10.000Z",
+            "fired": [
+              {
+                "at": "2026-10-07T13:41:10.000Z",
+                "label": "Payment status check runs"
+              }
+            ]
+          }
+        },
+        {
+          "atMs": 1100,
+          "kind": "notification",
+          "label": "Still waiting on your payment",
+          "notification": {
+            "channel": "in-app",
+            "title": "Still waiting on your payment",
+            "body": "This can take a little longer."
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Told the payment is slow"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-4"
+      ]
+    },
+    "Told the payment is slow :: Checks the payment again": {
+      "id": "Told the payment is slow :: Checks the payment again",
+      "source": "Told the payment is slow",
+      "target": "Waiting for the payment",
+      "event": "Checks the payment again",
+      "kind": "user",
+      "how": "The user checks the payment again in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/025.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Check the payment again",
+          "x": 244,
+          "y": 621
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Waiting for the payment"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-4"
+      ]
+    },
+    "Told the payment was declined :: Tries another way to pay": {
+      "id": "Told the payment was declined :: Tries another way to pay",
+      "source": "Told the payment was declined",
+      "target": "Choosing how to pay",
+      "event": "Tries another way to pay",
+      "kind": "user",
+      "how": "The user tries another way to pay in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/026.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Try another way to pay",
+          "x": 195,
+          "y": 565
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Choosing how to pay"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-3"
+      ]
+    },
+    "Paid :: Payment goes through": {
+      "id": "Paid :: Payment goes through",
+      "source": "Paid",
+      "target": "Order in progress",
+      "event": "Payment goes through",
+      "kind": "hand-off",
+      "how": "The child chart reached an end, so the parent chart moves on.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/027.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 200,
+          "kind": "note",
+          "label": "Checkout is done and hands back with \"Payment goes through\""
+        },
+        {
+          "atMs": 700,
+          "kind": "screen",
+          "label": "Now: Order in progress"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ]
+    },
+    "Checkout abandoned :: Leaves checkout": {
+      "id": "Checkout abandoned :: Leaves checkout",
+      "source": "Checkout abandoned",
+      "target": "Reviewing the cart",
+      "event": "Leaves checkout",
+      "kind": "hand-off",
+      "how": "The child chart reached an end, so the parent chart moves on.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/028.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 200,
+          "kind": "note",
+          "label": "Checkout is done and hands back with \"Leaves checkout\""
+        },
+        {
+          "atMs": 700,
+          "kind": "screen",
+          "label": "Now: Reviewing the cart"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-5"
+      ]
+    }
+  },
+  "paths": [
+    {
+      "id": "journey-1",
+      "name": "Orders a drink and pays by card",
+      "kind": "journey",
+      "description": "The everyday order, from the menu to picking the drink up.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing the milk :: Picks a milk",
+          "event": "Picks a milk",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Ready to add the drink :: Adds the drink to the cart",
+          "event": "Adds the drink to the cart",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks card",
+          "event": "Picks card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Entering card details :: Submits the card",
+          "event": "Submits the card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid, waiting for the barista :: Barista starts the drink",
+          "event": "Barista starts the drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Drink being made :: Barista finishes the drink",
+          "event": "Barista finishes the drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Drink ready for pickup :: Picks up the drink",
+          "event": "Picks up the drink",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-2",
+      "name": "Pays with a wallet",
+      "kind": "journey",
+      "description": "The wallet confirms the payment instead of a card.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing the milk :: Picks a milk",
+          "event": "Picks a milk",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Ready to add the drink :: Adds the drink to the cart",
+          "event": "Adds the drink to the cart",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks wallet",
+          "event": "Picks wallet",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Confirming with the wallet :: Confirms with the wallet",
+          "event": "Confirms with the wallet",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-3",
+      "name": "Card declined, then a wallet works",
+      "kind": "journey",
+      "description": "The card is declined and the wallet goes through.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing the milk :: Picks a milk",
+          "event": "Picks a milk",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Ready to add the drink :: Adds the drink to the cart",
+          "event": "Adds the drink to the cart",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks card",
+          "event": "Picks card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Entering card details :: Submits the card",
+          "event": "Submits the card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider declines the payment",
+          "event": "Payment provider declines the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Told the payment was declined :: Tries another way to pay",
+          "event": "Tries another way to pay",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks wallet",
+          "event": "Picks wallet",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Confirming with the wallet :: Confirms with the wallet",
+          "event": "Confirms with the wallet",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-4",
+      "name": "Slow payment",
+      "kind": "journey",
+      "description": "The payment provider takes more than a minute to answer.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing the milk :: Picks a milk",
+          "event": "Picks a milk",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Ready to add the drink :: Adds the drink to the cart",
+          "event": "Adds the drink to the cart",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks card",
+          "event": "Picks card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Entering card details :: Submits the card",
+          "event": "Submits the card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment takes longer than a minute",
+          "event": "Payment takes longer than a minute",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Told the payment is slow :: Checks the payment again",
+          "event": "Checks the payment again",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-5",
+      "name": "Leaves checkout and comes back",
+      "kind": "journey",
+      "description": "The customer closes checkout, then starts it again.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing the milk :: Picks a milk",
+          "event": "Picks a milk",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Ready to add the drink :: Adds the drink to the cart",
+          "event": "Adds the drink to the cart",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Closes checkout",
+          "event": "Closes checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Checkout abandoned :: Leaves checkout",
+          "event": "Leaves checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-6",
+      "name": "Drink left too long",
+      "kind": "journey",
+      "description": "Nobody picks the drink up, so it is thrown away and refunded.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing the milk :: Picks a milk",
+          "event": "Picks a milk",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Ready to add the drink :: Adds the drink to the cart",
+          "event": "Adds the drink to the cart",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks card",
+          "event": "Picks card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Entering card details :: Submits the card",
+          "event": "Submits the card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid, waiting for the barista :: Barista starts the drink",
+          "event": "Barista starts the drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Drink being made :: Barista finishes the drink",
+          "event": "Barista finishes the drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Drink ready for pickup :: Drink sits ready for ten minutes",
+          "event": "Drink sits ready for ten minutes",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Told the drink was thrown away :: Orders again",
+          "event": "Orders again",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-7",
+      "name": "Turns off updates while waiting",
+      "kind": "journey",
+      "description": "Updates go off while the drink is in the queue; the drink is still made.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing the milk :: Picks a milk",
+          "event": "Picks a milk",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Ready to add the drink :: Adds the drink to the cart",
+          "event": "Adds the drink to the cart",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks wallet",
+          "event": "Picks wallet",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Confirming with the wallet :: Confirms with the wallet",
+          "event": "Confirms with the wallet",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Updates on :: Turns off updates",
+          "event": "Turns off updates",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid, waiting for the barista :: Barista starts the drink",
+          "event": "Barista starts the drink",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-8",
+      "name": "Changes their mind about the drink",
+      "kind": "journey",
+      "description": "The customer backs out while choosing the drink.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Customizing the drink :: Goes back to the menu",
+          "event": "Goes back to the menu",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-9",
+      "name": "Empties the cart",
+      "kind": "journey",
+      "description": "The only drink is removed from the cart.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Browsing the menu :: Picks a drink",
+          "event": "Picks a drink",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing a size :: Picks a size",
+          "event": "Picks a size",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing the milk :: Picks a milk",
+          "event": "Picks a milk",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Ready to add the drink :: Adds the drink to the cart",
+          "event": "Adds the drink to the cart",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Removes the last drink",
+          "event": "Removes the last drink",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "generated-1",
+      "name": "Every other event in Coffee order",
+      "kind": "generated",
+      "description": "Generated to reach the 1 events in \"Coffee order\" that no named journey takes.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Updates off :: Turns on updates",
+          "event": "Turns on updates",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "generated-2",
+      "name": "Every other event in Checkout",
+      "kind": "generated",
+      "description": "Generated to reach the 2 events in \"Checkout\" that no named journey takes.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Entering card details :: Goes back to the payment options",
+          "event": "Goes back to the payment options",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Confirming with the wallet :: Cancels the wallet",
+          "event": "Cancels the wallet",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    }
+  ],
+  "coverage": {
+    "Coffee order": {
+      "states": {
+        "total": 17,
+        "passed": 17,
+        "failed": 0,
+        "flaky": 0,
+        "notReached": 0
+      },
+      "transitions": {
+        "total": 14,
+        "passed": 14,
+        "failed": 0,
+        "flaky": 0,
+        "notReached": 0
+      }
+    },
+    "Checkout": {
+      "states": {
+        "total": 8,
+        "passed": 8,
+        "failed": 0,
+        "flaky": 0,
+        "notReached": 0
+      },
+      "transitions": {
+        "total": 14,
+        "passed": 14,
+        "failed": 0,
+        "flaky": 0,
+        "notReached": 0
+      }
+    },
+    "overall": {
+      "states": {
+        "total": 25,
+        "passed": 25,
+        "failed": 0,
+        "flaky": 0,
+        "notReached": 0
+      },
+      "transitions": {
+        "total": 28,
+        "passed": 28,
+        "failed": 0,
+        "flaky": 0,
+        "notReached": 0
+      }
+    }
+  },
+  "privacy": {
+    "passed": true,
+    "findings": []
+  },
+  "reports": {
+    "junit": "junit.xml",
+    "ctrf": "ctrf.json",
+    "mermaid": "chart.mmd"
+  }
+}

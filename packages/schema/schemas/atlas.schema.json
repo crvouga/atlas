@@ -1,0 +1,32 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/atlas.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "contexts": {
+      "type": "array",
+      "items": {}
+    },
+    "handOffs": {
+      "type": "array",
+      "items": {}
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://github.com/crvouga/atlas/schemas/manifest.schema.json",
+  "schemaVersion": 1,
+  "run": {
+    "id": "2026-10-06T10-00-00-000Z-showcase",
+    "startedAt": "2026-10-06T10:00:00.000Z",
+    "finishedAt": "2026-10-06T10:02:00.000Z",
+    "durationMs": 120000,
+    "commit": "89c6f724ee5201fe0f1edab7dda599f25afa1218",
+    "branch": "main",
+    "environment": {
+      "driver": "playwright",
+      "baseUrl": "http://localhost:3000",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "deviceScaleFactor": 3
+    },
+    "mode": "showcase",
+    "specVersion": "f7ef440c67ed",
+    "specDirectory": "specs",
+    "approvals": [],
+    "scope": {
+      "chart": "Checkout",
+      "start": "A customer with a drink in the cart"
+    }
+  },
+  "charts": [
+    {
+      "id": "Coffee order",
+      "file": "coffee/ordering/machine.yaml",
+      "description": "A customer picks a drink, pays for it, and picks it up when it is ready.",
+      "parentState": null,
+      "handOffs": {}
+    },
+    {
+      "id": "Checkout",
+      "file": "coffee/ordering/checkout.scxml",
+      "description": "Paying for the order, by card or with a wallet.",
+      "parentState": "Checking out",
+      "handOffs": {
+        "Paid": "Payment goes through",
+        "Checkout abandoned": "Leaves checkout"
+      }
+    }
+  ],
+  "map": {
+    "nodes": [
+      {
+        "id": "Browsing the menu",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Customizing the drink",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "compound",
+        "initial": "Choosing a size",
+        "inScope": false
+      },
+      {
+        "id": "Choosing a size",
+        "

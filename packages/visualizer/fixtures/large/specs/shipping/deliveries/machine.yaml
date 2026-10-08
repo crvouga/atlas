@@ -1,0 +1,830 @@
+# Deliveries: generated fixture chart
+id: Deliveries
+initial: Handling the shipping label
+meta:
+  description: Packing, shipping and delivery.
+  snapshot: deliveries
+  events: []
+  confidence: confirmed
+  source:
+    - src/screens/deliveries
+states:
+  Handling the shipping label:
+    id: Handling the shipping label
+    initial: Reviewing the shipping label
+    meta:
+      description: Everything about the shipping label, from review to approval.
+      snapshot: handling-the-shipping-label
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-shipping-label.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the shipping label:
+        id: Reviewing the shipping label
+        meta:
+          description: The user checks the shipping label before sending it.
+          snapshot: reviewing-the-shipping-label
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-shipping-label.tsx
+          gherkin:
+            - features/shipping/deliveries/shipping-label.feature
+        on:
+          Taps edit on the shipping label:
+            target: "#Editing the shipping label"
+          Submits the shipping label:
+            target: "#Waiting for the shipping label to be approved"
+      Editing the shipping label:
+        id: Editing the shipping label
+        initial: Editing the shipping label details
+        meta:
+          description: The user changes the shipping label, with an optional file.
+          snapshot: editing-the-shipping-label
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-shipping-label.tsx
+        states:
+          Editing the shipping label details:
+            id: Editing the shipping label details
+            meta:
+              description: A form with the shipping label fields.
+              snapshot: editing-the-shipping-label-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-shipping-label-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the shipping label"
+          Uploading a file for the shipping label:
+            id: Uploading a file for the shipping label
+            meta:
+              description: A file picker for a document about the shipping label.
+              snapshot: uploading-a-file-for-the-shipping-label
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-shipping-label.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the shipping label details"
+        on:
+          Saves the shipping label:
+            target: "#Reviewing the shipping label"
+          Cancels the changes to the shipping label:
+            target: "#Reviewing the shipping label"
+          Saving the shipping label fails:
+            target: "#Told the shipping label could not be saved"
+      Told the shipping label could not be saved:
+        id: Told the shipping label could not be saved
+        meta:
+          description: A message says the shipping label could not be saved, with "Try again".
+          snapshot: told-the-shipping-label-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-shipping-label-could-not-be-saved.tsx
+        on:
+          Tries saving the shipping label again:
+            target: "#Editing the shipping label"
+      Waiting for the shipping label to be approved:
+        id: Waiting for the shipping label to be approved
+        meta:
+          description: A card says the shipping label is being checked.
+          snapshot: waiting-for-the-shipping-label-to-be-approved
+          events:
+            - Shipping label submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-shipping-label-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the shipping label:
+            target: "#Told the shipping label was approved"
+          Carrier rejects the shipping label:
+            target: "#Told the shipping label was rejected"
+          Approval of the shipping label takes longer than a day:
+            target: "#Told the shipping label is still under review"
+      Told the shipping label is still under review:
+        id: Told the shipping label is still under review
+        meta:
+          description: A card says the shipping label is still being checked.
+          snapshot: told-the-shipping-label-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-shipping-label-is-still-under-review.tsx
+        on:
+          Checks the shipping label again:
+            target: "#Waiting for the shipping label to be approved"
+      Told the shipping label was rejected:
+        id: Told the shipping label was rejected
+        meta:
+          description: A message explains why the shipping label was not accepted.
+          snapshot: told-the-shipping-label-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-shipping-label-was-rejected.tsx
+        on:
+          Starts the shipping label again:
+            target: "#Reviewing the shipping label"
+      Told the shipping label was approved:
+        id: Told the shipping label was approved
+        meta:
+          description: A message confirms the shipping label is approved.
+          snapshot: told-the-shipping-label-was-approved
+          events:
+            - Shipping label approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-shipping-label-was-approved.tsx
+        on:
+          Starts the delivery scheduling:
+            target: "#Going through the delivery scheduling"
+  Going through the delivery scheduling:
+    id: Going through the delivery scheduling
+    meta:
+      description: The delivery scheduling runs as its own chart.
+      snapshot: going-through-the-delivery-scheduling
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/going-through-the-delivery-scheduling.tsx
+    invoke:
+      src: Delivery scheduling
+      id: delivery-scheduling
+    on:
+      Delivery scheduling is completed:
+        target: "#Handling the package contents"
+      Delivery scheduling is abandoned:
+        target: "#Reviewing the shipping label"
+  Handling the package contents:
+    id: Handling the package contents
+    initial: Reviewing the package contents
+    meta:
+      description: Everything about the package contents, from review to approval.
+      snapshot: handling-the-package-contents
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-package-contents.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the package contents:
+        id: Reviewing the package contents
+        meta:
+          description: The user checks the package contents before sending it.
+          snapshot: reviewing-the-package-contents
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-package-contents.tsx
+          gherkin:
+            - features/shipping/deliveries/package-contents.feature
+        on:
+          Taps edit on the package contents:
+            target: "#Editing the package contents"
+          Submits the package contents:
+            target: "#Waiting for the package contents to be approved"
+      Editing the package contents:
+        id: Editing the package contents
+        meta:
+          description: A form to change the package contents.
+          snapshot: editing-the-package-contents
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-package-contents.tsx
+        on:
+          Saves the package contents:
+            target: "#Reviewing the package contents"
+          Cancels the changes to the package contents:
+            target: "#Reviewing the package contents"
+          Saving the package contents fails:
+            target: "#Told the package contents could not be saved"
+      Told the package contents could not be saved:
+        id: Told the package contents could not be saved
+        meta:
+          description: A message says the package contents could not be saved, with "Try again".
+          snapshot: told-the-package-contents-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-package-contents-could-not-be-saved.tsx
+        on:
+          Tries saving the package contents again:
+            target: "#Editing the package contents"
+      Waiting for the package contents to be approved:
+        id: Waiting for the package contents to be approved
+        meta:
+          description: A card says the package contents is being checked.
+          snapshot: waiting-for-the-package-contents-to-be-approved
+          events:
+            - Package contents submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-package-contents-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the package contents:
+            target: "#Told the package contents was approved"
+          Carrier rejects the package contents:
+            target: "#Told the package contents was rejected"
+          Approval of the package contents takes longer than a day:
+            target: "#Told the package contents is still under review"
+      Told the package contents is still under review:
+        id: Told the package contents is still under review
+        meta:
+          description: A card says the package contents is still being checked.
+          snapshot: told-the-package-contents-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-package-contents-is-still-under-review.tsx
+        on:
+          Checks the package contents again:
+            target: "#Waiting for the package contents to be approved"
+      Told the package contents was rejected:
+        id: Told the package contents was rejected
+        meta:
+          description: A message explains why the package contents was not accepted.
+          snapshot: told-the-package-contents-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-package-contents-was-rejected.tsx
+        on:
+          Starts the package contents again:
+            target: "#Reviewing the package contents"
+      Told the package contents was approved:
+        id: Told the package contents was approved
+        meta:
+          description: A message confirms the package contents is approved.
+          snapshot: told-the-package-contents-was-approved
+          events:
+            - Package contents approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-package-contents-was-approved.tsx
+        on:
+          Continues to the pickup window:
+            target: "#Handling the pickup window"
+  Handling the pickup window:
+    id: Handling the pickup window
+    initial: Reviewing the pickup window
+    meta:
+      description: Everything about the pickup window, from review to approval.
+      snapshot: handling-the-pickup-window
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-pickup-window.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the pickup window:
+        id: Reviewing the pickup window
+        meta:
+          description: The user checks the pickup window before sending it.
+          snapshot: reviewing-the-pickup-window
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-pickup-window.tsx
+          gherkin:
+            - features/shipping/deliveries/pickup-window.feature
+        on:
+          Taps edit on the pickup window:
+            target: "#Editing the pickup window"
+          Submits the pickup window:
+            target: "#Waiting for the pickup window to be approved"
+      Editing the pickup window:
+        id: Editing the pickup window
+        meta:
+          description: A form to change the pickup window.
+          snapshot: editing-the-pickup-window
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-pickup-window.tsx
+        on:
+          Saves the pickup window:
+            target: "#Reviewing the pickup window"
+          Cancels the changes to the pickup window:
+            target: "#Reviewing the pickup window"
+          Saving the pickup window fails:
+            target: "#Told the pickup window could not be saved"
+      Told the pickup window could not be saved:
+        id: Told the pickup window could not be saved
+        meta:
+          description: A message says the pickup window could not be saved, with "Try again".
+          snapshot: told-the-pickup-window-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-pickup-window-could-not-be-saved.tsx
+        on:
+          Tries saving the pickup window again:
+            target: "#Editing the pickup window"
+      Waiting for the pickup window to be approved:
+        id: Waiting for the pickup window to be approved
+        meta:
+          description: A card says the pickup window is being checked.
+          snapshot: waiting-for-the-pickup-window-to-be-approved
+          events:
+            - Pickup window submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-pickup-window-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the pickup window:
+            target: "#Told the pickup window was approved"
+          Carrier rejects the pickup window:
+            target: "#Told the pickup window was rejected"
+          Approval of the pickup window takes longer than a day:
+            target: "#Told the pickup window is still under review"
+      Told the pickup window is still under review:
+        id: Told the pickup window is still under review
+        meta:
+          description: A card says the pickup window is still being checked.
+          snapshot: told-the-pickup-window-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-pickup-window-is-still-under-review.tsx
+        on:
+          Checks the pickup window again:
+            target: "#Waiting for the pickup window to be approved"
+      Told the pickup window was rejected:
+        id: Told the pickup window was rejected
+        meta:
+          description: A message explains why the pickup window was not accepted.
+          snapshot: told-the-pickup-window-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-pickup-window-was-rejected.tsx
+        on:
+          Starts the pickup window again:
+            target: "#Reviewing the pickup window"
+      Told the pickup window was approved:
+        id: Told the pickup window was approved
+        meta:
+          description: A message confirms the pickup window is approved.
+          snapshot: told-the-pickup-window-was-approved
+          events:
+            - Pickup window approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-pickup-window-was-approved.tsx
+        on:
+          Continues to the tracking number:
+            target: "#Handling the tracking number"
+  Handling the tracking number:
+    id: Handling the tracking number
+    initial: Reviewing the tracking number
+    meta:
+      description: Everything about the tracking number, from review to approval.
+      snapshot: handling-the-tracking-number
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-tracking-number.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the tracking number:
+        id: Reviewing the tracking number
+        meta:
+          description: The user checks the tracking number before sending it.
+          snapshot: reviewing-the-tracking-number
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-tracking-number.tsx
+          gherkin:
+            - features/shipping/deliveries/tracking-number.feature
+        on:
+          Taps edit on the tracking number:
+            target: "#Editing the tracking number"
+          Submits the tracking number:
+            target: "#Waiting for the tracking number to be approved"
+      Editing the tracking number:
+        id: Editing the tracking number
+        meta:
+          description: A form to change the tracking number.
+          snapshot: editing-the-tracking-number
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-tracking-number.tsx
+        on:
+          Saves the tracking number:
+            target: "#Reviewing the tracking number"
+          Cancels the changes to the tracking number:
+            target: "#Reviewing the tracking number"
+          Saving the tracking number fails:
+            target: "#Told the tracking number could not be saved"
+      Told the tracking number could not be saved:
+        id: Told the tracking number could not be saved
+        meta:
+          description: A message says the tracking number could not be saved, with "Try again".
+          snapshot: told-the-tracking-number-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-tracking-number-could-not-be-saved.tsx
+        on:
+          Tries saving the tracking number again:
+            target: "#Editing the tracking number"
+      Waiting for the tracking number to be approved:
+        id: Waiting for the tracking number to be approved
+        meta:
+          description: A card says the tracking number is being checked.
+          snapshot: waiting-for-the-tracking-number-to-be-approved
+          events:
+            - Tracking number submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-tracking-number-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the tracking number:
+            target: "#Told the tracking number was approved"
+          Carrier rejects the tracking number:
+            target: "#Told the tracking number was rejected"
+          Approval of the tracking number takes longer than a day:
+            target: "#Told the tracking number is still under review"
+      Told the tracking number is still under review:
+        id: Told the tracking number is still under review
+        meta:
+          description: A card says the tracking number is still being checked.
+          snapshot: told-the-tracking-number-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-tracking-number-is-still-under-review.tsx
+        on:
+          Checks the tracking number again:
+            target: "#Waiting for the tracking number to be approved"
+      Told the tracking number was rejected:
+        id: Told the tracking number was rejected
+        meta:
+          description: A message explains why the tracking number was not accepted.
+          snapshot: told-the-tracking-number-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-tracking-number-was-rejected.tsx
+        on:
+          Starts the tracking number again:
+            target: "#Reviewing the tracking number"
+      Told the tracking number was approved:
+        id: Told the tracking number was approved
+        meta:
+          description: A message confirms the tracking number is approved.
+          snapshot: told-the-tracking-number-was-approved
+          events:
+            - Tracking number approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-tracking-number-was-approved.tsx
+        on:
+          Continues to the delivery instructions:
+            target: "#Handling the delivery instructions"
+  Handling the delivery instructions:
+    id: Handling the delivery instructions
+    initial: Reviewing the delivery instructions
+    meta:
+      description: Everything about the delivery instructions, from review to approval.
+      snapshot: handling-the-delivery-instructions
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-delivery-instructions.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the delivery instructions:
+        id: Reviewing the delivery instructions
+        meta:
+          description: The user checks the delivery instructions before sending it.
+          snapshot: reviewing-the-delivery-instructions
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-delivery-instructions.tsx
+          gherkin:
+            - features/shipping/deliveries/delivery-instructions.feature
+        on:
+          Taps edit on the delivery instructions:
+            target: "#Editing the delivery instructions"
+          Submits the delivery instructions:
+            target: "#Waiting for the delivery instructions to be approved"
+      Editing the delivery instructions:
+        id: Editing the delivery instructions
+        meta:
+          description: A form to change the delivery instructions.
+          snapshot: editing-the-delivery-instructions
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-delivery-instructions.tsx
+        on:
+          Saves the delivery instructions:
+            target: "#Reviewing the delivery instructions"
+          Cancels the changes to the delivery instructions:
+            target: "#Reviewing the delivery instructions"
+          Saving the delivery instructions fails:
+            target: "#Told the delivery instructions could not be saved"
+      Told the delivery instructions could not be saved:
+        id: Told the delivery instructions could not be saved
+        meta:
+          description: A message says the delivery instructions could not be saved, with "Try again".
+          snapshot: told-the-delivery-instructions-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-instructions-could-not-be-saved.tsx
+        on:
+          Tries saving the delivery instructions again:
+            target: "#Editing the delivery instructions"
+      Waiting for the delivery instructions to be approved:
+        id: Waiting for the delivery instructions to be approved
+        meta:
+          description: A card says the delivery instructions is being checked.
+          snapshot: waiting-for-the-delivery-instructions-to-be-approved
+          events:
+            - Delivery instructions submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-delivery-instructions-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the delivery instructions:
+            target: "#Told the delivery instructions was approved"
+          Carrier rejects the delivery instructions:
+            target: "#Told the delivery instructions was rejected"
+          Approval of the delivery instructions takes longer than a day:
+            target: "#Told the delivery instructions is still under review"
+      Told the delivery instructions is still under review:
+        id: Told the delivery instructions is still under review
+        meta:
+          description: A card says the delivery instructions is still being checked.
+          snapshot: told-the-delivery-instructions-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-delivery-instructions-is-still-under-review.tsx
+        on:
+          Checks the delivery instructions again:
+            target: "#Waiting for the delivery instructions to be approved"
+      Told the delivery instructions was rejected:
+        id: Told the delivery instructions was rejected
+        meta:
+          description: A message explains why the delivery instructions was not accepted.
+          snapshot: told-the-delivery-instructions-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-instructions-was-rejected.tsx
+        on:
+          Starts the delivery instructions again:
+            target: "#Reviewing the delivery instructions"
+      Told the delivery instructions was approved:
+        id: Told the delivery instructions was approved
+        meta:
+          description: A message confirms the delivery instructions is approved.
+          snapshot: told-the-delivery-instructions-was-approved
+          events:
+            - Delivery instructions approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-delivery-instructions-was-approved.tsx
+        on:
+          Continues to the return label:
+            target: "#Handling the return label"
+  Handling the return label:
+    id: Handling the return label
+    initial: Reviewing the return label
+    meta:
+      description: Everything about the return label, from review to approval.
+      snapshot: handling-the-return-label
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-return-label.tsx
+      owner: Fulfillment team
+    states:
+      Reviewing the return label:
+        id: Reviewing the return label
+        meta:
+          description: The user checks the return label before sending it.
+          snapshot: reviewing-the-return-label
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-return-label.tsx
+          gherkin:
+            - features/shipping/deliveries/return-label.feature
+        on:
+          Taps edit on the return label:
+            target: "#Editing the return label"
+          Submits the return label:
+            target: "#Waiting for the return label to be approved"
+      Editing the return label:
+        id: Editing the return label
+        meta:
+          description: A form to change the return label.
+          snapshot: editing-the-return-label
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-return-label.tsx
+        on:
+          Saves the return label:
+            target: "#Reviewing the return label"
+          Cancels the changes to the return label:
+            target: "#Reviewing the return label"
+          Saving the return label fails:
+            target: "#Told the return label could not be saved"
+      Told the return label could not be saved:
+        id: Told the return label could not be saved
+        meta:
+          description: A message says the return label could not be saved, with "Try again".
+          snapshot: told-the-return-label-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-return-label-could-not-be-saved.tsx
+        on:
+          Tries saving the return label again:
+            target: "#Editing the return label"
+      Waiting for the return label to be approved:
+        id: Waiting for the return label to be approved
+        meta:
+          description: A card says the return label is being checked.
+          snapshot: waiting-for-the-return-label-to-be-approved
+          events:
+            - Return label submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-return-label-to-be-approved.tsx
+          tier: critical
+        on:
+          Carrier approves the return label:
+            target: "#Told the return label was approved"
+          Carrier rejects the return label:
+            target: "#Told the return label was rejected"
+          Approval of the return label takes longer than a day:
+            target: "#Told the return label is still under review"
+      Told the return label is still under review:
+        id: Told the return label is still under review
+        meta:
+          description: A card says the return label is still being checked.
+          snapshot: told-the-return-label-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-return-label-is-still-under-review.tsx
+        on:
+          Checks the return label again:
+            target: "#Waiting for the return label to be approved"
+      Told the return label was rejected:
+        id: Told the return label was rejected
+        meta:
+          description: A message explains why the return label was not accepted.
+          snapshot: told-the-return-label-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-return-label-was-rejected.tsx
+        on:
+          Starts the return label again:
+            target: "#Reviewing the return label"
+      Told the return label was approved:
+        id: Told the return label was approved
+        meta:
+          description: A message confirms the return label is approved.
+          snapshot: told-the-return-label-was-approved
+          events:
+            - Return label approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-return-label-was-approved.tsx
+        on:
+          Continues to the deliveries settings:
+            target: "#Deliveries settings"
+  Deliveries settings:
+    id: Deliveries settings
+    type: parallel
+    meta:
+      description: "Settings for deliveries: notifications and help side by side."
+      snapshot: deliveries-settings
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/deliveries-settings.tsx
+    states:
+      Deliveries notifications:
+        id: Deliveries notifications
+        initial: Deliveries notifications on
+        meta:
+          description: Whether the user gets notifications.
+          snapshot: deliveries-notifications
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/deliveries-notifications.tsx
+        states:
+          Deliveries notifications on:
+            id: Deliveries notifications on
+            meta:
+              description: The notifications switch is on.
+              snapshot: deliveries-notifications-on
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/deliveries-notifications-on.tsx
+            on:
+              Turns off deliveries notifications:
+                target: "#Deliveries notifications off"
+          Deliveries notifications off:
+            id: Deliveries notifications off
+            meta:
+              description: The notifications switch is off.
+              snapshot: deliveries-notifications-off
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/deliveries-notifications-off.tsx
+            on:
+              Turns on deliveries notifications:
+                target: "#Deliveries notifications on"
+      Deliveries help:
+        id: Deliveries help
+        initial: No open deliveries help request
+        meta:
+          description: Help requests about this part of the product.
+          snapshot: deliveries-help
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/deliveries-help.tsx
+        states:
+          No open deliveries help request:
+            id: No open deliveries help request
+            meta:
+              description: A "Get help" button.
+              snapshot: no-open-deliveries-help-request
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/no-open-deliveries-help-request.tsx
+            on:
+              Opens a deliveries help request:
+                target: "#Deliveries help request open"
+          Deliveries help request open:
+            id: Deliveries help request open
+            meta:
+              description: A card says the help desk will answer soon.
+              snapshot: deliveries-help-request-open
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/deliveries-help-request-open.tsx
+            on:
+              Help desk answers the deliveries help request:
+                target: "#Deliveries help request answered"
+          Deliveries help request answered:
+            id: Deliveries help request answered
+            meta:
+              description: The answer shows in the help card.
+              snapshot: deliveries-help-request-answered
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/deliveries-help-request-answered.tsx
+            on:
+              Opens another deliveries help request:
+                target: "#Deliveries help request open"
+    on:
+      Closes the deliveries settings:
+        target: "#Deliveries finished"
+  Deliveries finished:
+    id: Deliveries finished
+    type: final
+    meta:
+      description: The user is done with deliveries.
+      snapshot: deliveries-finished
+      events:
+        - Deliveries finished
+      confidence: confirmed
+      source:
+        - src/screens/deliveries-finished.tsx

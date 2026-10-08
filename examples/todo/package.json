@@ -1,0 +1,29 @@
+{
+  "name": "atlas-example-todo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A tiny todo app specified as statecharts and run by Atlas, through Playwright and through Vitest.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "tsx server.ts",
+    "atlas:lint": "atlas lint --require-implementations",
+    "atlas:plan": "atlas plan",
+    "atlas:run": "atlas run --mode showcase",
+    "atlas:fast": "atlas run --mode fast",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@crvouga/atlas": "workspace:*",
+    "@crvouga/atlas-playwright": "workspace:*",
+    "@crvouga/atlas-vitest": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "playwright": "1.60.0",
+    "tsx": "4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.6"
+  }
+}

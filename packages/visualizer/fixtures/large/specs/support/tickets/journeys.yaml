@@ -1,0 +1,123 @@
+journeys:
+  Happy path through support tickets:
+    description: Everything is approved the first time, through the escalation and settings.
+    events:
+      - Submits the help request
+      - Support desk approves the help request
+      - Continues to the request details
+      - Submits the request details
+      - Support desk approves the request details
+      - Continues to the attached screenshot
+      - Submits the attached screenshot
+      - Support desk approves the attached screenshot
+      - Starts the escalation
+      - Submits the escalation note
+      - Support desk approves the escalation note
+      - Continues to the specialist review
+      - Submits the specialist review
+      - Support desk approves the specialist review
+      - Continues to the escalation answer
+      - Submits the escalation answer
+      - Support desk approves the escalation answer
+      - Finishes the escalation
+      - Submits the reply draft
+      - Support desk approves the reply draft
+      - Continues to the satisfaction rating
+      - Submits the satisfaction rating
+      - Support desk approves the satisfaction rating
+      - Continues to the support tickets settings
+      - Closes the support tickets settings
+    endsIn:
+      - Support tickets finished
+    owner: Support team
+    tour: true
+  Edits the help request with a file:
+    description: The user edits the help request, uploads a file, then sends it.
+    events:
+      - Taps edit on the help request
+      - Uploads a file
+      - Finishes uploading the file
+      - Saves the help request
+      - Submits the help request
+      - Support desk approves the help request
+    endsIn:
+      - Told the help request was approved
+  Saving the help request fails, then works:
+    description: The first save fails and the retry works.
+    events:
+      - Taps edit on the help request
+      - Saving the help request fails
+      - Tries saving the help request again
+      - Saves the help request
+    endsIn:
+      - Reviewing the help request
+  Slow approval of the request details:
+    description: Approval of the request details takes more than a day.
+    events:
+      - Submits the help request
+      - Support desk approves the help request
+      - Continues to the request details
+      - Submits the request details
+      - Approval of the request details takes longer than a day
+      - Checks the request details again
+      - Support desk approves the request details
+    endsIn:
+      - Told the request details was approved
+  Help request rejected, then approved:
+    description: The help request is rejected once, then approved.
+    events:
+      - Submits the help request
+      - Support desk rejects the help request
+      - Starts the help request again
+      - Submits the help request
+      - Support desk approves the help request
+    endsIn:
+      - Told the help request was approved
+  Leaves the escalation early:
+    description: The user closes the escalation right away and goes back a step.
+    events:
+      - Submits the help request
+      - Support desk approves the help request
+      - Continues to the request details
+      - Submits the request details
+      - Support desk approves the request details
+      - Continues to the attached screenshot
+      - Submits the attached screenshot
+      - Support desk approves the attached screenshot
+      - Starts the escalation
+      - Closes the escalation
+    endsIn:
+      - Reviewing the attached screenshot
+  Changes support tickets settings:
+    description: Notifications off, then a help request that gets answered.
+    events:
+      - Submits the help request
+      - Support desk approves the help request
+      - Continues to the request details
+      - Submits the request details
+      - Support desk approves the request details
+      - Continues to the attached screenshot
+      - Submits the attached screenshot
+      - Support desk approves the attached screenshot
+      - Starts the escalation
+      - Submits the escalation note
+      - Support desk approves the escalation note
+      - Continues to the specialist review
+      - Submits the specialist review
+      - Support desk approves the specialist review
+      - Continues to the escalation answer
+      - Submits the escalation answer
+      - Support desk approves the escalation answer
+      - Finishes the escalation
+      - Submits the reply draft
+      - Support desk approves the reply draft
+      - Continues to the satisfaction rating
+      - Submits the satisfaction rating
+      - Support desk approves the satisfaction rating
+      - Continues to the support tickets settings
+      - Turns off support tickets notifications
+      - Opens a support tickets help request
+      - Help desk answers the support tickets help request
+    endsIn:
+      - Support tickets notifications off
+      - Support tickets help request answered

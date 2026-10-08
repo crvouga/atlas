@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:atlas="https://github.com/crvouga/atlas/ns/1" version="1.0" name="Payment" datamodel="null" initial="handling-the-payment-details">
+  <atlas:meta>
+    <atlas:description>The payment, a step inside order checkout.</atlas:description>
+    <atlas:snapshot>payment</atlas:snapshot>
+    <atlas:confidence>confirmed</atlas:confidence>
+  </atlas:meta>
+  <state id="handling-the-payment-details" atlas:name="Handling the payment details" initial="reviewing-the-payment-details">
+    <atlas:meta>
+      <atlas:description>Everything about the payment details, from review to approval.</atlas:description>
+      <atlas:snapshot>handling-the-payment-details</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/handling-the-payment-details.tsx</atlas:source>
+      <atlas:owner>Orders team</atlas:owner>
+    </atlas:meta>
+    <state id="reviewing-the-payment-details" atlas:name="Reviewing the payment details">
+      <atlas:meta>
+        <atlas:description>The user checks the payment details before sending it.</atlas:description>
+        <atlas:snapshot>reviewing-the-payment-details</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/reviewing-the-payment-details.tsx</atlas:source>
+        <atlas:gherkin>[&quot;features/orders/checkout/payment-details.feature&quot;]</atlas:gherkin>
+      </atlas:meta>
+      <transition event="taps-edit-on-the-payment-details" target="editing-the-payment-details" atlas:name="Taps edit on the payment details"/>
+      <transition event="submits-the-payment-details" target="waiting-for-the-payment-details-to-be-approved" atlas:name="Submits the payment details"/>
+      <transition event="closes-the-payment" target="payment-abandoned" atlas:name="Closes the payment"/>
+    </state>
+    <state id="editing-the-payment-details" atlas:name="Editing the payment details" initial="editing-the-payment-details-details">
+      <atlas:meta>
+        <atlas:description>The user changes the payment details, with an optional file.</atlas:description>
+        <atlas:snapshot>editing-the-payment-details</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/editing-the-payment-details.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="saves-the-payment-details" target="reviewing-the-payment-details" atlas:name="Saves the payment details"/>
+      <transition event="cancels-the-changes-to-the-payment-details" target="reviewing-the-payment-details" atlas:name="Cancels the changes to the payment details"/>
+      <transition event="saving-the-payment-details-fails" target="told-the-payment-details-could-not-be-saved" atlas:name="Saving the payment details fails"/>
+      <state id="editing-the-payment-details-details" atlas:name="Editing the payment details details">
+        <atlas:meta>
+          <atlas:description>A form with the payment details fields.</atlas:description>
+          <atlas:snapshot>editing-the-payment-details-details</atlas:snapshot>
+          <atlas:confidence>confirmed</atlas:confidence>
+          <atlas:source>src/screens/editing-the-payment-details-details.tsx</atlas:source>
+          <atlas:hints>[&quot;A text field per detail&quot;,&quot;An \&quot;Upload a file\&quot; link&quot;]</atlas:hints>
+        </atlas:meta>
+        <transition event="uploads-a-file" target="uploading-a-file-for-the-payment-details" atlas:name="Uploads a file"/>
+      </state>
+      <state id="uploading-a-file-for-the-payment-details" atlas:name="Uploading a file for the payment details">
+        <atlas:meta>
+          <atlas:description>A file picker for a document about the payment details.</atlas:description>
+          <atlas:snapshot>uploading-a-file-for-the-payment-details</atlas:snapshot>
+          <atlas:confidence>confirmed</atlas:confidence>
+          <atlas:source>src/screens/uploading-a-file-for-the-payment-details.tsx</atlas:source>
+        </atlas:meta>
+        <transition event="finishes-uploading-the-file" target="editing-the-payment-details-details" atlas:name="Finishes uploading the file"/>
+      </state>
+    </state>
+    <state id="told-the-payment-details-could-not-be-saved" atlas:name="Told the payment details could not be saved">
+      <atlas:meta>
+        <atlas:description>A message says the payment details could not be saved, with &quot;Try again&quot;.</atlas:description>
+        <atlas:snapshot>told-the-payment-details-could-not-be-saved</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-details-could-not-be-saved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="tries-saving-the-payment-details-again" target="editing-the-payment-details" atlas:name="Tries saving the payment details again"/>
+    </state>
+    <state id="waiting-for-the-payment-details-to-be-approved" atlas:name="Waiting for the payment details to be approved">
+      <atlas:meta>
+        <atlas:description>A card says the payment details is being checked.</atlas:description>
+        <atlas:snapshot>waiting-for-the-payment-details-to-be-approved</atlas:snapshot>
+        <atlas:event>Payment details submitted</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/waiting-for-the-payment-details-to-be-approved.tsx</atlas:source>
+        <atlas:tier>critical</atlas:tier>
+      </atlas:meta>
+      <transition event="payment-processor-approves-the-payment-details" target="told-the-payment-details-was-approved" atlas:name="Payment processor approves the payment details"/>
+      <transition event="payment-processor-rejects-the-payment-details" target="told-the-payment-details-was-rejected" atlas:name="Payment processor rejects the payment details"/>
+      <transition event="approval-of-the-payment-details-takes-longer-than-a-day" target="told-the-payment-details-is-still-under-review" atlas:name="Approval of the payment details takes longer than a day"/>
+    </state>
+    <state id="told-the-payment-details-is-still-under-review" atlas:name="Told the payment details is still under review">
+      <atlas:meta>
+        <atlas:description>A card says the payment details is still being checked.</atlas:description>
+        <atlas:snapshot>told-the-payment-details-is-still-under-review</atlas:snapshot>
+        <atlas:confidence>assumed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-details-is-still-under-review.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="checks-the-payment-details-again" target="waiting-for-the-payment-details-to-be-approved" atlas:name="Checks the payment details again"/>
+    </state>
+    <state id="told-the-payment-details-was-rejected" atlas:name="Told the payment details was rejected">
+      <atlas:meta>
+        <atlas:description>A message explains why the payment details was not accepted.</atlas:description>
+        <atlas:snapshot>told-the-payment-details-was-rejected</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-details-was-rejected.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="starts-the-payment-details-again" target="reviewing-the-payment-details" atlas:name="Starts the payment details again"/>
+    </state>
+    <state id="told-the-payment-details-was-approved" atlas:name="Told the payment details was approved">
+      <atlas:meta>
+        <atlas:description>A message confirms the payment details is approved.</atlas:description>
+        <atlas:snapshot>told-the-payment-details-was-approved</atlas:snapshot>
+        <atlas:event>Payment details approved</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-details-was-approved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="continues-to-the-payment-authorization" target="handling-the-payment-authorization" atlas:name="Continues to the payment authorization"/>
+    </state>
+  </state>
+  <state id="handling-the-payment-authorization" atlas:name="Handling the payment authorization" initial="reviewing-the-payment-authorization">
+    <atlas:meta>
+      <atlas:description>Everything about the payment authorization, from review to approval.</atlas:description>
+      <atlas:snapshot>handling-the-payment-authorization</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/handling-the-payment-authorization.tsx</atlas:source>
+      <atlas:owner>Orders team</atlas:owner>
+    </atlas:meta>
+    <state id="reviewing-the-payment-authorization" atlas:name="Reviewing the payment authorization">
+      <atlas:meta>
+        <atlas:description>The user checks the payment authorization before sending it.</atlas:description>
+        <atlas:snapshot>reviewing-the-payment-authorization</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/reviewing-the-payment-authorization.tsx</atlas:source>
+        <atlas:gherkin>[&quot;features/orders/checkout/payment-authorization.feature&quot;]</atlas:gherkin>
+      </atlas:meta>
+      <transition event="taps-edit-on-the-payment-authorization" target="editing-the-payment-authorization" atlas:name="Taps edit on the payment authorization"/>
+      <transition event="submits-the-payment-authorization" target="waiting-for-the-payment-authorization-to-be-approved" atlas:name="Submits the payment authorization"/>
+    </state>
+    <state id="editing-the-payment-authorization" atlas:name="Editing the payment authorization">
+      <atlas:meta>
+        <atlas:description>A form to change the payment authorization.</atlas:description>
+        <atlas:snapshot>editing-the-payment-authorization</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/editing-the-payment-authorization.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="saves-the-payment-authorization" target="reviewing-the-payment-authorization" atlas:name="Saves the payment authorization"/>
+      <transition event="cancels-the-changes-to-the-payment-authorization" target="reviewing-the-payment-authorization" atlas:name="Cancels the changes to the payment authorization"/>
+      <transition event="saving-the-payment-authorization-fails" target="told-the-payment-authorization-could-not-be-saved" atlas:name="Saving the payment authorization fails"/>
+    </state>
+    <state id="told-the-payment-authorization-could-not-be-saved" atlas:name="Told the payment authorization could not be saved">
+      <atlas:meta>
+        <atlas:description>A message says the payment authorization could not be saved, with &quot;Try again&quot;.</atlas:description>
+        <atlas:snapshot>told-the-payment-authorization-could-not-be-saved</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-authorization-could-not-be-saved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="tries-saving-the-payment-authorization-again" target="editing-the-payment-authorization" atlas:name="Tries saving the payment authorization again"/>
+    </state>
+    <state id="waiting-for-the-payment-authorization-to-be-approved" atlas:name="Waiting for the payment authorization to be approved">
+      <atlas:meta>
+        <atlas:description>A card says the payment authorization is being checked.</atlas:description>
+        <atlas:snapshot>waiting-for-the-payment-authorization-to-be-approved</atlas:snapshot>
+        <atlas:event>Payment authorization submitted</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/waiting-for-the-payment-authorization-to-be-approved.tsx</atlas:source>
+        <atlas:tier>critical</atlas:tier>
+      </atlas:meta>
+      <transition event="payment-processor-approves-the-payment-authorization" target="told-the-payment-authorization-was-approved" atlas:name="Payment processor approves the payment authorization"/>
+      <transition event="payment-processor-rejects-the-payment-authorization" target="told-the-payment-authorization-was-rejected" atlas:name="Payment processor rejects the payment authorization"/>
+      <transition event="approval-of-the-payment-authorization-takes-longer-than-a-day" target="told-the-payment-authorization-is-still-under-review" atlas:name="Approval of the payment authorization takes longer than a day"/>
+    </state>
+    <state id="told-the-payment-authorization-is-still-under-review" atlas:name="Told the payment authorization is still under review">
+      <atlas:meta>
+        <atlas:description>A card says the payment authorization is still being checked.</atlas:description>
+        <atlas:snapshot>told-the-payment-authorization-is-still-under-review</atlas:snapshot>
+        <atlas:confidence>assumed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-authorization-is-still-under-review.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="checks-the-payment-authorization-again" target="waiting-for-the-payment-authorization-to-be-approved" atlas:name="Checks the payment authorization again"/>
+    </state>
+    <state id="told-the-payment-authorization-was-rejected" atlas:name="Told the payment authorization was rejected">
+      <atlas:meta>
+        <atlas:description>A message explains why the payment authorization was not accepted.</atlas:description>
+        <atlas:snapshot>told-the-payment-authorization-was-rejected</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-authorization-was-rejected.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="starts-the-payment-authorization-again" target="reviewing-the-payment-authorization" atlas:name="Starts the payment authorization again"/>
+    </state>
+    <state id="told-the-payment-authorization-was-approved" atlas:name="Told the payment authorization was approved">
+      <atlas:meta>
+        <atlas:description>A message confirms the payment authorization is approved.</atlas:description>
+        <atlas:snapshot>told-the-payment-authorization-was-approved</atlas:snapshot>
+        <atlas:event>Payment authorization approved</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-authorization-was-approved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="continues-to-the-payment-receipt" target="handling-the-payment-receipt" atlas:name="Continues to the payment receipt"/>
+    </state>
+  </state>
+  <state id="handling-the-payment-receipt" atlas:name="Handling the payment receipt" initial="reviewing-the-payment-receipt">
+    <atlas:meta>
+      <atlas:description>Everything about the payment receipt, from review to approval.</atlas:description>
+      <atlas:snapshot>handling-the-payment-receipt</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/handling-the-payment-receipt.tsx</atlas:source>
+      <atlas:owner>Orders team</atlas:owner>
+    </atlas:meta>
+    <state id="reviewing-the-payment-receipt" atlas:name="Reviewing the payment receipt">
+      <atlas:meta>
+        <atlas:description>The user checks the payment receipt before sending it.</atlas:description>
+        <atlas:snapshot>reviewing-the-payment-receipt</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/reviewing-the-payment-receipt.tsx</atlas:source>
+        <atlas:gherkin>[&quot;features/orders/checkout/payment-receipt.feature&quot;]</atlas:gherkin>
+      </atlas:meta>
+      <transition event="taps-edit-on-the-payment-receipt" target="editing-the-payment-receipt" atlas:name="Taps edit on the payment receipt"/>
+      <transition event="submits-the-payment-receipt" target="waiting-for-the-payment-receipt-to-be-approved" atlas:name="Submits the payment receipt"/>
+    </state>
+    <state id="editing-the-payment-receipt" atlas:name="Editing the payment receipt">
+      <atlas:meta>
+        <atlas:description>A form to change the payment receipt.</atlas:description>
+        <atlas:snapshot>editing-the-payment-receipt</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/editing-the-payment-receipt.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="saves-the-payment-receipt" target="reviewing-the-payment-receipt" atlas:name="Saves the payment receipt"/>
+      <transition event="cancels-the-changes-to-the-payment-receipt" target="reviewing-the-payment-receipt" atlas:name="Cancels the changes to the payment receipt"/>
+      <transition event="saving-the-payment-receipt-fails" target="told-the-payment-receipt-could-not-be-saved" atlas:name="Saving the payment receipt fails"/>
+    </state>
+    <state id="told-the-payment-receipt-could-not-be-saved" atlas:name="Told the payment receipt could not be saved">
+      <atlas:meta>
+        <atlas:description>A message says the payment receipt could not be saved, with &quot;Try again&quot;.</atlas:description>
+        <atlas:snapshot>told-the-payment-receipt-could-not-be-saved</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-receipt-could-not-be-saved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="tries-saving-the-payment-receipt-again" target="editing-the-payment-receipt" atlas:name="Tries saving the payment receipt again"/>
+    </state>
+    <state id="waiting-for-the-payment-receipt-to-be-approved" atlas:name="Waiting for the payment receipt to be approved">
+      <atlas:meta>
+        <atlas:description>A card says the payment receipt is being checked.</atlas:description>
+        <atlas:snapshot>waiting-for-the-payment-receipt-to-be-approved</atlas:snapshot>
+        <atlas:event>Payment receipt submitted</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/waiting-for-the-payment-receipt-to-be-approved.tsx</atlas:source>
+        <atlas:tier>critical</atlas:tier>
+      </atlas:meta>
+      <transition event="payment-processor-approves-the-payment-receipt" target="told-the-payment-receipt-was-approved" atlas:name="Payment processor approves the payment receipt"/>
+      <transition event="payment-processor-rejects-the-payment-receipt" target="told-the-payment-receipt-was-rejected" atlas:name="Payment processor rejects the payment receipt"/>
+      <transition event="approval-of-the-payment-receipt-takes-longer-than-a-day" target="told-the-payment-receipt-is-still-under-review" atlas:name="Approval of the payment receipt takes longer than a day"/>
+    </state>
+    <state id="told-the-payment-receipt-is-still-under-review" atlas:name="Told the payment receipt is still under review">
+      <atlas:meta>
+        <atlas:description>A card says the payment receipt is still being checked.</atlas:description>
+        <atlas:snapshot>told-the-payment-receipt-is-still-under-review</atlas:snapshot>
+        <atlas:confidence>assumed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-receipt-is-still-under-review.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="checks-the-payment-receipt-again" target="waiting-for-the-payment-receipt-to-be-approved" atlas:name="Checks the payment receipt again"/>
+    </state>
+    <state id="told-the-payment-receipt-was-rejected" atlas:name="Told the payment receipt was rejected">
+      <atlas:meta>
+        <atlas:description>A message explains why the payment receipt was not accepted.</atlas:description>
+        <atlas:snapshot>told-the-payment-receipt-was-rejected</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-receipt-was-rejected.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="starts-the-payment-receipt-again" target="reviewing-the-payment-receipt" atlas:name="Starts the payment receipt again"/>
+    </state>
+    <state id="told-the-payment-receipt-was-approved" atlas:name="Told the payment receipt was approved">
+      <atlas:meta>
+        <atlas:description>A message confirms the payment receipt is approved.</atlas:description>
+        <atlas:snapshot>told-the-payment-receipt-was-approved</atlas:snapshot>
+        <atlas:event>Payment receipt approved</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-payment-receipt-was-approved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="finishes-the-payment" target="payment-completed" atlas:name="Finishes the payment"/>
+    </state>
+  </state>
+  <final id="payment-completed" atlas:name="Payment completed" atlas:done-event="Payment is completed">
+    <atlas:meta>
+      <atlas:description>The payment is done.</atlas:description>
+      <atlas:snapshot>payment-completed</atlas:snapshot>
+      <atlas:event>Payment completed</atlas:event>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/payment-completed.tsx</atlas:source>
+    </atlas:meta>
+  </final>
+  <final id="payment-abandoned" atlas:name="Payment abandoned" atlas:done-event="Payment is abandoned">
+    <atlas:meta>
+      <atlas:description>The user left the payment before the end.</atlas:description>
+      <atlas:snapshot>payment-abandoned</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/payment-abandoned.tsx</atlas:source>
+    </atlas:meta>
+  </final>
+</scxml>

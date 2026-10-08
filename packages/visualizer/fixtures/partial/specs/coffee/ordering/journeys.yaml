@@ -1,0 +1,129 @@
+# Named paths through the composed chart. Hand-off events from Checkout are inserted automatically.
+journeys:
+  Orders a drink and pays by card:
+    description: The everyday order, from the menu to picking the drink up.
+    tour: true
+    events:
+      - Picks a drink
+      - Picks a size
+      - Picks a milk
+      - Adds the drink to the cart
+      - Starts checkout
+      - Picks card
+      - Submits the card
+      - Payment provider approves the payment
+      - Barista starts the drink
+      - Barista finishes the drink
+      - Picks up the drink
+    endsIn:
+      - Order complete
+  Pays with a wallet:
+    description: The wallet confirms the payment instead of a card.
+    events:
+      - Picks a drink
+      - Picks a size
+      - Picks a milk
+      - Adds the drink to the cart
+      - Starts checkout
+      - Picks wallet
+      - Confirms with the wallet
+      - Payment provider approves the payment
+    endsIn:
+      - Paid, waiting for the barista
+      - Updates on
+  Card declined, then a wallet works:
+    description: The card is declined and the wallet goes through.
+    events:
+      - Picks a drink
+      - Picks a size
+      - Picks a milk
+      - Adds the drink to the cart
+      - Starts checkout
+      - Picks card
+      - Submits the card
+      - Payment provider declines the payment
+      - Tries another way to pay
+      - Picks wallet
+      - Confirms with the wallet
+      - Payment provider approves the payment
+    endsIn:
+      - Paid, waiting for the barista
+  Slow payment:
+    description: The payment provider takes more than a minute to answer.
+    events:
+      - Picks a drink
+      - Picks a size
+      - Picks a milk
+      - Adds the drink to the cart
+      - Starts checkout
+      - Picks card
+      - Submits the card
+      - Payment takes longer than a minute
+      - Checks the payment again
+      - Payment provider approves the payment
+    endsIn:
+      - Paid, waiting for the barista
+  Leaves checkout and comes back:
+    description: The customer closes checkout, then starts it again.
+    events:
+      - Picks a drink
+      - Picks a size
+      - Picks a milk
+      - Adds the drink to the cart
+      - Starts checkout
+      - Closes checkout
+      - Starts checkout
+    endsIn:
+      - Checking out
+      - Choosing how to pay
+  Drink left too long:
+    description: Nobody picks the drink up, so it is thrown away and refunded.
+    events:
+      - Picks a drink
+      - Picks a size
+      - Picks a milk
+      - Adds the drink to the cart
+      - Starts checkout
+      - Picks card
+      - Submits the card
+      - Payment provider approves the payment
+      - Barista starts the drink
+      - Barista finishes the drink
+      - Drink sits ready for ten minutes
+      - Orders again
+    endsIn:
+      - Browsing the menu
+  Turns off updates while waiting:
+    description: Updates go off while the drink is in the queue; the drink is still made.
+    events:
+      - Picks a drink
+      - Picks a size
+      - Picks a milk
+      - Adds the drink to the cart
+      - Starts checkout
+      - Picks wallet
+      - Confirms with the wallet
+      - Payment provider approves the payment
+      - Turns off updates
+      - Barista starts the drink
+    endsIn:
+      - Updates off
+      - Drink being made
+  Changes their mind about the drink:
+    description: The customer backs out while choosing the drink.
+    events:
+      - Picks a drink
+      - Picks a size
+      - Goes back to the menu
+    endsIn:
+      - Browsing the menu
+  Empties the cart:
+    description: The only drink is removed from the cart.
+    events:
+      - Picks a drink
+      - Picks a size
+      - Picks a milk
+      - Adds the drink to the cart
+      - Removes the last drink
+    endsIn:
+      - Browsing the menu

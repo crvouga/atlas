@@ -1,0 +1,60 @@
+{
+  "name": "@crvouga/atlas",
+  "version": "0.1.0",
+  "description": "Executable statecharts: load W3C SCXML or XState charts, lint them, plan paths that cover every transition, and run them against a real system through any driver.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crvouga/atlas",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "statecharts",
+    "scxml",
+    "xstate",
+    "model-based-testing",
+    "e2e"
+  ],
+  "bin": {
+    "atlas": "./bin/atlas.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./spec": "./src/spec/index.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./spec": {
+        "types": "./dist/spec/index.d.ts",
+        "default": "./dist/spec/index.js"
+      }
+    }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.11.0",
+    "tsx": "4.23.13",
+    "xstate": "5.33.2",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.6"
+  }
+}

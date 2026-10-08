@@ -1,0 +1,23 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/runs-index.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "generatedAt": {
+      "type": "string"
+    },
+    "runs": {
+      "type": "array",
+      "items": {}
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "runs"
+  ]
+}

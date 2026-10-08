@@ -1,0 +1,1280 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.0.0",
+  "results": {
+    "tool": {
+      "name": "atlas"
+    },
+    "summary": {
+      "tests": 21,
+      "passed": 19,
+      "failed": 2,
+      "pending": 0,
+      "skipped": 0,
+      "other": 0,
+      "start": 1791297600000,
+      "stop": 1791297696300
+    },
+    "tests": [
+      {
+        "name": "Happy path through sign-up",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Submits the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the identity check",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the photo ID",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the photo ID",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the selfie match",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the selfie match",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the selfie match",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the address proof",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the address proof",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the address proof",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes the identity check",
+            "status": "passed"
+          },
+          {
+            "name": "Identity check is completed",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the profile photo",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the profile photo",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the notification preferences",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the notification preferences",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the notification preferences",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the security questions",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the security questions",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the security questions",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the sign-up settings",
+            "status": "passed"
+          },
+          {
+            "name": "Closes the sign-up settings",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Edits the account details with a file",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Taps edit on the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Uploads a file",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes uploading the file",
+            "status": "passed"
+          },
+          {
+            "name": "Saves the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the account details",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Saving the account details fails, then works",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Taps edit on the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Saving the account details fails",
+            "status": "passed"
+          },
+          {
+            "name": "Tries saving the account details again",
+            "status": "passed"
+          },
+          {
+            "name": "Saves the account details",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Slow approval of the home address",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Submits the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Approval of the home address takes longer than a day",
+            "status": "passed"
+          },
+          {
+            "name": "Checks the home address again",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the home address",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Account details rejected, then approved",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Submits the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service rejects the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the account details again",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the account details",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Leaves the identity check early",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Submits the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the identity check",
+            "status": "passed"
+          },
+          {
+            "name": "Closes the identity check",
+            "status": "passed"
+          },
+          {
+            "name": "Identity check is abandoned",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Changes sign-up settings",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": true,
+        "steps": [
+          {
+            "name": "Submits the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the account details",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the home address",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the date of birth",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the identity check",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the photo ID",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the photo ID",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the selfie match",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the selfie match",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the selfie match",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the address proof",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the address proof",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the address proof",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes the identity check",
+            "status": "passed"
+          },
+          {
+            "name": "Identity check is completed",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the profile photo",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the profile photo",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the notification preferences",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the notification preferences",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the notification preferences",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the security questions",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the security questions",
+            "status": "passed"
+          },
+          {
+            "name": "Identity service approves the security questions",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the sign-up settings",
+            "status": "passed"
+          },
+          {
+            "name": "Turns off sign-up notifications",
+            "status": "passed"
+          },
+          {
+            "name": "Opens a sign-up help request",
+            "status": "passed"
+          },
+          {
+            "name": "Help desk answers the sign-up help request",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Happy path through product browsing",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Submits the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the product comparison",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the comparison list",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the comparison list",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the comparison table",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the comparison table",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the comparison table",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the comparison summary",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the comparison summary",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the comparison summary",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes the product comparison",
+            "status": "passed"
+          },
+          {
+            "name": "Product comparison is completed",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the product details",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the product details",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the saved list",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the saved list",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the saved list",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the price alert",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the price alert",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the price alert",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the review draft",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the review draft",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the review draft",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the product browsing settings",
+            "status": "passed"
+          },
+          {
+            "name": "Closes the product browsing settings",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Edits the search filters with a file",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Taps edit on the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Uploads a file",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes uploading the file",
+            "status": "passed"
+          },
+          {
+            "name": "Saves the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the search filters",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Saving the search filters fails, then works",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Taps edit on the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Saving the search filters fails",
+            "status": "passed"
+          },
+          {
+            "name": "Tries saving the search filters again",
+            "status": "passed"
+          },
+          {
+            "name": "Saves the search filters",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Slow approval of the product list",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Submits the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Approval of the product list takes longer than a day",
+            "status": "passed"
+          },
+          {
+            "name": "Checks the product list again",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the product list",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Search filters rejected, then approved",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Submits the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service rejects the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the search filters again",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the search filters",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Leaves the product comparison early",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Submits the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the product comparison",
+            "status": "passed"
+          },
+          {
+            "name": "Closes the product comparison",
+            "status": "passed"
+          },
+          {
+            "name": "Product comparison is abandoned",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Changes product browsing settings",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Submits the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the search filters",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the product list",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the product comparison",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the comparison list",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the comparison list",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the comparison table",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the comparison table",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the comparison table",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the comparison summary",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the comparison summary",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the comparison summary",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes the product comparison",
+            "status": "passed"
+          },
+          {
+            "name": "Product comparison is completed",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the product details",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the product details",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the saved list",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the saved list",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the saved list",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the price alert",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the price alert",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the price alert",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the review draft",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the review draft",
+            "status": "passed"
+          },
+          {
+            "name": "Catalog service approves the review draft",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the product browsing settings",
+            "status": "passed"
+          },
+          {
+            "name": "Turns off product browsing notifications",
+            "status": "passed"
+          },
+          {
+            "name": "Opens a product browsing help request",
+            "status": "passed"
+          },
+          {
+            "name": "Help desk answers the product browsing help request",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Happy path through order checkout",
+        "status": "failed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "message": "Expected \"Told the payment method was approved\", but the card still says it is being checked",
+        "steps": [
+          {
+            "name": "Submits the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the payment details",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the payment details",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the payment authorization",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the payment authorization",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the payment authorization",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the payment receipt",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the payment receipt",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the payment receipt",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment is completed",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the payment method",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the payment method",
+            "status": "failed"
+          },
+          {
+            "name": "Continues to the promo code",
+            "status": "skipped"
+          },
+          {
+            "name": "Submits the promo code",
+            "status": "skipped"
+          },
+          {
+            "name": "Payment processor approves the promo code",
+            "status": "skipped"
+          },
+          {
+            "name": "Continues to the gift message",
+            "status": "skipped"
+          },
+          {
+            "name": "Submits the gift message",
+            "status": "skipped"
+          },
+          {
+            "name": "Payment processor approves the gift message",
+            "status": "skipped"
+          },
+          {
+            "name": "Continues to the order checkout settings",
+            "status": "skipped"
+          },
+          {
+            "name": "Closes the order checkout settings",
+            "status": "skipped"
+          }
+        ]
+      },
+      {
+        "name": "Edits the shopping cart with a file",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Taps edit on the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Uploads a file",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes uploading the file",
+            "status": "passed"
+          },
+          {
+            "name": "Saves the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the shopping cart",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Saving the shopping cart fails, then works",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Taps edit on the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Saving the shopping cart fails",
+            "status": "passed"
+          },
+          {
+            "name": "Tries saving the shopping cart again",
+            "status": "passed"
+          },
+          {
+            "name": "Saves the shopping cart",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Slow approval of the delivery address",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Submits the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Approval of the delivery address takes longer than a day",
+            "status": "passed"
+          },
+          {
+            "name": "Checks the delivery address again",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the delivery address",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Shopping cart rejected, then approved",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Submits the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor rejects the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the shopping cart again",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the shopping cart",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Leaves the payment early",
+        "status": "passed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "steps": [
+          {
+            "name": "Submits the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Closes the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment is abandoned",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "name": "Changes order checkout settings",
+        "status": "failed",
+        "duration": 0,
+        "suite": "journey",
+        "flaky": false,
+        "message": "Expected \"Told the payment method was approved\", but the card still says it is being checked",
+        "steps": [
+          {
+            "name": "Submits the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the shopping cart",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the delivery address",
+            "status": "passed"
+          },
+          {
+            "name": "Starts the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the payment details",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the payment details",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the payment authorization",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the payment authorization",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the payment authorization",
+            "status": "passed"
+          },
+          {
+            "name": "Continues to the payment receipt",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the payment receipt",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the payment receipt",
+            "status": "passed"
+          },
+          {
+            "name": "Finishes the payment",
+            "status": "passed"
+          },
+          {
+            "name": "Payment is completed",
+            "status": "passed"
+          },
+          {
+            "name": "Submits the payment method",
+            "status": "passed"
+          },
+          {
+            "name": "Payment processor approves the payment method",
+            "status": "failed"
+          },
+          {
+            "name": "Continues to the promo code",
+            "status": "skipped"
+          },
+          {
+            "name": "Submits the promo code",
+            "status": "skipped"
+          },
+          {
+            "name": "Payment processor approves the promo code",
+            "status": "skipped"
+          },
+          {
+            "name": "Continues to the gift message",
+            "status": "skipped"
+          },
+          {
+            "name": "Submits the gift message",
+            "status": "skipped"
+          },
+          {
+            "name": "Payment processor approves the gift message",
+            "status": "skipped"
+          },
+          {
+            "name": "Continues to the order checkout settings",
+            "status": "skipped"
+          },
+          {
+            "name": "Turns off order checkout notifications",
+            "status": "skipped"
+          },
+          {
+            "name": "Opens a order checkout help request",
+            "status": "skipped"
+          },
+          {
+            "name": "Help desk answers the order checkout help request",
+            "status": "skipped"
+          }
+        ]
+      }
+    ]
+  }
+}

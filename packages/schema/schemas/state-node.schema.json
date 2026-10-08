@@ -1,0 +1,177 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/state-node.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "initial": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "parallel",
+        "final"
+      ]
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "snapshot": {
+          "type": "string"
+        },
+        "events": {
+          "description": "Business events that happen on entering the state",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "assumed"
+          ]
+        },
+        "source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "childMachine": {
+          "type": "string"
+        },
+        "childFinalEvents": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "deadEnd": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "tier": {
+          "type": "string"
+        },
+        "quint": {
+          "description": "Quint model reference",
+          "type": "string"
+        },
+        "gherkin": {
+          "description": "Feature files or scenarios that cover the state",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "design": {
+          "type": "object",
+          "properties": {
+            "image": {
+              "description": "URL or spec-relative path of a design frame",
+              "type": "string",
+              "minLength": 1
+            },
+            "url": {
+              "description": "Where the design lives, for example a Figma frame link",
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "image"
+          ]
+        },
+        "hints": {
+          "description": "What the screen shows, for the placeholder sketch",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "eventKinds": {
+          "description": "Chart-level: who or what sends each event; overrides the runner and the guess",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "user",
+              "system",
+              "time",
+              "hand-off"
+            ]
+          }
+        },
+        "timeEvents": {
+          "description": "Chart-level: time events and the span each one jumps, for example \"5 minutes\"",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "states": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "#"
+      }
+    },
+    "on": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "target"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

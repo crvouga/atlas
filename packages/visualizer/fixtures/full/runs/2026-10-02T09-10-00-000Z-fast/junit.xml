@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="atlas" tests="7" failures="3" skipped="0" time="48.200">
+  <testsuite name="2026-10-02T09-10-00-000Z-fast" tests="7" failures="3" skipped="0" timestamp="2026-10-02T09:10:00.000Z">
+    <testcase classname="journey" name="Orders a drink and pays by card" id="journey-1"></testcase>
+    <testcase classname="journey" name="Pays with a wallet" id="journey-2"><failure message="Expected &quot;Waiting for the payment&quot;, but the wallet sheet is still open"/></testcase>
+    <testcase classname="journey" name="Card declined, then a wallet works" id="journey-3"><failure message="Expected &quot;Waiting for the payment&quot;, but the wallet sheet is still open"/></testcase>
+    <testcase classname="journey" name="Slow payment" id="journey-4"></testcase>
+    <testcase classname="journey" name="Leaves checkout and comes back" id="journey-5"></testcase>
+    <testcase classname="journey" name="Drink left too long" id="journey-6"></testcase>
+    <testcase classname="journey" name="Turns off updates while waiting" id="journey-7"><failure message="Expected &quot;Waiting for the payment&quot;, but the wallet sheet is still open"/></testcase>
+  </testsuite>
+</testsuites>

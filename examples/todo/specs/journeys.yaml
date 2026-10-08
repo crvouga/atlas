@@ -1,0 +1,53 @@
+# Curated journeys: the stories people actually live through. Atlas replays each one through the
+# charts (hand-offs from child charts are inserted automatically), runs it as its own path, and
+# then generates the shortest extra paths until every transition is covered.
+journeys:
+  Plans a weekend:
+    description: Names a list, adds a todo, finishes it and clears it away.
+    events:
+      - Starts setup
+      - Types a list name
+      - Creates the list
+      - Adds a todo
+      - Marks all done
+      - Clears completed todos
+    endsIn:
+      - No todos
+      - Synced
+
+  Keeps working through a sync outage:
+    description: Skips naming, adds todos while the sync is down, and the retry catches up.
+    events:
+      - Starts setup
+      - Skips naming the list
+      - Adds a todo
+      - Sync fails
+      - Adds a todo
+      - Retry timer elapses
+    endsIn:
+      - Some todos open
+      - Synced
+
+  Starts over:
+    description: Adds a todo and then throws the whole list away.
+    events:
+      - Starts setup
+      - Skips naming the list
+      - Adds a todo
+      - Starts over
+    endsIn:
+      - Welcome
+
+  Starts over while offline:
+    description: Throws the list away during a sync outage and starts a fresh one, which syncs again.
+    events:
+      - Starts setup
+      - Skips naming the list
+      - Sync fails
+      - Starts over
+      - Starts setup
+      - Types a list name
+      - Creates the list
+    endsIn:
+      - Synced
+      - No todos

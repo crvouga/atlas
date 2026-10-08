@@ -1,0 +1,67 @@
+stateDiagram-v2
+  direction TB
+  [*] --> s0
+  state "Browsing the menu" as s0
+  state "Customizing the drink" as s1 {
+    [*] --> s2
+    state "Choosing a size" as s2
+    state "Choosing the milk" as s3
+    state "Ready to add the drink" as s4
+  }
+  state "Reviewing the cart" as s5
+  state "Checking out" as s6 {
+    [*] --> s7
+    state "Choosing how to pay" as s7
+    state "Entering card details" as s8
+    state "Confirming with the wallet" as s9
+    state "Waiting for the payment" as s11
+    state "Told the payment is slow" as s14
+    state "Told the payment was declined" as s13
+    state "Paid" as s12
+    state "Checkout abandoned" as s10
+  }
+  state "Order in progress" as s15 {
+    state "Drink" as s16 {
+      [*] --> s17
+      state "Paid, waiting for the barista" as s17
+      state "Drink being made" as s18
+      state "Drink ready for pickup" as s19
+    }
+    --
+    state "Updates" as s22 {
+      [*] --> s23
+      state "Updates on" as s23
+      state "Updates off" as s24
+    }
+  }
+  state "Told the drink was thrown away" as s21
+  state "Order complete" as s20
+  s20 --> [*]
+  s0 --> s1 : Picks a drink
+  s1 --> s0 : Goes back to the menu
+  s2 --> s3 : Picks a size
+  s3 --> s4 : Picks a milk
+  s4 --> s5 : Adds the drink to the cart
+  s5 --> s0 : Removes the last drink
+  s5 --> s6 : Starts checkout
+  s7 --> s8 : Picks card
+  s7 --> s9 : Picks wallet
+  s7 --> s10 : Closes checkout
+  s8 --> s11 : Submits the card
+  s8 --> s7 : Goes back to the payment options
+  s9 --> s11 : Confirms with the wallet
+  s9 --> s7 : Cancels the wallet
+  s11 --> s12 : Payment provider approves the payment
+  s11 --> s13 : Payment provider declines the payment
+  s11 --> s14 : Payment takes longer than a minute
+  s14 --> s11 : Checks the payment again
+  s13 --> s7 : Tries another way to pay
+  s12 --> s15 : Payment goes through
+  s10 --> s5 : Leaves checkout
+  s17 --> s18 : Barista starts the drink
+  s18 --> s19 : Barista finishes the drink
+  s19 --> s20 : Picks up the drink
+  s19 --> s21 : Drink sits ready for ten minutes
+  s23 --> s24 : Turns off updates
+  s24 --> s23 : Turns on updates
+  s21 --> s0 : Orders again

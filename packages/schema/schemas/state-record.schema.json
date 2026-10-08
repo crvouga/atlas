@@ -1,0 +1,287 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/state-record.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "chart": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "snapshot": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "confirmed",
+        "assumed"
+      ]
+    },
+    "source": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expectedEvents": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "flaky",
+        "not-reached"
+      ]
+    },
+    "screenshot": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "png": {
+              "type": "string",
+              "minLength": 1
+            },
+            "webp": {
+              "description": "About 400 px wide, for the map",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "png",
+            "webp"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "screenshotState": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "processing",
+        "failed"
+      ]
+    },
+    "thumbnail": {
+      "description": "Proposed: a separate small image for the map",
+      "type": "string"
+    },
+    "screenshotsByPath": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "png": {
+            "type": "string",
+            "minLength": 1
+          },
+          "webp": {
+            "description": "About 400 px wide, for the map",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "png",
+          "webp"
+        ]
+      }
+    },
+    "recognizer": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "matched": {
+              "type": "boolean"
+            },
+            "signals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "signal": {
+                    "type": "string"
+                  },
+                  "expected": {
+                    "type": "string"
+                  },
+                  "visible": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "signal",
+                  "expected",
+                  "visible"
+                ]
+              }
+            }
+          },
+          "required": [
+            "matched",
+            "signals"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "looksLike": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "businessEvents": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "expected": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "observed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "missing": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "noSignal": {
+              "description": "No observable signal is mapped yet",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "events": {
+              "description": "The CloudEvents observed during the step",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "specversion": {
+                    "type": "string",
+                    "const": "1.0"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "time": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "datacontenttype": {
+                    "type": "string"
+                  },
+                  "data": {}
+                },
+                "required": [
+                  "specversion",
+                  "id",
+                  "source",
+                  "type"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          },
+          "required": [
+            "expected",
+            "observed",
+            "missing",
+            "noSignal"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "expected": {
+            "type": "string"
+          },
+          "actual": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "passed"
+        ]
+      }
+    },
+    "reachedBy": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "name",
+    "status"
+  ]
+}

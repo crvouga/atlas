@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="atlas" tests="11" failures="0" skipped="0" time="684.600">
+  <testsuite name="2026-10-06T14-40-00-000Z-showcase" tests="11" failures="0" skipped="0" timestamp="2026-10-06T14:40:00.000Z">
+    <testcase classname="journey" name="Orders a drink and pays by card" id="journey-1"></testcase>
+    <testcase classname="journey" name="Pays with a wallet" id="journey-2"></testcase>
+    <testcase classname="journey" name="Card declined, then a wallet works" id="journey-3"></testcase>
+    <testcase classname="journey" name="Slow payment" id="journey-4"></testcase>
+    <testcase classname="journey" name="Leaves checkout and comes back" id="journey-5"></testcase>
+    <testcase classname="journey" name="Drink left too long" id="journey-6"></testcase>
+    <testcase classname="journey" name="Turns off updates while waiting" id="journey-7"></testcase>
+    <testcase classname="journey" name="Changes their mind about the drink" id="journey-8"></testcase>
+    <testcase classname="journey" name="Empties the cart" id="journey-9"></testcase>
+    <testcase classname="generated" name="Every other event in Coffee order" id="generated-1"></testcase>
+    <testcase classname="generated" name="Every other event in Checkout" id="generated-2"></testcase>
+  </testsuite>
+</testsuites>

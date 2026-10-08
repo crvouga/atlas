@@ -1,0 +1,830 @@
+# Sign-up: generated fixture chart
+id: Sign-up
+initial: Handling the account details
+meta:
+  description: Signing up and keeping a profile up to date.
+  snapshot: sign-up
+  events: []
+  confidence: confirmed
+  source:
+    - src/screens/sign-up
+states:
+  Handling the account details:
+    id: Handling the account details
+    initial: Reviewing the account details
+    meta:
+      description: Everything about the account details, from review to approval.
+      snapshot: handling-the-account-details
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-account-details.tsx
+      owner: Accounts team
+    states:
+      Reviewing the account details:
+        id: Reviewing the account details
+        meta:
+          description: The user checks the account details before sending it.
+          snapshot: reviewing-the-account-details
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-account-details.tsx
+          gherkin:
+            - features/accounts/sign-up/account-details.feature
+        on:
+          Taps edit on the account details:
+            target: "#Editing the account details"
+          Submits the account details:
+            target: "#Waiting for the account details to be approved"
+      Editing the account details:
+        id: Editing the account details
+        initial: Editing the account details details
+        meta:
+          description: The user changes the account details, with an optional file.
+          snapshot: editing-the-account-details
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-account-details.tsx
+        states:
+          Editing the account details details:
+            id: Editing the account details details
+            meta:
+              description: A form with the account details fields.
+              snapshot: editing-the-account-details-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/editing-the-account-details-details.tsx
+              hints:
+                - A text field per detail
+                - An "Upload a file" link
+            on:
+              Uploads a file:
+                target: "#Uploading a file for the account details"
+          Uploading a file for the account details:
+            id: Uploading a file for the account details
+            meta:
+              description: A file picker for a document about the account details.
+              snapshot: uploading-a-file-for-the-account-details
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/uploading-a-file-for-the-account-details.tsx
+            on:
+              Finishes uploading the file:
+                target: "#Editing the account details details"
+        on:
+          Saves the account details:
+            target: "#Reviewing the account details"
+          Cancels the changes to the account details:
+            target: "#Reviewing the account details"
+          Saving the account details fails:
+            target: "#Told the account details could not be saved"
+      Told the account details could not be saved:
+        id: Told the account details could not be saved
+        meta:
+          description: A message says the account details could not be saved, with "Try again".
+          snapshot: told-the-account-details-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-account-details-could-not-be-saved.tsx
+        on:
+          Tries saving the account details again:
+            target: "#Editing the account details"
+      Waiting for the account details to be approved:
+        id: Waiting for the account details to be approved
+        meta:
+          description: A card says the account details is being checked.
+          snapshot: waiting-for-the-account-details-to-be-approved
+          events:
+            - Account details submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-account-details-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the account details:
+            target: "#Told the account details was approved"
+          Identity service rejects the account details:
+            target: "#Told the account details was rejected"
+          Approval of the account details takes longer than a day:
+            target: "#Told the account details is still under review"
+      Told the account details is still under review:
+        id: Told the account details is still under review
+        meta:
+          description: A card says the account details is still being checked.
+          snapshot: told-the-account-details-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-account-details-is-still-under-review.tsx
+        on:
+          Checks the account details again:
+            target: "#Waiting for the account details to be approved"
+      Told the account details was rejected:
+        id: Told the account details was rejected
+        meta:
+          description: A message explains why the account details was not accepted.
+          snapshot: told-the-account-details-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-account-details-was-rejected.tsx
+        on:
+          Starts the account details again:
+            target: "#Reviewing the account details"
+      Told the account details was approved:
+        id: Told the account details was approved
+        meta:
+          description: A message confirms the account details is approved.
+          snapshot: told-the-account-details-was-approved
+          events:
+            - Account details approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-account-details-was-approved.tsx
+        on:
+          Continues to the home address:
+            target: "#Handling the home address"
+  Handling the home address:
+    id: Handling the home address
+    initial: Reviewing the home address
+    meta:
+      description: Everything about the home address, from review to approval.
+      snapshot: handling-the-home-address
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-home-address.tsx
+      owner: Accounts team
+    states:
+      Reviewing the home address:
+        id: Reviewing the home address
+        meta:
+          description: The user checks the home address before sending it.
+          snapshot: reviewing-the-home-address
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-home-address.tsx
+          gherkin:
+            - features/accounts/sign-up/home-address.feature
+        on:
+          Taps edit on the home address:
+            target: "#Editing the home address"
+          Submits the home address:
+            target: "#Waiting for the home address to be approved"
+      Editing the home address:
+        id: Editing the home address
+        meta:
+          description: A form to change the home address.
+          snapshot: editing-the-home-address
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-home-address.tsx
+        on:
+          Saves the home address:
+            target: "#Reviewing the home address"
+          Cancels the changes to the home address:
+            target: "#Reviewing the home address"
+          Saving the home address fails:
+            target: "#Told the home address could not be saved"
+      Told the home address could not be saved:
+        id: Told the home address could not be saved
+        meta:
+          description: A message says the home address could not be saved, with "Try again".
+          snapshot: told-the-home-address-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-home-address-could-not-be-saved.tsx
+        on:
+          Tries saving the home address again:
+            target: "#Editing the home address"
+      Waiting for the home address to be approved:
+        id: Waiting for the home address to be approved
+        meta:
+          description: A card says the home address is being checked.
+          snapshot: waiting-for-the-home-address-to-be-approved
+          events:
+            - Home address submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-home-address-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the home address:
+            target: "#Told the home address was approved"
+          Identity service rejects the home address:
+            target: "#Told the home address was rejected"
+          Approval of the home address takes longer than a day:
+            target: "#Told the home address is still under review"
+      Told the home address is still under review:
+        id: Told the home address is still under review
+        meta:
+          description: A card says the home address is still being checked.
+          snapshot: told-the-home-address-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-home-address-is-still-under-review.tsx
+        on:
+          Checks the home address again:
+            target: "#Waiting for the home address to be approved"
+      Told the home address was rejected:
+        id: Told the home address was rejected
+        meta:
+          description: A message explains why the home address was not accepted.
+          snapshot: told-the-home-address-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-home-address-was-rejected.tsx
+        on:
+          Starts the home address again:
+            target: "#Reviewing the home address"
+      Told the home address was approved:
+        id: Told the home address was approved
+        meta:
+          description: A message confirms the home address is approved.
+          snapshot: told-the-home-address-was-approved
+          events:
+            - Home address approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-home-address-was-approved.tsx
+        on:
+          Continues to the date of birth:
+            target: "#Handling the date of birth"
+  Handling the date of birth:
+    id: Handling the date of birth
+    initial: Reviewing the date of birth
+    meta:
+      description: Everything about the date of birth, from review to approval.
+      snapshot: handling-the-date-of-birth
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-date-of-birth.tsx
+      owner: Accounts team
+    states:
+      Reviewing the date of birth:
+        id: Reviewing the date of birth
+        meta:
+          description: The user checks the date of birth before sending it.
+          snapshot: reviewing-the-date-of-birth
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-date-of-birth.tsx
+          gherkin:
+            - features/accounts/sign-up/date-of-birth.feature
+        on:
+          Taps edit on the date of birth:
+            target: "#Editing the date of birth"
+          Submits the date of birth:
+            target: "#Waiting for the date of birth to be approved"
+      Editing the date of birth:
+        id: Editing the date of birth
+        meta:
+          description: A form to change the date of birth.
+          snapshot: editing-the-date-of-birth
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-date-of-birth.tsx
+        on:
+          Saves the date of birth:
+            target: "#Reviewing the date of birth"
+          Cancels the changes to the date of birth:
+            target: "#Reviewing the date of birth"
+          Saving the date of birth fails:
+            target: "#Told the date of birth could not be saved"
+      Told the date of birth could not be saved:
+        id: Told the date of birth could not be saved
+        meta:
+          description: A message says the date of birth could not be saved, with "Try again".
+          snapshot: told-the-date-of-birth-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-date-of-birth-could-not-be-saved.tsx
+        on:
+          Tries saving the date of birth again:
+            target: "#Editing the date of birth"
+      Waiting for the date of birth to be approved:
+        id: Waiting for the date of birth to be approved
+        meta:
+          description: A card says the date of birth is being checked.
+          snapshot: waiting-for-the-date-of-birth-to-be-approved
+          events:
+            - Date of birth submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-date-of-birth-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the date of birth:
+            target: "#Told the date of birth was approved"
+          Identity service rejects the date of birth:
+            target: "#Told the date of birth was rejected"
+          Approval of the date of birth takes longer than a day:
+            target: "#Told the date of birth is still under review"
+      Told the date of birth is still under review:
+        id: Told the date of birth is still under review
+        meta:
+          description: A card says the date of birth is still being checked.
+          snapshot: told-the-date-of-birth-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-date-of-birth-is-still-under-review.tsx
+        on:
+          Checks the date of birth again:
+            target: "#Waiting for the date of birth to be approved"
+      Told the date of birth was rejected:
+        id: Told the date of birth was rejected
+        meta:
+          description: A message explains why the date of birth was not accepted.
+          snapshot: told-the-date-of-birth-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-date-of-birth-was-rejected.tsx
+        on:
+          Starts the date of birth again:
+            target: "#Reviewing the date of birth"
+      Told the date of birth was approved:
+        id: Told the date of birth was approved
+        meta:
+          description: A message confirms the date of birth is approved.
+          snapshot: told-the-date-of-birth-was-approved
+          events:
+            - Date of birth approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-date-of-birth-was-approved.tsx
+        on:
+          Starts the identity check:
+            target: "#Going through the identity check"
+  Going through the identity check:
+    id: Going through the identity check
+    meta:
+      description: The identity check runs as its own chart.
+      snapshot: going-through-the-identity-check
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/going-through-the-identity-check.tsx
+    invoke:
+      src: Identity check
+      id: identity-check
+    on:
+      Identity check is completed:
+        target: "#Handling the profile photo"
+      Identity check is abandoned:
+        target: "#Reviewing the date of birth"
+  Handling the profile photo:
+    id: Handling the profile photo
+    initial: Reviewing the profile photo
+    meta:
+      description: Everything about the profile photo, from review to approval.
+      snapshot: handling-the-profile-photo
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-profile-photo.tsx
+      owner: Accounts team
+    states:
+      Reviewing the profile photo:
+        id: Reviewing the profile photo
+        meta:
+          description: The user checks the profile photo before sending it.
+          snapshot: reviewing-the-profile-photo
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-profile-photo.tsx
+          gherkin:
+            - features/accounts/sign-up/profile-photo.feature
+        on:
+          Taps edit on the profile photo:
+            target: "#Editing the profile photo"
+          Submits the profile photo:
+            target: "#Waiting for the profile photo to be approved"
+      Editing the profile photo:
+        id: Editing the profile photo
+        meta:
+          description: A form to change the profile photo.
+          snapshot: editing-the-profile-photo
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-profile-photo.tsx
+        on:
+          Saves the profile photo:
+            target: "#Reviewing the profile photo"
+          Cancels the changes to the profile photo:
+            target: "#Reviewing the profile photo"
+          Saving the profile photo fails:
+            target: "#Told the profile photo could not be saved"
+      Told the profile photo could not be saved:
+        id: Told the profile photo could not be saved
+        meta:
+          description: A message says the profile photo could not be saved, with "Try again".
+          snapshot: told-the-profile-photo-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-profile-photo-could-not-be-saved.tsx
+        on:
+          Tries saving the profile photo again:
+            target: "#Editing the profile photo"
+      Waiting for the profile photo to be approved:
+        id: Waiting for the profile photo to be approved
+        meta:
+          description: A card says the profile photo is being checked.
+          snapshot: waiting-for-the-profile-photo-to-be-approved
+          events:
+            - Profile photo submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-profile-photo-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the profile photo:
+            target: "#Told the profile photo was approved"
+          Identity service rejects the profile photo:
+            target: "#Told the profile photo was rejected"
+          Approval of the profile photo takes longer than a day:
+            target: "#Told the profile photo is still under review"
+      Told the profile photo is still under review:
+        id: Told the profile photo is still under review
+        meta:
+          description: A card says the profile photo is still being checked.
+          snapshot: told-the-profile-photo-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-profile-photo-is-still-under-review.tsx
+        on:
+          Checks the profile photo again:
+            target: "#Waiting for the profile photo to be approved"
+      Told the profile photo was rejected:
+        id: Told the profile photo was rejected
+        meta:
+          description: A message explains why the profile photo was not accepted.
+          snapshot: told-the-profile-photo-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-profile-photo-was-rejected.tsx
+        on:
+          Starts the profile photo again:
+            target: "#Reviewing the profile photo"
+      Told the profile photo was approved:
+        id: Told the profile photo was approved
+        meta:
+          description: A message confirms the profile photo is approved.
+          snapshot: told-the-profile-photo-was-approved
+          events:
+            - Profile photo approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-profile-photo-was-approved.tsx
+        on:
+          Continues to the notification preferences:
+            target: "#Handling the notification preferences"
+  Handling the notification preferences:
+    id: Handling the notification preferences
+    initial: Reviewing the notification preferences
+    meta:
+      description: Everything about the notification preferences, from review to approval.
+      snapshot: handling-the-notification-preferences
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-notification-preferences.tsx
+      owner: Accounts team
+    states:
+      Reviewing the notification preferences:
+        id: Reviewing the notification preferences
+        meta:
+          description: The user checks the notification preferences before sending it.
+          snapshot: reviewing-the-notification-preferences
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-notification-preferences.tsx
+          gherkin:
+            - features/accounts/sign-up/notification-preferences.feature
+        on:
+          Taps edit on the notification preferences:
+            target: "#Editing the notification preferences"
+          Submits the notification preferences:
+            target: "#Waiting for the notification preferences to be approved"
+      Editing the notification preferences:
+        id: Editing the notification preferences
+        meta:
+          description: A form to change the notification preferences.
+          snapshot: editing-the-notification-preferences
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-notification-preferences.tsx
+        on:
+          Saves the notification preferences:
+            target: "#Reviewing the notification preferences"
+          Cancels the changes to the notification preferences:
+            target: "#Reviewing the notification preferences"
+          Saving the notification preferences fails:
+            target: "#Told the notification preferences could not be saved"
+      Told the notification preferences could not be saved:
+        id: Told the notification preferences could not be saved
+        meta:
+          description: A message says the notification preferences could not be saved, with "Try again".
+          snapshot: told-the-notification-preferences-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-notification-preferences-could-not-be-saved.tsx
+        on:
+          Tries saving the notification preferences again:
+            target: "#Editing the notification preferences"
+      Waiting for the notification preferences to be approved:
+        id: Waiting for the notification preferences to be approved
+        meta:
+          description: A card says the notification preferences is being checked.
+          snapshot: waiting-for-the-notification-preferences-to-be-approved
+          events:
+            - Notification preferences submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-notification-preferences-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the notification preferences:
+            target: "#Told the notification preferences was approved"
+          Identity service rejects the notification preferences:
+            target: "#Told the notification preferences was rejected"
+          Approval of the notification preferences takes longer than a day:
+            target: "#Told the notification preferences is still under review"
+      Told the notification preferences is still under review:
+        id: Told the notification preferences is still under review
+        meta:
+          description: A card says the notification preferences is still being checked.
+          snapshot: told-the-notification-preferences-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-notification-preferences-is-still-under-review.tsx
+        on:
+          Checks the notification preferences again:
+            target: "#Waiting for the notification preferences to be approved"
+      Told the notification preferences was rejected:
+        id: Told the notification preferences was rejected
+        meta:
+          description: A message explains why the notification preferences was not accepted.
+          snapshot: told-the-notification-preferences-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-notification-preferences-was-rejected.tsx
+        on:
+          Starts the notification preferences again:
+            target: "#Reviewing the notification preferences"
+      Told the notification preferences was approved:
+        id: Told the notification preferences was approved
+        meta:
+          description: A message confirms the notification preferences is approved.
+          snapshot: told-the-notification-preferences-was-approved
+          events:
+            - Notification preferences approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-notification-preferences-was-approved.tsx
+        on:
+          Continues to the security questions:
+            target: "#Handling the security questions"
+  Handling the security questions:
+    id: Handling the security questions
+    initial: Reviewing the security questions
+    meta:
+      description: Everything about the security questions, from review to approval.
+      snapshot: handling-the-security-questions
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/handling-the-security-questions.tsx
+      owner: Accounts team
+    states:
+      Reviewing the security questions:
+        id: Reviewing the security questions
+        meta:
+          description: The user checks the security questions before sending it.
+          snapshot: reviewing-the-security-questions
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/reviewing-the-security-questions.tsx
+          gherkin:
+            - features/accounts/sign-up/security-questions.feature
+        on:
+          Taps edit on the security questions:
+            target: "#Editing the security questions"
+          Submits the security questions:
+            target: "#Waiting for the security questions to be approved"
+      Editing the security questions:
+        id: Editing the security questions
+        meta:
+          description: A form to change the security questions.
+          snapshot: editing-the-security-questions
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/editing-the-security-questions.tsx
+        on:
+          Saves the security questions:
+            target: "#Reviewing the security questions"
+          Cancels the changes to the security questions:
+            target: "#Reviewing the security questions"
+          Saving the security questions fails:
+            target: "#Told the security questions could not be saved"
+      Told the security questions could not be saved:
+        id: Told the security questions could not be saved
+        meta:
+          description: A message says the security questions could not be saved, with "Try again".
+          snapshot: told-the-security-questions-could-not-be-saved
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-security-questions-could-not-be-saved.tsx
+        on:
+          Tries saving the security questions again:
+            target: "#Editing the security questions"
+      Waiting for the security questions to be approved:
+        id: Waiting for the security questions to be approved
+        meta:
+          description: A card says the security questions is being checked.
+          snapshot: waiting-for-the-security-questions-to-be-approved
+          events:
+            - Security questions submitted
+          confidence: confirmed
+          source:
+            - src/screens/waiting-for-the-security-questions-to-be-approved.tsx
+          tier: critical
+        on:
+          Identity service approves the security questions:
+            target: "#Told the security questions was approved"
+          Identity service rejects the security questions:
+            target: "#Told the security questions was rejected"
+          Approval of the security questions takes longer than a day:
+            target: "#Told the security questions is still under review"
+      Told the security questions is still under review:
+        id: Told the security questions is still under review
+        meta:
+          description: A card says the security questions is still being checked.
+          snapshot: told-the-security-questions-is-still-under-review
+          events: []
+          confidence: assumed
+          source:
+            - src/screens/told-the-security-questions-is-still-under-review.tsx
+        on:
+          Checks the security questions again:
+            target: "#Waiting for the security questions to be approved"
+      Told the security questions was rejected:
+        id: Told the security questions was rejected
+        meta:
+          description: A message explains why the security questions was not accepted.
+          snapshot: told-the-security-questions-was-rejected
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/told-the-security-questions-was-rejected.tsx
+        on:
+          Starts the security questions again:
+            target: "#Reviewing the security questions"
+      Told the security questions was approved:
+        id: Told the security questions was approved
+        meta:
+          description: A message confirms the security questions is approved.
+          snapshot: told-the-security-questions-was-approved
+          events:
+            - Security questions approved
+          confidence: confirmed
+          source:
+            - src/screens/told-the-security-questions-was-approved.tsx
+        on:
+          Continues to the sign-up settings:
+            target: "#Sign-up settings"
+  Sign-up settings:
+    id: Sign-up settings
+    type: parallel
+    meta:
+      description: "Settings for sign-up: notifications and help side by side."
+      snapshot: sign-up-settings
+      events: []
+      confidence: confirmed
+      source:
+        - src/screens/sign-up-settings.tsx
+    states:
+      Sign-up notifications:
+        id: Sign-up notifications
+        initial: Sign-up notifications on
+        meta:
+          description: Whether the user gets notifications.
+          snapshot: sign-up-notifications
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/sign-up-notifications.tsx
+        states:
+          Sign-up notifications on:
+            id: Sign-up notifications on
+            meta:
+              description: The notifications switch is on.
+              snapshot: sign-up-notifications-on
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/sign-up-notifications-on.tsx
+            on:
+              Turns off sign-up notifications:
+                target: "#Sign-up notifications off"
+          Sign-up notifications off:
+            id: Sign-up notifications off
+            meta:
+              description: The notifications switch is off.
+              snapshot: sign-up-notifications-off
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/sign-up-notifications-off.tsx
+            on:
+              Turns on sign-up notifications:
+                target: "#Sign-up notifications on"
+      Sign-up help:
+        id: Sign-up help
+        initial: No open sign-up help request
+        meta:
+          description: Help requests about this part of the product.
+          snapshot: sign-up-help
+          events: []
+          confidence: confirmed
+          source:
+            - src/screens/sign-up-help.tsx
+        states:
+          No open sign-up help request:
+            id: No open sign-up help request
+            meta:
+              description: A "Get help" button.
+              snapshot: no-open-sign-up-help-request
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/no-open-sign-up-help-request.tsx
+            on:
+              Opens a sign-up help request:
+                target: "#Sign-up help request open"
+          Sign-up help request open:
+            id: Sign-up help request open
+            meta:
+              description: A card says the help desk will answer soon.
+              snapshot: sign-up-help-request-open
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/sign-up-help-request-open.tsx
+            on:
+              Help desk answers the sign-up help request:
+                target: "#Sign-up help request answered"
+          Sign-up help request answered:
+            id: Sign-up help request answered
+            meta:
+              description: The answer shows in the help card.
+              snapshot: sign-up-help-request-answered
+              events: []
+              confidence: confirmed
+              source:
+                - src/screens/sign-up-help-request-answered.tsx
+            on:
+              Opens another sign-up help request:
+                target: "#Sign-up help request open"
+    on:
+      Closes the sign-up settings:
+        target: "#Sign-up finished"
+  Sign-up finished:
+    id: Sign-up finished
+    type: final
+    meta:
+      description: The user is done with sign-up.
+      snapshot: sign-up-finished
+      events:
+        - Sign-up finished
+      confidence: confirmed
+      source:
+        - src/screens/sign-up-finished.tsx

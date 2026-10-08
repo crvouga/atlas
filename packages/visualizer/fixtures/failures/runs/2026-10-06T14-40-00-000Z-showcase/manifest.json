@@ -1,0 +1,2003 @@
+{
+  "$schema": "https://github.com/crvouga/atlas/schemas/manifest.schema.json",
+  "schemaVersion": 1,
+  "run": {
+    "id": "2026-10-06T14-40-00-000Z-showcase",
+    "startedAt": "2026-10-06T14:40:00.000Z",
+    "finishedAt": "2026-10-06T14:47:35.000Z",
+    "durationMs": 455000,
+    "commit": "571dc134d087dde25bfff6177c4fdafe794c3a4a",
+    "branch": "main",
+    "environment": {
+      "driver": "playwright",
+      "baseUrl": "http://localhost:3000",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "deviceScaleFactor": 3
+    },
+    "mode": "showcase",
+    "specVersion": "f7ef440c67ed",
+    "specDirectory": "specs",
+    "approvals": [],
+    "scope": {
+      "chart": "Checkout",
+      "start": "A customer with a drink in the cart"
+    }
+  },
+  "charts": [
+    {
+      "id": "Coffee order",
+      "file": "coffee/ordering/machine.yaml",
+      "description": "A customer picks a drink, pays for it, and picks it up when it is ready.",
+      "parentState": null,
+      "handOffs": {}
+    },
+    {
+      "id": "Checkout",
+      "file": "coffee/ordering/checkout.scxml",
+      "description": "Paying for the order, by card or with a wallet.",
+      "parentState": "Checking out",
+      "handOffs": {
+        "Paid": "Payment goes through",
+        "Checkout abandoned": "Leaves checkout"
+      }
+    }
+  ],
+  "map": {
+    "nodes": [
+      {
+        "id": "Browsing the menu",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Customizing the drink",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "compound",
+        "initial": "Choosing a size",
+        "inScope": false
+      },
+      {
+        "id": "Choosing a size",
+        "parent": "Customizing the drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Choosing the milk",
+        "parent": "Customizing the drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Ready to add the drink",
+        "parent": "Customizing the drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Reviewing the cart",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Checking out",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Order in progress",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "parallel",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Drink",
+        "parent": "Order in progress",
+        "chart": "Coffee order",
+        "type": "compound",
+        "initial": "Paid, waiting for the barista",
+        "inScope": false
+      },
+      {
+        "id": "Paid, waiting for the barista",
+        "parent": "Drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Drink being made",
+        "parent": "Drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Drink ready for pickup",
+        "parent": "Drink",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Updates",
+        "parent": "Order in progress",
+        "chart": "Coffee order",
+        "type": "compound",
+        "initial": "Updates on",
+        "inScope": false
+      },
+      {
+        "id": "Updates on",
+        "parent": "Updates",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Updates off",
+        "parent": "Updates",
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Told the drink was thrown away",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "atomic",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Order complete",
+        "parent": null,
+        "chart": "Coffee order",
+        "type": "final",
+        "initial": null,
+        "inScope": false
+      },
+      {
+        "id": "Choosing how to pay",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Entering card details",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Confirming with the wallet",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Waiting for the payment",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Told the payment is slow",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Told the payment was declined",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "atomic",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Paid",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "final",
+        "initial": null,
+        "inScope": true
+      },
+      {
+        "id": "Checkout abandoned",
+        "parent": null,
+        "chart": "Checkout",
+        "type": "final",
+        "initial": null,
+        "inScope": true
+      }
+    ],
+    "edges": [
+      {
+        "id": "Browsing the menu :: Picks a drink",
+        "source": "Browsing the menu",
+        "target": "Customizing the drink",
+        "event": "Picks a drink",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Choosing a size :: Picks a size",
+        "source": "Choosing a size",
+        "target": "Choosing the milk",
+        "event": "Picks a size",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Choosing the milk :: Picks a milk",
+        "source": "Choosing the milk",
+        "target": "Ready to add the drink",
+        "event": "Picks a milk",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Ready to add the drink :: Adds the drink to the cart",
+        "source": "Ready to add the drink",
+        "target": "Reviewing the cart",
+        "event": "Adds the drink to the cart",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Customizing the drink :: Goes back to the menu",
+        "source": "Customizing the drink",
+        "target": "Browsing the menu",
+        "event": "Goes back to the menu",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Reviewing the cart :: Removes the last drink",
+        "source": "Reviewing the cart",
+        "target": "Browsing the menu",
+        "event": "Removes the last drink",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Reviewing the cart :: Starts checkout",
+        "source": "Reviewing the cart",
+        "target": "Checking out",
+        "event": "Starts checkout",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Paid, waiting for the barista :: Barista starts the drink",
+        "source": "Paid, waiting for the barista",
+        "target": "Drink being made",
+        "event": "Barista starts the drink",
+        "kind": "system",
+        "inScope": false
+      },
+      {
+        "id": "Drink being made :: Barista finishes the drink",
+        "source": "Drink being made",
+        "target": "Drink ready for pickup",
+        "event": "Barista finishes the drink",
+        "kind": "system",
+        "inScope": false
+      },
+      {
+        "id": "Drink ready for pickup :: Picks up the drink",
+        "source": "Drink ready for pickup",
+        "target": "Order complete",
+        "event": "Picks up the drink",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Drink ready for pickup :: Drink sits ready for ten minutes",
+        "source": "Drink ready for pickup",
+        "target": "Told the drink was thrown away",
+        "event": "Drink sits ready for ten minutes",
+        "kind": "time",
+        "inScope": false
+      },
+      {
+        "id": "Updates on :: Turns off updates",
+        "source": "Updates on",
+        "target": "Updates off",
+        "event": "Turns off updates",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Updates off :: Turns on updates",
+        "source": "Updates off",
+        "target": "Updates on",
+        "event": "Turns on updates",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Told the drink was thrown away :: Orders again",
+        "source": "Told the drink was thrown away",
+        "target": "Browsing the menu",
+        "event": "Orders again",
+        "kind": "user",
+        "inScope": false
+      },
+      {
+        "id": "Choosing how to pay :: Picks card",
+        "source": "Choosing how to pay",
+        "target": "Entering card details",
+        "event": "Picks card",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Choosing how to pay :: Picks wallet",
+        "source": "Choosing how to pay",
+        "target": "Confirming with the wallet",
+        "event": "Picks wallet",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Choosing how to pay :: Closes checkout",
+        "source": "Choosing how to pay",
+        "target": "Checkout abandoned",
+        "event": "Closes checkout",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Entering card details :: Submits the card",
+        "source": "Entering card details",
+        "target": "Waiting for the payment",
+        "event": "Submits the card",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Entering card details :: Goes back to the payment options",
+        "source": "Entering card details",
+        "target": "Choosing how to pay",
+        "event": "Goes back to the payment options",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Confirming with the wallet :: Confirms with the wallet",
+        "source": "Confirming with the wallet",
+        "target": "Waiting for the payment",
+        "event": "Confirms with the wallet",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Confirming with the wallet :: Cancels the wallet",
+        "source": "Confirming with the wallet",
+        "target": "Choosing how to pay",
+        "event": "Cancels the wallet",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Waiting for the payment :: Payment provider approves the payment",
+        "source": "Waiting for the payment",
+        "target": "Paid",
+        "event": "Payment provider approves the payment",
+        "kind": "system",
+        "inScope": true
+      },
+      {
+        "id": "Waiting for the payment :: Payment provider declines the payment",
+        "source": "Waiting for the payment",
+        "target": "Told the payment was declined",
+        "event": "Payment provider declines the payment",
+        "kind": "system",
+        "inScope": true
+      },
+      {
+        "id": "Waiting for the payment :: Payment takes longer than a minute",
+        "source": "Waiting for the payment",
+        "target": "Told the payment is slow",
+        "event": "Payment takes longer than a minute",
+        "kind": "time",
+        "inScope": true
+      },
+      {
+        "id": "Told the payment is slow :: Checks the payment again",
+        "source": "Told the payment is slow",
+        "target": "Waiting for the payment",
+        "event": "Checks the payment again",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Told the payment was declined :: Tries another way to pay",
+        "source": "Told the payment was declined",
+        "target": "Choosing how to pay",
+        "event": "Tries another way to pay",
+        "kind": "user",
+        "inScope": true
+      },
+      {
+        "id": "Paid :: Payment goes through",
+        "source": "Paid",
+        "target": "Order in progress",
+        "event": "Payment goes through",
+        "kind": "hand-off",
+        "inScope": true
+      },
+      {
+        "id": "Checkout abandoned :: Leaves checkout",
+        "source": "Checkout abandoned",
+        "target": "Reviewing the cart",
+        "event": "Leaves checkout",
+        "kind": "hand-off",
+        "inScope": true
+      }
+    ]
+  },
+  "states": {
+    "Reviewing the cart": {
+      "name": "Reviewing the cart",
+      "chart": "Coffee order",
+      "description": "The drinks in the cart, the total, and a checkout button.",
+      "snapshot": "cart",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/01.png",
+        "webp": "media/paths/journey-1/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/01.png",
+          "webp": "media/paths/journey-1/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"cart\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Reviewing the cart\"",
+          "passed": true,
+          "expected": "test ID \"cart\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Checking out": {
+      "name": "Checking out",
+      "chart": "Coffee order",
+      "description": "Checkout runs as its own chart.",
+      "snapshot": "checking-out",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": null,
+      "screenshotsByPath": {},
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"checking-out\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Order in progress": {
+      "name": "Order in progress",
+      "chart": "Coffee order",
+      "description": "The drink is made while the customer chooses how to hear about it.",
+      "snapshot": "order-in-progress",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": null,
+      "screenshotsByPath": {},
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"order-in-progress\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Choosing how to pay": {
+      "name": "Choosing how to pay",
+      "chart": "Checkout",
+      "description": "Card and wallet buttons, and the order total.",
+      "snapshot": "pay-options",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/02.png",
+        "webp": "media/paths/journey-1/02.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/02.png",
+          "webp": "media/paths/journey-1/02.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"pay-options\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Choosing how to pay\"",
+          "passed": true,
+          "expected": "test ID \"pay-options\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Entering card details": {
+      "name": "Entering card details",
+      "chart": "Checkout",
+      "description": "A form for the card number, expiry and code.",
+      "snapshot": "card-form",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/03.png",
+        "webp": "media/paths/journey-1/03.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/03.png",
+          "webp": "media/paths/journey-1/03.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"card-form\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Entering card details\"",
+          "passed": true,
+          "expected": "test ID \"card-form\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-3",
+        "journey-4",
+        "journey-6"
+      ],
+      "notes": []
+    },
+    "Confirming with the wallet": {
+      "name": "Confirming with the wallet",
+      "chart": "Checkout",
+      "description": "The wallet sheet asks the customer to confirm the payment.",
+      "snapshot": "wallet-sheet",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-2/01.png",
+        "webp": "media/paths/journey-2/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-2": {
+          "png": "media/paths/journey-2/01.png",
+          "webp": "media/paths/journey-2/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"wallet-sheet\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Confirming with the wallet\"",
+          "passed": true,
+          "expected": "test ID \"wallet-sheet\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-2",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Waiting for the payment": {
+      "name": "Waiting for the payment",
+      "chart": "Checkout",
+      "description": "A spinner while the payment provider answers.",
+      "snapshot": "paying",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Payment requested"
+      ],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-1/04.png",
+        "webp": "media/paths/journey-1/04.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/04.png",
+          "webp": "media/paths/journey-1/04.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"paying\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Payment requested"
+        ],
+        "observed": [],
+        "missing": [
+          "Payment requested"
+        ],
+        "noSignal": [],
+        "events": []
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Waiting for the payment\"",
+          "passed": true,
+          "expected": "test ID \"paying\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Told the payment is slow": {
+      "name": "Told the payment is slow",
+      "chart": "Checkout",
+      "description": "A message says the payment is taking longer than usual, with \"Check again\".",
+      "snapshot": "paying-slow",
+      "confidence": "assumed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "flaky",
+      "screenshot": {
+        "png": "media/paths/journey-4/01.png",
+        "webp": "media/paths/journey-4/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-4": {
+          "png": "media/paths/journey-4/01.png",
+          "webp": "media/paths/journey-4/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"paying-slow\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Told the payment is slow\"",
+          "passed": true,
+          "expected": "test ID \"paying-slow\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-4"
+      ],
+      "notes": [
+        "Passed on the second attempt: the first attempt saw the spinner still running."
+      ]
+    },
+    "Told the payment was declined": {
+      "name": "Told the payment was declined",
+      "chart": "Checkout",
+      "description": "A message says the payment was declined, with \"Try another way\".",
+      "snapshot": "payment-declined",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Payment declined"
+      ],
+      "status": "failed",
+      "screenshot": null,
+      "screenshotsByPath": {
+        "journey-3 (failed)": {
+          "png": "media/paths/journey-3/failed-01.png",
+          "webp": "media/paths/journey-3/failed-01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": false,
+        "signals": [
+          {
+            "signal": "test ID \"payment-declined\"",
+            "expected": "visible",
+            "visible": false
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Told the payment was declined\"",
+          "passed": false,
+          "expected": "test ID \"payment-declined\" visible",
+          "actual": "hidden; the app looks like none of the known screens"
+        }
+      ],
+      "reachedBy": [],
+      "notes": []
+    },
+    "Paid": {
+      "name": "Paid",
+      "chart": "Checkout",
+      "description": "A check mark confirms the payment.",
+      "snapshot": "paid",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [
+        "Payment captured"
+      ],
+      "status": "failed",
+      "screenshot": {
+        "png": "media/paths/journey-1/05.png",
+        "webp": "media/paths/journey-1/05.webp"
+      },
+      "screenshotsByPath": {
+        "journey-1": {
+          "png": "media/paths/journey-1/05.png",
+          "webp": "media/paths/journey-1/05.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"paid\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": {
+        "expected": [
+          "Payment captured",
+          "Customer notified"
+        ],
+        "observed": [
+          "Payment captured"
+        ],
+        "missing": [
+          "Customer notified"
+        ],
+        "noSignal": [],
+        "events": [
+          {
+            "specversion": "1.0",
+            "id": "0bbca02b645e86457bc8",
+            "source": "/fixture/orders",
+            "type": "com.example.payment.captured",
+            "time": "2026-10-06T14:45:00.000Z",
+            "subject": "order-fixture-failures",
+            "datacontenttype": "application/json",
+            "data": {
+              "name": "Payment captured"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "check": "The screen shows \"Paid\"",
+          "passed": true,
+          "expected": "test ID \"paid\" visible",
+          "actual": "visible"
+        },
+        {
+          "check": "Business event \"Customer notified\" is recorded",
+          "passed": false,
+          "expected": "recorded within 10 seconds",
+          "actual": "not recorded"
+        }
+      ],
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ],
+      "notes": []
+    },
+    "Checkout abandoned": {
+      "name": "Checkout abandoned",
+      "chart": "Checkout",
+      "description": "Checkout closes and the cart is kept.",
+      "snapshot": "checkout-closed",
+      "confidence": "confirmed",
+      "source": [],
+      "expectedEvents": [],
+      "status": "passed",
+      "screenshot": {
+        "png": "media/paths/journey-5/01.png",
+        "webp": "media/paths/journey-5/01.webp"
+      },
+      "screenshotsByPath": {
+        "journey-5": {
+          "png": "media/paths/journey-5/01.png",
+          "webp": "media/paths/journey-5/01.webp"
+        }
+      },
+      "recognizer": {
+        "matched": true,
+        "signals": [
+          {
+            "signal": "test ID \"checkout-closed\"",
+            "expected": "visible",
+            "visible": true
+          }
+        ]
+      },
+      "looksLike": [],
+      "businessEvents": null,
+      "checks": [
+        {
+          "check": "The screen shows \"Checkout abandoned\"",
+          "passed": true,
+          "expected": "test ID \"checkout-closed\" visible",
+          "actual": "visible"
+        }
+      ],
+      "reachedBy": [
+        "journey-5"
+      ],
+      "notes": []
+    }
+  },
+  "transitions": {
+    "Reviewing the cart :: Starts checkout": {
+      "id": "Reviewing the cart :: Starts checkout",
+      "source": "Reviewing the cart",
+      "target": "Checking out",
+      "event": "Starts checkout",
+      "kind": "user",
+      "how": "The user starts checkout in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/001.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Start checkout",
+          "x": 57,
+          "y": 738
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Checking out"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-3",
+        "journey-4",
+        "journey-5",
+        "journey-6",
+        "journey-7"
+      ]
+    },
+    "Choosing how to pay :: Picks card": {
+      "id": "Choosing how to pay :: Picks card",
+      "source": "Choosing how to pay",
+      "target": "Entering card details",
+      "event": "Picks card",
+      "kind": "user",
+      "how": "The user picks card in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/002.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Pick card",
+          "x": 331,
+          "y": 749
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Entering card details"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-3",
+        "journey-4",
+        "journey-6"
+      ]
+    },
+    "Choosing how to pay :: Picks wallet": {
+      "id": "Choosing how to pay :: Picks wallet",
+      "source": "Choosing how to pay",
+      "target": "Confirming with the wallet",
+      "event": "Picks wallet",
+      "kind": "user",
+      "how": "The user picks wallet in the app.",
+      "status": "flaky",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/003.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Pick wallet",
+          "x": 82,
+          "y": 568
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Confirming with the wallet"
+        }
+      ],
+      "reason": "Timed out waiting for \"Confirming with the wallet\" on the first attempt",
+      "reachedBy": [
+        "journey-2",
+        "journey-7"
+      ]
+    },
+    "Choosing how to pay :: Closes checkout": {
+      "id": "Choosing how to pay :: Closes checkout",
+      "source": "Choosing how to pay",
+      "target": "Checkout abandoned",
+      "event": "Closes checkout",
+      "kind": "user",
+      "how": "The user closes checkout in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/004.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Close checkout",
+          "x": 325,
+          "y": 570
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Checkout abandoned"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-5"
+      ]
+    },
+    "Entering card details :: Submits the card": {
+      "id": "Entering card details :: Submits the card",
+      "source": "Entering card details",
+      "target": "Waiting for the payment",
+      "event": "Submits the card",
+      "kind": "user",
+      "how": "The user submits the card in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/02.mp4",
+        "poster": "media/clips/journey-1/02.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/005.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 300,
+          "kind": "tap",
+          "label": "Card number",
+          "x": 195,
+          "y": 308
+        },
+        {
+          "atMs": 650,
+          "kind": "type",
+          "label": "Card number",
+          "text": "4242 4242 4242 4242"
+        },
+        {
+          "atMs": 1500,
+          "kind": "tap",
+          "label": "Submit the card",
+          "x": 59,
+          "y": 631
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Waiting for the payment"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-3",
+        "journey-4",
+        "journey-6"
+      ]
+    },
+    "Entering card details :: Goes back to the payment options": {
+      "id": "Entering card details :: Goes back to the payment options",
+      "source": "Entering card details",
+      "target": "Choosing how to pay",
+      "event": "Goes back to the payment options",
+      "kind": "user",
+      "how": null,
+      "status": "not-reached",
+      "clip": null,
+      "timeline": [],
+      "reason": "No journey goes back from the card form, and generated paths are off in this run.",
+      "reachedBy": []
+    },
+    "Confirming with the wallet :: Confirms with the wallet": {
+      "id": "Confirming with the wallet :: Confirms with the wallet",
+      "source": "Confirming with the wallet",
+      "target": "Waiting for the payment",
+      "event": "Confirms with the wallet",
+      "kind": "user",
+      "how": "The user confirms with the wallet in the app.",
+      "status": "flaky",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/013.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Confirm with the wallet",
+          "x": 179,
+          "y": 586
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Waiting for the payment"
+        }
+      ],
+      "reason": "The wallet sheet answered slowly once; passed on retry.",
+      "reachedBy": [
+        "journey-2",
+        "journey-7"
+      ]
+    },
+    "Confirming with the wallet :: Cancels the wallet": {
+      "id": "Confirming with the wallet :: Cancels the wallet",
+      "source": "Confirming with the wallet",
+      "target": "Choosing how to pay",
+      "event": "Cancels the wallet",
+      "kind": "user",
+      "how": null,
+      "status": "not-reached",
+      "clip": null,
+      "timeline": [],
+      "reason": "The wallet stand-in cannot be cancelled yet.",
+      "reachedBy": []
+    },
+    "Waiting for the payment :: Payment provider approves the payment": {
+      "id": "Waiting for the payment :: Payment provider approves the payment",
+      "source": "Waiting for the payment",
+      "target": "Paid",
+      "event": "Payment provider approves the payment",
+      "kind": "system",
+      "how": "The fixture sends POST /webhooks/payments as Payment provider webhook.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/007.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 400,
+          "kind": "note",
+          "label": "The user waits on this screen"
+        },
+        {
+          "atMs": 900,
+          "kind": "system",
+          "label": "Payment provider approves the payment",
+          "system": {
+            "source": "Payment provider webhook",
+            "endpoint": "POST /webhooks/payments",
+            "eventType": "payment.approved",
+            "payload": {
+              "type": "payment.approved",
+              "data": {
+                "paymentId": "pay_fixture_0007",
+                "status": "approved"
+              }
+            },
+            "responseStatus": 200
+          }
+        },
+        {
+          "atMs": 1300,
+          "kind": "notification",
+          "label": "Approved",
+          "notification": {
+            "channel": "push",
+            "title": "Approved",
+            "body": "Next: paid."
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Paid"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ]
+    },
+    "Waiting for the payment :: Payment provider declines the payment": {
+      "id": "Waiting for the payment :: Payment provider declines the payment",
+      "source": "Waiting for the payment",
+      "target": "Told the payment was declined",
+      "event": "Payment provider declines the payment",
+      "kind": "system",
+      "how": "The fixture sends POST /webhooks/payments as Payment provider webhook.",
+      "status": "failed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/008.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 400,
+          "kind": "note",
+          "label": "The user waits on this screen"
+        },
+        {
+          "atMs": 900,
+          "kind": "system",
+          "label": "Payment provider declines the payment",
+          "system": {
+            "source": "Payment provider webhook",
+            "endpoint": "POST /webhooks/payments",
+            "eventType": "payment.declined",
+            "payload": {
+              "type": "payment.declined",
+              "data": {
+                "paymentId": "pay_fixture_0008",
+                "status": "declined"
+              }
+            },
+            "responseStatus": 200
+          }
+        },
+        {
+          "atMs": 1300,
+          "kind": "notification",
+          "label": "Payment declined",
+          "notification": {
+            "channel": "in-app",
+            "title": "Payment declined",
+            "body": "Try another way to pay."
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Told the payment was declined"
+        }
+      ],
+      "reason": "Expected \"Told the payment was declined\", the app looks like none of the known screens",
+      "reachedBy": [
+        "journey-3"
+      ]
+    },
+    "Waiting for the payment :: Payment takes longer than a minute": {
+      "id": "Waiting for the payment :: Payment takes longer than a minute",
+      "source": "Waiting for the payment",
+      "target": "Told the payment is slow",
+      "event": "Payment takes longer than a minute",
+      "kind": "time",
+      "how": "The test clock jumps forward; nothing in the app is touched.",
+      "status": "flaky",
+      "clip": {
+        "video": "media/clips/journey-1/04.mp4",
+        "poster": "media/clips/journey-1/04.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/009.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 300,
+          "kind": "time",
+          "label": "Payment takes longer than a minute",
+          "time": {
+            "from": "2026-10-06T22:40:00.000Z",
+            "to": "2026-10-06T22:41:10.000Z",
+            "fired": [
+              {
+                "at": "2026-10-06T22:41:10.000Z",
+                "label": "Payment status check runs"
+              }
+            ]
+          }
+        },
+        {
+          "atMs": 1100,
+          "kind": "notification",
+          "label": "Still waiting on your payment",
+          "notification": {
+            "channel": "in-app",
+            "title": "Still waiting on your payment",
+            "body": "This can take a little longer."
+          }
+        },
+        {
+          "atMs": 1900,
+          "kind": "screen",
+          "label": "Now: Told the payment is slow"
+        }
+      ],
+      "reason": "The clock jump landed before the payment check started; passed on retry",
+      "reachedBy": [
+        "journey-4"
+      ]
+    },
+    "Told the payment is slow :: Checks the payment again": {
+      "id": "Told the payment is slow :: Checks the payment again",
+      "source": "Told the payment is slow",
+      "target": "Waiting for the payment",
+      "event": "Checks the payment again",
+      "kind": "user",
+      "how": "The user checks the payment again in the app.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/01.mp4",
+        "poster": "media/clips/journey-1/01.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/010.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 700,
+          "kind": "tap",
+          "label": "Check the payment again",
+          "x": 244,
+          "y": 621
+        },
+        {
+          "atMs": 2100,
+          "kind": "screen",
+          "label": "Now: Waiting for the payment"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-4"
+      ]
+    },
+    "Told the payment was declined :: Tries another way to pay": {
+      "id": "Told the payment was declined :: Tries another way to pay",
+      "source": "Told the payment was declined",
+      "target": "Choosing how to pay",
+      "event": "Tries another way to pay",
+      "kind": "user",
+      "how": null,
+      "status": "not-reached",
+      "clip": null,
+      "timeline": [],
+      "reason": "No path reached it.",
+      "reachedBy": []
+    },
+    "Paid :: Payment goes through": {
+      "id": "Paid :: Payment goes through",
+      "source": "Paid",
+      "target": "Order in progress",
+      "event": "Payment goes through",
+      "kind": "hand-off",
+      "how": "The child chart reached an end, so the parent chart moves on.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/011.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 200,
+          "kind": "note",
+          "label": "Checkout is done and hands back with \"Payment goes through\""
+        },
+        {
+          "atMs": 700,
+          "kind": "screen",
+          "label": "Now: Order in progress"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-1",
+        "journey-2",
+        "journey-4",
+        "journey-6",
+        "journey-7"
+      ]
+    },
+    "Checkout abandoned :: Leaves checkout": {
+      "id": "Checkout abandoned :: Leaves checkout",
+      "source": "Checkout abandoned",
+      "target": "Reviewing the cart",
+      "event": "Leaves checkout",
+      "kind": "hand-off",
+      "how": "The child chart reached an end, so the parent chart moves on.",
+      "status": "passed",
+      "clip": {
+        "video": "media/clips/journey-1/03.mp4",
+        "poster": "media/clips/journey-1/03.poster.webp",
+        "durationMs": 2500,
+        "captions": "media/captions/012.vtt"
+      },
+      "timeline": [
+        {
+          "atMs": 200,
+          "kind": "note",
+          "label": "Checkout is done and hands back with \"Leaves checkout\""
+        },
+        {
+          "atMs": 700,
+          "kind": "screen",
+          "label": "Now: Reviewing the cart"
+        }
+      ],
+      "reason": null,
+      "reachedBy": [
+        "journey-5"
+      ]
+    }
+  },
+  "paths": [
+    {
+      "id": "journey-1",
+      "name": "Orders a drink and pays by card",
+      "kind": "journey",
+      "description": "The everyday order, from the menu to picking the drink up.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks card",
+          "event": "Picks card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Entering card details :: Submits the card",
+          "event": "Submits the card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-2",
+      "name": "Pays with a wallet",
+      "kind": "journey",
+      "description": "The wallet confirms the payment instead of a card.",
+      "status": "flaky",
+      "attempts": [
+        {
+          "status": "failed",
+          "error": "Timed out waiting for \"Confirming with the wallet\" on the first attempt",
+          "stoppedAt": null,
+          "trace": null
+        },
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks wallet",
+          "event": "Picks wallet",
+          "status": "flaky",
+          "reason": "Timed out waiting for \"Confirming with the wallet\" on the first attempt"
+        },
+        {
+          "transition": "Confirming with the wallet :: Confirms with the wallet",
+          "event": "Confirms with the wallet",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-3",
+      "name": "Card declined, then a wallet works",
+      "kind": "journey",
+      "description": "The card is declined and the wallet goes through.",
+      "status": "failed",
+      "attempts": [
+        {
+          "status": "failed",
+          "error": "Expected \"Told the payment was declined\", the app looks like none of the known screens",
+          "stoppedAt": "Told the payment was declined",
+          "trace": null
+        },
+        {
+          "status": "failed",
+          "error": "Expected \"Told the payment was declined\", the app looks like none of the known screens",
+          "stoppedAt": "Told the payment was declined",
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks card",
+          "event": "Picks card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Entering card details :: Submits the card",
+          "event": "Submits the card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider declines the payment",
+          "event": "Payment provider declines the payment",
+          "status": "failed",
+          "reason": "Expected \"Told the payment was declined\", the app looks like none of the known screens"
+        },
+        {
+          "transition": "Told the payment was declined :: Tries another way to pay",
+          "event": "Tries another way to pay",
+          "status": "not-reached",
+          "reason": "Not reached: the path stopped at \"Told the payment was declined\"."
+        },
+        {
+          "transition": "Choosing how to pay :: Picks wallet",
+          "event": "Picks wallet",
+          "status": "not-reached",
+          "reason": "Not reached: the path stopped at \"Told the payment was declined\"."
+        },
+        {
+          "transition": "Confirming with the wallet :: Confirms with the wallet",
+          "event": "Confirms with the wallet",
+          "status": "not-reached",
+          "reason": "Not reached: the path stopped at \"Told the payment was declined\"."
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "not-reached",
+          "reason": "Not reached: the path stopped at \"Told the payment was declined\"."
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "not-reached",
+          "reason": "Not reached: the path stopped at \"Told the payment was declined\"."
+        }
+      ],
+      "stoppedAt": "Told the payment was declined"
+    },
+    {
+      "id": "journey-4",
+      "name": "Slow payment",
+      "kind": "journey",
+      "description": "The payment provider takes more than a minute to answer.",
+      "status": "flaky",
+      "attempts": [
+        {
+          "status": "failed",
+          "error": "The clock jump landed before the payment check started; passed on retry",
+          "stoppedAt": null,
+          "trace": null
+        },
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks card",
+          "event": "Picks card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Entering card details :: Submits the card",
+          "event": "Submits the card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment takes longer than a minute",
+          "event": "Payment takes longer than a minute",
+          "status": "flaky",
+          "reason": "The clock jump landed before the payment check started; passed on retry"
+        },
+        {
+          "transition": "Told the payment is slow :: Checks the payment again",
+          "event": "Checks the payment again",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-5",
+      "name": "Leaves checkout and comes back",
+      "kind": "journey",
+      "description": "The customer closes checkout, then starts it again.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Closes checkout",
+          "event": "Closes checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Checkout abandoned :: Leaves checkout",
+          "event": "Leaves checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-6",
+      "name": "Drink left too long",
+      "kind": "journey",
+      "description": "Nobody picks the drink up, so it is thrown away and refunded.",
+      "status": "passed",
+      "attempts": [
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks card",
+          "event": "Picks card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Entering card details :: Submits the card",
+          "event": "Submits the card",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    },
+    {
+      "id": "journey-7",
+      "name": "Turns off updates while waiting",
+      "kind": "journey",
+      "description": "Updates go off while the drink is in the queue; the drink is still made.",
+      "status": "flaky",
+      "attempts": [
+        {
+          "status": "failed",
+          "error": "Timed out waiting for \"Confirming with the wallet\" on the first attempt",
+          "stoppedAt": null,
+          "trace": null
+        },
+        {
+          "status": "passed",
+          "error": null,
+          "stoppedAt": null,
+          "trace": null
+        }
+      ],
+      "steps": [
+        {
+          "transition": "Reviewing the cart :: Starts checkout",
+          "event": "Starts checkout",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Choosing how to pay :: Picks wallet",
+          "event": "Picks wallet",
+          "status": "flaky",
+          "reason": "Timed out waiting for \"Confirming with the wallet\" on the first attempt"
+        },
+        {
+          "transition": "Confirming with the wallet :: Confirms with the wallet",
+          "event": "Confirms with the wallet",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Waiting for the payment :: Payment provider approves the payment",
+          "event": "Payment provider approves the payment",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "transition": "Paid :: Payment goes through",
+          "event": "Payment goes through",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "stoppedAt": null
+    }
+  ],
+  "coverage": {
+    "Coffee order": {
+      "states": {
+        "total": 3,
+        "passed": 3,
+        "failed": 0,
+        "flaky": 0,
+        "notReached": 0
+      },
+      "transitions": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "flaky": 0,
+        "notReached": 0
+      }
+    },
+    "Checkout": {
+      "states": {
+        "total": 8,
+        "passed": 7,
+        "failed": 1,
+        "flaky": 0,
+        "notReached": 0
+      },
+      "transitions": {
+        "total": 14,
+        "passed": 8,
+        "failed": 1,
+        "flaky": 2,
+        "notReached": 3
+      }
+    },
+    "overall": {
+      "states": {
+        "total": 11,
+        "passed": 10,
+        "failed": 1,
+        "flaky": 0,
+        "notReached": 0
+      },
+      "transitions": {
+        "total": 15,
+        "passed": 9,
+        "failed": 1,
+        "flaky": 2,
+        "notReached": 3
+      }
+    }
+  },
+  "privacy": {
+    "passed": true,
+    "findings": []
+  },
+  "reports": {
+    "junit": "junit.xml",
+    "ctrf": "ctrf.json",
+    "mermaid": "chart.mmd"
+  }
+}

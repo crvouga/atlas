@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:atlas="https://github.com/crvouga/atlas/ns/1" version="1.0" name="Refund handling" datamodel="null" initial="handling-the-refund-request">
+  <atlas:meta>
+    <atlas:description>The refund handling, a step inside invoices and payments.</atlas:description>
+    <atlas:snapshot>refund-handling</atlas:snapshot>
+    <atlas:confidence>confirmed</atlas:confidence>
+  </atlas:meta>
+  <state id="handling-the-refund-request" atlas:name="Handling the refund request" initial="reviewing-the-refund-request">
+    <atlas:meta>
+      <atlas:description>Everything about the refund request, from review to approval.</atlas:description>
+      <atlas:snapshot>handling-the-refund-request</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/handling-the-refund-request.tsx</atlas:source>
+      <atlas:owner>Billing team</atlas:owner>
+    </atlas:meta>
+    <state id="reviewing-the-refund-request" atlas:name="Reviewing the refund request">
+      <atlas:meta>
+        <atlas:description>The user checks the refund request before sending it.</atlas:description>
+        <atlas:snapshot>reviewing-the-refund-request</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/reviewing-the-refund-request.tsx</atlas:source>
+        <atlas:gherkin>[&quot;features/billing/invoices/refund-request.feature&quot;]</atlas:gherkin>
+      </atlas:meta>
+      <transition event="taps-edit-on-the-refund-request" target="editing-the-refund-request" atlas:name="Taps edit on the refund request"/>
+      <transition event="submits-the-refund-request" target="waiting-for-the-refund-request-to-be-approved" atlas:name="Submits the refund request"/>
+      <transition event="closes-the-refund-handling" target="refund-handling-abandoned" atlas:name="Closes the refund handling"/>
+    </state>
+    <state id="editing-the-refund-request" atlas:name="Editing the refund request" initial="editing-the-refund-request-details">
+      <atlas:meta>
+        <atlas:description>The user changes the refund request, with an optional file.</atlas:description>
+        <atlas:snapshot>editing-the-refund-request</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/editing-the-refund-request.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="saves-the-refund-request" target="reviewing-the-refund-request" atlas:name="Saves the refund request"/>
+      <transition event="cancels-the-changes-to-the-refund-request" target="reviewing-the-refund-request" atlas:name="Cancels the changes to the refund request"/>
+      <transition event="saving-the-refund-request-fails" target="told-the-refund-request-could-not-be-saved" atlas:name="Saving the refund request fails"/>
+      <state id="editing-the-refund-request-details" atlas:name="Editing the refund request details">
+        <atlas:meta>
+          <atlas:description>A form with the refund request fields.</atlas:description>
+          <atlas:snapshot>editing-the-refund-request-details</atlas:snapshot>
+          <atlas:confidence>confirmed</atlas:confidence>
+          <atlas:source>src/screens/editing-the-refund-request-details.tsx</atlas:source>
+          <atlas:hints>[&quot;A text field per detail&quot;,&quot;An \&quot;Upload a file\&quot; link&quot;]</atlas:hints>
+        </atlas:meta>
+        <transition event="uploads-a-file" target="uploading-a-file-for-the-refund-request" atlas:name="Uploads a file"/>
+      </state>
+      <state id="uploading-a-file-for-the-refund-request" atlas:name="Uploading a file for the refund request">
+        <atlas:meta>
+          <atlas:description>A file picker for a document about the refund request.</atlas:description>
+          <atlas:snapshot>uploading-a-file-for-the-refund-request</atlas:snapshot>
+          <atlas:confidence>confirmed</atlas:confidence>
+          <atlas:source>src/screens/uploading-a-file-for-the-refund-request.tsx</atlas:source>
+        </atlas:meta>
+        <transition event="finishes-uploading-the-file" target="editing-the-refund-request-details" atlas:name="Finishes uploading the file"/>
+      </state>
+    </state>
+    <state id="told-the-refund-request-could-not-be-saved" atlas:name="Told the refund request could not be saved">
+      <atlas:meta>
+        <atlas:description>A message says the refund request could not be saved, with &quot;Try again&quot;.</atlas:description>
+        <atlas:snapshot>told-the-refund-request-could-not-be-saved</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-request-could-not-be-saved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="tries-saving-the-refund-request-again" target="editing-the-refund-request" atlas:name="Tries saving the refund request again"/>
+    </state>
+    <state id="waiting-for-the-refund-request-to-be-approved" atlas:name="Waiting for the refund request to be approved">
+      <atlas:meta>
+        <atlas:description>A card says the refund request is being checked.</atlas:description>
+        <atlas:snapshot>waiting-for-the-refund-request-to-be-approved</atlas:snapshot>
+        <atlas:event>Refund request submitted</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/waiting-for-the-refund-request-to-be-approved.tsx</atlas:source>
+        <atlas:tier>critical</atlas:tier>
+      </atlas:meta>
+      <transition event="billing-service-approves-the-refund-request" target="told-the-refund-request-was-approved" atlas:name="Billing service approves the refund request"/>
+      <transition event="billing-service-rejects-the-refund-request" target="told-the-refund-request-was-rejected" atlas:name="Billing service rejects the refund request"/>
+      <transition event="approval-of-the-refund-request-takes-longer-than-a-day" target="told-the-refund-request-is-still-under-review" atlas:name="Approval of the refund request takes longer than a day"/>
+    </state>
+    <state id="told-the-refund-request-is-still-under-review" atlas:name="Told the refund request is still under review">
+      <atlas:meta>
+        <atlas:description>A card says the refund request is still being checked.</atlas:description>
+        <atlas:snapshot>told-the-refund-request-is-still-under-review</atlas:snapshot>
+        <atlas:confidence>assumed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-request-is-still-under-review.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="checks-the-refund-request-again" target="waiting-for-the-refund-request-to-be-approved" atlas:name="Checks the refund request again"/>
+    </state>
+    <state id="told-the-refund-request-was-rejected" atlas:name="Told the refund request was rejected">
+      <atlas:meta>
+        <atlas:description>A message explains why the refund request was not accepted.</atlas:description>
+        <atlas:snapshot>told-the-refund-request-was-rejected</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-request-was-rejected.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="starts-the-refund-request-again" target="reviewing-the-refund-request" atlas:name="Starts the refund request again"/>
+    </state>
+    <state id="told-the-refund-request-was-approved" atlas:name="Told the refund request was approved">
+      <atlas:meta>
+        <atlas:description>A message confirms the refund request is approved.</atlas:description>
+        <atlas:snapshot>told-the-refund-request-was-approved</atlas:snapshot>
+        <atlas:event>Refund request approved</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-request-was-approved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="continues-to-the-refund-approval" target="handling-the-refund-approval" atlas:name="Continues to the refund approval"/>
+    </state>
+  </state>
+  <state id="handling-the-refund-approval" atlas:name="Handling the refund approval" initial="reviewing-the-refund-approval">
+    <atlas:meta>
+      <atlas:description>Everything about the refund approval, from review to approval.</atlas:description>
+      <atlas:snapshot>handling-the-refund-approval</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/handling-the-refund-approval.tsx</atlas:source>
+      <atlas:owner>Billing team</atlas:owner>
+    </atlas:meta>
+    <state id="reviewing-the-refund-approval" atlas:name="Reviewing the refund approval">
+      <atlas:meta>
+        <atlas:description>The user checks the refund approval before sending it.</atlas:description>
+        <atlas:snapshot>reviewing-the-refund-approval</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/reviewing-the-refund-approval.tsx</atlas:source>
+        <atlas:gherkin>[&quot;features/billing/invoices/refund-approval.feature&quot;]</atlas:gherkin>
+      </atlas:meta>
+      <transition event="taps-edit-on-the-refund-approval" target="editing-the-refund-approval" atlas:name="Taps edit on the refund approval"/>
+      <transition event="submits-the-refund-approval" target="waiting-for-the-refund-approval-to-be-approved" atlas:name="Submits the refund approval"/>
+    </state>
+    <state id="editing-the-refund-approval" atlas:name="Editing the refund approval">
+      <atlas:meta>
+        <atlas:description>A form to change the refund approval.</atlas:description>
+        <atlas:snapshot>editing-the-refund-approval</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/editing-the-refund-approval.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="saves-the-refund-approval" target="reviewing-the-refund-approval" atlas:name="Saves the refund approval"/>
+      <transition event="cancels-the-changes-to-the-refund-approval" target="reviewing-the-refund-approval" atlas:name="Cancels the changes to the refund approval"/>
+      <transition event="saving-the-refund-approval-fails" target="told-the-refund-approval-could-not-be-saved" atlas:name="Saving the refund approval fails"/>
+    </state>
+    <state id="told-the-refund-approval-could-not-be-saved" atlas:name="Told the refund approval could not be saved">
+      <atlas:meta>
+        <atlas:description>A message says the refund approval could not be saved, with &quot;Try again&quot;.</atlas:description>
+        <atlas:snapshot>told-the-refund-approval-could-not-be-saved</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-approval-could-not-be-saved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="tries-saving-the-refund-approval-again" target="editing-the-refund-approval" atlas:name="Tries saving the refund approval again"/>
+    </state>
+    <state id="waiting-for-the-refund-approval-to-be-approved" atlas:name="Waiting for the refund approval to be approved">
+      <atlas:meta>
+        <atlas:description>A card says the refund approval is being checked.</atlas:description>
+        <atlas:snapshot>waiting-for-the-refund-approval-to-be-approved</atlas:snapshot>
+        <atlas:event>Refund approval submitted</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/waiting-for-the-refund-approval-to-be-approved.tsx</atlas:source>
+        <atlas:tier>critical</atlas:tier>
+      </atlas:meta>
+      <transition event="billing-service-approves-the-refund-approval" target="told-the-refund-approval-was-approved" atlas:name="Billing service approves the refund approval"/>
+      <transition event="billing-service-rejects-the-refund-approval" target="told-the-refund-approval-was-rejected" atlas:name="Billing service rejects the refund approval"/>
+      <transition event="approval-of-the-refund-approval-takes-longer-than-a-day" target="told-the-refund-approval-is-still-under-review" atlas:name="Approval of the refund approval takes longer than a day"/>
+    </state>
+    <state id="told-the-refund-approval-is-still-under-review" atlas:name="Told the refund approval is still under review">
+      <atlas:meta>
+        <atlas:description>A card says the refund approval is still being checked.</atlas:description>
+        <atlas:snapshot>told-the-refund-approval-is-still-under-review</atlas:snapshot>
+        <atlas:confidence>assumed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-approval-is-still-under-review.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="checks-the-refund-approval-again" target="waiting-for-the-refund-approval-to-be-approved" atlas:name="Checks the refund approval again"/>
+    </state>
+    <state id="told-the-refund-approval-was-rejected" atlas:name="Told the refund approval was rejected">
+      <atlas:meta>
+        <atlas:description>A message explains why the refund approval was not accepted.</atlas:description>
+        <atlas:snapshot>told-the-refund-approval-was-rejected</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-approval-was-rejected.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="starts-the-refund-approval-again" target="reviewing-the-refund-approval" atlas:name="Starts the refund approval again"/>
+    </state>
+    <state id="told-the-refund-approval-was-approved" atlas:name="Told the refund approval was approved">
+      <atlas:meta>
+        <atlas:description>A message confirms the refund approval is approved.</atlas:description>
+        <atlas:snapshot>told-the-refund-approval-was-approved</atlas:snapshot>
+        <atlas:event>Refund approval approved</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-approval-was-approved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="continues-to-the-refund-transfer" target="handling-the-refund-transfer" atlas:name="Continues to the refund transfer"/>
+    </state>
+  </state>
+  <state id="handling-the-refund-transfer" atlas:name="Handling the refund transfer" initial="reviewing-the-refund-transfer">
+    <atlas:meta>
+      <atlas:description>Everything about the refund transfer, from review to approval.</atlas:description>
+      <atlas:snapshot>handling-the-refund-transfer</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/handling-the-refund-transfer.tsx</atlas:source>
+      <atlas:owner>Billing team</atlas:owner>
+    </atlas:meta>
+    <state id="reviewing-the-refund-transfer" atlas:name="Reviewing the refund transfer">
+      <atlas:meta>
+        <atlas:description>The user checks the refund transfer before sending it.</atlas:description>
+        <atlas:snapshot>reviewing-the-refund-transfer</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/reviewing-the-refund-transfer.tsx</atlas:source>
+        <atlas:gherkin>[&quot;features/billing/invoices/refund-transfer.feature&quot;]</atlas:gherkin>
+      </atlas:meta>
+      <transition event="taps-edit-on-the-refund-transfer" target="editing-the-refund-transfer" atlas:name="Taps edit on the refund transfer"/>
+      <transition event="submits-the-refund-transfer" target="waiting-for-the-refund-transfer-to-be-approved" atlas:name="Submits the refund transfer"/>
+    </state>
+    <state id="editing-the-refund-transfer" atlas:name="Editing the refund transfer">
+      <atlas:meta>
+        <atlas:description>A form to change the refund transfer.</atlas:description>
+        <atlas:snapshot>editing-the-refund-transfer</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/editing-the-refund-transfer.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="saves-the-refund-transfer" target="reviewing-the-refund-transfer" atlas:name="Saves the refund transfer"/>
+      <transition event="cancels-the-changes-to-the-refund-transfer" target="reviewing-the-refund-transfer" atlas:name="Cancels the changes to the refund transfer"/>
+      <transition event="saving-the-refund-transfer-fails" target="told-the-refund-transfer-could-not-be-saved" atlas:name="Saving the refund transfer fails"/>
+    </state>
+    <state id="told-the-refund-transfer-could-not-be-saved" atlas:name="Told the refund transfer could not be saved">
+      <atlas:meta>
+        <atlas:description>A message says the refund transfer could not be saved, with &quot;Try again&quot;.</atlas:description>
+        <atlas:snapshot>told-the-refund-transfer-could-not-be-saved</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-transfer-could-not-be-saved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="tries-saving-the-refund-transfer-again" target="editing-the-refund-transfer" atlas:name="Tries saving the refund transfer again"/>
+    </state>
+    <state id="waiting-for-the-refund-transfer-to-be-approved" atlas:name="Waiting for the refund transfer to be approved">
+      <atlas:meta>
+        <atlas:description>A card says the refund transfer is being checked.</atlas:description>
+        <atlas:snapshot>waiting-for-the-refund-transfer-to-be-approved</atlas:snapshot>
+        <atlas:event>Refund transfer submitted</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/waiting-for-the-refund-transfer-to-be-approved.tsx</atlas:source>
+        <atlas:tier>critical</atlas:tier>
+      </atlas:meta>
+      <transition event="billing-service-approves-the-refund-transfer" target="told-the-refund-transfer-was-approved" atlas:name="Billing service approves the refund transfer"/>
+      <transition event="billing-service-rejects-the-refund-transfer" target="told-the-refund-transfer-was-rejected" atlas:name="Billing service rejects the refund transfer"/>
+      <transition event="approval-of-the-refund-transfer-takes-longer-than-a-day" target="told-the-refund-transfer-is-still-under-review" atlas:name="Approval of the refund transfer takes longer than a day"/>
+    </state>
+    <state id="told-the-refund-transfer-is-still-under-review" atlas:name="Told the refund transfer is still under review">
+      <atlas:meta>
+        <atlas:description>A card says the refund transfer is still being checked.</atlas:description>
+        <atlas:snapshot>told-the-refund-transfer-is-still-under-review</atlas:snapshot>
+        <atlas:confidence>assumed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-transfer-is-still-under-review.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="checks-the-refund-transfer-again" target="waiting-for-the-refund-transfer-to-be-approved" atlas:name="Checks the refund transfer again"/>
+    </state>
+    <state id="told-the-refund-transfer-was-rejected" atlas:name="Told the refund transfer was rejected">
+      <atlas:meta>
+        <atlas:description>A message explains why the refund transfer was not accepted.</atlas:description>
+        <atlas:snapshot>told-the-refund-transfer-was-rejected</atlas:snapshot>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-transfer-was-rejected.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="starts-the-refund-transfer-again" target="reviewing-the-refund-transfer" atlas:name="Starts the refund transfer again"/>
+    </state>
+    <state id="told-the-refund-transfer-was-approved" atlas:name="Told the refund transfer was approved">
+      <atlas:meta>
+        <atlas:description>A message confirms the refund transfer is approved.</atlas:description>
+        <atlas:snapshot>told-the-refund-transfer-was-approved</atlas:snapshot>
+        <atlas:event>Refund transfer approved</atlas:event>
+        <atlas:confidence>confirmed</atlas:confidence>
+        <atlas:source>src/screens/told-the-refund-transfer-was-approved.tsx</atlas:source>
+      </atlas:meta>
+      <transition event="finishes-the-refund-handling" target="refund-handling-completed" atlas:name="Finishes the refund handling"/>
+    </state>
+  </state>
+  <final id="refund-handling-completed" atlas:name="Refund handling completed" atlas:done-event="Refund handling is completed">
+    <atlas:meta>
+      <atlas:description>The refund handling is done.</atlas:description>
+      <atlas:snapshot>refund-handling-completed</atlas:snapshot>
+      <atlas:event>Refund handling completed</atlas:event>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/refund-handling-completed.tsx</atlas:source>
+    </atlas:meta>
+  </final>
+  <final id="refund-handling-abandoned" atlas:name="Refund handling abandoned" atlas:done-event="Refund handling is abandoned">
+    <atlas:meta>
+      <atlas:description>The user left the refund handling before the end.</atlas:description>
+      <atlas:snapshot>refund-handling-abandoned</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+      <atlas:source>src/screens/refund-handling-abandoned.tsx</atlas:source>
+    </atlas:meta>
+  </final>
+</scxml>

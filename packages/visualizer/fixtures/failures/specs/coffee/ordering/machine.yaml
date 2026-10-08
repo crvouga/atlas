@@ -1,0 +1,158 @@
+# The root chart: XState v5 machine config, as Stately Studio imports and exports it.
+# "Checking out" runs the Checkout chart (checkout.scxml) with a standard invoke.
+id: Coffee order
+initial: Browsing the menu
+meta:
+  description: A customer picks a drink, pays for it, and picks it up when it is ready.
+  timeEvents:
+    Drink sits ready for ten minutes: 10 minutes
+  eventKinds:
+    Barista starts the drink: system
+states:
+  Browsing the menu:
+    meta:
+      description: The menu of drinks, with a cart button.
+      snapshot: menu
+      confidence: confirmed
+      hints:
+        - A list of drinks with prices
+        - A cart button with the number of drinks
+      source:
+        - src/screens/menu.tsx
+    on:
+      Picks a drink:
+        target: '#Customizing the drink'
+  Customizing the drink:
+    initial: Choosing a size
+    meta:
+      description: The customer sets the drink up before adding it to the cart.
+    states:
+      Choosing a size:
+        meta:
+          description: Small, medium and large buttons.
+          snapshot: size
+          confidence: confirmed
+        on:
+          Picks a size:
+            target: '#Choosing the milk'
+      Choosing the milk:
+        meta:
+          description: A list of milks, with "No milk" first.
+          snapshot: milk
+          confidence: confirmed
+        on:
+          Picks a milk:
+            target: '#Ready to add the drink'
+      Ready to add the drink:
+        meta:
+          description: A summary of the drink with an "Add to cart" button.
+          snapshot: drink-summary
+          confidence: confirmed
+          checks:
+            - The summary shows the size and the milk
+        on:
+          Adds the drink to the cart:
+            target: '#Reviewing the cart'
+    on:
+      Goes back to the menu:
+        target: '#Browsing the menu'
+  Reviewing the cart:
+    meta:
+      description: The drinks in the cart, the total, and a checkout button.
+      snapshot: cart
+      confidence: confirmed
+      checks:
+        - The total matches the drinks in the cart
+    on:
+      Removes the last drink:
+        target: '#Browsing the menu'
+      Starts checkout:
+        target: '#Checking out'
+  Checking out:
+    meta:
+      description: Checkout runs as its own chart.
+    invoke:
+      src: Checkout
+      id: checkout
+    on:
+      Payment goes through:
+        target: '#Order in progress'
+      Leaves checkout:
+        target: '#Reviewing the cart'
+  Order in progress:
+    type: parallel
+    meta:
+      description: The drink is made while the customer chooses how to hear about it.
+    states:
+      Drink:
+        initial: Paid, waiting for the barista
+        meta:
+          description: Where the drink is.
+        states:
+          Paid, waiting for the barista:
+            meta:
+              description: A card says the order is paid and in the queue.
+              snapshot: order-queued
+              confidence: confirmed
+              events:
+                - Order paid
+            on:
+              Barista starts the drink:
+                target: '#Drink being made'
+          Drink being made:
+            meta:
+              description: A progress bar while the barista makes the drink.
+              snapshot: order-making
+              confidence: assumed
+            on:
+              Barista finishes the drink:
+                target: '#Drink ready for pickup'
+          Drink ready for pickup:
+            meta:
+              description: A card says the drink is ready, with the pickup counter.
+              snapshot: order-ready
+              confidence: confirmed
+              events:
+                - Customer notified
+            on:
+              Picks up the drink:
+                target: '#Order complete'
+              Drink sits ready for ten minutes:
+                target: '#Told the drink was thrown away'
+      Updates:
+        initial: Updates on
+        meta:
+          description: Whether the customer gets a notification at each step.
+        states:
+          Updates on:
+            meta:
+              description: The updates switch is on.
+              snapshot: updates-on
+            on:
+              Turns off updates:
+                target: '#Updates off'
+          Updates off:
+            meta:
+              description: The updates switch is off.
+              snapshot: updates-off
+            on:
+              Turns on updates:
+                target: '#Updates on'
+  Told the drink was thrown away:
+    meta:
+      description: A message says the drink waited too long and was refunded.
+      snapshot: order-expired
+      confidence: assumed
+      events:
+        - Order refunded
+    on:
+      Orders again:
+        target: '#Browsing the menu'
+  Order complete:
+    type: final
+    meta:
+      description: A thank-you screen with the receipt.
+      snapshot: order-complete
+      confidence: confirmed
+      events:
+        - Order completed

@@ -1,0 +1,120 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/timeline-entry.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "atMs": {
+      "description": "Milliseconds from the start of the clip",
+      "type": "number",
+      "minimum": 0
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "tap",
+        "type",
+        "system",
+        "screen",
+        "toast",
+        "note",
+        "time",
+        "notification"
+      ]
+    },
+    "label": {
+      "type": "string"
+    },
+    "x": {
+      "description": "Tap position in CSS pixels",
+      "type": "number"
+    },
+    "y": {
+      "type": "number"
+    },
+    "text": {
+      "description": "What was typed",
+      "type": "string"
+    },
+    "system": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "eventType": {
+          "type": "string"
+        },
+        "payload": {},
+        "responseStatus": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "response": {
+          "description": "Proposed: the response body"
+        }
+      }
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "fired": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "label"
+            ]
+          }
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ]
+    },
+    "notification": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "push",
+            "email",
+            "sms",
+            "in-app"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "atMs",
+    "kind",
+    "label"
+  ]
+}

@@ -1,0 +1,120 @@
+journeys:
+  Happy path through order checkout:
+    description: Everything is approved the first time, through the payment and settings.
+    events:
+      - Submits the shopping cart
+      - Payment processor approves the shopping cart
+      - Continues to the delivery address
+      - Submits the delivery address
+      - Payment processor approves the delivery address
+      - Starts the payment
+      - Submits the payment details
+      - Payment processor approves the payment details
+      - Continues to the payment authorization
+      - Submits the payment authorization
+      - Payment processor approves the payment authorization
+      - Continues to the payment receipt
+      - Submits the payment receipt
+      - Payment processor approves the payment receipt
+      - Finishes the payment
+      - Submits the payment method
+      - Payment processor approves the payment method
+      - Continues to the promo code
+      - Submits the promo code
+      - Payment processor approves the promo code
+      - Continues to the gift message
+      - Submits the gift message
+      - Payment processor approves the gift message
+      - Continues to the order checkout settings
+      - Closes the order checkout settings
+    endsIn:
+      - Order checkout finished
+    owner: Orders team
+    tour: true
+  Edits the shopping cart with a file:
+    description: The user edits the shopping cart, uploads a file, then sends it.
+    events:
+      - Taps edit on the shopping cart
+      - Uploads a file
+      - Finishes uploading the file
+      - Saves the shopping cart
+      - Submits the shopping cart
+      - Payment processor approves the shopping cart
+    endsIn:
+      - Told the shopping cart was approved
+  Saving the shopping cart fails, then works:
+    description: The first save fails and the retry works.
+    events:
+      - Taps edit on the shopping cart
+      - Saving the shopping cart fails
+      - Tries saving the shopping cart again
+      - Saves the shopping cart
+    endsIn:
+      - Reviewing the shopping cart
+  Slow approval of the delivery address:
+    description: Approval of the delivery address takes more than a day.
+    events:
+      - Submits the shopping cart
+      - Payment processor approves the shopping cart
+      - Continues to the delivery address
+      - Submits the delivery address
+      - Approval of the delivery address takes longer than a day
+      - Checks the delivery address again
+      - Payment processor approves the delivery address
+    endsIn:
+      - Told the delivery address was approved
+  Shopping cart rejected, then approved:
+    description: The shopping cart is rejected once, then approved.
+    events:
+      - Submits the shopping cart
+      - Payment processor rejects the shopping cart
+      - Starts the shopping cart again
+      - Submits the shopping cart
+      - Payment processor approves the shopping cart
+    endsIn:
+      - Told the shopping cart was approved
+  Leaves the payment early:
+    description: The user closes the payment right away and goes back a step.
+    events:
+      - Submits the shopping cart
+      - Payment processor approves the shopping cart
+      - Continues to the delivery address
+      - Submits the delivery address
+      - Payment processor approves the delivery address
+      - Starts the payment
+      - Closes the payment
+    endsIn:
+      - Reviewing the delivery address
+  Changes order checkout settings:
+    description: Notifications off, then a help request that gets answered.
+    events:
+      - Submits the shopping cart
+      - Payment processor approves the shopping cart
+      - Continues to the delivery address
+      - Submits the delivery address
+      - Payment processor approves the delivery address
+      - Starts the payment
+      - Submits the payment details
+      - Payment processor approves the payment details
+      - Continues to the payment authorization
+      - Submits the payment authorization
+      - Payment processor approves the payment authorization
+      - Continues to the payment receipt
+      - Submits the payment receipt
+      - Payment processor approves the payment receipt
+      - Finishes the payment
+      - Submits the payment method
+      - Payment processor approves the payment method
+      - Continues to the promo code
+      - Submits the promo code
+      - Payment processor approves the promo code
+      - Continues to the gift message
+      - Submits the gift message
+      - Payment processor approves the gift message
+      - Continues to the order checkout settings
+      - Turns off order checkout notifications
+      - Opens a order checkout help request
+      - Help desk answers the order checkout help request
+    endsIn:
+      - Order checkout notifications off
+      - Order checkout help request answered

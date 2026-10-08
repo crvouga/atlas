@@ -1,0 +1,17 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/journeys.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "journeys": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "journeys"
+  ]
+}

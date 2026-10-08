@@ -1,0 +1,132 @@
+journeys:
+  Happy path through deliveries:
+    description: Everything is approved the first time, through the delivery scheduling and settings.
+    events:
+      - Submits the shipping label
+      - Carrier approves the shipping label
+      - Starts the delivery scheduling
+      - Submits the delivery slot
+      - Carrier approves the delivery slot
+      - Continues to the delivery reminder
+      - Submits the delivery reminder
+      - Carrier approves the delivery reminder
+      - Continues to the delivery confirmation
+      - Submits the delivery confirmation
+      - Carrier approves the delivery confirmation
+      - Finishes the delivery scheduling
+      - Submits the package contents
+      - Carrier approves the package contents
+      - Continues to the pickup window
+      - Submits the pickup window
+      - Carrier approves the pickup window
+      - Continues to the tracking number
+      - Submits the tracking number
+      - Carrier approves the tracking number
+      - Continues to the delivery instructions
+      - Submits the delivery instructions
+      - Carrier approves the delivery instructions
+      - Continues to the return label
+      - Submits the return label
+      - Carrier approves the return label
+      - Continues to the deliveries settings
+      - Closes the deliveries settings
+    endsIn:
+      - Deliveries finished
+    owner: Fulfillment team
+    tour: true
+  Edits the shipping label with a file:
+    description: The user edits the shipping label, uploads a file, then sends it.
+    events:
+      - Taps edit on the shipping label
+      - Uploads a file
+      - Finishes uploading the file
+      - Saves the shipping label
+      - Submits the shipping label
+      - Carrier approves the shipping label
+    endsIn:
+      - Told the shipping label was approved
+  Saving the shipping label fails, then works:
+    description: The first save fails and the retry works.
+    events:
+      - Taps edit on the shipping label
+      - Saving the shipping label fails
+      - Tries saving the shipping label again
+      - Saves the shipping label
+    endsIn:
+      - Reviewing the shipping label
+  Slow approval of the package contents:
+    description: Approval of the package contents takes more than a day.
+    events:
+      - Submits the shipping label
+      - Carrier approves the shipping label
+      - Starts the delivery scheduling
+      - Submits the delivery slot
+      - Carrier approves the delivery slot
+      - Continues to the delivery reminder
+      - Submits the delivery reminder
+      - Carrier approves the delivery reminder
+      - Continues to the delivery confirmation
+      - Submits the delivery confirmation
+      - Carrier approves the delivery confirmation
+      - Finishes the delivery scheduling
+      - Submits the package contents
+      - Approval of the package contents takes longer than a day
+      - Checks the package contents again
+      - Carrier approves the package contents
+    endsIn:
+      - Told the package contents was approved
+  Shipping label rejected, then approved:
+    description: The shipping label is rejected once, then approved.
+    events:
+      - Submits the shipping label
+      - Carrier rejects the shipping label
+      - Starts the shipping label again
+      - Submits the shipping label
+      - Carrier approves the shipping label
+    endsIn:
+      - Told the shipping label was approved
+  Leaves the delivery scheduling early:
+    description: The user closes the delivery scheduling right away and goes back a step.
+    events:
+      - Submits the shipping label
+      - Carrier approves the shipping label
+      - Starts the delivery scheduling
+      - Closes the delivery scheduling
+    endsIn:
+      - Reviewing the shipping label
+  Changes deliveries settings:
+    description: Notifications off, then a help request that gets answered.
+    events:
+      - Submits the shipping label
+      - Carrier approves the shipping label
+      - Starts the delivery scheduling
+      - Submits the delivery slot
+      - Carrier approves the delivery slot
+      - Continues to the delivery reminder
+      - Submits the delivery reminder
+      - Carrier approves the delivery reminder
+      - Continues to the delivery confirmation
+      - Submits the delivery confirmation
+      - Carrier approves the delivery confirmation
+      - Finishes the delivery scheduling
+      - Submits the package contents
+      - Carrier approves the package contents
+      - Continues to the pickup window
+      - Submits the pickup window
+      - Carrier approves the pickup window
+      - Continues to the tracking number
+      - Submits the tracking number
+      - Carrier approves the tracking number
+      - Continues to the delivery instructions
+      - Submits the delivery instructions
+      - Carrier approves the delivery instructions
+      - Continues to the return label
+      - Submits the return label
+      - Carrier approves the return label
+      - Continues to the deliveries settings
+      - Turns off deliveries notifications
+      - Opens a deliveries help request
+      - Help desk answers the deliveries help request
+    endsIn:
+      - Deliveries notifications off
+      - Deliveries help request answered

@@ -1,0 +1,117 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/transition-record.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "target": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "event": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "user",
+        "system",
+        "time",
+        "hand-off"
+      ]
+    },
+    "how": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "flaky",
+        "not-reached"
+      ]
+    },
+    "clip": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "video": {
+              "type": "string",
+              "minLength": 1
+            },
+            "poster": {
+              "type": "string"
+            },
+            "durationMs": {
+              "type": "number",
+              "minimum": 0
+            },
+            "captions": {
+              "description": "Proposed: a WebVTT file",
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "processing",
+                "failed"
+              ]
+            }
+          },
+          "required": [
+            "video"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "timeline": {
+      "type": "array",
+      "items": {}
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reachedBy": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "source",
+    "event",
+    "status"
+  ]
+}

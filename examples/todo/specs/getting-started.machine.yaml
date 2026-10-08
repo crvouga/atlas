@@ -1,0 +1,37 @@
+# A child chart in XState v5 machine config (the format Stately Studio imports and exports).
+# The root chart invokes it from "Setting up". Each final state names, in meta.doneEvent, the
+# event its parent receives when the person gets there.
+id: Getting started
+initial: Naming the list
+meta:
+  description: A new person names their first list, or skips and keeps the default name.
+states:
+  Naming the list:
+    meta:
+      description: The list name field is empty, so the list cannot be created yet.
+      snapshot: '"Name your list" with a disabled "Create list" button and "Skip for now".'
+      confidence: confirmed
+    on:
+      Types a list name: List name entered
+      Skips naming the list: Default list kept
+  List name entered:
+    meta:
+      description: A name is typed, so the list can be created.
+      snapshot: '"Create list" is enabled.'
+      confidence: confirmed
+    on:
+      Creates the list: List ready
+  List ready:
+    type: final
+    meta:
+      description: The list exists with the name the person chose.
+      events:
+        - List created
+      doneEvent: Setup completes
+  Default list kept:
+    type: final
+    meta:
+      description: The list exists with the default name.
+      events:
+        - List created
+      doneEvent: Setup completes with the default list
