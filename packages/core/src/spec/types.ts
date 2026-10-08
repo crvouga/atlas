@@ -10,7 +10,11 @@
  * transitions, statically resolvable child charts (`invoke` with a `src` naming another chart),
  * and `meta`. Guards, actions, context, delays and `always` are rejected by the linter.
  */
-export type TransitionConfig = { target: string };
+export type TransitionConfig = {
+  target: string;
+  /** Declarative provenance or business metadata; ignored while executing the chart. */
+  meta?: Record<string, unknown>;
+};
 
 export type InvokeConfig = {
   /** The id of another chart in the bundle; composed statically. */
