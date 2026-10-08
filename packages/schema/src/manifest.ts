@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 
-import { CountSchema, EventKindSchema, ImageSchema, RunStatusSchema } from './common';
+import { CountSchema, EventKindSchema, ImageSchema, RunStatusSchema } from './common.js';
 
 /** Manifest schema versions this package describes. Readers accept these and try newer ones. */
 export const MANIFEST_SCHEMA_VERSIONS = [1] as const;
