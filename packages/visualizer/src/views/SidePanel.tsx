@@ -25,8 +25,8 @@ function EventLink({ t, view, direction }: { t: TransitionView; view: AtlasView;
   return (
     <Link
       to="/chart/$chartId"
-      params={{ chartId: view.states.get(direction === 'in' ? (t.target ?? t.source) : t.source)?.chartId ?? t.chartId }}
-      search={(prev) => ({ run: prev.run, event: t.id, journey: prev.journey, step: prev.step })}
+      params={{ chartId: view.states.get(direction === 'in' ? t.target ?? t.source : t.source)?.chartId ?? t.chartId }}
+      search={(prev) => ({ run: prev.run, event: t.id, journey: prev.journey })}
       className={styles.eventRow}
     >
       <span className={styles.inlineChip} data-kind={t.kind} data-status={t.status}>
@@ -86,18 +86,14 @@ function Questions({ view, ids }: { view: AtlasView; ids: string[] }) {
 }
 
 function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
-  const checks = state.result?.checks.length
-    ? state.result.checks
-    : state.specChecks.map((check) => ({ check, passed: null as boolean | null, expected: undefined, actual: undefined }));
+  const checks = state.result?.checks.length ? state.result.checks : state.specChecks.map((check) => ({ check, passed: null as boolean | null, expected: undefined, actual: undefined }));
   const events = state.result?.businessEvents;
   const incoming = state.incoming.map((id) => view.transitions.get(id)).filter((t): t is TransitionView => Boolean(t) && !t!.carriedBy);
   const outgoing = state.outgoing.map((id) => view.transitions.get(id)).filter((t): t is TransitionView => Boolean(t));
   return (
     <>
       <div className={styles.panelHead}>
-        <span className={styles.eyebrow}>
-          {state.childChartId ? 'Child machine' : state.kind === 'parallel' ? 'Parallel states' : state.children.length ? 'State group' : 'Screen'}
-        </span>
+        <span className={styles.eyebrow}>Screen</span>
         <StatusBadge status={state.status} />
         {state.confidence === 'assumed' && <span className={styles.assumedBadge}>Assumed, not confirmed</span>}
         <h2 className={styles.panelTitle}>{state.name}</h2>
@@ -189,31 +185,9 @@ function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
           ['State ID', <code key="id">{state.name}</code>],
           ['Spec file', <code key="f">{state.file}</code>],
           ['Snapshot name', state.snapshot ? <code key="s">{state.snapshot}</code> : null],
-          [
-            'Sources',
-            state.sources.length ? (
-              <ul key="src">
-                {state.sources.map((s) => (
-                  <li key={s}>
-                    <code>{s}</code>
-                  </li>
-                ))}
-              </ul>
-            ) : null
-          ],
+          ['Sources', state.sources.length ? <ul key="src">{state.sources.map((s) => <li key={s}><code>{s}</code></li>)}</ul> : null],
           ['Quint', state.quint ? <code key="q">{state.quint}</code> : null],
-          [
-            'Gherkin',
-            state.gherkin.length ? (
-              <ul key="g">
-                {state.gherkin.map((s) => (
-                  <li key={s}>
-                    <code>{s}</code>
-                  </li>
-                ))}
-              </ul>
-            ) : null
-          ],
+          ['Gherkin', state.gherkin.length ? <ul key="g">{state.gherkin.map((s) => <li key={s}><code>{s}</code></li>)}</ul> : null],
           ['Owner', state.owner],
           ['Tier', state.tier],
           [
@@ -308,16 +282,10 @@ function JourneyDetails({ view, journeyId, chartId }: { view: AtlasView; journey
         {j.steps.map((step, i) => {
           const t = view.transitions.get(step.transitionIds[0] ?? '');
           if (!t) return null;
-          const here =
-            view.transitions.get(t.id)?.chartId === chartId || [...view.transitions.values()].some((x) => x.carriedBy === t.id && x.chartId === chartId);
+          const here = view.transitions.get(t.id)?.chartId === chartId || [...view.transitions.values()].some((x) => x.carriedBy === t.id && x.chartId === chartId);
           return (
             <li key={i} data-here={here}>
-              <Link
-                to="/chart/$chartId"
-                params={{ chartId: t.chartId }}
-                search={(prev) => ({ run: prev.run, journey: j.id, event: t.id })}
-                className={styles.step}
-              >
+              <Link to="/chart/$chartId" params={{ chartId: t.chartId }} search={(prev) => ({ run: prev.run, journey: j.id, event: t.id })} className={styles.step}>
                 <span className={styles.stepNo}>{i + 1}</span>
                 <span className={styles.inlineChip} data-kind={t.kind} data-status={t.status}>
                   <KindIcon kind={t.kind} size={10} />
@@ -356,7 +324,7 @@ export function SidePanel({ view, chartId, selection }: { view: AtlasView; chart
       <Link
         to="/chart/$chartId"
         params={{ chartId }}
-        search={(prev) => ({ run: prev.run, journey: state || transition ? prev.journey : undefined, step: prev.step })}
+        search={(prev) => ({ run: prev.run, journey: state || transition ? prev.journey : undefined })}
         className={styles.close}
         aria-label="Close panel"
       >

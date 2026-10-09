@@ -1,20 +1,21 @@
-import { MiniMap, ReactFlow, ReactFlowProvider, type Node, type Viewport } from '@xyflow/react';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type Node, type ReactFlowInstance, type Viewport } from '@xyflow/react';
+import { useCallback, useMemo, useRef } from 'react';
 
 import type { AtlasView, ItemStatus } from '../data/model';
-import { chartGraph, DEFAULT_DETAILS, isolateJourney } from '../layout/graph';
+import { FitIcon, MinusIcon, PlusIcon } from '../components/icons';
+import { Legend } from '../components/Legend';
+import { chartGraph } from '../layout/graph';
 import type { ChartLayout } from '../layout/layout';
 import { useChartLayout } from '../layout/use-chart-layout';
 import { useUiStore } from '../state/ui-store';
 import { EdgeMarkers, edgeTypes, type EventEdgeType } from './EventEdge';
-import { ancestors, chartScope, journeyPath, stepFocus, visibleRepresentative } from './navigation';
 import styles from './map.module.css';
-import { useCamera } from './use-camera';
-import { MapControls } from './MapControls';
 import { nodeTypes, type ChartLinkNodeType, type ContextNodeType, type GroupNodeType, type ScreenNodeType } from './nodes';
 
 type MapNode = ScreenNodeType | GroupNodeType | ChartLinkNodeType | ContextNodeType;
-export type MapSelection = { screen?: string; event?: string; journey?: string; step?: number };
+
+export type MapSelection = { screen?: string; event?: string; journey?: string };
+
 const MINIMAP_COLOR: Record<ItemStatus, string> = {
   passed: '#86efac',
   flaky: '#fdba74',
@@ -24,20 +25,34 @@ const MINIMAP_COLOR: Record<ItemStatus, string> = {
   'spec-only': '#ddd6fe'
 };
 
-function hiddenCount(view: AtlasView, name: string, seen = new Set<string>()): number {
-  if (seen.has(name)) return 0;
-  seen.add(name);
-  const state = view.states.get(name);
-  const children = state?.childChartId ? (view.charts.get(state.childChartId)?.rootStates ?? []) : (state?.children ?? []);
-  return children.reduce((sum, child) => sum + 1 + hiddenCount(view, child, seen), 0);
-}
+/** Below this a fitted map is too small to read, so the map opens on its first screen instead. */
+const READABLE_ZOOM = 0.42;
+const START_ZOOM = 0.7;
 
-function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout, selection: MapSelection, compact: boolean) {
-  const journey = useMemo(() => view.journeys.find((j) => j.id === selection.journey), [view, selection.journey]);
-  const path = useMemo(() => journeyPath(view, journey), [view, journey]);
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout | undefined, selection: MapSelection) {
   return useMemo(() => {
-    const visible = new Set(layout.nodes.map((n) => n.id));
-    const active = new Set(stepFocus(view, journey, selection.step).map((id) => visibleRepresentative(view, id, visible)));
+    if (!layout) return { nodes: [] as MapNode[], edges: [] as EventEdgeType[] };
+    const journey = selection.journey ? view.journeys.find((j) => j.id === selection.journey) : undefined;
+    const steps = new Map<string, number>();
+    journey?.steps.forEach((step, i) => {
+      for (const tid of step.transitionIds) {
+        if (!steps.has(tid)) steps.set(tid, i + 1);
+        const carried = [...view.transitions.values()].find((t) => t.carriedBy === tid);
+        if (carried && !steps.has(carried.id)) steps.set(carried.id, i + 1);
+      }
+    });
+    const onJourney = new Set<string>();
+    for (const tid of steps.keys()) {
+      const t = view.transitions.get(tid);
+      if (t) {
+        onJourney.add(t.source);
+        if (t.target) onJourney.add(t.target);
+      }
+    }
+    const dim = (id: string) => Boolean(journey) && !onJourney.has(id);
+
     const nodes: MapNode[] = layout.nodes.flatMap((n): MapNode[] => {
       const state = view.states.get(n.id);
       if (!state) return [];
@@ -51,90 +66,87 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout, 
         draggable: false,
         selectable: false
       };
-      const emphasis = { dimmed: Boolean(journey) && !path.states.has(n.id), active: active.has(n.id), onPath: Boolean(journey) && path.states.has(n.id) };
       switch (n.kind) {
         case 'group':
         case 'region':
         case 'parallel':
-          return [{ ...base, type: 'group', zIndex: 0, data: { state, chartId, variant: n.kind, ...emphasis } }];
+          return [{ ...base, type: 'group', zIndex: 0, data: { state, variant: n.kind, dimmed: false } }];
         case 'chart-link':
-        case 'collapsed':
-          return [
-            {
-              ...base,
-              type: 'chartLink',
-              zIndex: 2,
-              data: {
-                state,
-                chartId,
-                chart: state.childChartId ? (view.charts.get(state.childChartId) ?? null) : null,
-                count: hiddenCount(view, n.id),
-                ...emphasis
-              }
-            }
-          ];
+          return [{ ...base, type: 'chartLink', zIndex: 2, data: { state, chart: state.childChartId ? view.charts.get(state.childChartId) ?? null : null, dimmed: dim(n.id) } }];
         case 'context':
-          return [{ ...base, type: 'context', zIndex: 2, data: { state, chart: view.charts.get(state.chartId) ?? null, dimmed: emphasis.dimmed } }];
+          return [{ ...base, type: 'context', zIndex: 2, data: { state, chart: view.charts.get(state.chartId) ?? null, dimmed: dim(n.id) } }];
         default:
-          return [{ ...base, type: 'screen', zIndex: 2, data: { state, chartId, selected: selection.screen === n.id, compact, ...emphasis } }];
+          return [{ ...base, type: 'screen', zIndex: 2, data: { state, chartId, selected: selection.screen === n.id, dimmed: dim(n.id) } }];
       }
     });
+
     const edges: EventEdgeType[] = layout.edges.flatMap((e): EventEdgeType[] => {
       const transition = view.transitions.get(e.transitionId);
       if (!transition) return [];
-      const indices = path.transitions.get(e.transitionId);
-      const current = selection.step !== undefined && Boolean(indices?.includes(selection.step));
-      const step = indices ? (current ? selection.step! : indices[0]!) + 1 : null;
+      const step = steps.get(e.transitionId) ?? null;
       return [
         {
           id: e.id,
           source: e.source,
           target: e.target,
           type: 'event',
-          zIndex: current ? 4 : 1,
+          zIndex: 1,
           selectable: false,
-          data: { placed: e, transition, chartId, selected: selection.event === e.transitionId, step, active: current, dimmed: Boolean(journey) && !indices }
+          data: { placed: e, transition, chartId, selected: selection.event === e.transitionId, step, dimmed: Boolean(journey) && step === null }
         }
       ];
     });
     return { nodes, edges };
-  }, [view, chartId, layout, journey, path, selection.screen, selection.event, selection.step, compact]);
+  }, [view, chartId, layout, selection.screen, selection.event, selection.journey]);
 }
 
-function Flow({
-  view,
-  chartId,
-  layout,
-  selection,
-  busy,
-  compact
-}: {
-  view: AtlasView;
-  chartId: string;
-  layout: ChartLayout;
-  selection: MapSelection;
-  busy: boolean;
-  compact: boolean;
-}) {
-  const { nodes, edges } = useFlowElements(view, chartId, layout, selection, compact);
+function ZoomControls() {
+  const flow = useReactFlow();
+  const duration = reducedMotion() ? 0 : 250;
+  return (
+    <div className={styles.zoom} role="group" aria-label="Zoom">
+      <button type="button" className={styles.zoomButton} onClick={() => void flow.zoomIn({ duration })} aria-label="Zoom in">
+        <PlusIcon size={16} />
+      </button>
+      <button type="button" className={styles.zoomButton} onClick={() => void flow.zoomOut({ duration })} aria-label="Zoom out">
+        <MinusIcon size={16} />
+      </button>
+      <button type="button" className={styles.zoomButton} onClick={() => void flow.fitView({ duration, padding: 0.08 })} aria-label="Fit the whole map">
+        <FitIcon size={16} />
+      </button>
+    </div>
+  );
+}
+
+function Flow({ view, chartId, layout, selection }: { view: AtlasView; chartId: string; layout: ChartLayout; selection: MapSelection }) {
+  const { nodes, edges } = useFlowElements(view, chartId, layout, selection);
   const saved = useRef<Viewport | undefined>(useUiStore.getState().viewports[chartId]);
   const saveViewport = useUiStore((s) => s.saveViewport);
-  const minimap = useUiStore((s) => s.minimap);
-  const onSettled = useCallback(
-    (viewport: Viewport) => {
-      const previous = useUiStore.getState().viewports[chartId];
-      if (previous?.x !== viewport.x || previous?.y !== viewport.y || previous?.zoom !== viewport.zoom) saveViewport(chartId, viewport);
+  const onMoveEnd = useCallback((_: unknown, viewport: Viewport) => saveViewport(chartId, viewport), [chartId, saveViewport]);
+  const onInit = useCallback(
+    (flow: ReactFlowInstance<MapNode, EventEdgeType>) => {
+      if (saved.current) return;
+      const el = document.querySelector('.react-flow');
+      const width = el?.clientWidth ?? 1200;
+      const height = el?.clientHeight ?? 700;
+      const fit = Math.min(width / layout.width, height / layout.height) * 0.94;
+      if (fit >= READABLE_ZOOM && !selection.screen) {
+        void flow.fitView({ padding: 0.06 });
+        return;
+      }
+      const focus = layout.nodes.find((n) => n.id === selection.screen);
+      if (focus) {
+        const zoom = START_ZOOM;
+        flow.setViewport({ x: width / 2 - (focus.absX + focus.width / 2) * zoom, y: height / 2 - (focus.absY + focus.height / 2) * zoom, zoom });
+        return;
+      }
+      const start = layout.nodes.find((n) => n.id === view.charts.get(chartId)?.initial) ?? layout.nodes[0]!;
+      const zoom = START_ZOOM;
+      flow.setViewport({ x: 32 - start.absX * zoom, y: height / 2 - (start.absY + start.height / 2) * zoom, zoom });
     },
-    [chartId, saveViewport]
+    [layout, view, chartId, selection.screen]
   );
-  const camera = useCamera(onSettled);
-  // Programmatic frames emit move-end events too. Persist only settled navigation or a user gesture.
-  const onMoveEnd = useCallback(
-    (_: unknown, viewport: Viewport) => {
-      if (!camera.isMoving()) onSettled(viewport);
-    },
-    [camera, onSettled]
-  );
+  const hasTime = useMemo(() => [...view.transitions.values()].some((t) => t.chartId === chartId && t.kind === 'time'), [view, chartId]);
   return (
     <ReactFlow<MapNode, EventEdgeType>
       nodes={nodes}
@@ -142,12 +154,8 @@ function Flow({
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       defaultViewport={saved.current}
+      onInit={onInit}
       onMoveEnd={onMoveEnd}
-      onPointerDownCapture={camera.cancel}
-      onWheelCapture={camera.cancel}
-      onMoveStart={(event) => {
-        if (event) camera.cancel();
-      }}
       minZoom={0.08}
       maxZoom={2.5}
       nodesDraggable={false}
@@ -160,19 +168,20 @@ function Flow({
       aria-label="Map of screens and events. Drag to move, scroll or pinch to zoom."
     >
       <EdgeMarkers />
-      <MapControls view={view} chartId={chartId} layout={layout} selection={selection} busy={busy} camera={camera} hadSavedViewport={Boolean(saved.current)} />
-      {minimap && (
-        <MiniMap<MapNode>
-          pannable
-          zoomable
-          ariaLabel="Overview of the whole map"
-          className={styles.minimap}
-          nodeColor={(n: Node) => (n.type === 'group' ? 'transparent' : MINIMAP_COLOR[(n as ScreenNodeType).data.state.status])}
-          nodeStrokeColor={(n: Node) => (n.type === 'group' ? '#ddd6fe' : 'transparent')}
-          nodeBorderRadius={8}
-          maskColor="rgba(248, 250, 252, 0.7)"
-        />
-      )}
+      <ZoomControls />
+      <div className={styles.legendSlot}>
+        <Legend showTime={hasTime} />
+      </div>
+      <MiniMap<MapNode>
+        pannable
+        zoomable
+        ariaLabel="Overview of the whole map"
+        className={styles.minimap}
+        nodeColor={(n: Node) => (n.type === 'group' ? 'transparent' : MINIMAP_COLOR[(n as ScreenNodeType).data.state.status])}
+        nodeStrokeColor={(n: Node) => (n.type === 'group' ? '#ddd6fe' : 'transparent')}
+        nodeBorderRadius={8}
+        maskColor="rgba(248, 250, 252, 0.7)"
+      />
     </ReactFlow>
   );
 }
@@ -190,46 +199,12 @@ function MapSkeleton({ label }: { label: string }) {
   );
 }
 
+/** One chart's map. Positions come from the cached layout, statuses and media from the view. */
 export function ChartMap({ view, chartId, selection }: { view: AtlasView; chartId: string; selection: MapSelection }) {
-  const details = useUiStore((s) => s.details[chartId] ?? DEFAULT_DETAILS);
-  const compact = useUiStore((s) => s.compact);
-  const pathOnly = useUiStore((s) => s.pathOnly);
-  const revealedSelection = useRef('');
-  // Reveal only when navigation changes. Users can subsequently collapse the current branch.
-  useEffect(() => {
-    const navigationKey = JSON.stringify([chartId, selection]);
-    if (revealedSelection.current === navigationKey) return;
-    revealedSelection.current = navigationKey;
-    const journey = view.journeys.find((j) => j.id === selection.journey);
-    const event = selection.event ? view.transitions.get(selection.event) : undefined;
-    const targets = selection.screen
-      ? [selection.screen]
-      : event
-        ? [event.source, ...(event.target ? [event.target] : [])]
-        : stepFocus(view, journey, selection.step);
-    if (!targets.length) return;
-    const scope = chartScope(view, chartId);
-    const parents = new Set(targets.flatMap((id) => ancestors(view, id)).filter((id) => scope.has(view.states.get(id)?.chartId ?? '')));
-    const current = useUiStore.getState().details[chartId] ?? DEFAULT_DETAILS;
-    const expanded = [...new Set([...current.expanded, ...[...parents].filter((id) => view.states.get(id)?.childChartId)])];
-    const collapsed = current.collapsed.filter((id) => !parents.has(id));
-    if (expanded.length !== current.expanded.length || collapsed.length !== current.collapsed.length)
-      useUiStore.getState().setDetails(chartId, { expanded, collapsed });
-  }, [chartId, selection.screen, selection.event, selection.journey, selection.step, view]);
-  const input = useMemo(() => {
-    let graph = chartGraph(view, chartId, details);
-    if (!graph) return graph;
-    const journey = view.journeys.find((j) => j.id === selection.journey);
-    if (pathOnly && journey?.steps.length) graph = isolateJourney(view, graph, journey, selection);
-    if (!compact) return graph;
-    const nodes = graph.nodes.map((n) => (n.kind === 'screen' ? { ...n, width: 200, height: 100 } : n));
-    return { ...graph, nodes, key: `${graph.key}:compact` };
-  }, [view, chartId, details, compact, pathOnly, selection.journey, selection.screen, selection.event]);
+  const input = useMemo(() => chartGraph(view, chartId), [view, chartId]);
   const chart = view.charts.get(chartId);
-  // Saved pins describe the original expanded geometry, not alternative detail levels.
-  const pinned = details.expanded.length || details.collapsed.length || compact || (pathOnly && selection.journey) ? null : (chart?.layout ?? null);
-  const layout = useChartLayout(input, pinned);
-  if (layout.error)
+  const layout = useChartLayout(input, chart?.layout ?? null);
+  if (layout.error) {
     return (
       <div className={styles.mapMessage} role="alert">
         <p>The map for this chart couldn’t be laid out.</p>
@@ -238,16 +213,18 @@ export function ChartMap({ view, chartId, selection }: { view: AtlasView; chartI
         </button>
       </div>
     );
+  }
   if (!layout.data) return <MapSkeleton label={`Laying out ${chart?.name ?? 'the map'}…`} />;
-  if (!layout.data.nodes.length)
+  if (layout.data.nodes.length === 0) {
     return (
       <div className={styles.mapMessage}>
         <p>This chart has no states yet.</p>
       </div>
     );
+  }
   return (
     <ReactFlowProvider>
-      <Flow view={view} chartId={chartId} layout={layout.data} selection={selection} busy={layout.isFetching} compact={compact} />
+      <Flow view={view} chartId={chartId} layout={layout.data} selection={selection} />
     </ReactFlowProvider>
   );
 }

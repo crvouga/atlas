@@ -3,7 +3,6 @@ import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { useAtlas } from '../app/atlas-context';
 import { ChartMap } from '../map/ChartMap';
 import { SidePanel } from './SidePanel';
-import { JourneyNavigator } from './JourneyNavigator';
 import styles from './views.module.css';
 
 export function ChartPage() {
@@ -30,13 +29,10 @@ export function ChartPage() {
       </div>
     );
   }
-  const journey = view.journeys.find((j) => j.id === search.journey);
-  const step = journey && search.step !== undefined && search.step < journey.steps.length ? search.step : undefined;
-  const selection = { screen: search.screen, event: search.event, journey: search.journey, step };
-  const open = Boolean(search.screen || search.event || (search.journey && !journey));
+  const selection = { screen: search.screen, event: search.event, journey: search.journey };
+  const open = Boolean(search.screen || search.event || search.journey);
   return (
-    <div className={styles.chartView} data-panel={open} data-journey={Boolean(journey)}>
-      {journey && <JourneyNavigator key={journey.id} view={view} chartId={chartId} journey={journey} selection={selection} />}
+    <div className={styles.chartView} data-panel={open}>
       <div className={styles.mapArea}>
         <ChartMap key={chartId} view={view} chartId={chartId} selection={selection} />
       </div>

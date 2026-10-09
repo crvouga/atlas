@@ -11,7 +11,6 @@ const ChartSearch = RootSearch.extend({
   screen: z.string().min(1).optional().catch(undefined),
   event: z.string().min(1).optional().catch(undefined),
   journey: z.string().min(1).optional().catch(undefined),
-  step: z.coerce.number().int().nonnegative().optional().catch(undefined),
   t: z.coerce.number().nonnegative().optional().catch(undefined)
 });
 
