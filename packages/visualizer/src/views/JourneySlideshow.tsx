@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { CloseIcon } from '../components/icons';
+import { ArrowLeftIcon, ArrowRightIcon, CloseIcon, PauseIcon, PlayIcon, ReplayIcon } from '../components/icons';
 import { ScreenPlaceholder, placeholderReason } from '../components/Screen';
 import type { AtlasView, JourneyView } from '../data/model';
 import { journeySlides, type JourneySlide } from './journey-media';
@@ -19,7 +19,7 @@ function ScreenFrame({ frame }: { frame: Extract<JourneySlide, { kind: 'screens'
       )}
       <figcaption>
         {frame.state.name}
-        {failed && ' · Screenshot unavailable'}
+        {failed && ', screenshot unavailable'}
       </figcaption>
     </figure>
   );
@@ -167,7 +167,7 @@ export function JourneySlideshow({
           <div>
             <Dialog.Title className={styles.title}>{journey.name}</Dialog.Title>
             <Dialog.Description className={styles.description}>
-              Screenshots and recordings from the selected run · {view.run ? 'Available media' : 'Spec preview'}
+              {view.run ? 'Screenshots and recordings from the selected run.' : 'Sketches from the spec. Run Atlas to fill in screenshots and recordings.'}
             </Dialog.Description>
           </div>
           <button type="button" onClick={onClose} className={styles.close} aria-label="Close journey slideshow">
@@ -218,20 +218,32 @@ export function JourneySlideshow({
           <strong>{completed ? 'Journey complete' : slide?.label}</strong>
           <span>
             {slide &&
-              `Step ${slide.step + 1} of ${journey.steps.length} · ${slide.id === 'start' ? 'Starting screens' : slide.kind === 'video' ? 'Event recording' : 'Resulting screens'}`}
+              `Step ${slide.step + 1} of ${journey.steps.length}, ${slide.id === 'start' ? 'starting screens' : slide.kind === 'video' ? 'recording of the event' : 'resulting screens'}`}
           </span>
           {blocked && <span>Playback paused by the browser. Use the video’s Play control to continue.</span>}
         </div>
         <footer className={styles.controls}>
           <div className={styles.transport}>
             <button type="button" onClick={() => seek(index - 1)} disabled={index <= 0} aria-label="Previous slide">
-              ←
+              <ArrowLeftIcon size={16} />
             </button>
             <button ref={playButton} type="button" onClick={toggle} disabled={!slide} aria-label={playing ? 'Pause slideshow' : 'Play slideshow'}>
-              {playing ? 'Ⅱ Pause' : completed ? '↺ Replay' : '▶ Play'}
+              {playing ? (
+                <>
+                  <PauseIcon size={13} /> Pause
+                </>
+              ) : completed ? (
+                <>
+                  <ReplayIcon size={14} /> Replay
+                </>
+              ) : (
+                <>
+                  <PlayIcon size={13} /> Play
+                </>
+              )}
             </button>
             <button type="button" onClick={() => seek(index + 1)} disabled={index >= slides.length - 1} aria-label="Next slide">
-              →
+              <ArrowRightIcon size={16} />
             </button>
           </div>
           <label>

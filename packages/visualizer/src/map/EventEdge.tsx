@@ -81,12 +81,12 @@ export function EdgeMarkers() {
   return (
     <svg className={styles.markers} aria-hidden="true">
       <defs>
-        {marker('user', '#a78bfa')}
-        {marker('system', '#f59e0b')}
-        {marker('time', '#38bdf8')}
-        {marker('hand-off', '#2dd4bf')}
-        {marker('muted', '#94a3b8')}
-        {marker('active', '#7c3aed')}
+        {marker('user', '#7d8992')}
+        {marker('system', '#c9a046')}
+        {marker('time', '#5f9db0')}
+        {marker('hand-off', '#b071b4')}
+        {marker('muted', '#aab3b9')}
+        {marker('active', '#2449e8')}
       </defs>
     </svg>
   );

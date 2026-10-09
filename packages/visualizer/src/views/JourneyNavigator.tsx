@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 
-import { CloseIcon, PlayIcon } from '../components/icons';
+import { ArrowLeftIcon, ArrowRightIcon, CloseIcon, PauseIcon, PlayIcon } from '../components/icons';
 import { StatusBadge, StatusDot } from '../components/Status';
 import type { AtlasView, JourneyView } from '../data/model';
 import type { MapSelection } from '../map/ChartMap';
@@ -37,8 +37,14 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
     setPlaying(true);
   };
 
+  // Scroll the step list alone; scrollIntoView would also move the panel and the page around it.
   useEffect(() => {
-    activeRow.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    const row = activeRow.current;
+    const list = row?.parentElement;
+    if (!row || !list || list.scrollHeight <= list.clientHeight) return;
+    const top = row.offsetTop;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (top + row.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + row.offsetHeight - list.clientHeight;
   }, [index]);
   useEffect(() => {
     setPlaying(false);
@@ -84,12 +90,15 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
   return (
     <aside className={styles.journeyNavigator} aria-label="Journey navigator">
       <div className={styles.journeyHead}>
-        <span className={styles.eyebrow}>Follow a journey</span>
+        <span className={styles.journeyKicker}>Following a journey</span>
         <Link to="/chart/$chartId" params={{ chartId }} search={(prev) => ({ run: prev.run })} className={styles.journeyClose} aria-label="Exit journey">
           <CloseIcon size={16} />
         </Link>
+        <h2>{journey.name}</h2>
+        <StatusBadge status={journey.status} />
+        {journey.description && <p>{journey.description}</p>}
         <label className={styles.journeyPicker}>
-          <span className="sr-only">Choose a journey</span>
+          <span className={styles.pickerLabel}>Switch journey</span>
           <select
             value={journey.id}
             onChange={(event) => {
@@ -104,9 +113,6 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
             ))}
           </select>
         </label>
-        <h2>{journey.name}</h2>
-        <StatusBadge status={journey.status} />
-        {journey.description && <p>{journey.description}</p>}
       </div>
       <div className={styles.journeyControls}>
         <div className={styles.playback} role="group" aria-label="Journey playback">
@@ -120,7 +126,7 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
             aria-label="Previous journey step"
             title="Previous step (←)"
           >
-            ←
+            <ArrowLeftIcon size={15} />
           </button>
           <button
             type="button"
@@ -132,7 +138,9 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
             aria-label={playing ? 'Pause journey' : 'Play journey'}
           >
             {playing ? (
-              'Ⅱ Pause'
+              <>
+                <PauseIcon size={12} /> Pause
+              </>
             ) : (
               <>
                 <PlayIcon size={12} /> Play
@@ -149,11 +157,11 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
             aria-label="Next journey step"
             title="Next step (→)"
           >
-            →
+            <ArrowRightIcon size={15} />
           </button>
         </div>
         <div className={styles.progressLabel} role="status" aria-live="polite">
-          {step ? `Step ${index! + 1} of ${journey.steps.length}` : `${journey.steps.length} steps · Path overview`}
+          {step ? `Step ${index! + 1} of ${journey.steps.length}` : `${journey.steps.length} ${journey.steps.length === 1 ? 'step' : 'steps'}`}
         </div>
         <button
           ref={watchButton}
@@ -166,7 +174,7 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
             setWatching(true);
           }}
         >
-          ▶ Watch journey
+          Watch as a slideshow
         </button>
         <progress value={index === undefined ? 0 : index + 1} max={Math.max(1, journey.steps.length)} aria-label="Journey progress" />
         <button
@@ -178,7 +186,7 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
           }}
           disabled={index === undefined}
         >
-          ↖ Back to path overview
+          Show the whole journey
         </button>
       </div>
       <ol className={styles.journeyTimeline} aria-label="Journey steps">
@@ -198,8 +206,8 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
                 <span className={styles.timelineCopy}>
                   <strong>{s.event}</strong>
                   <small>
-                    {s.handOff ? 'Hand-off · ' : ''}
-                    {s.to.filter((name) => view.states.get(name)?.kind === 'screen' || view.states.get(name)?.kind === 'final').join(' · ') || s.to.join(' · ')}
+                    {s.handOff ? 'Hand-off to ' : ''}
+                    {s.to.filter((name) => view.states.get(name)?.kind === 'screen' || view.states.get(name)?.kind === 'final').join(', ') || s.to.join(', ')}
                   </small>
                 </span>
                 {transition && <StatusDot status={transition.status} />}
@@ -211,7 +219,7 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
                   search={(prev) => ({ run: prev.run, journey: journey.id, step: i, event: transition.id })}
                   className={styles.inspectStep}
                 >
-                  Inspect this event ↗
+                  Inspect this event
                 </Link>
               )}
             </li>
@@ -239,7 +247,14 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
           />
         )}
       </Dialog.Root>
-      <div className={styles.journeyFooter}>← → Move through steps · Space to play</div>
+      <div className={styles.journeyFooter}>
+        <span>
+          <kbd>←</kbd> <kbd>→</kbd> move through steps
+        </span>
+        <span>
+          <kbd>Space</kbd> play
+        </span>
+      </div>
     </aside>
   );
 }

@@ -1,4 +1,4 @@
-import { MiniMap, ReactFlow, ReactFlowProvider, type Node, type Viewport } from '@xyflow/react';
+import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider, type Node, type Viewport } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type { AtlasView, ItemStatus } from '../data/model';
@@ -16,12 +16,12 @@ import { nodeTypes, type ChartLinkNodeType, type ContextNodeType, type GroupNode
 type MapNode = ScreenNodeType | GroupNodeType | ChartLinkNodeType | ContextNodeType;
 export type MapSelection = { screen?: string; event?: string; journey?: string; step?: number };
 const MINIMAP_COLOR: Record<ItemStatus, string> = {
-  passed: '#86efac',
-  flaky: '#fdba74',
-  failed: '#fca5a5',
-  'not-reached': '#e2e8f0',
-  'not-yet-run': '#e2e8f0',
-  'spec-only': '#ddd6fe'
+  passed: '#8fd0ab',
+  flaky: '#f0c072',
+  failed: '#f0a39d',
+  'not-reached': '#dde3e0',
+  'not-yet-run': '#dde3e0',
+  'spec-only': '#c5cdc9'
 };
 
 function hiddenCount(view: AtlasView, name: string, seen = new Set<string>()): number {
@@ -159,6 +159,8 @@ function Flow({
       className={styles.flow}
       aria-label="Map of screens and events. Drag to move, scroll or pinch to zoom."
     >
+      <Background id="minor" variant={BackgroundVariant.Lines} gap={40} lineWidth={1} color="rgba(56, 84, 72, 0.035)" />
+      <Background id="major" variant={BackgroundVariant.Lines} gap={200} lineWidth={1} color="rgba(56, 84, 72, 0.075)" />
       <EdgeMarkers />
       <MapControls view={view} chartId={chartId} layout={layout} selection={selection} busy={busy} camera={camera} hadSavedViewport={Boolean(saved.current)} />
       {minimap && (
@@ -168,9 +170,9 @@ function Flow({
           ariaLabel="Overview of the whole map"
           className={styles.minimap}
           nodeColor={(n: Node) => (n.type === 'group' ? 'transparent' : MINIMAP_COLOR[(n as ScreenNodeType).data.state.status])}
-          nodeStrokeColor={(n: Node) => (n.type === 'group' ? '#ddd6fe' : 'transparent')}
+          nodeStrokeColor={(n: Node) => (n.type === 'group' ? '#c5cdc9' : 'transparent')}
           nodeBorderRadius={8}
-          maskColor="rgba(248, 250, 252, 0.7)"
+          maskColor="rgba(238, 241, 239, 0.72)"
         />
       )}
     </ReactFlow>

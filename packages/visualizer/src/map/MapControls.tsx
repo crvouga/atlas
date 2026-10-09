@@ -1,9 +1,11 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import * as Popover from '@radix-ui/react-popover';
 import { getViewportForBounds, useReactFlow, useViewport } from '@xyflow/react';
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AtlasView } from '../data/model';
-import { FitIcon, MinusIcon, PlusIcon } from '../components/icons';
+import { CheckIcon, ChevronDownIcon, FitIcon, MinusIcon, PlusIcon, RouteIcon, SearchIcon, SlidersIcon } from '../components/icons';
 import { Legend } from '../components/Legend';
 import { StatusDot } from '../components/Status';
 import type { ChartLayout } from '../layout/layout';
@@ -160,9 +162,54 @@ export function MapControls({
     void navigate({ to: '/chart/$chartId', params: { chartId }, search: (prev) => ({ run: prev.run, journey: prev.journey, step: prev.step, screen: name }) });
   };
   const containers = [...view.states.values()].filter((state) => scope.has(state.chartId) && (state.childChartId || state.children.length));
+  const chart = view.charts.get(chartId);
+  const related = new Set([chartId, ...(chart?.childChartIds ?? []), ...(chart?.parent ? [chart.parent.chartId] : [])]);
+  const journeys = view.journeys.filter((j) => j.chartIds.some((id) => related.has(id)) && j.chartIds.includes(chartId));
+  const transitions = [...view.transitions.values()].filter((t) => scope.has(t.chartId));
+  const stateCount = layout.nodes.filter((n) => !['group', 'region', 'parallel'].includes(n.kind)).length;
   return (
     <>
       <div className={`${styles.toolbar} nodrag nopan`} role="toolbar" aria-label="Map controls">
+        {journeys.length > 0 && (
+          <Popover.Root>
+            <Popover.Trigger className={styles.toolButton} data-active={Boolean(journey)}>
+              <RouteIcon size={15} />
+              Journeys
+              <span className={styles.count}>{journeys.length}</span>
+              <ChevronDownIcon size={12} className={styles.chevron} />
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content className={styles.menu} align="start" sideOffset={8} collisionPadding={12}>
+                <nav aria-label="Journeys through this chart">
+                  <p className={styles.menuLead}>Follow a journey step by step through the map.</p>
+                  <ul className={styles.journeyMenu}>
+                    {journeys.map((j) => {
+                      const active = selection.journey === j.id;
+                      return (
+                        <li key={j.id}>
+                          <Popover.Close asChild>
+                            <Link
+                              to="/chart/$chartId"
+                              params={{ chartId }}
+                              search={(prev) => ({ run: prev.run, journey: active ? undefined : j.id })}
+                              className={styles.journeyItem}
+                              data-active={active}
+                              aria-current={active ? 'true' : undefined}
+                            >
+                              <StatusDot status={j.status} />
+                              <span>{j.name}</span>
+                              {active && <CheckIcon size={14} />}
+                            </Link>
+                          </Popover.Close>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </nav>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        )}
         <div
           className={styles.searchBox}
           ref={searchBox}
@@ -170,6 +217,7 @@ export function MapControls({
             if (!event.currentTarget.contains(event.relatedTarget)) setSearching(false);
           }}
         >
+          <SearchIcon size={15} className={styles.searchIcon} />
           <input
             ref={searchInput}
             value={query}
@@ -195,7 +243,7 @@ export function MapControls({
                 choose(results[activeResult]!.name);
               }
             }}
-            placeholder="Find a state…"
+            placeholder="Find a state"
             role="combobox"
             aria-autocomplete="list"
             aria-activedescendant={searching && results[activeResult] ? `state-result-${activeResult}` : undefined}
@@ -208,8 +256,7 @@ export function MapControls({
           {searching && (
             <div id="state-search-results" className={styles.searchResults} role="listbox" aria-label="Matching states">
               <span className={styles.searchHint}>
-                {query ? 'Matching states' : 'Jump to a state'} · {results.length}
-                {results.length === 30 ? '+' : ''}
+                {query ? `${results.length}${results.length === 30 ? '+' : ''} matching` : 'Jump to a state'}
               </span>
               {results.map((state, index) => (
                 <button
@@ -219,6 +266,7 @@ export function MapControls({
                   id={`state-result-${index}`}
                   key={state.name}
                   onClick={() => choose(state.name)}
+                  onMouseEnter={() => setActiveResult(index)}
                 >
                   <StatusDot status={state.status} />
                   <span>
@@ -231,26 +279,12 @@ export function MapControls({
             </div>
           )}
         </div>
-        <div className={styles.toolbarGroup}>
-          <button
-            type="button"
-            onClick={() => setDetails(chartId, { expanded: [], collapsed: containers.filter((s) => !s.childChartId).map((s) => s.name) })}
-            title="Collapse child machines and nested groups"
-            disabled={!containers.length}
-          >
-            Collapse all
-          </button>
-          <button
-            type="button"
-            onClick={() => setDetails(chartId, { expanded: containers.filter((s) => s.childChartId).map((s) => s.name), collapsed: [] })}
-            disabled={!containers.length}
-          >
-            Expand all
-          </button>
-        </div>
+      </div>
+      <div className={`${styles.viewbar} nodrag nopan`}>
         {journey && (
           <button
             type="button"
+            className={styles.toolButton}
             aria-pressed={pathOnly}
             disabled={!journey.steps.length}
             onClick={() => useUiStore.getState().setPathOnly(!pathOnly)}
@@ -259,44 +293,109 @@ export function MapControls({
             Path only
           </button>
         )}
-        <button type="button" aria-pressed={compact} onClick={() => useUiStore.getState().setCompact(!compact)} title="Use smaller cards without screenshots">
-          Compact
-        </button>
-        <button type="button" aria-pressed={minimap} onClick={() => useUiStore.getState().setMinimap(!minimap)}>
-          Minimap
-        </button>
-        <button type="button" aria-expanded={legend} onClick={() => setLegend(!legend)}>
-          Legend
-        </button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger className={styles.toolButton}>
+            <SlidersIcon size={15} />
+            View
+            <ChevronDownIcon size={12} className={styles.chevron} />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className={styles.menu} align="end" sideOffset={8} collisionPadding={12}>
+              <DropdownMenu.CheckboxItem
+                className={styles.menuItem}
+                checked={compact}
+                onCheckedChange={(checked) => useUiStore.getState().setCompact(checked)}
+                onSelect={(event) => event.preventDefault()}
+              >
+                <span className={styles.menuCheck}>
+                  <DropdownMenu.ItemIndicator>
+                    <CheckIcon size={14} />
+                  </DropdownMenu.ItemIndicator>
+                </span>
+                <span>
+                  Compact
+                  <small>Smaller cards without screenshots</small>
+                </span>
+              </DropdownMenu.CheckboxItem>
+              <DropdownMenu.CheckboxItem
+                className={styles.menuItem}
+                checked={minimap}
+                onCheckedChange={(checked) => useUiStore.getState().setMinimap(checked)}
+                onSelect={(event) => event.preventDefault()}
+              >
+                <span className={styles.menuCheck}>
+                  <DropdownMenu.ItemIndicator>
+                    <CheckIcon size={14} />
+                  </DropdownMenu.ItemIndicator>
+                </span>
+                <span>Minimap</span>
+              </DropdownMenu.CheckboxItem>
+              <DropdownMenu.CheckboxItem className={styles.menuItem} checked={legend} onCheckedChange={setLegend} onSelect={(event) => event.preventDefault()}>
+                <span className={styles.menuCheck}>
+                  <DropdownMenu.ItemIndicator>
+                    <CheckIcon size={14} />
+                  </DropdownMenu.ItemIndicator>
+                </span>
+                <span>Legend</span>
+              </DropdownMenu.CheckboxItem>
+              <DropdownMenu.Separator className={styles.menuSeparator} />
+              <DropdownMenu.Item
+                className={styles.menuItem}
+                disabled={!containers.length}
+                onSelect={() => setDetails(chartId, { expanded: [], collapsed: containers.filter((s) => !s.childChartId).map((s) => s.name) })}
+              >
+                <span className={styles.menuCheck} />
+                <span>
+                  Collapse all
+                  <small>Fold child machines and nested groups</small>
+                </span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className={styles.menuItem}
+                disabled={!containers.length}
+                onSelect={() => setDetails(chartId, { expanded: containers.filter((s) => s.childChartId).map((s) => s.name), collapsed: [] })}
+              >
+                <span className={styles.menuCheck} />
+                <span>
+                  Expand all
+                  <small>Open every child machine in place</small>
+                </span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
-      <div className={styles.mapContext} role="status">
-        {busy ? 'Updating map…' : `${layout.nodes.filter((n) => !['group', 'region', 'parallel'].includes(n.kind)).length} visible states`}
-        {journey && <span> · {selection.step === undefined ? 'Journey path highlighted' : `Following step ${selection.step + 1}`}</span>}
+      <div className={styles.footer}>
+        {legend && (
+          <div className={`${styles.legendSlot} nodrag nopan`}>
+            <Legend showTime={transitions.some((t) => t.kind === 'time')} showHandOff={transitions.some((t) => t.kind === 'hand-off')} />
+          </div>
+        )}
+        <div className={styles.mapContext} role="status">
+          {busy ? 'Updating the map…' : `${stateCount} ${stateCount === 1 ? 'state' : 'states'} shown`}
+          {journey && <span>{selection.step === undefined ? ', journey highlighted' : `, following step ${selection.step + 1}`}</span>}
+        </div>
       </div>
       <div className={`${styles.zoom} nodrag nopan`} role="group" aria-label="Map viewport">
         {journey && (
           <button type="button" className={styles.fitPath} onClick={() => fit([...path.states])}>
+            <RouteIcon size={14} />
             Fit journey
           </button>
         )}
-        <button type="button" className={styles.zoomButton} onClick={() => zoomBy(1.2)} aria-label="Zoom in">
-          <PlusIcon size={16} />
-        </button>
-        <ZoomReadout />
-        <button type="button" className={styles.zoomButton} onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out">
-          <MinusIcon size={16} />
-        </button>
-        <button type="button" className={styles.zoomButton} onClick={() => fit()} aria-label="Fit the whole map" title="Fit the whole map">
-          <FitIcon size={16} />
-        </button>
-      </div>
-      {legend && (
-        <div className={styles.legendSlot}>
-          <Legend showTime={[...view.transitions.values()].some((t) => scope.has(t.chartId) && t.kind === 'time')} />
+        <div className={styles.zoomBar}>
+          <button type="button" className={styles.zoomButton} onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out">
+            <MinusIcon size={15} />
+          </button>
+          <ZoomReadout />
+          <button type="button" className={styles.zoomButton} onClick={() => zoomBy(1.2)} aria-label="Zoom in">
+            <PlusIcon size={15} />
+          </button>
+          <span className={styles.zoomDivider} aria-hidden="true" />
+          <button type="button" className={styles.zoomButton} onClick={() => fit()} aria-label="Fit the whole map" title="Fit the whole map (F)">
+            <FitIcon size={15} />
+          </button>
         </div>
-      )}
-      <div className={styles.mapHint}>
-        Drag to pan · Scroll to zoom · <kbd>F</kbd> to fit
       </div>
     </>
   );

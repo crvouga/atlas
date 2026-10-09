@@ -4,6 +4,7 @@ import { memo } from 'react';
 
 import { STATUS_LABEL, type ChartView, type StateView } from '../data/model';
 import { ScreenImage } from '../components/Screen';
+import { PlusIcon } from '../components/icons';
 import { StatusDot } from '../components/Status';
 import { useUiStore } from '../state/ui-store';
 import styles from './map.module.css';
@@ -39,7 +40,7 @@ export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNod
       aria-current={selected ? 'true' : undefined}
     >
       {!compact && <ScreenImage state={state} size="thumb" />}
-      {compact && <span className={styles.chartEyebrow}>{state.kind === 'final' ? 'Final state' : 'Screen'}</span>}
+      {compact && <span className={styles.compactKind}>{state.kind === 'final' ? 'Final state' : 'Screen'}</span>}
       <span className={styles.screenLabel}>
         <StatusDot status={state.status} />
         <span>{state.name}</span>
@@ -86,7 +87,7 @@ export const GroupNode = memo(function GroupNode({ data }: NodeProps<GroupNodeTy
             search={(prev) => ({ run: prev.run, journey: prev.journey, step: prev.step })}
             className={styles.chartCta}
           >
-            Open ↗
+            Open chart
           </Link>
         )}
         <button
@@ -96,7 +97,7 @@ export const GroupNode = memo(function GroupNode({ data }: NodeProps<GroupNodeTy
           aria-expanded="true"
           aria-label={`Hide details of ${state.name}`}
         >
-          − Hide details
+          Hide details
         </button>
       </span>
       <Handles />
@@ -121,7 +122,7 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
   return (
     <div className={styles.chartLink} data-dimmed={dimmed} data-active={active} data-path={onPath}>
       <span className={styles.chartEyebrow}>
-        {state.childChartId ? 'Child machine' : state.kind === 'parallel' ? 'Parallel states' : 'State group'} · {count} hidden states
+        {state.childChartId ? 'Child machine' : state.kind === 'parallel' ? 'Parallel states' : 'State group'}, {count} {count === 1 ? 'state' : 'states'} inside
       </span>
       <strong className={styles.chartTitle}>
         <StatusDot status={state.status} />
@@ -143,7 +144,8 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
           aria-expanded="false"
           aria-label={`Show details of ${state.name}`}
         >
-          + Show details
+          <PlusIcon size={12} />
+          Show details
         </button>
         {chart && (
           <Link
@@ -152,7 +154,7 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
             search={(prev) => ({ run: prev.run, journey: prev.journey, step: prev.step })}
             className={styles.chartCta}
           >
-            Open chart ↗
+            Open chart
           </Link>
         )}
       </div>

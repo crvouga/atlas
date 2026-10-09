@@ -13,30 +13,63 @@ body,
 body {
   margin: 0;
   font-family: var(--font);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
-  background: var(--bg);
+  background: var(--sheet);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
-  color: var(--user);
+  color: var(--route-ink);
 }
 
-button {
+button,
+input,
+select {
   font: inherit;
+  color: inherit;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 :focus-visible {
-  outline: 3px solid var(--focus);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-sm);
 }
 
 code,
-pre {
+pre,
+kbd {
   font-family: var(--mono);
-  font-size: 0.8rem;
+  font-size: 0.8em;
+}
+
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+::selection {
+  background: var(--route-soft);
 }
 
 .sr-only {
@@ -53,7 +86,7 @@ pre {
 
 .react-flow__attribution {
   font-size: 9px;
-  opacity: 0.6;
+  opacity: 0.5;
   background: transparent;
 }
 
@@ -62,7 +95,7 @@ pre {
 }
 
 .react-flow__node:focus-visible > * {
-  outline: 3px solid var(--focus);
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -70,7 +103,14 @@ pre {
   border-radius: var(--radius);
   border: 1px solid var(--line);
   overflow: hidden;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-float);
+  background: var(--surface);
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -150% 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

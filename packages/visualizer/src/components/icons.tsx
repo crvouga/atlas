@@ -86,3 +86,71 @@ export const ChevronIcon = (p: IconProps) => (
     <path d="m6 3.5 4.5 4.5L6 12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
+
+export const ChevronDownIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m3.5 6 4.5 4.5L12.5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="7" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.7" />
+    <path d="m10.5 10.5 3.2 3.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </Svg>
+);
+
+export const CheckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m3.2 8.4 3 3 6.6-6.8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const SlidersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 4.5h6M12 4.5h1.5M2.5 11.5H4M7.5 11.5h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <circle cx="10.2" cy="4.5" r="1.7" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="5.8" cy="11.5" r="1.7" stroke="currentColor" strokeWidth="1.6" />
+  </Svg>
+);
+
+export const ArrowLeftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M13 8H3.5M7.5 3.8 3.3 8l4.2 4.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const ArrowRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 8h9.5M8.5 3.8 12.7 8l-4.2 4.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const PauseIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4" y="3" width="2.8" height="10" rx="0.8" fill="currentColor" />
+    <rect x="9.2" y="3" width="2.8" height="10" rx="0.8" fill="currentColor" />
+  </Svg>
+);
+
+export const ExternalIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9.5 2.8h3.7v3.7M13 3 7.6 8.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M11.5 9.5v2.6a1.1 1.1 0 0 1-1.1 1.1H3.9a1.1 1.1 0 0 1-1.1-1.1V5.6a1.1 1.1 0 0 1 1.1-1.1h2.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </Svg>
+);
+
+export const RouteIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="3.8" cy="12.2" r="1.8" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="12.2" cy="3.8" r="1.8" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M5.6 12.2h4.2a2.2 2.2 0 0 0 0-4.4H6.2a2.2 2.2 0 0 1 0-4.4h4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </Svg>
+);
+
+export const ReplayIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 8a5 5 0 1 0 1.6-3.7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="M3.2 2.6v2.6h2.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);

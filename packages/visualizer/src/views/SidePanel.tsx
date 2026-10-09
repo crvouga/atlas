@@ -95,7 +95,7 @@ function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
   return (
     <>
       <div className={styles.panelHead}>
-        <span className={styles.eyebrow}>
+        <span className={styles.kind}>
           {state.childChartId ? 'Child machine' : state.kind === 'parallel' ? 'Parallel states' : state.children.length ? 'State group' : 'Screen'}
         </span>
         <StatusBadge status={state.status} />
@@ -255,7 +255,7 @@ function EventDetails({ view, t }: { view: AtlasView; t: TransitionView }) {
   return (
     <>
       <div className={styles.panelHead}>
-        <span className={styles.eyebrow} data-kind={t.kind}>
+        <span className={styles.kind} data-kind={t.kind}>
           <KindIcon kind={t.kind} size={11} /> {KIND_LABEL[t.kind]}
         </span>
         <StatusBadge status={t.status} />
@@ -298,7 +298,7 @@ function JourneyDetails({ view, journeyId, chartId }: { view: AtlasView; journey
   return (
     <>
       <div className={styles.panelHead}>
-        <span className={styles.eyebrow}>Journey</span>
+        <span className={styles.kind}>Journey</span>
         <StatusBadge status={j.status} />
         <h2 className={styles.panelTitle}>{j.name}</h2>
       </div>

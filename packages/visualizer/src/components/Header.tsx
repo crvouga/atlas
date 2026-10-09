@@ -1,3 +1,4 @@
+import * as Popover from '@radix-ui/react-popover';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 
 import { useAtlas } from '../app/atlas-context';
@@ -5,8 +6,8 @@ import { emptyCounts, type AtlasView } from '../data/model';
 import { LATEST } from '../data/queries';
 import { DataIssues } from './DataIssues';
 import styles from './Header.module.css';
-import { ChevronIcon } from './icons';
-import { StatusDot, SummaryBar } from './Status';
+import { CheckIcon, ChevronDownIcon, ChevronIcon, ExternalIcon } from './icons';
+import { SummaryBar } from './Status';
 
 const dateTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -18,95 +19,110 @@ export function formatRunTime(iso: string) {
 function minutes(ms: number | undefined) {
   if (!ms) return null;
   const m = Math.round(ms / 60_000);
-  return m < 1 ? 'under a minute' : `${m} min`;
+  return m < 1 ? 'Under a minute' : `${m} min`;
 }
 
-function RunMeta({ view }: { view: AtlasView | null }) {
-  const { run, runs } = useAtlas();
-  if (!view) return <span className={styles.meta}>Loading the spec…</span>;
-  if (run.loading) return <span className={styles.meta}>Loading the run…</span>;
-  if (!view.run) {
-    return <span className={styles.meta}>{runs.loading ? 'Looking for runs…' : view.runs.length ? 'No finished run yet' : 'From the spec · not run yet'}</span>;
-  }
-  const info = view.run.info;
-  const parts = [
-    `Checked ${formatRunTime(info.startedAt)}`,
-    minutes(info.durationMs),
-    info.mode === 'showcase' ? 'with videos' : 'quick check',
-    info.branch,
-    info.commit?.slice(0, 7)
-  ].filter(Boolean);
+function AtlasMark() {
   return (
-    <span className={styles.meta}>
-      {parts.join(' · ')}
-      {view.run.outOfDate && <span className={styles.stale}> · spec has changed since</span>}
-      {view.run.reports.map((r) => (
-        <span key={r.label}>
-          {' · '}
-          <a className={styles.report} href={r.url} target="_blank" rel="noreferrer">
-            {r.label}
-          </a>
-        </span>
-      ))}
-    </span>
+    <svg className={styles.mark} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor" />
+      <path d="M7.5 7.5 16.5 12 7.5 16.5" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
+      <circle cx="7.5" cy="7.5" r="2.4" fill="#fff" />
+      <circle cx="16.5" cy="12" r="2.4" fill="#fff" />
+      <circle cx="7.5" cy="16.5" r="2.4" fill="#fff" />
+    </svg>
   );
 }
 
-function RunPicker({ view }: { view: AtlasView }) {
+function runLabel(view: AtlasView | null, loading: { run: boolean; runs: boolean }) {
+  if (!view) return 'Loading the spec…';
+  if (loading.run) return 'Loading the run…';
+  if (!view.run) return loading.runs ? 'Looking for runs…' : view.runs.length ? 'No finished run yet' : 'Not run yet';
+  return formatRunTime(view.run.info.startedAt);
+}
+
+/** The run being shown, what it was, and every other run to switch to. */
+function RunMenu({ view }: { view: AtlasView | null }) {
+  const { run, runs, latestRunId } = useAtlas();
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
-  const { latestRunId } = useAtlas();
-  if (view.runs.length === 0) return null;
-  const latest = view.runs.find((r) => r.id === latestRunId);
+  const label = runLabel(view, { run: run.loading, runs: runs.loading });
+  const current = view?.run;
+  const selected = search.run ?? LATEST;
+  const latest = view?.runs.find((r) => r.id === latestRunId);
+  const choose = (id: string) => void navigate({ to: '.', search: (prev) => ({ ...prev, run: id === LATEST ? undefined : id }) });
+  const info = current?.info;
+  const rows: [string, string | null | undefined][] = info
+    ? [
+        ['Checked', formatRunTime(info.startedAt)],
+        ['Took', minutes(info.durationMs)],
+        ['Recording', info.mode === 'showcase' ? 'With videos' : 'Quick check'],
+        ['Branch', info.branch],
+        ['Commit', info.commit?.slice(0, 7)]
+      ]
+    : [];
   return (
-    <label className={styles.picker}>
-      <span className="sr-only">Run</span>
-      <select
-        className={styles.select}
-        value={search.run ?? LATEST}
-        onChange={(e) => void navigate({ to: '.', search: (prev) => ({ ...prev, run: e.target.value === LATEST ? undefined : e.target.value }) })}
-      >
-        <option value={LATEST}>Latest{latest ? ` · ${formatRunTime(latest.startedAt)}` : ''}</option>
-        {view.runs.map((r) => (
-          <option key={r.id} value={r.id} disabled={r.progress === 'running'}>
-            {formatRunTime(r.startedAt)} · {r.progress === 'running' ? 'still running' : r.mode === 'showcase' ? 'with videos' : 'quick check'}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function JourneyBar({ view, chartId }: { view: AtlasView; chartId: string }) {
-  const search = useSearch({ strict: false });
-  const chart = view.charts.get(chartId);
-  const related = new Set([chartId, ...(chart?.childChartIds ?? []), ...(chart?.parent ? [chart.parent.chartId] : [])]);
-  const journeys = view.journeys.filter((j) => j.chartIds.some((id) => related.has(id)) && j.chartIds.includes(chartId));
-  if (journeys.length === 0) return null;
-  return (
-    <nav className={styles.journeys} aria-label="Journeys through this chart">
-      <span className={styles.journeysLabel}>Journeys</span>
-      <ul className={styles.journeyList}>
-        {journeys.map((j) => {
-          const active = search.journey === j.id;
-          return (
-            <li key={j.id}>
-              <Link
-                to="/chart/$chartId"
-                params={{ chartId }}
-                search={(prev) => ({ run: prev.run, journey: active ? undefined : j.id })}
-                className={styles.journey}
-                data-active={active}
-                aria-current={active ? 'true' : undefined}
-              >
-                <StatusDot status={j.status} />
-                {j.name}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <Popover.Root>
+      <Popover.Trigger className={styles.runTrigger} data-stale={Boolean(current?.outOfDate)} disabled={!view}>
+        <span className={styles.runCaption}>{current ? (selected === LATEST ? 'Latest run' : 'Run') : 'Runs'}</span>
+        <span className={styles.runValue}>{label}</span>
+        {current?.outOfDate && <span className={styles.staleDot} aria-label="The spec has changed since this run" />}
+        <ChevronDownIcon size={13} className={styles.runChevron} />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content className={styles.runPop} align="end" sideOffset={8} collisionPadding={12}>
+          {info ? (
+            <section className={styles.runDetails} aria-label="This run">
+              <dl>
+                {rows
+                  .filter(([, v]) => v)
+                  .map(([k, v]) => (
+                    <div key={k}>
+                      <dt>{k}</dt>
+                      <dd>{v}</dd>
+                    </div>
+                  ))}
+              </dl>
+              {current.outOfDate && <p className={styles.stale}>The spec has changed since this run, so some results may not match the map.</p>}
+              {current.reports.length > 0 && (
+                <div className={styles.reports}>
+                  {current.reports.map((r) => (
+                    <a key={r.label} href={r.url} target="_blank" rel="noreferrer">
+                      {r.label}
+                      <ExternalIcon size={12} />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : (
+            <p className={styles.runEmpty}>
+              {view?.runs.length ? 'No run has finished yet. Results appear here once one does.' : 'Everything on the map comes from the spec. Run Atlas against the app to fill in screenshots and results.'}
+            </p>
+          )}
+          {view && view.runs.length > 0 && (
+            <div className={styles.runList} role="radiogroup" aria-label="Choose a run">
+              <button type="button" role="radio" aria-checked={selected === LATEST} onClick={() => choose(LATEST)}>
+                <span>
+                  Always show the latest
+                  {latest && <small>{formatRunTime(latest.startedAt)}</small>}
+                </span>
+                {selected === LATEST && <CheckIcon size={14} />}
+              </button>
+              {view.runs.map((r) => (
+                <button key={r.id} type="button" role="radio" aria-checked={selected === r.id} disabled={r.progress === 'running'} onClick={() => choose(r.id)}>
+                  <span>
+                    {formatRunTime(r.startedAt)}
+                    <small>{r.progress === 'running' ? 'Still running' : r.mode === 'showcase' ? 'With videos' : 'Quick check'}</small>
+                  </span>
+                  {selected === r.id && <CheckIcon size={14} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
@@ -116,18 +132,19 @@ function Breadcrumbs({ view, chartId }: { view: AtlasView | null; chartId: strin
   const parent = chart?.parent ? view?.charts.get(chart.parent.chartId) : undefined;
   return (
     <nav className={styles.crumbs} aria-label="Where you are">
-      <Link to="/" search={(prev) => ({ run: prev.run })} className={styles.home}>
-        {view?.title ?? 'Atlas'}
+      <Link to="/" search={(prev) => ({ run: prev.run })} className={styles.home} aria-current={chart ? undefined : 'page'}>
+        <AtlasMark />
+        <span>{view?.title ?? 'Atlas'}</span>
       </Link>
       {context && (
         <>
-          <ChevronIcon size={12} className={styles.sep} />
+          <ChevronIcon size={11} className={styles.sep} />
           <span className={styles.crumb}>{context.name}</span>
         </>
       )}
       {parent && (
         <>
-          <ChevronIcon size={12} className={styles.sep} />
+          <ChevronIcon size={11} className={styles.sep} />
           <Link to="/chart/$chartId" params={{ chartId: parent.id }} search={(prev) => ({ run: prev.run })} className={styles.crumbLink}>
             {parent.name}
           </Link>
@@ -135,7 +152,7 @@ function Breadcrumbs({ view, chartId }: { view: AtlasView | null; chartId: strin
       )}
       {chart && (
         <>
-          <ChevronIcon size={12} className={styles.sep} />
+          <ChevronIcon size={11} className={styles.sep} />
           <span className={styles.crumbCurrent} aria-current="page">
             {chart.name}
           </span>
@@ -152,33 +169,29 @@ export function Header() {
   const chart = chartId ? view?.charts.get(chartId) : undefined;
   const counts = chart
     ? { screens: chart.screens, events: chart.events, journeys: summarize(view!, chart.journeyIds) }
-    : view?.totals ?? { screens: emptyCounts(), events: emptyCounts(), journeys: emptyCounts() };
+    : (view?.totals ?? { screens: emptyCounts(), events: emptyCounts(), journeys: emptyCounts() });
   return (
     <header className={styles.header}>
-      <div className={styles.brand}>
-        <Breadcrumbs view={view} chartId={chartId} />
-        <RunMeta view={view} />
-      </div>
-      <div className={styles.summaries} aria-label="Summary">
+      <Breadcrumbs view={view} chartId={chartId} />
+      <div className={styles.health} aria-label={chart ? `Health of ${chart.name}` : 'Health of the product'}>
         {view ? (
           <>
-            <SummaryBar noun="screen" nounPlural="screens" counts={counts.screens} verb="working" />
-            <SummaryBar noun="event" nounPlural="events" counts={counts.events} verb="exercised" />
-            <SummaryBar noun="journey" nounPlural="journeys" counts={counts.journeys} verb="passed" />
+            <SummaryBar variant="inline" noun="screen" nounPlural="screens" counts={counts.screens} verb="working" />
+            <SummaryBar variant="inline" noun="event" nounPlural="events" counts={counts.events} verb="exercised" />
+            <SummaryBar variant="inline" noun="journey" nounPlural="journeys" counts={counts.journeys} verb="passed" />
           </>
         ) : (
           <>
-            <span className={styles.summarySkeleton} />
-            <span className={styles.summarySkeleton} />
-            <span className={styles.summarySkeleton} />
+            <span className={styles.healthSkeleton} />
+            <span className={styles.healthSkeleton} />
+            <span className={styles.healthSkeleton} />
           </>
         )}
       </div>
       <div className={styles.tools}>
-        {view && <RunPicker view={view} />}
+        <RunMenu view={view} />
         {view && <DataIssues issues={view.issues} />}
       </div>
-      {view && chartId && <JourneyBar view={view} chartId={chartId} />}
     </header>
   );
 }

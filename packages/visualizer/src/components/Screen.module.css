@@ -4,21 +4,22 @@
   aspect-ratio: 390 / 844;
   border-radius: 0.65rem;
   overflow: hidden;
-  background: var(--bg-2);
+  background: var(--sheet-2);
   display: block;
 }
 
 .phone[data-size='full'] {
-  border-radius: 1.4rem;
+  border-radius: 1.5rem;
   border: 1px solid var(--line);
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-float);
 }
 
 .phone[data-variant='sketch'] {
   background:
-    radial-gradient(circle at 1px 1px, rgba(124, 58, 237, 0.13) 1px, transparent 0) 0 0 / 10px 10px,
-    linear-gradient(180deg, #fbfaff 0%, #f6f4fd 100%);
-  border: 1.5px dashed var(--user-line);
+    linear-gradient(var(--graticule) 1px, transparent 1px) 0 0 / 100% 12px,
+    linear-gradient(90deg, var(--graticule) 1px, transparent 1px) 0 0 / 12px 100%,
+    var(--surface-2);
+  border: 1.5px dashed var(--line-2);
 }
 
 .phone[data-size='full'][data-variant='sketch'] {
@@ -33,7 +34,7 @@
   height: 7px;
   transform: translateX(-50%);
   border-radius: var(--pill);
-  background: rgba(76, 29, 149, 0.12);
+  background: var(--line);
 }
 
 .phone[data-size='full'] .notch {
@@ -59,15 +60,13 @@
 
 .reason {
   align-self: flex-start;
-  font-size: 7.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 2px 6px;
+  font-size: 8px;
+  font-weight: 600;
+  padding: 1px 6px;
   border-radius: var(--pill);
-  background: var(--card);
-  color: var(--user-ink);
-  border: 1px solid var(--user-ring);
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line-2);
 }
 
 .reason[data-reason='not-reached'] {
@@ -79,28 +78,30 @@
 .reason[data-reason='processing'] {
   color: var(--time-ink);
   border-color: var(--time-line);
+  border-style: solid;
 }
 
 .phone[data-size='full'] .reason {
-  font-size: 0.7rem;
-  padding: 0.2rem 0.6rem;
+  font-size: var(--text-xs);
+  padding: 0.15rem 0.6rem;
 }
 
 .title {
   font-size: 11px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--user-deep);
+  font-family: var(--font-map);
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--ink);
 }
 
 .phone[data-size='full'] .title {
-  font-size: 1.15rem;
+  font-size: var(--text-lg);
 }
 
 .description {
   font-size: 8px;
   line-height: 1.35;
-  color: var(--ink-3);
+  color: var(--ink-2);
   display: -webkit-box;
   -webkit-line-clamp: 6;
   -webkit-box-orient: vertical;
@@ -127,7 +128,7 @@
   font-size: 7px;
   line-height: 1.3;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--surface);
   border-radius: 4px;
   padding: 3px 4px;
 }
@@ -151,7 +152,7 @@
   width: 6px;
   height: 6px;
   border-radius: 2px;
-  border: 1.2px solid var(--user-line);
+  border: 1.2px solid var(--line-2);
 }
 
 .phone[data-size='full'] .tick {
@@ -172,7 +173,7 @@
   display: block;
   height: 5px;
   border-radius: var(--pill);
-  background: rgba(124, 58, 237, 0.1);
+  background: var(--line);
 }
 
 .barNarrow {
@@ -184,8 +185,8 @@
   height: 46px;
   border-radius: 6px;
   margin-bottom: 4px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(124, 58, 237, 0.12);
+  background: var(--surface);
+  border: 1px solid var(--line);
 }
 
 .phone[data-size='full'] .card {
@@ -196,7 +197,7 @@
 .button {
   height: 12px;
   margin-top: 4px;
-  background: rgba(124, 58, 237, 0.18);
+  background: var(--line-2);
 }
 
 .phone[data-size='full'] .barWide,
@@ -222,12 +223,12 @@
   bottom: 6px;
   text-align: center;
   font-size: 8px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 3px 4px;
   border-radius: var(--pill);
-  color: var(--user-ink);
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid var(--user-line);
+  color: var(--ink-2);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--line-2);
 }
 
 .phone[data-size='full'] .designTag {
@@ -249,14 +250,8 @@
 .skeleton {
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, var(--bg-2) 30%, #e9eef5 50%, var(--bg-2) 70%) 0 0 / 300% 100%;
+  background: linear-gradient(100deg, var(--sheet) 30%, var(--sheet-2) 50%, var(--sheet) 70%) 0 0 / 300% 100%;
   animation: shimmer 1.4s linear infinite;
-}
-
-@keyframes shimmer {
-  to {
-    background-position: -150% 0;
-  }
 }
 
 .img {
@@ -287,7 +282,7 @@
   text-align: center;
   font-size: 8.5px;
   color: var(--muted);
-  background: var(--bg);
+  background: var(--surface-2);
 }
 
 .phone[data-size='full'] .failed {
@@ -297,8 +292,8 @@
 .retry {
   font-size: inherit;
   border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--user);
+  background: var(--surface);
+  color: var(--route-ink);
   border-radius: var(--pill);
   padding: 2px 8px;
   cursor: pointer;
