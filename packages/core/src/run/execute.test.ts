@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -131,6 +131,42 @@ async function run(impl: Implementation<Lamp>, options: { retry?: boolean; drive
 }
 
 describe('runPaths', () => {
+  it('publishes reached screens and steps before the active path finishes', async () => {
+    let enter = () => {};
+    let release = () => {};
+    const entered = new Promise<void>((resolve) => { enter = resolve; });
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const output = path.join(directory, 'live');
+    const running = run(implementation({
+      Brightens: {
+        kind: 'user',
+        how: 'brighten()',
+        run: async (lamp) => {
+          enter();
+          await held;
+          lamp.brighten();
+        }
+      }
+    }), { output, retry: false });
+    await entered;
+    try {
+      const id = readdirSync(output)[0]!;
+      const snapshot = JSON.parse(readFileSync(path.join(output, id, 'manifest.json'), 'utf8'));
+      expect(snapshot.run.finishedAt).toBeNull();
+      expect(snapshot.run.progress).toMatchObject({ totalPaths: 1, completedPaths: 0, activePaths: ['journey-1'] });
+      expect(snapshot.states.Dim.status).toBe('passed');
+      expect(snapshot.transitions['Off :: Switches on'].status).toBe('passed');
+      expect(snapshot.paths[0]).toMatchObject({ progress: 'running', steps: [{ event: 'Switches on', status: 'passed' }] });
+    } finally {
+      release();
+      await running;
+    }
+    const { manifest, ok } = await running;
+    expect(ok).toBe(true);
+    expect(manifest.run.finishedAt).toEqual(expect.any(String));
+    expect(manifest.run.progress).toMatchObject({ totalPaths: 1, completedPaths: 1, activePaths: [] });
+  });
+
   it('passes every path, state and transition, and writes the manifest and reports', async () => {
     const { manifest, runDir, ok } = await run(implementation());
     expect(ok).toBe(true);

@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { BusinessEventResult, CloudEvent } from '../events/cloudevents';
@@ -241,7 +241,7 @@ export function buildManifest<C>(
   context: RunContext<C>,
   paths: PlannedPath[],
   outcomes: Map<string, PathOutcome>,
-  run: { id: string; startedAt: Date; finished: boolean; mode: RunMode; driver: { name: string; clients?: Record<string, string> }; extra?: Record<string, unknown> }
+  run: { id: string; startedAt: Date; finished: boolean; mode: RunMode; driver: { name: string; clients?: Record<string, string> }; activePaths?: string[]; extra?: Record<string, unknown> }
 ) {
   const { implementation: impl, graph, scope } = context;
   const metaOf = new Map<string, StateMeta>();
@@ -292,12 +292,15 @@ export function buildManifest<C>(
         const tr = transitions[s.transition];
         if (tr && tr.status === 'not-reached') tr.reason = s.reason;
       }
-      results.push({ ...pathFields, status: 'not-reached', attempts: [], steps, stoppedAt: null });
+      results.push({ ...pathFields, progress: 'complete', status: 'not-reached', attempts: [], steps, stoppedAt: null });
       resultStatus.set(planned.id, 'not-reached');
       continue;
     }
     const outcome = outcomes.get(planned.key);
-    if (!outcome) continue;
+    if (!outcome) {
+      results.push({ ...pathFields, progress: run.finished ? 'complete' : run.activePaths?.includes(planned.id) ? 'running' : 'queued', status: 'not-reached', attempts: [], steps: [], stoppedAt: null });
+      continue;
+    }
     const flaky = outcome.status === 'flaky';
     leaks.push(...outcome.leaks);
     if (outcome.failure && states[outcome.failure.state]) {
@@ -359,6 +362,7 @@ export function buildManifest<C>(
     if (outcome.status === 'failed' && outcome.stoppedAt && states[outcome.stoppedAt]) states[outcome.stoppedAt]!.status = 'failed';
     results.push({
       ...pathFields,
+      progress: run.activePaths?.includes(planned.id) ? 'running' : 'complete',
       status: outcome.status,
       attempts: outcome.attempts,
       steps: outcome.steps,
@@ -423,6 +427,12 @@ export function buildManifest<C>(
       id: run.id,
       startedAt: run.startedAt.toISOString(),
       finishedAt: run.finished ? new Date().toISOString() : null,
+      progress: {
+        totalPaths: paths.length,
+        completedPaths: paths.filter((p) => p.skipRun || (outcomes.has(p.key) && !run.activePaths?.includes(p.id))).length,
+        activePaths: run.activePaths ?? [],
+        updatedAt: new Date().toISOString()
+      },
       durationMs: Date.now() - run.startedAt.getTime(),
       commit: git('rev-parse HEAD'),
       branch: git('rev-parse --abbrev-ref HEAD'),
@@ -521,6 +531,12 @@ export function buildManifest<C>(
 
 export type Manifest = ReturnType<typeof buildManifest>;
 
+function writeAtomic(file: string, text: string) {
+  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.tmp`);
+  writeFileSync(temporary, text);
+  renameSync(temporary, file);
+}
+
 /** Write a run's manifest, reports and outcomes; returns the manifest. */
 export function writeRun<C>(
   runDir: string,
@@ -530,12 +546,12 @@ export function writeRun<C>(
   run: Parameters<typeof buildManifest>[3]
 ) {
   const manifest = buildManifest(context, paths, outcomes, run);
-  writeFileSync(path.join(runDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  writeFileSync(path.join(runDir, 'junit.xml'), toJUnit(manifest));
-  writeFileSync(path.join(runDir, 'ctrf.json'), `${JSON.stringify(toCtrf(manifest), null, 2)}\n`);
-  writeFileSync(path.join(runDir, 'chart.mmd'), toMermaid(context.composition.machine));
-  const ordered = Object.fromEntries(paths.flatMap((p) => (outcomes.has(p.key) ? [[p.key, outcomes.get(p.key)!]] : [])));
-  writeFileSync(path.join(runDir, 'outcomes.json'), `${JSON.stringify({ runId: run.id, plan: paths.map((p) => p.key), outcomes: ordered })}\n`);
+  writeAtomic(path.join(runDir, 'junit.xml'), toJUnit(manifest));
+  writeAtomic(path.join(runDir, 'ctrf.json'), `${JSON.stringify(toCtrf(manifest), null, 2)}\n`);
+  writeAtomic(path.join(runDir, 'chart.mmd'), toMermaid(context.composition.machine));
+  const ordered = Object.fromEntries(paths.flatMap((p) => (outcomes.has(p.key) && !run.activePaths?.includes(p.id) ? [[p.key, outcomes.get(p.key)!]] : [])));
+  writeAtomic(path.join(runDir, 'outcomes.json'), `${JSON.stringify({ runId: run.id, plan: paths.map((p) => p.key), outcomes: ordered })}\n`);
+  writeAtomic(path.join(runDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }
 
@@ -610,6 +626,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
   const workers = Math.max(1, Math.min(options.workers ?? 1, driver.concurrency ?? 1, toRun.length || 1));
   const sideBySide = workers > 1;
   const outcomes = new Map<string, PathOutcome>();
+  const activeOutcomes = new Map<string, PathOutcome>();
+  const activePaths = new Set<string>();
 
   const reused = new Set<string>();
   for (const p of toRun) {
@@ -713,6 +731,22 @@ export async function runPaths<C>(options: RunOptions<C>) {
     let failed = false;
     const attemptStarted = Date.now();
     let setupMs: number | undefined;
+    const publishAttempt = () => {
+      activeOutcomes.set(planned.key, {
+        id: planned.id,
+        key: planned.key,
+        status: error ? 'failed' : 'not-reached',
+        attempts: [],
+        steps,
+        stoppedAt,
+        observed,
+        failure,
+        leaks,
+        durationMs: Date.now() - attemptStarted,
+        setupMs
+      });
+      publish();
+    };
     const shotFile = (name: string) => path.join(mediaDir, 'paths', tag, `${name}.png`);
     const clipFile = (index: number) => path.join(mediaDir, 'clips', tag, `${pad(index + 1)}.mp4`);
     const shoot = async (name: string, at: Focus) => {
@@ -756,6 +790,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
         transient: false,
         checks: (await impl.states[startState]?.checks?.(ctx)) ?? []
       });
+      if (driver.text) leaks.push(...privacyFindings(await driver.text(ctx).catch(() => ''), `${planned.id} / ${startState}`, privacy));
+      publishAttempt();
 
       for (const [index, step] of planned.steps.entries()) {
         const ev = impl.events[step.event];
@@ -829,8 +865,9 @@ export async function runPaths<C>(options: RunOptions<C>) {
         if (driver.text) leaks.push(...privacyFindings(await driver.text(ctx).catch(() => ''), `${planned.id} / ${target}`, privacy));
         const shot = transient ? null : await shoot(pad(index + 1), on(s?.client));
         observed.push({ step, target, clip, timeline: [...timeline.entries], events, recognizer, shot, transient, checks });
-        await s?.settle?.(ctx);
         steps.push({ transition, event: step.event, status: 'passed', reason: null });
+        publishAttempt();
+        await s?.settle?.(ctx);
       }
     } catch (e) {
       failed = true;
@@ -849,6 +886,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
           reason: rest === failedStep ? err.message : `Not reached: the path stopped at "${err.state ?? 'start'}".`
         });
       }
+      publishAttempt();
     }
     const traceFile = path.join(mediaDir, 'traces', `${tag}.zip`);
     const closed = await driver.close(ctx, { failed, traceFile }).catch(() => undefined);
@@ -920,12 +958,17 @@ export async function runPaths<C>(options: RunOptions<C>) {
     finished,
     mode: options.mode,
     driver: { name: driver.name, ...(driver.clients ? { clients: driver.clients } : {}) },
+    activePaths: options.paths.filter((p) => activePaths.has(p.id)).map((p) => p.id),
     extra: {
       workers,
       ...(options.shard ? { shard: options.shard } : {}),
       ...(reused.size ? { reused: { from: path.basename(options.reuse!.runDir), paths: reused.size } } : {})
     }
   });
+
+  function publish() {
+    writeRun(runDir, options, options.paths, new Map([...outcomes, ...activeOutcomes]), runInfo(false));
+  }
 
   const history = durationHistory(options.outputRoot);
   const cost = (p: PlannedPath) => history[p.key] ?? estimateMs(p);
@@ -942,8 +985,12 @@ export async function runPaths<C>(options: RunOptions<C>) {
     await Promise.all(
       Array.from({ length: workers }, async () => {
         for (let next = queue.shift(); next; next = queue.shift()) {
+          activePaths.add(next.id);
+          publish();
           outcomes.set(next.key, await runPath(next));
-          writeRun(runDir, options, options.paths, outcomes, runInfo(false));
+          activeOutcomes.delete(next.key);
+          activePaths.delete(next.id);
+          publish();
         }
       })
     );
