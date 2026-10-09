@@ -250,12 +250,19 @@ describe('planChart', () => {
         ]
       });
       const byEvents = (events: string[]) => paths.filter((p) => p.steps.map((s) => s.event).join(' > ') === events.join(' > '));
-      expect(byEvents(['Orders', 'Order arrives']).map((p) => [p.seed, p.blockedBy])).toEqual([
-        ['Free member with a gift card', []],
-        [undefined, ['Start: no seed at Paid + None is for "Orders"']]
-      ]);
+      expect(byEvents(['Orders', 'Order arrives']).map((p) => [p.seed, p.blockedBy])).toEqual([['Free member with a gift card', []]]);
+      // Not cut where only a seed unsuited to what follows starts: the paid order runs from the variant.
+      expect(byEvents(['Upgrades', 'Orders', 'Order arrives']).map((p) => [p.seed, p.blockedBy])).toEqual([['Free member with a gift card', []]]);
       expect(paths.filter((p) => p.seed === 'Free member with a gift card').every((p) => p.steps.some((s) => s.event === 'Orders'))).toBe(true);
       expect(paths.filter((p) => p.steps.some((s) => s.event === 'Orders') && !p.blockedBy.length).every((p) => p.seed === 'Free member with a gift card')).toBe(true);
+
+      // A journey is not cut where only a variant seed for other events starts.
+      const upgrades = bundleOf('.', [chart(product)], [{ name: 'Upgrades', description: 'Upgrades.', events: ['Signs up', 'Upgrades'], endsIn: ['Paid'] }]);
+      const onlyVariant = planChart(upgrades, graph, chartScope(upgrades, composition, graph), {
+        seeds: [{ name: 'Free member with a gift card', at: graph.valueOf('Member'), for: ['Orders'] }]
+      });
+      const stretches = onlyVariant.journeys[0]!.paths.map((id) => onlyVariant.paths.find((p) => p.id === id)!);
+      expect(stretches.map((p) => [p.seed ?? 'setup', p.steps.map((s) => s.event)])).toEqual([['setup', ['Signs up', 'Upgrades']]]);
 
       // With no journey to cover it, the step after the variant's event still starts from the variant.
       const bare = bundleOf('.', [chart(product)], []);

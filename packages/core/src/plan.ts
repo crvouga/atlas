@@ -266,12 +266,24 @@ export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartSco
       journeyPaths.push(path);
       ids.push(path.id);
     };
-    for (const step of replay.steps) {
+    /** The events of the stretch that would start at step `from`: up to the next seeded configuration. */
+    const stretchFrom = (from: number) => {
+      const events: string[] = [];
+      for (let i = from; i < replay.steps.length; i++) {
+        const next = replay.steps[i]!;
+        if (!inScope(scope, next.transitions) || (i > from && startsAt(next.from).length > 0)) break;
+        events.push(next.event);
+      }
+      return events;
+    };
+    for (const [index, step] of replay.steps.entries()) {
       if (!inScope(scope, step.transitions)) {
         flush();
         continue;
       }
-      const seeded = startsAt(step.from).length > 0;
+      // Cut only where a start point suits what follows: a variant seed for other events is no place to cut.
+      const candidates = startsAt(step.from);
+      const seeded = candidates.length > 0 && candidates.some((p) => suits(p, stretchFrom(index)));
       if (current && seeded) flush();
       if (!current) {
         const entering = isRoot || seeded || step.transitions.some((t) => scope.entries.has(t));
