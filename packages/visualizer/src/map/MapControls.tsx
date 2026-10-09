@@ -12,8 +12,12 @@ import type { MapSelection } from './ChartMap';
 import { chartScope, initialState, journeyPath, stepFocus, visibleRepresentative } from './navigation';
 import styles from './map.module.css';
 
-// Immediate viewport changes also work in background tabs and avoid motion during rapid stepping.
-const duration = () => 0;
+import type { CameraController } from './use-camera';
+
+function ZoomReadout() {
+  const { zoom } = useViewport();
+  return <span className={styles.zoomValue}>{Math.round(zoom * 100)}%</span>;
+}
 
 export function MapControls({
   view,
@@ -21,7 +25,8 @@ export function MapControls({
   layout,
   selection,
   busy,
-  hadSavedViewport
+  hadSavedViewport,
+  camera
 }: {
   view: AtlasView;
   chartId: string;
@@ -29,10 +34,10 @@ export function MapControls({
   selection: MapSelection;
   busy: boolean;
   hadSavedViewport: boolean;
+  camera: CameraController;
 }) {
   const flow = useReactFlow();
   const initialized = flow.viewportInitialized;
-  const { zoom } = useViewport();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -49,7 +54,7 @@ export function MapControls({
   const path = useMemo(() => journeyPath(view, journey), [view, journey]);
   const visible = useMemo(() => new Set(layout.nodes.map((n) => n.id)), [layout]);
   const fit = useCallback(
-    (ids?: string[]) => {
+    (ids?: string[], animate = true) => {
       const targets = ids ? [...new Set(ids.map((id) => visibleRepresentative(view, id, visible)).filter((id): id is string => Boolean(id)))] : undefined;
       if (targets?.length === 0) return;
       const placed = targets ? layout.nodes.filter((node) => targets.includes(node.id)) : layout.nodes;
@@ -68,10 +73,19 @@ export function MapControls({
         1,
         0.18
       );
-      void flow.setViewport({ ...viewport, x: viewport.x + 20, y: viewport.y + top }, { duration: 0 });
+      camera.moveTo({ ...viewport, x: viewport.x + 20, y: viewport.y + top }, animate);
     },
-    [flow, view, visible, layout]
+    [camera, view, visible, layout]
   );
+  const zoomBy = (factor: number) => {
+    const current = flow.getViewport();
+    const zoom = Math.max(0.08, Math.min(2.5, current.zoom * factor));
+    const element = searchBox.current?.closest('.react-flow');
+    const cx = (element?.clientWidth ?? 1200) / 2;
+    const cy = (element?.clientHeight ?? 700) / 2;
+    const ratio = zoom / current.zoom;
+    camera.moveTo({ x: cx - (cx - current.x) * ratio, y: cy - (cy - current.y) * ratio, zoom });
+  };
   const lastFocus = useRef('');
   useEffect(() => {
     if (!initialized || busy) return;
@@ -80,36 +94,43 @@ export function MapControls({
     const first = !lastFocus.current;
     lastFocus.current = key;
     if (selection.screen) {
-      fit([selection.screen]);
+      fit([selection.screen], !first);
       return;
     }
     if (selection.event) {
       const edge = layout.edges.find((e) => e.transitionId === selection.event || view.transitions.get(e.transitionId)?.carriedBy === selection.event);
       if (edge) {
-        fit([edge.source, edge.target]);
+        fit([edge.source, edge.target], !first);
         return;
       }
     }
     const focus = stepFocus(view, journey, selection.step);
     if (focus.length) {
-      fit(focus);
+      fit(focus, !first);
       return;
     }
     if (journey) {
-      fit([...path.states]);
+      fit([...path.states], !first);
       return;
     }
     if (first && hadSavedViewport) return;
     const el = searchBox.current?.closest('.react-flow');
     const readable = Math.min((el?.clientWidth ?? 1200) / layout.width, (el?.clientHeight ?? 700) / layout.height) > 0.42;
-    if (readable) fit();
-    else fit([initialState(view, chartId) ?? layout.nodes[0]!.id]);
+    if (readable) fit(undefined, !first);
+    else fit([initialState(view, chartId) ?? layout.nodes[0]!.id], !first);
   }, [initialized, busy, selection, layout, fit, journey, path, view, chartId, hadSavedViewport]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target instanceof Element ? event.target : null;
-      if (event.ctrlKey || event.metaKey || event.altKey || target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        target?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')
+      )
+        return;
       if (event.key === '/') {
         event.preventDefault();
         searchInput.current?.focus();
@@ -258,11 +279,11 @@ export function MapControls({
             Fit journey
           </button>
         )}
-        <button type="button" className={styles.zoomButton} onClick={() => void flow.zoomIn({ duration: duration() })} aria-label="Zoom in">
+        <button type="button" className={styles.zoomButton} onClick={() => zoomBy(1.2)} aria-label="Zoom in">
           <PlusIcon size={16} />
         </button>
-        <span className={styles.zoomValue}>{Math.round(zoom * 100)}%</span>
-        <button type="button" className={styles.zoomButton} onClick={() => void flow.zoomOut({ duration: duration() })} aria-label="Zoom out">
+        <ZoomReadout />
+        <button type="button" className={styles.zoomButton} onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out">
           <MinusIcon size={16} />
         </button>
         <button type="button" className={styles.zoomButton} onClick={() => fit()} aria-label="Fit the whole map" title="Fit the whole map">

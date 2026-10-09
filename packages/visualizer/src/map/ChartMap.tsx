@@ -9,6 +9,7 @@ import { useUiStore } from '../state/ui-store';
 import { EdgeMarkers, edgeTypes, type EventEdgeType } from './EventEdge';
 import { ancestors, chartScope, journeyPath, stepFocus, visibleRepresentative } from './navigation';
 import styles from './map.module.css';
+import { useCamera } from './use-camera';
 import { MapControls } from './MapControls';
 import { nodeTypes, type ChartLinkNodeType, type ContextNodeType, type GroupNodeType, type ScreenNodeType } from './nodes';
 
@@ -32,9 +33,9 @@ function hiddenCount(view: AtlasView, name: string, seen = new Set<string>()): n
 }
 
 function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout, selection: MapSelection, compact: boolean) {
+  const journey = useMemo(() => view.journeys.find((j) => j.id === selection.journey), [view, selection.journey]);
+  const path = useMemo(() => journeyPath(view, journey), [view, journey]);
   return useMemo(() => {
-    const journey = view.journeys.find((j) => j.id === selection.journey);
-    const path = journeyPath(view, journey);
     const visible = new Set(layout.nodes.map((n) => n.id));
     const active = new Set(stepFocus(view, journey, selection.step).map((id) => visibleRepresentative(view, id, visible)));
     const nodes: MapNode[] = layout.nodes.flatMap((n): MapNode[] => {
@@ -97,7 +98,7 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout, 
       ];
     });
     return { nodes, edges };
-  }, [view, chartId, layout, selection.screen, selection.event, selection.journey, selection.step, compact]);
+  }, [view, chartId, layout, journey, path, selection.screen, selection.event, selection.step, compact]);
 }
 
 function Flow({
@@ -119,7 +120,21 @@ function Flow({
   const saved = useRef<Viewport | undefined>(useUiStore.getState().viewports[chartId]);
   const saveViewport = useUiStore((s) => s.saveViewport);
   const minimap = useUiStore((s) => s.minimap);
-  const onMoveEnd = useCallback((_: unknown, viewport: Viewport) => saveViewport(chartId, viewport), [chartId, saveViewport]);
+  const onSettled = useCallback(
+    (viewport: Viewport) => {
+      const previous = useUiStore.getState().viewports[chartId];
+      if (previous?.x !== viewport.x || previous?.y !== viewport.y || previous?.zoom !== viewport.zoom) saveViewport(chartId, viewport);
+    },
+    [chartId, saveViewport]
+  );
+  const camera = useCamera(onSettled);
+  // Programmatic frames emit move-end events too. Persist only settled navigation or a user gesture.
+  const onMoveEnd = useCallback(
+    (_: unknown, viewport: Viewport) => {
+      if (!camera.isMoving()) onSettled(viewport);
+    },
+    [camera, onSettled]
+  );
   return (
     <ReactFlow<MapNode, EventEdgeType>
       nodes={nodes}
@@ -128,6 +143,11 @@ function Flow({
       edgeTypes={edgeTypes}
       defaultViewport={saved.current}
       onMoveEnd={onMoveEnd}
+      onPointerDownCapture={camera.cancel}
+      onWheelCapture={camera.cancel}
+      onMoveStart={(event) => {
+        if (event) camera.cancel();
+      }}
       minZoom={0.08}
       maxZoom={2.5}
       nodesDraggable={false}
@@ -140,7 +160,7 @@ function Flow({
       aria-label="Map of screens and events. Drag to move, scroll or pinch to zoom."
     >
       <EdgeMarkers />
-      <MapControls view={view} chartId={chartId} layout={layout} selection={selection} busy={busy} hadSavedViewport={Boolean(saved.current)} />
+      <MapControls view={view} chartId={chartId} layout={layout} selection={selection} busy={busy} camera={camera} hadSavedViewport={Boolean(saved.current)} />
       {minimap && (
         <MiniMap<MapNode>
           pannable

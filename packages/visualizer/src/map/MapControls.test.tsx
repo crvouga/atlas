@@ -9,7 +9,8 @@ import type { ChartLayout } from '../layout/layout';
 import { useUiStore } from '../state/ui-store';
 import { MapControls } from './MapControls';
 
-const flow = vi.hoisted(() => ({ viewportInitialized: true, setViewport: vi.fn(), zoomIn: vi.fn(), zoomOut: vi.fn() }));
+const flow = vi.hoisted(() => ({ viewportInitialized: true, setViewport: vi.fn(), getViewport: () => ({ x: 0, y: 0, zoom: 1 }) }));
+const camera = { moveTo: flow.setViewport, cancel: vi.fn(), isMoving: () => false };
 vi.mock('@xyflow/react', async (original) => ({
   ...(await original<typeof import('@xyflow/react')>()),
   useReactFlow: () => flow,
@@ -54,7 +55,15 @@ async function mount() {
     path: '/chart/$chartId',
     validateSearch: (search: Record<string, unknown>) => ({ journey: String(search.journey), step: Number(search.step) }),
     component: () => (
-      <MapControls view={view} chartId="Coffee order" layout={layout} selection={useSearch({ strict: false })} busy={false} hadSavedViewport={false} />
+      <MapControls
+        view={view}
+        chartId="Coffee order"
+        layout={layout}
+        selection={useSearch({ strict: false })}
+        busy={false}
+        hadSavedViewport={false}
+        camera={camera}
+      />
     )
   });
   const router = createRouter({

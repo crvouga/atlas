@@ -805,3 +805,12 @@
   background: var(--user-soft);
   color: var(--user-deep);
 }
+
+/* Non-selectable React Flow wrappers disable hit testing. Restore it only for
+   interactive cards and group headers; the large group interior stays pannable. */
+.screen,
+.chartLink,
+.context,
+.groupLabel {
+  pointer-events: auto;
+}
