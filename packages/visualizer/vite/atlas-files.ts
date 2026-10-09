@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { isStatechartFile, type Count, type RunSummary, type SpecIndex } from '@crvouga/atlas-schema';
+import { isStatechartFile, ReportSourcesSchema, RunInfoSchema, type Count, type RemoteReportSource, type ReportSource, type RunSummary, type SpecIndex } from '@crvouga/atlas-schema';
 
 export const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const FIXTURES_ROOT = path.join(APP_ROOT, 'fixtures');
@@ -13,6 +13,21 @@ export const DEFAULT_SPECS_DIR = 'specs';
 export const DEFAULT_RUNS_DIR = 'atlas-runs';
 
 export type AtlasRoots = { specs: string; runs: string; label: string };
+
+export function resolveReportSources(roots: AtlasRoots, env: NodeJS.ProcessEnv = process.env): ReportSource[] {
+  const workspace: ReportSource = { id: 'workspace', label: 'Workspace runs', type: 'directory', runs: roots.runs };
+  if (!env.ATLAS_SOURCES_FILE) return [workspace];
+  const file = path.resolve(env.INIT_CWD || process.cwd(), env.ATLAS_SOURCES_FILE);
+  const parsed = ReportSourcesSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
+  if (parsed.sources.some((source) => source.id === workspace.id)) throw new Error('The source id "workspace" is reserved for --runs.');
+  return [workspace, ...parsed.sources.map((source) => source.type === 'directory' ? { ...source, runs: path.resolve(path.dirname(file), source.runs) } : source)];
+}
+
+export function publicReportSources(sources: ReportSource[], base = '/__atlas/'): RemoteReportSource[] {
+  return sources.map((source) => source.type === 'directory'
+    ? { id: source.id, label: source.label, type: 'http', live: true, baseUrl: source.id === 'workspace' ? base : `${base}sources/${source.id}/` }
+    : source);
+}
 
 /** A chart in either open format: W3C SCXML or XState machine config. */
 export function isChartFile(file: string) {
@@ -111,27 +126,33 @@ function asCount(value: unknown): Count | undefined {
   return { total: n('total'), passed: n('passed'), failed: n('failed'), flaky: n('flaky'), notReached: n('notReached') };
 }
 
+function object(value: unknown) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 /** A run directory's summary: complete once its manifest is readable, running before that. */
 export function summarizeRun(runsRoot: string, id: string): RunSummary | null {
   const dir = path.join(runsRoot, id);
   const stat = statSafe(dir);
   if (!stat?.isDirectory()) return null;
   const manifestFile = path.join(dir, 'manifest.json');
-  const running: RunSummary = { id, startedAt: startedAtFromId(id, stat.birthtime), mode: id.endsWith('showcase') ? 'showcase' : 'fast', progress: 'running' };
+  const running: RunSummary = { id, startedAt: startedAtFromId(id, stat.birthtime), mode: id.endsWith('showcase') ? 'showcase' : 'fast', progress: 'running', hasManifest: false };
   if (!existsSync(manifestFile)) return running;
   let manifest: Record<string, unknown>;
   try {
-    manifest = JSON.parse(readFileSync(manifestFile, 'utf8')) as Record<string, unknown>;
+    const raw: unknown = JSON.parse(readFileSync(manifestFile, 'utf8'));
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ...running, progress: 'complete' };
+    manifest = object(raw);
   } catch {
     const ageMs = Date.now() - (statSafe(manifestFile)?.mtimeMs ?? 0);
     return ageMs < STILL_WRITING_MS ? running : { ...running, progress: 'complete' };
   }
-  const run = (manifest.run ?? {}) as Record<string, unknown>;
-  const coverage = ((manifest.coverage ?? {}) as Record<string, Record<string, unknown>>).overall;
+  const run = object(manifest.run);
+  const coverage = object(object(manifest.coverage).overall);
   const paths = Array.isArray(manifest.journeys)
-    ? (manifest.journeys as Record<string, unknown>[])
+    ? manifest.journeys.map(object)
     : Array.isArray(manifest.paths)
-      ? (manifest.paths as Record<string, unknown>[]).filter((p) => p.kind === 'journey')
+      ? manifest.paths.map(object).filter((p) => p.kind === 'journey')
       : [];
   const journeys: Count = { total: paths.length, passed: 0, failed: 0, flaky: 0, notReached: 0 };
   for (const p of paths) {
@@ -149,7 +170,9 @@ export function summarizeRun(runsRoot: string, id: string): RunSummary | null {
     durationMs: typeof run.durationMs === 'number' ? run.durationMs : undefined,
     specVersion: typeof run.specVersion === 'string' ? run.specVersion : undefined,
     progress: typeof run.finishedAt === 'string' || run.finishedAt === undefined ? 'complete' : 'running',
-    coverage: coverage ? { states: asCount(coverage.states), transitions: asCount(coverage.transitions) } : undefined,
+    execution: RunInfoSchema.shape.progress.safeParse(run.progress).data,
+    hasManifest: true,
+    coverage: Object.keys(coverage).length ? { states: asCount(coverage.states), transitions: asCount(coverage.transitions) } : undefined,
     journeys
   };
 }

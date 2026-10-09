@@ -18,6 +18,7 @@ Usage
 Options
   --specs <dir>    statecharts (*.scxml, *.machine.yaml|yml|json), journeys.yaml, notes   (default: ./specs)
   --runs <dir>     run directories, each with a manifest.json                              (default: ./atlas-runs)
+  --sources <file> additional directory, HTTP and streaming API report sources (JSON)
   --fixture <name> show a bundled example instead (spec-only, partial, full, failures, removed, malformed, large)
   --out <dir>      build: the static site (default ./atlas-site); publish-data: the data (default ./atlas-data)
   --keep <n>       how many of the newest runs to publish (default 30)
@@ -39,6 +40,7 @@ function parse(argv) {
     options: {
       specs: { type: 'string' },
       runs: { type: 'string' },
+      sources: { type: 'string' },
       fixture: { type: 'string' },
       out: { type: 'string' },
       keep: { type: 'string' },
@@ -60,6 +62,7 @@ function integer(name, value, min, max) {
 
 /** Point the shared root resolution (vite/atlas-files.ts) at the flags, as absolute paths. */
 function applyRoots(values, base) {
+  if (values.sources) process.env.ATLAS_SOURCES_FILE = path.resolve(base, values.sources);
   if (values.fixture) {
     if (values.specs || values.runs) throw new UsageError('--fixture cannot be combined with --specs or --runs');
     process.env.ATLAS_FIXTURE = values.fixture;

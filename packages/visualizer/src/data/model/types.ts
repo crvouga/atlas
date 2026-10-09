@@ -150,6 +150,7 @@ export type JourneyRunPath = {
   /** The seed the stretch started from; null when it started at the beginning. */
   seed: string | null;
   status: RunStatus;
+  progress: 'queued' | 'running' | 'complete';
   stoppedAt: string | null;
   error: string | null;
   steps: { transition: string | null; event: string; status: RunStatus | null; reason: string | null }[];
@@ -226,6 +227,19 @@ export type RunView = {
   outOfDate: boolean;
   /** Links to the other formats the run wrote: JUnit, CTRF, Mermaid. */
   reports: RunReport[];
+  paths: {
+    id: string;
+    name: string;
+    kind: 'journey' | 'generated';
+    status: ItemStatus;
+    progress: 'queued' | 'running' | 'complete';
+    steps: number;
+    seed: string | null;
+    durationMs: number | null;
+    error: string | null;
+    stoppedAt: string | null;
+    traces: RunReport[];
+  }[];
 };
 
 export type RemovedState = {

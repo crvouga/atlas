@@ -5,15 +5,17 @@ export * from './adapter';
 const DEV_PREFIX = '/__atlas/';
 const CHANGE_EVENT = 'atlas:change';
 
-function createDevAdapter(): AtlasAdapter {
-  const adapter = createHttpAdapter(DEV_PREFIX, 'dev');
+export function createDevAdapter(base = DEV_PREFIX, label = 'Live from disk', sourceId = 'workspace'): AtlasAdapter {
+  const adapter = createHttpAdapter(base, 'dev');
   return {
     ...adapter,
-    label: 'Live from disk',
+    label,
     subscribe: (onChange) => {
       const hot = import.meta.hot;
       if (!hot) return () => undefined;
-      const handler = (change: AtlasChange) => onChange(change);
+      const handler = (change: AtlasChange) => {
+        if (change.scope === 'specs' || (change.sourceId ?? 'workspace') === sourceId) onChange(change);
+      };
       hot.on(CHANGE_EVENT, handler);
       return () => hot.off(CHANGE_EVENT, handler);
     }

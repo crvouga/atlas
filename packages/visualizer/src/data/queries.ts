@@ -1,24 +1,21 @@
-import { SpecIndexSchema, type DataIssue, type RunSummary } from '@crvouga/atlas-schema';
+import { RunsIndexSchema, SpecIndexSchema, type DataIssue } from '@crvouga/atlas-schema';
 import { QueryClient, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useMemo } from 'react';
+import { useContext, useEffect, useMemo } from 'react';
 
+import { ReportSourcesContext, type BackendEntry } from '../app/report-sources';
 import { LoadError, type AtlasAdapter } from './adapters';
+import { useAdapter } from './adapters/context';
+import { reportKey, sourceRuns, type ReportBackend, type SourcedRunSummary } from './adapters/report-backend';
 import { buildAtlasView, type AtlasView } from './model';
-import { createIssueSink } from './parse/issues';
+import { createIssueSink, isRecord } from './parse/issues';
 import { parseManifest, parseRunsIndex } from './parse/manifest';
 import { parseSpec } from './parse/spec';
 
-export const AdapterContext = createContext<AtlasAdapter | null>(null);
+export { AdapterContext, useAdapter } from './adapters/context';
 
-export function useAdapter() {
-  const adapter = useContext(AdapterContext);
-  if (!adapter) throw new Error('useAdapter needs an AdapterContext provider');
-  return adapter;
-}
-
-const POLL_MS = Number(import.meta.env.VITE_ATLAS_POLL_MS ?? 60_000);
-const RUNNING_POLL_MS = 10_000;
-
+const configuredPollMs = Number(import.meta.env.VITE_ATLAS_POLL_MS ?? 60_000);
+const POLL_MS = Number.isFinite(configuredPollMs) && configuredPollMs >= 1000 ? configuredPollMs : 60_000;
+const RUNNING_POLL_MS = 2000;
 export const LATEST = 'latest';
 
 export function createQueryClient() {
@@ -34,28 +31,71 @@ export function createQueryClient() {
 }
 
 export const keys = {
-  specIndex: ['spec-index'] as const,
-  specFile: (path: string) => ['spec-file', path] as const,
-  runsIndex: ['runs-index'] as const,
-  manifest: (runId: string) => ['manifest', runId] as const
+  specIndex: (source: string) => ['spec', source, 'index'] as const,
+  specFile: (source: string, path: string) => ['spec', source, 'file', path] as const,
+  runsIndex: (source: string) => ['reports', source, 'index'] as const,
+  manifests: (source: string) => ['reports', source, 'manifest'] as const,
+  manifest: (source: string, runId: string) => ['reports', source, 'manifest', runId] as const
 };
 
-/** In dev, a spec or run changing on disk refetches just what changed. */
-export function useLiveUpdates() {
+function specKey(adapter: AtlasAdapter) {
+  return `${adapter.kind}:${adapter.label}`;
+}
+
+function useBackends() {
   const adapter = useAdapter();
+  const registry = useContext(ReportSourcesContext);
+  const fallback = useMemo<BackendEntry[]>(() => [{
+    backend: { ...adapter, id: 'workspace', cacheKey: specKey(adapter), pollMs: POLL_MS },
+    config: { id: 'workspace', label: adapter.label, type: 'http', baseUrl: adapter.label },
+    enabled: true,
+    custom: false
+  }], [adapter]);
+  return registry?.entries ?? fallback;
+}
+
+export function useLiveUpdates(enabled = true) {
+  const adapter = useAdapter();
+  const entries = useBackends();
   const client = useQueryClient();
   useEffect(() => {
-    if (!adapter.subscribe) return;
-    return adapter.subscribe((change) => {
-      if (change.scope === 'specs') {
-        void client.invalidateQueries({ queryKey: keys.specIndex });
-        for (const file of change.files) void client.invalidateQueries({ queryKey: keys.specFile(file) });
-      } else {
-        void client.invalidateQueries({ queryKey: keys.runsIndex });
-        for (const runId of change.runIds) void client.invalidateQueries({ queryKey: keys.manifest(runId) });
-      }
-    });
-  }, [adapter, client]);
+    if (!enabled) return;
+    const unsubscribe: (() => void)[] = [];
+    if (adapter.subscribe) unsubscribe.push(adapter.subscribe((change) => {
+      if (change.scope !== 'specs') return;
+      void client.invalidateQueries({ queryKey: keys.specIndex(specKey(adapter)) });
+      if (!change.files.length) void client.invalidateQueries({ queryKey: ['spec', specKey(adapter)] });
+      for (const file of change.files) void client.invalidateQueries({ queryKey: keys.specFile(specKey(adapter), file) });
+    }));
+    for (const { backend, enabled: active } of entries) {
+      if (!active || !backend.subscribe) continue;
+      unsubscribe.push(backend.subscribe((change) => {
+        if (change.scope !== 'runs') return;
+        void client.invalidateQueries({ queryKey: keys.runsIndex(backend.cacheKey) });
+        if (!change.runIds.length) void client.invalidateQueries({ queryKey: keys.manifests(backend.cacheKey) });
+        for (const id of change.runIds) void client.invalidateQueries({ queryKey: keys.manifest(backend.cacheKey, id) });
+      }));
+    }
+    return () => { for (const stop of unsubscribe) stop(); };
+  }, [adapter, entries, client, enabled]);
+}
+
+export function selectReport(runs: SourcedRunSummary[], backends: ReportBackend[], param?: string) {
+  const summary = !param || param === LATEST ? runs[0] : runs.find((run) => run.id === param) ?? runs.find((run) => run.nativeId === param && run.sourceId === 'workspace') ?? runs.find((run) => run.nativeId === param);
+  if (summary) {
+    const backend = backends.find((source) => source.id === summary.sourceId);
+    return backend ? { backend, nativeId: summary.nativeId, id: summary.id, summary } : null;
+  }
+  if (!param || param === LATEST) return null;
+  const separator = param.indexOf('~');
+  const sourceId = separator < 0 ? 'workspace' : param.slice(0, separator);
+  const backend = backends.find((source) => source.id === sourceId);
+  try {
+    const nativeId = separator < 0 ? param : decodeURIComponent(param.slice(separator + 1));
+    return backend && nativeId ? { backend, nativeId, id: reportKey(backend.id, nativeId), summary: undefined } : null;
+  } catch {
+    return null;
+  }
 }
 
 function errorText(error: unknown) {
@@ -64,123 +104,152 @@ function errorText(error: unknown) {
 
 function combineFiles(results: { data?: string; error: Error | null; isPending: boolean }[]) {
   return {
-    texts: results.map((r) => r.data),
-    errors: results.map((r) => (r.error ? errorText(r.error) : null)),
-    loading: results.some((r) => r.isPending)
+    texts: results.map((result) => result.data),
+    errors: results.map((result) => result.error ? errorText(result.error) : null),
+    loading: results.some((result) => result.isPending)
   };
 }
 
 export type LoadState = { loading: boolean; error: string | null; retry: () => void };
-
+export type SourceHealth = { id: string; label: string; kind: string; enabled: boolean; loading: boolean; refreshing: boolean; error: string | null; count: number; running: number; updatedAt: number };
 export type AtlasData = {
   view: AtlasView | null;
   spec: LoadState;
   runs: LoadState;
-  run: LoadState & { id: string | null };
+  run: LoadState & { id: string | null; waiting: boolean; summary: SourcedRunSummary | null };
+  reports: SourcedRunSummary[];
+  sources: SourceHealth[];
   latestRunId: string | null;
+  updatedAt: number;
+  refreshing: boolean;
+  refresh: () => void;
 };
 
-/** The newest run with a manifest; a run still going has none yet. */
-export function latestCompleteRun(runs: RunSummary[]) {
-  return runs.find((r) => r.progress !== 'running') ?? null;
-}
-
-export function useAtlasData(runParam: string | undefined): AtlasData {
+export function useAtlasData(runParam: string | undefined, live = true): AtlasData {
   const adapter = useAdapter();
-  const polling = adapter.kind === 'static';
-
-  const specIndex = useQuery({ queryKey: keys.specIndex, queryFn: adapter.specIndex, refetchOnWindowFocus: polling });
+  const entries = useBackends();
+  const client = useQueryClient();
+  const source = specKey(adapter);
+  const specIndex = useQuery({ queryKey: keys.specIndex(source), queryFn: async () => SpecIndexSchema.parse(await adapter.specIndex()), refetchInterval: live && adapter.kind !== 'dev' ? POLL_MS : false, refetchOnWindowFocus: live ? 'always' : false });
   const index = useMemo(() => {
     const parsed = SpecIndexSchema.safeParse(specIndex.data);
     return parsed.success ? parsed.data : null;
   }, [specIndex.data]);
-
   const files = useQueries({
     queries: (index?.files ?? []).map((path) => ({
-      queryKey: keys.specFile(path),
-      queryFn: () => adapter.specFile(path)
+      queryKey: keys.specFile(source, path),
+      queryFn: () => adapter.specFile(path),
+      refetchInterval: live && adapter.kind !== 'dev' ? POLL_MS : false,
+      refetchOnWindowFocus: live ? 'always' as const : false as const
     })),
     combine: combineFiles
   });
-
-  const runsIndex = useQuery({
-    queryKey: keys.runsIndex,
-    queryFn: adapter.runsIndex,
-    refetchInterval: polling ? POLL_MS : false,
-    refetchOnWindowFocus: polling
+  const indexes = useQueries({
+    queries: entries.map(({ backend, enabled }) => ({
+      queryKey: keys.runsIndex(backend.cacheKey),
+      queryFn: async () => {
+        const raw = await backend.runsIndex();
+        if (!RunsIndexSchema.safeParse(raw).success) throw new Error('This source returned an invalid report index.');
+        return raw;
+      },
+      enabled,
+      refetchInterval: live && enabled ? backend.pollMs : false,
+      refetchOnWindowFocus: live && enabled ? 'always' as const : false as const
+    }))
   });
-
-  const runsParsed = useMemo(() => {
+  const parsedSources = indexes.map((result, i) => {
+    const entry = entries[i]!;
     const sink = createIssueSink();
-    const parsed = runsIndex.data === undefined ? { runs: [], excluded: [] } : parseRunsIndex('runs/index.json', runsIndex.data, sink);
-    return { ...parsed, issues: sink.issues };
-  }, [runsIndex.data]);
-
-  const latest = latestCompleteRun(runsParsed.runs);
-  const runId = !runParam || runParam === LATEST ? latest?.id ?? null : runParam;
-  const summary = runsParsed.runs.find((r) => r.id === runId);
-
-  const manifest = useQuery({
-    queryKey: keys.manifest(runId ?? ''),
-    queryFn: () => adapter.manifest(runId!),
-    enabled: Boolean(runId),
-    refetchInterval: polling && summary?.progress === 'running' ? RUNNING_POLL_MS : false
+    const parsed = result.data === undefined || !entry.enabled ? { runs: [], excluded: [] } : parseRunsIndex(`${entry.backend.label}/runs`, result.data, sink);
+    return { ...entry, ...parsed, issues: sink.issues, result };
   });
-
+  const reports = parsedSources.flatMap(({ backend, runs }) => sourceRuns(backend, runs)).sort((a, b) =>
+    (Date.parse(b.startedAt) || 0) - (Date.parse(a.startedAt) || 0) || a.id.localeCompare(b.id)
+  );
+  const selection = selectReport(reports, entries.filter((entry) => entry.enabled).map((entry) => entry.backend), runParam);
+  const backend = selection?.backend;
+  const nativeId = selection?.nativeId;
+  const manifest = useQuery({
+    queryKey: keys.manifest(backend?.cacheKey ?? '', nativeId ?? ''),
+    queryFn: async () => {
+      if (!backend || !nativeId) throw new Error('This report source is unavailable.');
+      const raw = await backend.manifest(nativeId);
+      if (!isRecord(raw)) throw new LoadError(backend.manifestPath(nativeId), 200, 'The report snapshot is not a JSON object.');
+      if (isRecord(raw.run) && typeof raw.run.finishedAt === 'string') {
+        const info = raw.run;
+        client.setQueryData(keys.runsIndex(backend.cacheKey), (previous: unknown) => {
+          if (!isRecord(previous) || !Array.isArray(previous.runs)) return previous;
+          if (!previous.runs.some((run) => isRecord(run) && run.id === nativeId && run.progress === 'running')) return previous;
+          return { ...previous, runs: previous.runs.map((run) => isRecord(run) && run.id === nativeId ? { ...run, progress: 'complete', execution: info.progress ?? run.execution, durationMs: info.durationMs ?? run.durationMs } : run) };
+        });
+      }
+      return raw;
+    },
+    enabled: Boolean(backend && nativeId),
+    refetchInterval: (query) => {
+      const raw = query.state.data;
+      if (isRecord(raw) && isRecord(raw.run) && typeof raw.run.finishedAt === 'string') return false;
+      const running = selection?.summary?.progress === 'running' || (isRecord(raw) && isRecord(raw.run) && raw.run.finishedAt === null);
+      return live && running ? RUNNING_POLL_MS : false;
+    },
+    refetchOnWindowFocus: live ? 'always' : false,
+    staleTime: selection?.summary?.progress === 'running' ? 0 : Number.POSITIVE_INFINITY
+  });
   const specDoc = useMemo(() => {
     if (!index || files.loading) return null;
     const sink = createIssueSink();
-    const doc = parseSpec(
-      {
-        ref: index.ref ?? null,
-        files: index.files.map((path, i) => ({ path, text: files.texts[i] ?? null, error: files.errors[i] ?? undefined }))
-      },
-      sink
-    );
+    const doc = parseSpec({ ref: index.ref ?? null, files: index.files.map((path, i) => ({ path, text: files.texts[i] ?? null, error: files.errors[i] ?? undefined })) }, sink);
     return { doc, issues: sink.issues };
   }, [index, files]);
-
   const runParsed = useMemo(() => {
-    if (!runId || manifest.data === undefined) return null;
+    if (!selection || manifest.data === undefined) return null;
     const sink = createIssueSink();
-    const run = parseManifest(runId, adapter.manifestPath(runId), manifest.data, sink);
+    const run = parseManifest(selection.id, selection.backend.manifestPath(selection.nativeId), manifest.data, sink);
     return { run, issues: sink.issues };
-  }, [adapter, runId, manifest.data]);
-
-  const view = useMemo(() => {
-    if (!specDoc) return null;
-    const runIssues: DataIssue[] = [...runsParsed.issues, ...(runParsed?.issues ?? [])];
-    if (manifest.error && runId) {
-      runIssues.push({ severity: 'error', file: adapter.manifestPath(runId), path: '', message: `This run could not be loaded: ${errorText(manifest.error)}` });
+  }, [selection?.id, backend, nativeId, manifest.data]);
+  const waiting = Boolean(selection?.summary?.progress === 'running' && !manifest.data && (!manifest.error || manifest.error instanceof LoadError && manifest.error.status === 404));
+  const runIssues: DataIssue[] = [...parsedSources.flatMap((entry) => entry.issues), ...(runParsed?.issues ?? [])];
+  for (const entry of parsedSources) if (entry.enabled && entry.result.error) runIssues.push({ severity: 'warning', file: entry.backend.label, path: '', message: `This source could not be refreshed: ${errorText(entry.result.error)}. Available reports are kept.` });
+  if (manifest.error && selection && !waiting) runIssues.push({ severity: 'warning', file: selection.backend.manifestPath(selection.nativeId), path: '', message: `This report could not be refreshed: ${errorText(manifest.error)}. The last available snapshot is kept.` });
+  const view = specDoc ? buildAtlasView({
+    spec: specDoc.doc,
+    specIssues: specDoc.issues,
+    runs: reports,
+    run: runParsed?.run ?? null,
+    runIssues,
+    runProgress: runParsed?.run?.info.finishedAt === null ? 'running' : typeof runParsed?.run?.info.finishedAt === 'string' ? 'complete' : selection?.summary?.progress,
+    resolveMedia: (id, path) => {
+      const resolved = selectReport(reports, entries.map((entry) => entry.backend), id);
+      return resolved ? resolved.backend.mediaUrl(resolved.nativeId, path) : '';
     }
-    if (runsIndex.error) runIssues.push({ severity: 'warning', file: 'runs/index.json', path: '', message: `The list of runs could not be loaded: ${errorText(runsIndex.error)}` });
-    const view = buildAtlasView({
-      spec: specDoc.doc,
-      specIssues: specDoc.issues,
-      runs: runsParsed.runs,
-      run: runParsed?.run ?? null,
-      runIssues,
-      runProgress: summary?.progress,
-      resolveMedia: adapter.mediaUrl
-    });
-    for (const item of runsParsed.excluded) if (!view.excluded.includes(item)) view.excluded.push(item);
-    return view;
-  }, [specDoc, runsParsed, runParsed, manifest.error, runsIndex.error, runId, summary?.progress, adapter]);
-
+  }) : null;
+  if (view) for (const entry of parsedSources) for (const item of entry.excluded) if (!view.excluded.includes(item)) view.excluded.push(item);
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: ['spec', source] });
+    for (const { backend: reportBackend, enabled } of entries) if (enabled) void client.invalidateQueries({ queryKey: ['reports', reportBackend.cacheKey] });
+  };
+  const sources = parsedSources.map(({ backend: reportBackend, enabled, runs, result }) => ({
+    id: reportBackend.id,
+    label: reportBackend.label,
+    kind: reportBackend.kind,
+    enabled,
+    loading: enabled && result.isPending,
+    refreshing: result.isFetching,
+    error: result.error ? errorText(result.error) : null,
+    count: runs.length,
+    running: runs.filter((run) => run.progress === 'running').length,
+    updatedAt: result.dataUpdatedAt
+  }));
   return {
     view,
-    spec: {
-      loading: specIndex.isPending || files.loading,
-      error: specIndex.error ? errorText(specIndex.error) : null,
-      retry: () => void specIndex.refetch()
-    },
-    runs: { loading: runsIndex.isPending, error: runsIndex.error ? errorText(runsIndex.error) : null, retry: () => void runsIndex.refetch() },
-    run: {
-      id: runId,
-      loading: Boolean(runId) && manifest.isPending,
-      error: manifest.error ? errorText(manifest.error) : null,
-      retry: () => void manifest.refetch()
-    },
-    latestRunId: latest?.id ?? null
+    spec: { loading: specIndex.isPending || files.loading, error: specIndex.error ? errorText(specIndex.error) : specIndex.data !== undefined && !index ? 'The spec index is not in a supported format.' : null, retry: refresh },
+    runs: { loading: sources.some((entry) => entry.loading), error: sources.find((entry) => entry.enabled && entry.error)?.error ?? null, retry: refresh },
+    run: { id: selection?.id ?? null, summary: selection?.summary ?? null, waiting, loading: Boolean(selection) && manifest.isPending, error: waiting ? null : manifest.error ? errorText(manifest.error) : runParam && runParam !== LATEST && !selection ? 'This report source is disabled or unavailable.' : null, retry: selection ? () => void manifest.refetch() : refresh },
+    reports,
+    sources,
+    latestRunId: reports[0]?.id ?? null,
+    updatedAt: Math.max(manifest.dataUpdatedAt, ...sources.map((entry) => entry.updatedAt), 0),
+    refreshing: manifest.isFetching || sources.some((entry) => entry.refreshing),
+    refresh
   };
 }

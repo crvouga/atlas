@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { DEFAULT_FIXTURE, FIXTURES_ROOT, isSpecFile, listSpecFiles, resolveRoots, safeJoin } from './atlas-files';
+import { DEFAULT_FIXTURE, FIXTURES_ROOT, isSpecFile, listSpecFiles, publicReportSources, resolveReportSources, resolveRoots, safeJoin, summarizeRun } from './atlas-files';
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'atlas-files-'));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -85,5 +85,29 @@ describe('safeJoin', () => {
     ['%E0%A4%A', false]
   ])('%s stays inside the root: %s', (relative, inside) => {
     expect(safeJoin('/root', relative) !== null).toBe(inside);
+  });
+});
+
+describe('report sources and snapshots', () => {
+  it('resolves extra directories relative to the source configuration and preserves remote backends', () => {
+    touch('config/sources.json', JSON.stringify({ schemaVersion: 1, sources: [
+      { id: 'web', label: 'Web runs', type: 'directory', runs: '../web-runs' },
+      { id: 'ci', label: 'CI', type: 'api', baseUrl: 'https://ci.example.test/atlas/', eventsUrl: 'https://ci.example.test/events' }
+    ] }));
+    const sources = resolveReportSources({ specs: '/specs', runs: '/runs', label: 'test' }, { ATLAS_SOURCES_FILE: path.join(tmp, 'config/sources.json') });
+    expect(sources[1]).toMatchObject({ runs: path.join(tmp, 'web-runs') });
+    expect(publicReportSources(sources)[1]).toMatchObject({ live: true, baseUrl: '/__atlas/sources/web/' });
+    expect(publicReportSources(sources)[2]).toMatchObject({ type: 'api', baseUrl: 'https://ci.example.test/atlas/' });
+  });
+
+  it('summarizes readable running snapshots with execution progress', () => {
+    touch('live/live-run/manifest.json', JSON.stringify({ run: { finishedAt: null, progress: { totalPaths: 3, completedPaths: 1, activePaths: ['path-2'], updatedAt: '2026-10-09T10:00:00Z' } } }));
+    expect(summarizeRun(path.join(tmp, 'live'), 'live-run')).toMatchObject({ progress: 'running', hasManifest: true, execution: { totalPaths: 3, completedPaths: 1, activePaths: ['path-2'] } });
+  });
+
+  it.each(['null', '[]', '"invalid"'])('isolates a malformed manifest envelope: %s', (raw) => {
+    touch('bad/bad-run/manifest.json', raw);
+    expect(() => summarizeRun(path.join(tmp, 'bad'), 'bad-run')).not.toThrow();
+    expect(summarizeRun(path.join(tmp, 'bad'), 'bad-run')?.hasManifest).toBe(false);
   });
 });

@@ -9,6 +9,14 @@ reads two independent sources and works with whatever exists:
 2. **Partial runs.** Real screenshots and clips replace each placeholder as a run writes them.
 3. **Full runs.** Everything is populated, with history across runs.
 
+The application has a product overview, searchable screens, journey library, report history
+with active path progress, and source management. Local directories, published HTTP files and
+HTTP APIs can supply reports simultaneously. Reports update through file watching, polling or
+server events. Latest includes running reports; one unavailable backend leaves the others usable.
+
+See [report backends and live snapshots](../../docs/report-backends.md) for configuration,
+the API contract, streaming notifications and adding another transport.
+
 ## Point it at your project
 
 ```sh
@@ -19,6 +27,7 @@ atlas-visualizer dev --specs ./specs --runs ./atlas-runs
 | ----------------- | -------------------------------------------------------------------------------------------------------- |
 | `--specs <dir>`   | Statecharts, journeys and notes. Default `./specs`.                                                      |
 | `--runs <dir>`    | One directory per run, each with a `manifest.json` (what `atlas run` writes). Default `./atlas-runs`.    |
+| `--sources <file>` | JSON configuration for additional directories, HTTP files or HTTP API sources. |
 | `--fixture <name>`| Show a bundled example instead: `spec-only`, `partial`, `full`, `failures`, `removed`, `malformed`, `large`. |
 | `--out <dir>`     | `build`: the static site (default `./atlas-site`). `publish-data`: the data only (default `./atlas-data`). |
 | `--keep <n>`      | How many of the newest runs to publish (default 30).                                                     |
@@ -30,7 +39,7 @@ environment is read: `ATLAS_SPECS_ROOT`, `ATLAS_RUNS_ROOT` (relative to `INIT_CW
 to where you ran it, or the current directory) and `ATLAS_FIXTURE`. With nothing configured and no
 `specs/` directory, the `full` example is shown.
 
-Editing a spec file or a run finishing updates the open page in about a second, without a reload,
+Editing a spec file or a run publishing a snapshot updates the open page in about a second, without a reload,
 keeping selection, zoom and pan.
 
 ### Explore large charts
@@ -99,7 +108,7 @@ atlas-visualizer build        --specs <dir> --runs <dir> --out site  # static si
 atlas-visualizer publish-data --specs <dir> --runs <dir> --out data  # data only
 ```
 
-`build` writes a static site that any file server can host, with the spec and the newest runs
+`build` writes a static site that any file server can host, with the spec and the newest privacy-checked snapshots
 under `<out>/data`. URLs use the hash, so deep links work without server rewrites. A run whose
 privacy check failed or is missing is never published. With `--no-data`, set
 `VITE_ATLAS_BASE_URL` at build time to where `publish-data` output is hosted; `VITE_ATLAS_POLL_MS`
@@ -115,7 +124,8 @@ pnpm --filter @crvouga/atlas-visualizer fixtures                  # regenerate t
 ```
 
 `publish-data` and `build` scripts do the same as the CLI, writing to `public/data` (or
-`ATLAS_OUT`) and `dist`.
+`ATLAS_OUT`) and `dist`. `ATLAS_SOURCES_FILE` supplies additional sources, and
+`VITE_ATLAS_SOURCES_URL` can point a hosted viewer at a separate source descriptor file.
 
 ## What it reads
 

@@ -1,7 +1,9 @@
-export type AtlasChange = { scope: 'specs' | 'runs'; files: string[]; runIds: string[] };
+import { AtlasChangeSchema, type AtlasChange } from '@crvouga/atlas-schema';
+
+export type { AtlasChange } from '@crvouga/atlas-schema';
 
 export type AtlasAdapter = {
-  kind: 'static' | 'dev';
+  kind: 'static' | 'dev' | 'api';
   /** Where the data comes from, for the developer section. */
   label: string;
   specIndex: () => Promise<unknown>;
@@ -25,13 +27,14 @@ export class LoadError extends Error {
 }
 
 function encodePath(path: string) {
+  if (!path || path.split(/[\\/]/).some((part) => part === '..' || part === '.') || path.startsWith('/')) throw new Error('The file path must stay inside its report.');
   return path.split('/').map(encodeURIComponent).join('/');
 }
 
 async function get(url: string) {
   let response: Response;
   try {
-    response = await fetch(url, { cache: 'no-cache' });
+    response = await fetch(url, { cache: 'no-cache', signal: AbortSignal.timeout(15_000) });
   } catch {
     throw new LoadError(url, null, 'The server could not be reached.');
   }
@@ -40,7 +43,7 @@ async function get(url: string) {
   return response;
 }
 
-async function getJson(url: string): Promise<unknown> {
+export async function getJson(url: string): Promise<unknown> {
   const text = await (await get(url)).text();
   try {
     return JSON.parse(text) as unknown;
@@ -53,9 +56,15 @@ async function getJson(url: string): Promise<unknown> {
  * Files over HTTP from a base URL laid out as `specs/index.json`, `specs/<path>`,
  * `runs/index.json` and `runs/<id>/manifest.json` plus media.
  */
-export function createHttpAdapter(baseUrl: string, kind: AtlasAdapter['kind'] = 'static'): AtlasAdapter {
+export function createHttpAdapter(baseUrl: string, kind: AtlasAdapter['kind'] = 'static', eventsUrl?: string): AtlasAdapter {
   const base = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`, window.location.href).href;
+  const location = new URL(base);
+  if (!['http:', 'https:'].includes(location.protocol) || location.username || location.password) throw new Error('Use an HTTP URL without credentials.');
   const url = (path: string) => new URL(path, base).href;
+  const runPath = (runId: string) => {
+    if (!runId || runId === '.' || runId === '..' || /[\\/]/.test(runId)) throw new Error('The report id must name one run.');
+    return `runs/${encodeURIComponent(runId)}`;
+  };
   return {
     kind,
     label: base,
@@ -63,15 +72,42 @@ export function createHttpAdapter(baseUrl: string, kind: AtlasAdapter['kind'] = 
     specFile: async (path) => (await get(url(`specs/${encodePath(path)}`))).text(),
     runsIndex: async () => {
       try {
-        return await getJson(url('runs/index.json'));
+        return await getJson(url(kind === 'api' ? 'runs' : 'runs/index.json'));
       } catch (error) {
-        if (error instanceof LoadError && error.status === 404) return { runs: [] };
+        if (kind !== 'api' && error instanceof LoadError && error.status === 404) return { runs: [] };
         throw error;
       }
     },
-    manifest: (runId) => getJson(url(`runs/${encodeURIComponent(runId)}/manifest.json`)),
-    manifestPath: (runId) => `runs/${runId}/manifest.json`,
-    mediaUrl: (runId, path) => url(`runs/${encodeURIComponent(runId)}/${encodePath(path)}`),
-    subscribe: null
+    manifest: (runId) => getJson(url(`${runPath(runId)}/${kind === 'api' ? 'manifest' : 'manifest.json'}`)),
+    manifestPath: (runId) => url(`${runPath(runId)}/${kind === 'api' ? 'manifest' : 'manifest.json'}`),
+    mediaUrl: (runId, path) => {
+      try {
+        return url(`${runPath(runId)}/${kind === 'api' ? 'files/' : ''}${encodePath(path)}`);
+      } catch {
+        return '';
+      }
+    },
+    subscribe: eventsUrl ? subscribeToEvents(new URL(eventsUrl, base).href) : null
+  };
+}
+
+function subscribeToEvents(url: string): NonNullable<AtlasAdapter['subscribe']> {
+  const location = new URL(url);
+  if (!['http:', 'https:'].includes(location.protocol) || location.username || location.password) throw new Error('Use an HTTP event URL without credentials.');
+  return (onChange) => {
+    if (typeof EventSource === 'undefined') return () => undefined;
+    const stream = new EventSource(url);
+    const receive = (event: MessageEvent<string>) => {
+      try {
+        const change = AtlasChangeSchema.safeParse(JSON.parse(event.data));
+        if (change.success) onChange(change.data);
+      } catch {
+        return;
+      }
+    };
+    stream.addEventListener('message', receive);
+    stream.addEventListener('atlas:change', receive);
+    stream.addEventListener('open', () => onChange({ scope: 'runs', files: [], runIds: [] }));
+    return () => stream.close();
   };
 }

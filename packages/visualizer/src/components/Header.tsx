@@ -37,18 +37,18 @@ function AtlasMark() {
 function runLabel(view: AtlasView | null, loading: { run: boolean; runs: boolean }) {
   if (!view) return 'Loading the spec…';
   if (loading.run) return 'Loading the run…';
-  if (!view.run) return loading.runs ? 'Looking for runs…' : view.runs.length ? 'No finished run yet' : 'Not run yet';
+  if (!view.run) return loading.runs ? 'Looking for runs…' : view.runs.length ? 'Waiting for results…' : 'Not run yet';
   return formatRunTime(view.run.info.startedAt);
 }
 
 /** The run being shown, what it was, and every other run to switch to. */
 function RunMenu({ view }: { view: AtlasView | null }) {
-  const { run, runs, latestRunId } = useAtlas();
+  const { run, runs, reports, latestRunId } = useAtlas();
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const label = runLabel(view, { run: run.loading, runs: runs.loading });
   const current = view?.run;
-  const selected = search.run ?? LATEST;
+  const selected = search.run ? run.id ?? search.run : LATEST;
   const latest = view?.runs.find((r) => r.id === latestRunId);
   const choose = (id: string) => void navigate({ to: '.', search: (prev) => ({ ...prev, run: id === LATEST ? undefined : id }) });
   const info = current?.info;
@@ -58,7 +58,8 @@ function RunMenu({ view }: { view: AtlasView | null }) {
         ['Took', minutes(info.durationMs)],
         ['Recording', info.mode === 'showcase' ? 'With videos' : 'Quick check'],
         ['Branch', info.branch],
-        ['Commit', info.commit?.slice(0, 7)]
+        ['Commit', info.commit?.slice(0, 7)],
+        ['Source', run.summary?.sourceLabel]
       ]
     : [];
   return (
@@ -97,7 +98,7 @@ function RunMenu({ view }: { view: AtlasView | null }) {
             </section>
           ) : (
             <p className={styles.runEmpty}>
-              {view?.runs.length ? 'No run has finished yet. Results appear here once one does.' : 'Everything on the map comes from the spec. Run Atlas against the app to fill in screenshots and results.'}
+              {view?.runs.length ? 'This report is starting. Screens and results appear as they arrive.' : 'Everything on the map comes from the spec. Run Atlas against the app to fill in screenshots and results.'}
             </p>
           )}
           {view && view.runs.length > 0 && (
@@ -109,11 +110,11 @@ function RunMenu({ view }: { view: AtlasView | null }) {
                 </span>
                 {selected === LATEST && <CheckIcon size={14} />}
               </button>
-              {view.runs.map((r) => (
-                <button key={r.id} type="button" role="radio" aria-checked={selected === r.id} disabled={r.progress === 'running'} onClick={() => choose(r.id)}>
+              {reports.map((r) => (
+                <button key={r.id} type="button" role="radio" aria-checked={selected === r.id} onClick={() => choose(r.id)}>
                   <span>
                     {formatRunTime(r.startedAt)}
-                    <small>{r.progress === 'running' ? 'Still running' : r.mode === 'showcase' ? 'With videos' : 'Quick check'}</small>
+                    <small>{r.sourceLabel} · {r.progress === 'running' ? 'Still running' : r.mode === 'showcase' ? 'With videos' : 'Quick check'}</small>
                   </span>
                   {selected === r.id && <CheckIcon size={14} />}
                 </button>

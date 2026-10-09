@@ -106,11 +106,14 @@ export function buildAtlasView(input: BuildInput): AtlasView {
   const anyRuns = input.runs.length > 0 || run !== null;
   const unrun: ItemStatus = anyRuns ? 'not-yet-run' : 'spec-only';
 
-  const processing = input.runProgress === 'running';
+  const processing = input.runProgress === 'running' || run?.info.finishedAt === null;
+  const itemStatus = (status: ItemStatus | undefined) => processing && status === 'not-reached' ? 'not-yet-run' : status ?? unrun;
   const image = (img: Image | null | undefined, marked: string | undefined): ImageMedia => {
     if (!run || !img) return { state: marked === 'processing' || processing ? 'processing' : 'missing', thumb: null, full: null };
     if (marked === 'processing') return { state: 'processing', thumb: null, full: null };
-    return { state: 'available', thumb: input.resolveMedia(run.id, img.webp), full: input.resolveMedia(run.id, img.png) };
+    const full = input.resolveMedia(run.id, img.png) || null;
+    const thumb = img.webp ? input.resolveMedia(run.id, img.webp) || full : full;
+    return { state: full || thumb ? 'available' : 'missing', thumb, full };
   };
   const pathRef = (id: string): PathRef => ({ id, name: run?.paths.find((p) => p.id === id)?.name ?? id });
 
@@ -158,7 +161,7 @@ export function buildAtlasView(input: BuildInput): AtlasView {
       outgoing: [...s.transitions],
       questionIds: [...questions.values()].filter((q) => q.states.includes(s.name)).map((q) => q.id),
       knownIssues: doc.knownIssues.filter((n) => n.states.includes(s.name)).map((n) => ({ title: n.title, body: n.body, file: n.file })),
-      status: record?.status ?? unrun,
+      status: itemStatus(record?.status),
       result: record
         ? {
             runId: run!.id,
@@ -216,7 +219,7 @@ export function buildAtlasView(input: BuildInput): AtlasView {
       knownIssues: doc.knownIssues
         .filter((n) => n.transitions.some((r) => r.source === t.source && r.event === t.event))
         .map((n) => ({ title: n.title, body: n.body, file: n.file })),
-      status: record?.status ?? unrun,
+      status: itemStatus(record?.status),
       result: record
         ? {
             runId: run!.id,
@@ -265,6 +268,7 @@ export function buildAtlasView(input: BuildInput): AtlasView {
         name: p.name,
         seed: p.seed ?? null,
         status: p.status,
+        progress: p.progress ?? 'complete',
         stoppedAt: p.stoppedAt ?? null,
         error: p.attempts?.find((a) => a.error)?.error ?? null,
         steps: p.steps.map((st) => ({ transition: st.transition ?? null, event: st.event, status: st.status ?? null, reason: st.reason ?? null }))
@@ -282,7 +286,7 @@ export function buildAtlasView(input: BuildInput): AtlasView {
       endsIn: j.endsIn,
       steps: replay.steps,
       replay: { ok: replay.ok, failedAt: replay.failedAt, missingEnds: replay.missingEnds },
-      status: runPaths.length ? worstOf(runPaths.map((p) => p.status), unrun) : unrun,
+      status: runPaths.length ? worstOf(runPaths.map((p) => p.progress === 'complete' ? p.status : p.status === 'failed' ? 'failed' : 'not-yet-run'), unrun) : unrun,
       runPaths
     };
   });
@@ -352,13 +356,29 @@ export function buildAtlasView(input: BuildInput): AtlasView {
     ? {
         id: run.id,
         info: run.info,
-        progress: input.runProgress ?? summary?.progress ?? 'complete',
+        progress: processing ? 'running' : input.runProgress ?? summary?.progress ?? 'complete',
         privacyPassed: run.privacy?.passed ?? null,
         outOfDate: removed.states.length + removed.transitions.length > 0,
         reports: REPORT_LABELS.flatMap(([key, label]) => {
           const file = run.reports?.[key];
           return file ? [{ label, url: input.resolveMedia(run.id, file) }] : [];
-        })
+        }),
+        paths: run.paths.map((path) => ({
+          id: path.id,
+          name: path.name,
+          kind: path.kind,
+          status: path.progress === 'queued' || path.progress === 'running' && path.status !== 'failed' ? 'not-yet-run' : path.status,
+          progress: path.progress ?? 'complete',
+          steps: path.steps.filter((step) => step.status === 'passed').length,
+          seed: path.seed ?? null,
+          durationMs: path.durationMs ?? null,
+          error: path.attempts?.findLast((attempt) => attempt.error)?.error ?? null,
+          stoppedAt: path.stoppedAt ?? null,
+          traces: (path.attempts ?? []).flatMap((attempt, i) => [
+            ...(attempt.trace ? [{ label: `Attempt ${i + 1}`, url: input.resolveMedia(run.id, attempt.trace) }] : []),
+            ...Object.entries(attempt.traces ?? {}).map(([client, file]) => ({ label: `${client}, attempt ${i + 1}`, url: input.resolveMedia(run.id, file) }))
+          ])
+        }))
       }
     : null;
 

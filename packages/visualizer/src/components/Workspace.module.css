@@ -1,0 +1,38 @@
+.workspace { height: 100%; display: grid; grid-template-columns: 216px minmax(0, 1fr); }
+.content { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.sidebar { display: flex; flex-direction: column; background: #f8faf9; border-right: 1px solid var(--line); padding: 1.5rem 1rem; gap: 2rem; min-height: 0; }
+.brand { display: flex; align-items: center; gap: .65rem; text-decoration: none; color: var(--ink); font-size: 1.65rem; letter-spacing: -.04em; font-weight: 700; line-height: 1.1; }
+.brandIcon { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: 11px; color: white; background: #244b3d; }
+.brand small { display: block; font-size: .6rem; letter-spacing: .02em; font-weight: 500; color: var(--muted); margin-top: .45rem; }
+.productName { display: flex; flex-direction: column; gap: .5rem; padding: 0 .75rem; }
+.productName > span { font-size: .65rem; letter-spacing: .14em; color: var(--muted); font-weight: 600; }
+.productName strong { font-size: .95rem; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.navigation { display: flex; flex-direction: column; gap: .3rem; }
+.navigation a { display: flex; align-items: center; gap: .75rem; padding: .75rem; border-radius: var(--radius-sm); color: var(--ink-2); text-decoration: none; font-weight: 500; }
+.navigation a:hover { background: var(--sheet); }
+.navigation a[aria-current='page'] { background: #e3ede7; color: #244b3d; font-weight: 600; }
+.navigation small { margin-left: auto; color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.sidebarFoot { margin-top: auto; padding: 1rem .75rem 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 1rem; color: var(--muted); font-size: .8rem; }
+.sidebarFoot > a { color: var(--passed-ink); text-decoration: none; display: flex; align-items: center; gap: .5rem; }
+.sidebarFoot p { margin: 0; line-height: 1.7; }
+.liveSwitch { display: flex; align-items: center; gap: .6rem; cursor: pointer; color: var(--ink-2); }
+.liveSwitch input { accent-color: #244b3d; width: 1rem; height: 1rem; margin: 0; }
+.liveDot, .pausedDot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--passed); }
+.pausedDot { background: var(--faint); }
+.activity { min-height: 2.5rem; display: flex; align-items: center; gap: .65rem; padding: .4rem 1.25rem; border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: .75rem; flex: none; }
+.activity[data-running='true'] { background: #eef7f1; }
+.activityCopy { display: flex; align-items: center; gap: .9rem; flex: 1; min-width: 0; color: var(--muted); flex-wrap: wrap; }
+.activityCopy strong { color: var(--ink-2); font-weight: 600; }
+.activitySource { border-left: 1px solid var(--line-2); padding-left: .9rem; }
+.refresh { border: 0; background: transparent; color: var(--ink-2); font-size: .75rem; cursor: pointer; padding: .25rem .5rem; }
+.refresh:disabled { cursor: default; color: var(--muted); }
+.sourceError { color: var(--failed-ink); text-decoration: none; }
+@media (max-width: 1200px) { .workspace { grid-template-columns: 184px minmax(0, 1fr); } .sidebar { padding: 1.25rem .75rem; } .brand small { font-size: .54rem; } }
+@media (max-width: 800px) {
+  .workspace { display: flex; flex-direction: column; }
+  .content { flex: 1; }
+  .sidebar { padding: .5rem .75rem; gap: .5rem; flex-direction: row; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); flex: none; }
+  .brand { font-size: 1.15rem; gap: .4rem; } .brandIcon { width: 1.75rem; height: 1.75rem; } .brand small, .productName, .sidebarFoot { display: none; }
+  .navigation { flex-direction: row; overflow-x: auto; margin-left: auto; gap: .1rem; } .navigation a { padding: .5rem .6rem; font-size: .8rem; gap: .4rem; } .navigation small { display: none; }
+}
+@media (max-width: 560px) { .brand > span:last-child, .navigation svg, .activitySource { display: none; } .navigation a { padding: .5rem; } .activity { padding: .4rem .75rem; } .sourceError { display: none; } }

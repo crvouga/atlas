@@ -6,9 +6,10 @@ import { KindIcon } from '../components/labels';
 import { StatusBadge, StatusDot, SummaryBar } from '../components/Status';
 import { worstOf } from '../data/model';
 import styles from './views.module.css';
+import application from './application.module.css';
 
 export function ProductPage() {
-  const { view } = useAtlas();
+  const { view, sources, reports } = useAtlas();
   if (!view) {
     return (
       <div className={styles.product}>
@@ -26,6 +27,7 @@ export function ProductPage() {
     <div className={styles.product}>
       <div className={styles.productInner}>
         <div className={styles.intro}>
+          <span className={application.eyebrow}>YOUR PRODUCT, MAPPED</span>
           <h1>{view.title}</h1>
           <p>
             {view.description ||
@@ -33,6 +35,14 @@ export function ProductPage() {
           </p>
           {[...view.charts.values()].filter((chart) => !chart.parent).map((chart) => <Link key={chart.id} to="/chart/$chartId" params={{ chartId: chart.id }} search={(prev) => ({ run: prev.run, explore: true })} className={styles.button}>Explore {chart.name}</Link>)}
         </div>
+        <div className={application.overviewMetrics}>
+          <Link to="/screens" search={(prev) => ({ run: prev.run })}><span>Screens</span><strong>{view.totals.screens.total}</strong><small>{view.totals.screens.passed} working · {view.totals.screens.failed} broken</small></Link>
+          <Link to="/journeys" search={(prev) => ({ run: prev.run })}><span>Journeys</span><strong>{view.journeys.length}</strong><small>{view.totals.journeys.passed} verified paths through the product</small></Link>
+          <Link to="/runs" search={(prev) => ({ run: prev.run })}><span>Reports</span><strong>{reports.length}</strong><small>{reports.filter((report) => report.progress === 'running').length} in progress</small></Link>
+          <Link to="/sources" search={(prev) => ({ run: prev.run })}><span>Sources</span><strong>{sources.filter((source) => source.enabled).length}</strong><small>Evidence from every backend</small></Link>
+        </div>
+        {[...view.states.values()].some((state) => state.status === 'failed') && <section className={application.attention} aria-label="Needs attention"><strong>Needs attention</strong><div>{[...view.states.values()].filter((state) => state.status === 'failed' && (state.kind === 'screen' || state.kind === 'final')).slice(0, 5).map((state) => <Link key={state.key} to="/chart/$chartId" params={{ chartId: state.chartId }} search={(prev) => ({ run: prev.run, screen: state.name })}><StatusDot status="failed" />{state.name}<ChevronIcon /></Link>)}</div></section>}
+        <div className={application.sectionHead}><div><h2>Product areas</h2><p>{view.contexts.length} areas · {view.charts.size} connected charts · {view.handOffs.length} hand-offs</p></div><Link to="/journeys" search={(prev) => ({ run: prev.run })}>Explore journeys<ChevronIcon /></Link></div>
         <div className={styles.contexts}>
           {view.contexts.map((ctx) => {
             const status = worstOf(
