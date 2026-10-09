@@ -50,6 +50,16 @@ its destination and focuses the camera, including parallel branches and child-ma
 shows the full route; **Back to path overview** leaves step mode. Journey and step live in the URL
 so browser history and shared links preserve your place.
 
+Camera navigation slides smoothly between objects and can be interrupted by panning or another
+selection. It follows the browser's **prefers-reduced-motion** setting, including changes made
+while the visualizer is open. Reduced motion and initial positioning use an immediate move.
+
+**Watch journey** plays starting screenshots, each available event recording, and resulting
+screens as a continuous slideshow. Videos play to completion; screenshot duration is adjustable.
+Pause, jump to a step, skip a slide, replay, loop, or enable sound. Parallel screens appear together,
+and unavailable media gets a placeholder or is skipped. Closing returns to the current graph step.
+The player loads one video at a time and preloads only the next screenshots.
+
 Search **Find a state** to jump directly into any nested state; its ancestors open automatically.
 Use arrow keys and Enter in search. On the map, `/` opens search, `F` fits the map or journey,
 `←` / `→` moves through journey steps, Space plays or pauses, and Escape returns to path overview.

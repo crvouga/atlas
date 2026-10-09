@@ -874,3 +874,23 @@
   font: inherit;
   font-size: 11px;
 }
+.watchButton {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid var(--user-line);
+  border-radius: 7px;
+  padding: 7px;
+  color: var(--user-deep);
+  background: var(--user-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.watchButton:hover {
+  border-color: var(--user);
+}
+.watchButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

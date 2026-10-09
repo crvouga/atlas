@@ -1,3 +1,4 @@
+import * as Dialog from '@radix-ui/react-dialog';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 
@@ -7,11 +8,14 @@ import type { AtlasView, JourneyView } from '../data/model';
 import type { MapSelection } from '../map/ChartMap';
 import { journeyChart } from '../map/navigation';
 import styles from './views.module.css';
+import { JourneySlideshow } from './JourneySlideshow';
 
 export function JourneyNavigator({ view, chartId, journey, selection }: { view: AtlasView; chartId: string; journey: JourneyView; selection: MapSelection }) {
   const navigate = useNavigate();
   const [playing, setPlaying] = useState(false);
+  const [watching, setWatching] = useState(false);
   const activeRow = useRef<HTMLLIElement>(null);
+  const watchButton = useRef<HTMLButtonElement>(null);
   const index = selection.step;
   const step = index === undefined ? undefined : journey.steps[index];
   const last = journey.steps.length - 1;
@@ -21,7 +25,7 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
       to: '/chart/$chartId',
       params: { chartId: journeyChart(view, chartId, journey, next) },
       search: (prev) => ({ run: prev.run, journey: journey.id, step: next }),
-      replace: playing
+      replace: playing || watching
     });
 
   const togglePlayback = async () => {
@@ -50,6 +54,7 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
   }, [playing, index, last, journey.id, chartId]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (watching) return;
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented) return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, button, a, [contenteditable="true"]')) return;
@@ -74,7 +79,7 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [index, last, chartId, journey.id, playing]);
+  }, [index, last, chartId, journey.id, playing, watching]);
 
   return (
     <aside className={styles.journeyNavigator} aria-label="Journey navigator">
@@ -150,6 +155,19 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
         <div className={styles.progressLabel} role="status" aria-live="polite">
           {step ? `Step ${index! + 1} of ${journey.steps.length}` : `${journey.steps.length} steps · Path overview`}
         </div>
+        <button
+          ref={watchButton}
+          type="button"
+          className={styles.watchButton}
+          disabled={last < 0}
+          onClick={async () => {
+            setPlaying(false);
+            await go(0);
+            setWatching(true);
+          }}
+        >
+          ▶ Watch journey
+        </button>
         <progress value={index === undefined ? 0 : index + 1} max={Math.max(1, journey.steps.length)} aria-label="Journey progress" />
         <button
           type="button"
@@ -207,6 +225,20 @@ export function JourneyNavigator({ view, chartId, journey, selection }: { view: 
         </p>
       )}
       {journey.runPaths.some((path) => path.error) && <p className={styles.journeyWarning}>{journey.runPaths.find((path) => path.error)?.error}</p>}
+      <Dialog.Root open={watching} onOpenChange={setWatching}>
+        {watching && (
+          <JourneySlideshow
+            key={`${journey.id}:${view.run?.id ?? 'spec'}`}
+            view={view}
+            journey={journey}
+            onStep={(step) => {
+              if (step !== index) void go(step);
+            }}
+            onClose={() => setWatching(false)}
+            restoreFocus={() => watchButton.current?.focus()}
+          />
+        )}
+      </Dialog.Root>
       <div className={styles.journeyFooter}>← → Move through steps · Space to play</div>
     </aside>
   );
