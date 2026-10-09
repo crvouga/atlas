@@ -94,6 +94,15 @@ pnpm atlas:clients      # clients/: one chart across a phone, a desktop and the 
 pnpm atlas:clients:bun  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
 ```
 
+For development, the repository root has shortcuts for producing a showcase run and keeping its
+specs and latest results open in the visualizer. Run these in separate terminals; the visualizer
+updates when a run finishes.
+
+```sh
+pnpm example:run
+pnpm example:viz
+```
+
 A showcase run ends with:
 
 ```
