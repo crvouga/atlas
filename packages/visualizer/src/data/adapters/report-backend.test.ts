@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { selectReport } from '../queries';
 import { createHttpAdapter, LoadError } from './adapter';
 import { createReportBackend, reportKey, sourceRuns } from './report-backend';
-import { selectReport } from '../queries';
 
 beforeEach(() => vi.stubGlobal('window', { location: { href: 'https://atlas.example.test/site/' } }));
 afterEach(() => vi.unstubAllGlobals());
@@ -47,15 +47,21 @@ describe('report backends', () => {
     expect(createHttpAdapter('/data/').mediaUrl('run', file)).toBe('');
   });
 
-  it.each(['javascript:alert(1)', 'file:///reports', 'https://token@example.test/data'])('rejects an unsafe backend location: %s', (url) => {
-    expect(() => createHttpAdapter(url)).toThrow();
-  });
+  it.each(['javascript:alert(1)', 'file:///reports', 'https://token@example.test/data'])(
+    'rejects an unsafe backend location: %s',
+    (url) => {
+      expect(() => createHttpAdapter(url)).toThrow();
+    }
+  );
 
   it('refreshes after event-stream reconnection, ignores malformed events, and closes on unsubscribe', () => {
     const streams: Stream[] = [];
     class Stream extends EventTarget {
       close = vi.fn();
-      constructor(readonly url: string) { super(); streams.push(this); }
+      constructor(readonly url: string) {
+        super();
+        streams.push(this);
+      }
     }
     vi.stubGlobal('EventSource', Stream);
     const adapter = createHttpAdapter('/api/', 'api', './events');

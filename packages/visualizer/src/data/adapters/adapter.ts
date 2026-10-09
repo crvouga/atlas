@@ -12,7 +12,6 @@ export type AtlasAdapter = {
   manifest: (runId: string) => Promise<unknown>;
   manifestPath: (runId: string) => string;
   mediaUrl: (runId: string, path: string) => string;
-  /** Pushes a change as soon as a spec or run changes on disk. Dev only. */
   subscribe: ((onChange: (change: AtlasChange) => void) => () => void) | null;
 };
 

@@ -1,16 +1,18 @@
-import { RemoteReportSourceSchema, type RemoteReportSource } from '@crvouga/atlas-schema';
+import type { RemoteReportSource } from '@crvouga/atlas-schema';
+import type { ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
+import { RemoteReportSourceSchema } from '@crvouga/atlas-schema';
 import { useQuery } from '@tanstack/react-query';
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { z } from 'zod/v4';
 
+import type { ReportBackend } from '../data/adapters/report-backend';
 import { getJson, LoadError } from '../data/adapters';
 import { useAdapter } from '../data/adapters/context';
-import { createReportBackend, type ReportBackend } from '../data/adapters/report-backend';
+import { createReportBackend } from '../data/adapters/report-backend';
 
-const SourceListSchema = z.object({ schemaVersion: z.literal(1), sources: z.array(RemoteReportSourceSchema) }).refine(
-  ({ sources }) => new Set(sources.map((source) => source.id)).size === sources.length,
-  'Each source needs a unique id.'
-);
+const SourceListSchema = z
+  .object({ schemaVersion: z.literal(1), sources: z.array(RemoteReportSourceSchema) })
+  .refine(({ sources }) => new Set(sources.map((source) => source.id)).size === sources.length, 'Each source needs a unique id.');
 const PreferencesSchema = z.object({ custom: z.array(RemoteReportSourceSchema), disabled: z.array(z.string()) });
 
 export type BackendEntry = { backend: ReportBackend; config: RemoteReportSource; enabled: boolean; custom: boolean };
@@ -33,13 +35,16 @@ export function useReportSources() {
 
 export function ReportSourcesProvider({ children }: { children: ReactNode }) {
   const adapter = useAdapter();
-  const defaultConfig = useMemo<RemoteReportSource>(() => ({
-    id: 'workspace',
-    label: adapter.kind === 'dev' ? 'Workspace runs' : 'Published reports',
-    type: 'http',
-    baseUrl: adapter.kind === 'dev' ? '/__atlas/' : import.meta.env.VITE_ATLAS_BASE_URL ?? './data/',
-    live: adapter.kind === 'dev'
-  }), [adapter]);
+  const defaultConfig = useMemo<RemoteReportSource>(
+    () => ({
+      id: 'workspace',
+      label: adapter.kind === 'dev' ? 'Workspace runs' : 'Published reports',
+      type: 'http',
+      baseUrl: adapter.kind === 'dev' ? '/__atlas/' : (import.meta.env.VITE_ATLAS_BASE_URL ?? './data/'),
+      live: adapter.kind === 'dev'
+    }),
+    [adapter]
+  );
   const configBase = defaultConfig.baseUrl.endsWith('/') ? defaultConfig.baseUrl : `${defaultConfig.baseUrl}/`;
   const configUrl = new URL(import.meta.env.VITE_ATLAS_SOURCES_URL ?? 'sources.json', new URL(configBase, window.location.href)).href;
   const storageKey = `atlas:sources:${configUrl}`;
@@ -60,7 +65,9 @@ export function ReportSourcesProvider({ children }: { children: ReactNode }) {
         return parsed.sources.map((source) => ({
           ...source,
           baseUrl: new URL(source.baseUrl, configUrl).href,
-          eventsUrl: source.eventsUrl ? new URL(source.eventsUrl, new URL(source.baseUrl.endsWith('/') ? source.baseUrl : `${source.baseUrl}/`, configUrl)).href : undefined
+          eventsUrl: source.eventsUrl
+            ? new URL(source.eventsUrl, new URL(source.baseUrl.endsWith('/') ? source.baseUrl : `${source.baseUrl}/`, configUrl)).href
+            : undefined
         }));
       } catch (error) {
         if (error instanceof LoadError && error.status === 404) return [defaultConfig];
@@ -98,8 +105,18 @@ export function ReportSourcesProvider({ children }: { children: ReactNode }) {
       if (entries.some((entry) => entry.config.id === config.id)) throw new Error('A source with this id already exists.');
       update({ ...preferences, custom: [...preferences.custom, config] });
     },
-    remove: (id) => update({ custom: preferences.custom.filter((source) => source.id !== id), disabled: preferences.disabled.filter((sourceId) => sourceId !== id) }),
-    toggle: (id) => update({ ...preferences, disabled: preferences.disabled.includes(id) ? preferences.disabled.filter((sourceId) => sourceId !== id) : [...preferences.disabled, id] })
+    remove: (id) =>
+      update({
+        custom: preferences.custom.filter((source) => source.id !== id),
+        disabled: preferences.disabled.filter((sourceId) => sourceId !== id)
+      }),
+    toggle: (id) =>
+      update({
+        ...preferences,
+        disabled: preferences.disabled.includes(id)
+          ? preferences.disabled.filter((sourceId) => sourceId !== id)
+          : [...preferences.disabled, id]
+      })
   };
   return <ReportSourcesContext.Provider value={registry}>{children}</ReportSourcesContext.Provider>;
 }

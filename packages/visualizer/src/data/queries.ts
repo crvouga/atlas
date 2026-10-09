@@ -1,12 +1,17 @@
-import { RunsIndexSchema, SpecIndexSchema, type DataIssue } from '@crvouga/atlas-schema';
-import { QueryClient, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { DataIssue } from '@crvouga/atlas-schema';
 import { useContext, useEffect, useMemo } from 'react';
+import { RunsIndexSchema, SpecIndexSchema } from '@crvouga/atlas-schema';
+import { QueryClient, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { ReportSourcesContext, type BackendEntry } from '../app/report-sources';
-import { LoadError, type AtlasAdapter } from './adapters';
+import type { BackendEntry } from '../app/report-sources';
+import type { AtlasAdapter } from './adapters';
+import type { ReportBackend, SourcedRunSummary } from './adapters/report-backend';
+import type { AtlasView } from './model';
+import { ReportSourcesContext } from '../app/report-sources';
+import { LoadError } from './adapters';
 import { useAdapter } from './adapters/context';
-import { reportKey, sourceRuns, type ReportBackend, type SourcedRunSummary } from './adapters/report-backend';
-import { buildAtlasView, type AtlasView } from './model';
+import { reportKey, sourceRuns } from './adapters/report-backend';
+import { buildAtlasView } from './model';
 import { createIssueSink, isRecord } from './parse/issues';
 import { parseManifest, parseRunsIndex } from './parse/manifest';
 import { parseSpec } from './parse/spec';
@@ -45,12 +50,17 @@ function specKey(adapter: AtlasAdapter) {
 function useBackends() {
   const adapter = useAdapter();
   const registry = useContext(ReportSourcesContext);
-  const fallback = useMemo<BackendEntry[]>(() => [{
-    backend: { ...adapter, id: 'workspace', cacheKey: specKey(adapter), pollMs: POLL_MS },
-    config: { id: 'workspace', label: adapter.label, type: 'http', baseUrl: adapter.label },
-    enabled: true,
-    custom: false
-  }], [adapter]);
+  const fallback = useMemo<BackendEntry[]>(
+    () => [
+      {
+        backend: { ...adapter, id: 'workspace', cacheKey: specKey(adapter), pollMs: POLL_MS },
+        config: { id: 'workspace', label: adapter.label, type: 'http', baseUrl: adapter.label },
+        enabled: true,
+        custom: false
+      }
+    ],
+    [adapter]
+  );
   return registry?.entries ?? fallback;
 }
 
@@ -61,27 +71,39 @@ export function useLiveUpdates(enabled = true) {
   useEffect(() => {
     if (!enabled) return;
     const unsubscribe: (() => void)[] = [];
-    if (adapter.subscribe) unsubscribe.push(adapter.subscribe((change) => {
-      if (change.scope !== 'specs') return;
-      void client.invalidateQueries({ queryKey: keys.specIndex(specKey(adapter)) });
-      if (!change.files.length) void client.invalidateQueries({ queryKey: ['spec', specKey(adapter)] });
-      for (const file of change.files) void client.invalidateQueries({ queryKey: keys.specFile(specKey(adapter), file) });
-    }));
+    if (adapter.subscribe)
+      unsubscribe.push(
+        adapter.subscribe((change) => {
+          if (change.scope !== 'specs') return;
+          void client.invalidateQueries({ queryKey: keys.specIndex(specKey(adapter)) });
+          if (!change.files.length) void client.invalidateQueries({ queryKey: ['spec', specKey(adapter)] });
+          for (const file of change.files) void client.invalidateQueries({ queryKey: keys.specFile(specKey(adapter), file) });
+        })
+      );
     for (const { backend, enabled: active } of entries) {
       if (!active || !backend.subscribe) continue;
-      unsubscribe.push(backend.subscribe((change) => {
-        if (change.scope !== 'runs') return;
-        void client.invalidateQueries({ queryKey: keys.runsIndex(backend.cacheKey) });
-        if (!change.runIds.length) void client.invalidateQueries({ queryKey: keys.manifests(backend.cacheKey) });
-        for (const id of change.runIds) void client.invalidateQueries({ queryKey: keys.manifest(backend.cacheKey, id) });
-      }));
+      unsubscribe.push(
+        backend.subscribe((change) => {
+          if (change.scope !== 'runs') return;
+          void client.invalidateQueries({ queryKey: keys.runsIndex(backend.cacheKey) });
+          if (!change.runIds.length) void client.invalidateQueries({ queryKey: keys.manifests(backend.cacheKey) });
+          for (const id of change.runIds) void client.invalidateQueries({ queryKey: keys.manifest(backend.cacheKey, id) });
+        })
+      );
     }
-    return () => { for (const stop of unsubscribe) stop(); };
+    return () => {
+      for (const stop of unsubscribe) stop();
+    };
   }, [adapter, entries, client, enabled]);
 }
 
 export function selectReport(runs: SourcedRunSummary[], backends: ReportBackend[], param?: string) {
-  const summary = !param || param === LATEST ? runs[0] : runs.find((run) => run.id === param) ?? runs.find((run) => run.nativeId === param && run.sourceId === 'workspace') ?? runs.find((run) => run.nativeId === param);
+  const summary =
+    !param || param === LATEST
+      ? runs[0]
+      : (runs.find((run) => run.id === param) ??
+        runs.find((run) => run.nativeId === param && run.sourceId === 'workspace') ??
+        runs.find((run) => run.nativeId === param));
   if (summary) {
     const backend = backends.find((source) => source.id === summary.sourceId);
     return backend ? { backend, nativeId: summary.nativeId, id: summary.id, summary } : null;
@@ -105,13 +127,24 @@ function errorText(error: unknown) {
 function combineFiles(results: { data?: string; error: Error | null; isPending: boolean }[]) {
   return {
     texts: results.map((result) => result.data),
-    errors: results.map((result) => result.error ? errorText(result.error) : null),
+    errors: results.map((result) => (result.error ? errorText(result.error) : null)),
     loading: results.some((result) => result.isPending)
   };
 }
 
 export type LoadState = { loading: boolean; error: string | null; retry: () => void };
-export type SourceHealth = { id: string; label: string; kind: string; enabled: boolean; loading: boolean; refreshing: boolean; error: string | null; count: number; running: number; updatedAt: number };
+export type SourceHealth = {
+  id: string;
+  label: string;
+  kind: string;
+  enabled: boolean;
+  loading: boolean;
+  refreshing: boolean;
+  error: string | null;
+  count: number;
+  running: number;
+  updatedAt: number;
+};
 export type AtlasData = {
   view: AtlasView | null;
   spec: LoadState;
@@ -130,7 +163,12 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
   const entries = useBackends();
   const client = useQueryClient();
   const source = specKey(adapter);
-  const specIndex = useQuery({ queryKey: keys.specIndex(source), queryFn: async () => SpecIndexSchema.parse(await adapter.specIndex()), refetchInterval: live && adapter.kind !== 'dev' ? POLL_MS : false, refetchOnWindowFocus: live ? 'always' : false });
+  const specIndex = useQuery({
+    queryKey: keys.specIndex(source),
+    queryFn: async () => SpecIndexSchema.parse(await adapter.specIndex()),
+    refetchInterval: live && adapter.kind !== 'dev' ? POLL_MS : false,
+    refetchOnWindowFocus: live ? 'always' : false
+  });
   const index = useMemo(() => {
     const parsed = SpecIndexSchema.safeParse(specIndex.data);
     return parsed.success ? parsed.data : null;
@@ -140,7 +178,7 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
       queryKey: keys.specFile(source, path),
       queryFn: () => adapter.specFile(path),
       refetchInterval: live && adapter.kind !== 'dev' ? POLL_MS : false,
-      refetchOnWindowFocus: live ? 'always' as const : false as const
+      refetchOnWindowFocus: live ? ('always' as const) : (false as const)
     })),
     combine: combineFiles
   });
@@ -154,19 +192,26 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
       },
       enabled,
       refetchInterval: live && enabled ? backend.pollMs : false,
-      refetchOnWindowFocus: live && enabled ? 'always' as const : false as const
+      refetchOnWindowFocus: live && enabled ? ('always' as const) : (false as const)
     }))
   });
   const parsedSources = indexes.map((result, i) => {
     const entry = entries[i]!;
     const sink = createIssueSink();
-    const parsed = result.data === undefined || !entry.enabled ? { runs: [], excluded: [] } : parseRunsIndex(`${entry.backend.label}/runs`, result.data, sink);
+    const parsed =
+      result.data === undefined || !entry.enabled
+        ? { runs: [], excluded: [] }
+        : parseRunsIndex(`${entry.backend.label}/runs`, result.data, sink);
     return { ...entry, ...parsed, issues: sink.issues, result };
   });
-  const reports = parsedSources.flatMap(({ backend, runs }) => sourceRuns(backend, runs)).sort((a, b) =>
-    (Date.parse(b.startedAt) || 0) - (Date.parse(a.startedAt) || 0) || a.id.localeCompare(b.id)
+  const reports = parsedSources
+    .flatMap(({ backend, runs }) => sourceRuns(backend, runs))
+    .sort((a, b) => (Date.parse(b.startedAt) || 0) - (Date.parse(a.startedAt) || 0) || a.id.localeCompare(b.id));
+  const selection = selectReport(
+    reports,
+    entries.filter((entry) => entry.enabled).map((entry) => entry.backend),
+    runParam
   );
-  const selection = selectReport(reports, entries.filter((entry) => entry.enabled).map((entry) => entry.backend), runParam);
   const backend = selection?.backend;
   const nativeId = selection?.nativeId;
   const manifest = useQuery({
@@ -180,7 +225,14 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
         client.setQueryData(keys.runsIndex(backend.cacheKey), (previous: unknown) => {
           if (!isRecord(previous) || !Array.isArray(previous.runs)) return previous;
           if (!previous.runs.some((run) => isRecord(run) && run.id === nativeId && run.progress === 'running')) return previous;
-          return { ...previous, runs: previous.runs.map((run) => isRecord(run) && run.id === nativeId ? { ...run, progress: 'complete', execution: info.progress ?? run.execution, durationMs: info.durationMs ?? run.durationMs } : run) };
+          return {
+            ...previous,
+            runs: previous.runs.map((run) =>
+              isRecord(run) && run.id === nativeId
+                ? { ...run, progress: 'complete', execution: info.progress ?? run.execution, durationMs: info.durationMs ?? run.durationMs }
+                : run
+            )
+          };
         });
       }
       return raw;
@@ -198,7 +250,13 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
   const specDoc = useMemo(() => {
     if (!index || files.loading) return null;
     const sink = createIssueSink();
-    const doc = parseSpec({ ref: index.ref ?? null, files: index.files.map((path, i) => ({ path, text: files.texts[i] ?? null, error: files.errors[i] ?? undefined })) }, sink);
+    const doc = parseSpec(
+      {
+        ref: index.ref ?? null,
+        files: index.files.map((path, i) => ({ path, text: files.texts[i] ?? null, error: files.errors[i] ?? undefined }))
+      },
+      sink
+    );
     return { doc, issues: sink.issues };
   }, [index, files]);
   const runParsed = useMemo(() => {
@@ -207,26 +265,56 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
     const run = parseManifest(selection.id, selection.backend.manifestPath(selection.nativeId), manifest.data, sink);
     return { run, issues: sink.issues };
   }, [selection?.id, backend, nativeId, manifest.data]);
-  const waiting = Boolean(selection?.summary?.progress === 'running' && !manifest.data && (!manifest.error || manifest.error instanceof LoadError && manifest.error.status === 404));
+  const waiting = Boolean(
+    selection?.summary?.progress === 'running' &&
+    !manifest.data &&
+    (!manifest.error || (manifest.error instanceof LoadError && manifest.error.status === 404))
+  );
   const runIssues: DataIssue[] = [...parsedSources.flatMap((entry) => entry.issues), ...(runParsed?.issues ?? [])];
-  for (const entry of parsedSources) if (entry.enabled && entry.result.error) runIssues.push({ severity: 'warning', file: entry.backend.label, path: '', message: `This source could not be refreshed: ${errorText(entry.result.error)}. Available reports are kept.` });
-  if (manifest.error && selection && !waiting) runIssues.push({ severity: 'warning', file: selection.backend.manifestPath(selection.nativeId), path: '', message: `This report could not be refreshed: ${errorText(manifest.error)}. The last available snapshot is kept.` });
-  const view = specDoc ? buildAtlasView({
-    spec: specDoc.doc,
-    specIssues: specDoc.issues,
-    runs: reports,
-    run: runParsed?.run ?? null,
-    runIssues,
-    runProgress: runParsed?.run?.info.finishedAt === null ? 'running' : typeof runParsed?.run?.info.finishedAt === 'string' ? 'complete' : selection?.summary?.progress,
-    resolveMedia: (id, path) => {
-      const resolved = selectReport(reports, entries.map((entry) => entry.backend), id);
-      return resolved ? resolved.backend.mediaUrl(resolved.nativeId, path) : '';
-    }
-  }) : null;
-  if (view) for (const entry of parsedSources) for (const item of entry.excluded) if (!view.excluded.includes(item)) view.excluded.push(item);
+  for (const entry of parsedSources)
+    if (entry.enabled && entry.result.error)
+      runIssues.push({
+        severity: 'warning',
+        file: entry.backend.label,
+        path: '',
+        message: `This source could not be refreshed: ${errorText(entry.result.error)}. Available reports are kept.`
+      });
+  if (manifest.error && selection && !waiting)
+    runIssues.push({
+      severity: 'warning',
+      file: selection.backend.manifestPath(selection.nativeId),
+      path: '',
+      message: `This report could not be refreshed: ${errorText(manifest.error)}. The last available snapshot is kept.`
+    });
+  const view = specDoc
+    ? buildAtlasView({
+        spec: specDoc.doc,
+        specIssues: specDoc.issues,
+        runs: reports,
+        run: runParsed?.run ?? null,
+        runIssues,
+        runProgress:
+          runParsed?.run?.info.finishedAt === null
+            ? 'running'
+            : typeof runParsed?.run?.info.finishedAt === 'string'
+              ? 'complete'
+              : selection?.summary?.progress,
+        resolveMedia: (id, path) => {
+          const resolved = selectReport(
+            reports,
+            entries.map((entry) => entry.backend),
+            id
+          );
+          return resolved ? resolved.backend.mediaUrl(resolved.nativeId, path) : '';
+        }
+      })
+    : null;
+  if (view)
+    for (const entry of parsedSources) for (const item of entry.excluded) if (!view.excluded.includes(item)) view.excluded.push(item);
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ['spec', source] });
-    for (const { backend: reportBackend, enabled } of entries) if (enabled) void client.invalidateQueries({ queryKey: ['reports', reportBackend.cacheKey] });
+    for (const { backend: reportBackend, enabled } of entries)
+      if (enabled) void client.invalidateQueries({ queryKey: ['reports', reportBackend.cacheKey] });
   };
   const sources = parsedSources.map(({ backend: reportBackend, enabled, runs, result }) => ({
     id: reportBackend.id,
@@ -242,9 +330,34 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
   }));
   return {
     view,
-    spec: { loading: specIndex.isPending || files.loading, error: specIndex.error ? errorText(specIndex.error) : specIndex.data !== undefined && !index ? 'The spec index is not in a supported format.' : null, retry: refresh },
-    runs: { loading: sources.some((entry) => entry.loading), error: sources.find((entry) => entry.enabled && entry.error)?.error ?? null, retry: refresh },
-    run: { id: selection?.id ?? null, summary: selection?.summary ?? null, waiting, loading: Boolean(selection) && manifest.isPending, error: waiting ? null : manifest.error ? errorText(manifest.error) : runParam && runParam !== LATEST && !selection ? 'This report source is disabled or unavailable.' : null, retry: selection ? () => void manifest.refetch() : refresh },
+    spec: {
+      loading: specIndex.isPending || files.loading,
+      error: specIndex.error
+        ? errorText(specIndex.error)
+        : specIndex.data !== undefined && !index
+          ? 'The spec index is not in a supported format.'
+          : null,
+      retry: refresh
+    },
+    runs: {
+      loading: sources.some((entry) => entry.loading),
+      error: sources.find((entry) => entry.enabled && entry.error)?.error ?? null,
+      retry: refresh
+    },
+    run: {
+      id: selection?.id ?? null,
+      summary: selection?.summary ?? null,
+      waiting,
+      loading: Boolean(selection) && manifest.isPending,
+      error: waiting
+        ? null
+        : manifest.error
+          ? errorText(manifest.error)
+          : runParam && runParam !== LATEST && !selection
+            ? 'This report source is disabled or unavailable.'
+            : null,
+      retry: selection ? () => void manifest.refetch() : refresh
+    },
     reports,
     sources,
     latestRunId: reports[0]?.id ?? null,
