@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 
-import { ConfidenceSchema, EventKindSchema } from './common';
+import { ConfidenceSchema, EventKindSchema } from './common.js';
 
 export const SPEC_SCHEMA_VERSION = 1;
 
@@ -44,7 +44,10 @@ export type StateMeta = z.infer<typeof StateMetaSchema>;
 
 export const TransitionTargetSchema = z.union([
   z.string().min(1),
-  z.object({ target: z.string().min(1) })
+  z.object({
+    target: z.string().min(1),
+    meta: z.record(z.string(), z.unknown()).optional()
+  })
 ]);
 
 export const STATE_TYPES = ['atomic', 'compound', 'parallel', 'final'] as const;
