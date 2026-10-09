@@ -100,6 +100,7 @@ function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
         </span>
         <StatusBadge status={state.status} />
         {state.confidence === 'assumed' && <span className={styles.assumedBadge}>Assumed, not confirmed</span>}
+        {state.result?.seeds.length ? <span className={styles.assumedBadge}>Seeded: {state.result.seeds.join(', ')}</span> : null}
         <h2 className={styles.panelTitle}>{state.name}</h2>
       </div>
       {state.description && <p className={styles.lead}>{state.description}</p>}

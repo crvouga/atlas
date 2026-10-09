@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto';
+
 import type { Config, StateValue } from './graph';
 import type { ChartGraph } from './graph';
+import { configKey } from './graph';
 import type { Composition } from './spec/compose';
 import type { SpecBundle } from './spec/types';
 import { splitTransitionId, transitionId, walkStates } from './spec/types';
@@ -22,12 +25,18 @@ export type PlannedStep = { event: string; transitions: string[]; handOff: boole
 
 export type PlannedPath = {
   id: string;
+  /** The same start and events give the same key on any machine and in any run. */
+  key: string;
   name: string;
   kind: 'journey' | 'generated';
   description: string;
   steps: PlannedStep[];
   /** Active states the path starts in, for the implementation's setup. */
   start: string[];
+  /** The seed that puts the system in the start configuration; `setup` does it when absent. */
+  seed?: string;
+  /** The journeys this stretch belongs to: a stretch several journeys share is run once. */
+  journeys?: string[];
   blockedBy: string[];
   /** A blocked path whose runnable part other paths already cover: reported, not run. */
   skipRun?: boolean;
@@ -135,11 +144,24 @@ function withoutAutomaticHandOffs(graph: ChartGraph, start: Config, events: stri
   return out;
 }
 
+/** A named seed: a configuration the implementation can put the system in directly. */
+export type SeedPoint = { name: string; at: StateValue; blocked?: string };
+
+/** A journey as the paths it is cut into, one per seeded stretch, in order. */
+export type PlannedJourney = { name: string; description: string; paths: string[] };
+
 export type PlanOptions = {
   /** Events that cannot run yet; paths stop before them. */
   isBlocked?: (event: string) => boolean;
   /** Whether the implementation can set a path up in this starting configuration. */
   canStart?: (active: string[]) => true | string;
+  /**
+   * Configurations the implementation can seed directly. Paths start from the nearest one, and
+   * journeys are cut wherever they pass through one, so every stretch runs on its own.
+   */
+  seeds?: SeedPoint[];
+  /** Whether `setup` can start a path at the scope's start; true when omitted. */
+  hasSetup?: boolean;
 };
 
 /** The steps a path can actually run: everything before its first blocked event. */
@@ -148,89 +170,157 @@ export function runnableSteps(steps: PlannedStep[], isBlocked: (event: string) =
   return stop < 0 ? steps : steps.slice(0, stop);
 }
 
+export function pathKey(seed: string | undefined, start: Config, events: string[]) {
+  return createHash('sha256')
+    .update(JSON.stringify([seed ?? null, configKey(start.value), events]))
+    .digest('hex')
+    .slice(0, 16);
+}
+
+const leaves = (graph: ChartGraph, active: string[]) => active.filter((n) => graph.isLeaf(n));
+
 /**
- * Paths for one chart: each curated journey's stretch inside the chart, then the shortest extra
- * paths until every transition in scope is planned. Loops are bounded by breadth-first search.
+ * Paths for one chart. Every path starts at a start point: the scope's start (through `setup`)
+ * or a seed. Each curated journey is replayed from the chart's initial state and cut into
+ * stretches wherever it passes through a seeded configuration; identical stretches of different
+ * journeys become one path. Then the shortest extra path from the nearest start point is added
+ * for every transition still uncovered, and extra paths that are a prefix of another path are
+ * dropped. Everything is ordered by the chart and the journeys, so the plan is deterministic.
  */
 export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartScope, options: PlanOptions = {}) {
   const isBlocked = options.isBlocked ?? (() => false);
   const canStart = options.canStart ?? (() => true as const);
+  const hasSetup = options.hasSetup !== false;
   const blockedEvents = (steps: PlannedStep[]) => [...new Set(steps.map((s) => s.event).filter(isBlocked))];
   const isRoot = scope.chart === bundle.root && !scope.state;
-  const startActive = graph.resolve(scope.start).active;
 
-  const journeys: PlannedPath[] = [];
-  const seen = new Set<string>();
+  const seeds = (options.seeds ?? []).map((seed) => ({ ...seed, config: graph.resolve(seed.at) }));
+  const startPoints: { seed?: string; config: Config }[] = [
+    ...seeds.filter((s) => !s.blocked).map((s) => ({ seed: s.name, config: s.config })),
+    ...(hasSetup ? [{ config: graph.resolve(scope.start) }] : [])
+  ];
+  const startAt = (config: Config) => startPoints.find((p) => configKey(p.config.value) === configKey(config.value));
+  const startVerdict = (config: Config) => {
+    const point = startAt(config);
+    if (point?.seed) return { point, supported: true as const };
+    if (!hasSetup) return { point, supported: `no seed puts the system in ${leaves(graph, config.active).join(' + ')}` };
+    return { point, supported: canStart(config.active) };
+  };
+
+  const journeyPaths: PlannedPath[] = [];
+  const byKey = new Map<string, PlannedPath>();
+  const journeys: PlannedJourney[] = [];
   for (const journey of bundle.journeys) {
     const replay = graph.replay(graph.initial(), journey.events);
-    let current: ReplayStep[] = [];
+    const ids: string[] = [];
+    let current: ReplayStep[] | null = null;
     const flush = () => {
-      if (current.length === 0) return;
+      if (!current?.length) {
+        current = null;
+        return;
+      }
+      const startConfig = current[0]!.from;
       const steps = toSteps(current);
-      current = [];
-      const start = steps[0]!.from;
-      const key = `${start.join('|')} ${steps.map((s) => s.event).join(' > ')}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      const supported = canStart(start);
-      journeys.push({
-        id: `journey-${journeys.length + 1}`,
+      current = null;
+      const { point, supported } = startVerdict(startConfig);
+      const key = pathKey(point?.seed, startConfig, steps.map((s) => s.event));
+      const existing = byKey.get(key);
+      if (existing) {
+        if (!existing.journeys!.includes(journey.name)) existing.journeys!.push(journey.name);
+        if (!ids.includes(existing.id)) ids.push(existing.id);
+        return;
+      }
+      const path: PlannedPath = {
+        id: `journey-${journeyPaths.length + 1}`,
+        key,
         name: journey.name,
         kind: 'journey',
         description: journey.description,
         steps,
-        start,
+        start: startConfig.active,
+        ...(point?.seed ? { seed: point.seed } : {}),
+        journeys: [journey.name],
         blockedBy: [...(supported === true ? [] : [`Start: ${supported}`]), ...blockedEvents(steps)]
-      });
+      };
+      byKey.set(key, path);
+      journeyPaths.push(path);
+      ids.push(path.id);
     };
     for (const step of replay.steps) {
-      const entering = isRoot ? current.length === 0 : step.transitions.some((t) => scope.entries.has(t));
-      if (current.length === 0 && entering && inScope(scope, step.transitions)) current.push(step);
-      else if (current.length > 0 && inScope(scope, step.transitions)) current.push(step);
-      else flush();
+      if (!inScope(scope, step.transitions)) {
+        flush();
+        continue;
+      }
+      const seeded = startAt(step.from);
+      if (current && seeded) flush();
+      if (!current) {
+        const entering = isRoot || Boolean(seeded) || step.transitions.some((t) => scope.entries.has(t));
+        if (!entering) continue;
+        current = [];
+      }
+      current.push(step);
     }
     flush();
+    if (ids.length) journeys.push({ name: journey.name, description: journey.description, paths: ids });
   }
 
-  const covered = new Set(journeys.flatMap((p) => (p.blockedBy.some((b) => b.startsWith('Start:')) ? [] : runnableSteps(p.steps, isBlocked).flatMap((s) => s.transitions))));
+  const startable = (p: PlannedPath) => !p.blockedBy.some((b) => b.startsWith('Start:'));
+  const covered = new Set(journeyPaths.filter(startable).flatMap((p) => runnableSteps(p.steps, isBlocked).flatMap((s) => s.transitions)));
   const planned = new Set<string>();
-  const generated: PlannedPath[] = [];
-  const start = graph.resolve(scope.start);
-  for (const avoidBlocked of [true, false]) {
-    const allowed = (event: string) => scope.events.has(event) && (!avoidBlocked || !isBlocked(event));
-    const explored = graph.explore(start, allowed);
-    for (const target of scope.transitions) {
-      if (covered.has(target) || planned.has(target)) continue;
-      const { source, event } = splitTransitionId(target);
-      if (avoidBlocked && isBlocked(event)) continue;
-      const reaching = [...explored.seen.values()]
-        .filter(({ config }) => config.active.includes(source) && graph.firedBy(config, event).includes(target))
-        .sort((a, b) => a.path.length - b.path.length)[0];
-      if (!reaching) continue;
-      const replay = graph.replay(start, withoutAutomaticHandOffs(graph, start, [...reaching.path, event]));
-      const steps = toSteps(replay.steps).filter((s) => inScope(scope, s.transitions));
-      for (const s of runnableSteps(steps, isBlocked)) for (const t of s.transitions) covered.add(t);
-      if (!avoidBlocked) for (const s of steps) for (const t of s.transitions) planned.add(t);
-      generated.push({
-        id: `generated-${generated.length + 1}`,
-        name: `Covers: ${source} → ${event}`,
-        kind: 'generated',
-        description: `Shortest path that reaches "${source}" and takes "${event}".`,
-        steps,
-        start: startActive,
-        blockedBy: blockedEvents(steps)
-      });
+  let generated: PlannedPath[] = [];
+  if (startPoints.length) {
+    for (const avoidBlocked of [true, false]) {
+      const allowed = (event: string) => scope.events.has(event) && (!avoidBlocked || !isBlocked(event));
+      const explored = graph.explore(
+        startPoints.map((p) => p.config),
+        allowed
+      );
+      for (const target of scope.transitions) {
+        if (covered.has(target) || planned.has(target)) continue;
+        const { source, event } = splitTransitionId(target);
+        if (avoidBlocked && isBlocked(event)) continue;
+        const first = explored.firstFired.get(target);
+        if (!first) continue;
+        const origin = startPoints[first.from.origin]!;
+        const replay = graph.replay(origin.config, withoutAutomaticHandOffs(graph, origin.config, [...first.from.path, first.event]));
+        const steps = toSteps(replay.steps).filter((s) => inScope(scope, s.transitions));
+        for (const s of runnableSteps(steps, isBlocked)) for (const t of s.transitions) covered.add(t);
+        if (!avoidBlocked) for (const s of steps) for (const t of s.transitions) planned.add(t);
+        generated.push({
+          id: '',
+          key: pathKey(origin.seed, origin.config, steps.map((s) => s.event)),
+          name: `Covers: ${source} → ${event}`,
+          kind: 'generated',
+          description: `Shortest path from ${origin.seed ? `the seed "${origin.seed}"` : 'the start'} that reaches "${source}" and takes "${event}".`,
+          steps,
+          start: origin.config.active,
+          ...(origin.seed ? { seed: origin.seed } : {}),
+          blockedBy: blockedEvents(steps)
+        });
+      }
     }
   }
 
-  const everPlanned = new Set([...journeys, ...generated].flatMap((p) => p.steps.flatMap((s) => s.transitions)));
+  const all = [...journeyPaths, ...generated];
+  const startKey = (p: PlannedPath) => `${p.seed ?? ''}|${p.start.join('|')}`;
+  const isPrefix = (short: PlannedPath, long: PlannedPath) =>
+    short !== long && startable(long) && startKey(short) === startKey(long) && short.steps.length <= long.steps.length && short.steps.every((s, i) => s.event === long.steps[i]!.event);
+  generated = generated.filter((p, i) => !all.some((q) => isPrefix(p, q) && (q.steps.length > p.steps.length || q.kind === 'journey' || generated.indexOf(q) < i)));
+  generated.forEach((p, i) => (p.id = `generated-${i + 1}`));
+
+  const everPlanned = new Set([...journeyPaths, ...generated].filter(startable).flatMap((p) => p.steps.flatMap((s) => s.transitions)));
   const unreachable = [...scope.transitions].filter((t) => !everPlanned.has(t));
   const runCovered = new Set<string>();
-  const paths = [...journeys, ...generated].map((p) => {
-    const prefix = runnableSteps(p.steps, isBlocked).flatMap((s) => s.transitions);
+  const paths = [...journeyPaths, ...generated].map((p) => {
+    const prefix = startable(p) ? runnableSteps(p.steps, isBlocked).flatMap((s) => s.transitions) : [];
     const adds = prefix.some((t) => !runCovered.has(t));
     for (const t of prefix) runCovered.add(t);
     return p.blockedBy.length && !adds ? { ...p, skipRun: true } : p;
   });
-  return { paths, unreachable };
+  return {
+    paths,
+    unreachable,
+    journeys,
+    seeds: seeds.map((s) => ({ name: s.name, active: s.config.active, ...(s.blocked ? { blocked: s.blocked } : {}) }))
+  };
 }

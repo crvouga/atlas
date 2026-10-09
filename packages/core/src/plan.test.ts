@@ -123,8 +123,11 @@ describe('planChart', () => {
     expect(runnableSteps(journey.steps, isBlocked).map((s) => s.event)).toEqual(['Adds to cart', 'Checks out', 'Submits details']);
 
     const blocked = paths.slice(1).filter((p) => p.blockedBy.length);
-    expect(blocked.length).toBeGreaterThan(0);
     for (const path of blocked) expect(path.skipRun, path.name).toBe(true);
+    const events = (p: { steps: { event: string }[] }) => p.steps.map((s) => s.event).join(' > ');
+    for (const path of paths.filter((p) => p.kind === 'generated')) {
+      for (const other of paths) if (other !== path) expect(events(other).startsWith(events(path)), `${path.name} is a prefix of ${other.name}`).toBe(false);
+    }
     for (const path of paths.filter((p) => !p.blockedBy.length)) expect(path.steps.some((s) => isBlocked(s.event))).toBe(false);
     expect(unreachable).toEqual([]);
   });
@@ -171,5 +174,68 @@ describe('planChart', () => {
     expect(unreachable).toEqual([]);
     expect(paths.every((p) => p.steps[0]?.event === 'Checks out')).toBe(true);
     expect(paths.find((p) => p.kind === 'journey')?.steps.map((s) => s.event)).toEqual(['Checks out', 'Submits details', 'Pays']);
+  });
+
+  describe('with seeds', () => {
+    const product: MachineConfig = {
+      id: 'Product',
+      initial: 'Visitor',
+      states: {
+        Visitor: { on: { 'Signs up': 'Member' } },
+        Member: {
+          type: 'parallel',
+          states: {
+            Plan: { initial: 'Free', states: { Free: { on: { Upgrades: 'Paid' } }, Paid: { on: { Downgrades: 'Free' } } } },
+            Orders: { initial: 'None', states: { None: { on: { Orders: 'Ordered' } }, Ordered: { on: { 'Order arrives': 'Delivered' } }, Delivered: {} } }
+          }
+        }
+      }
+    };
+    const journeys: Journey[] = [
+      { name: 'Free order', description: 'Orders on the free plan.', events: ['Signs up', 'Orders', 'Order arrives'], endsIn: ['Delivered'] },
+      { name: 'Paid order', description: 'Upgrades, then orders.', events: ['Signs up', 'Upgrades', 'Orders', 'Order arrives'], endsIn: ['Delivered'] }
+    ];
+    const plan = (seeds: { name: string; at: string | Record<string, unknown> }[], extra: { hasSetup?: boolean } = {}) => {
+      const bundle = bundleOf('.', [chart(product)], journeys);
+      const { composition, graph } = lintBundle(bundle, { requiredMeta: [] });
+      const scope = chartScope(bundle, composition, graph);
+      return planChart(bundle, graph, scope, { seeds: seeds.map((s) => ({ name: s.name, at: typeof s.at === 'string' ? graph.valueOf(s.at) : (s.at as never) })), ...extra });
+    };
+
+    it('cuts journeys at seeded configurations and runs a stretch journeys share once', () => {
+      const { paths, journeys: planned } = plan([
+        { name: 'Free member', at: 'Member' },
+        { name: 'Paid member', at: { Member: { Plan: 'Paid' } } }
+      ]);
+      const journeyPaths = paths.filter((p) => p.kind === 'journey');
+      expect(journeyPaths.map((p) => [p.id, p.seed ?? 'setup', p.steps.map((s) => s.event), p.journeys])).toEqual([
+        ['journey-1', 'setup', ['Signs up'], ['Free order', 'Paid order']],
+        ['journey-2', 'Free member', ['Orders', 'Order arrives'], ['Free order']],
+        ['journey-3', 'Free member', ['Upgrades'], ['Paid order']],
+        ['journey-4', 'Paid member', ['Orders', 'Order arrives'], ['Paid order']]
+      ]);
+      expect(planned.map((j) => [j.name, j.paths])).toEqual([
+        ['Free order', ['journey-1', 'journey-2']],
+        ['Paid order', ['journey-1', 'journey-3', 'journey-4']]
+      ]);
+    });
+
+    it('starts every generated path at the nearest seed, and plans the same every time', () => {
+      const seeds = [{ name: 'Paid member', at: { Member: { Plan: 'Paid' } } }];
+      const first = plan(seeds);
+      const generated = first.paths.filter((p) => p.kind === 'generated');
+      const downgrade = generated.find((p) => p.name === 'Covers: Paid → Downgrades')!;
+      expect(downgrade).toMatchObject({ seed: 'Paid member' });
+      expect(downgrade.steps.map((s) => s.event)).toEqual(['Downgrades']);
+      expect(first.unreachable).toEqual([]);
+      expect(plan(seeds).paths.map((p) => [p.id, p.key])).toEqual(first.paths.map((p) => [p.id, p.key]));
+    });
+
+    it('plans from seeds alone when there is no setup', () => {
+      const { paths, unreachable } = plan([{ name: 'Free member', at: 'Member' }], { hasSetup: false });
+      expect(paths.find((p) => p.steps[0]?.event === 'Signs up')?.blockedBy).toEqual(['Start: no seed puts the system in Visitor']);
+      expect(paths.filter((p) => p.kind === 'generated').every((p) => p.seed === 'Free member')).toBe(true);
+      expect(unreachable).toEqual(['Visitor :: Signs up']);
+    });
   });
 });

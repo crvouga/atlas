@@ -59,6 +59,11 @@ export type WebDriverDriverOptions = {
   actionTimeoutMs?: number;
   name?: string;
   pacing?: { before: number; after: number };
+  /**
+   * Sessions open at once (one per worker): raise it for a grid or several devices. 1 when
+   * omitted, and always 1 with a per-run session.
+   */
+  concurrency?: number;
 };
 
 function inferMode(capabilities: Record<string, unknown>): Mode {
@@ -195,9 +200,11 @@ export function webdriverDriver(options: WebDriverDriverOptions): Driver<WebDriv
   const mode = options.mode ?? inferMode(options.capabilities);
   const timeoutMs = options.actionTimeoutMs ?? 15_000;
   let server: { url: string; process: ChildProcess | null } | null = null;
+  let starting: Promise<string> | null = null;
   let shared: WebDriverSession | null = null;
 
-  const serverUrl = async () => {
+  const serverUrl = () => (starting ??= startServer());
+  const startServer = async () => {
     if (server) return server.url;
     if (options.url) {
       server = { url: options.url, process: null };
@@ -223,6 +230,7 @@ export function webdriverDriver(options: WebDriverDriverOptions): Driver<WebDriv
   return {
     name: options.name ?? (mode === 'native' ? `webdriver:${String(options.capabilities.platformName ?? 'native').toLowerCase()}` : `webdriver:${String(options.capabilities.browserName ?? 'browser')}`),
     pacing: options.pacing ?? { before: 400, after: 900 },
+    concurrency: options.session === 'per-run' ? 1 : (options.concurrency ?? 1),
     async open({ timeline }) {
       const session = options.session === 'per-run' ? (shared ??= await startSession()) : await startSession();
       const baseUrl = typeof options.baseUrl === 'function' ? await options.baseUrl() : options.baseUrl;
@@ -266,6 +274,7 @@ export function webdriverDriver(options: WebDriverDriverOptions): Driver<WebDriv
       shared = null;
       server?.process?.kill();
       server = null;
+      starting = null;
     }
   };
 }

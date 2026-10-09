@@ -46,6 +46,11 @@ export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNod
         <span>{state.name}</span>
       </span>
       {state.confidence === 'assumed' && <span className={styles.assumed}>Assumed</span>}
+      {state.result?.seeds.length ? (
+        <span className={styles.seeded} title={`Paths start here from ${state.result.seeds.map((s) => `"${s}"`).join(', ')}`}>
+          Seeded
+        </span>
+      ) : null}
       <Handles />
     </Link>
   );

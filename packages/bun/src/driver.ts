@@ -58,6 +58,8 @@ export type BunWebViewDriverOptions = {
   actionTimeoutMs?: number;
   /** Showcase pacing, in milliseconds. */
   pacing?: { before: number; after: number };
+  /** Views open at once (one per worker); 8 when omitted. */
+  concurrency?: number;
 };
 
 function webViewConstructor() {
@@ -122,6 +124,7 @@ export function bunWebViewDriver(options: BunWebViewDriverOptions = {}): Driver<
   return {
     name: 'bun-webview',
     pacing: options.pacing ?? { before: 400, after: 900 },
+    concurrency: options.concurrency ?? 8,
     async open({ timeline }) {
       const WebView = webViewConstructor();
       const view = new WebView({ width, height, headless: true, ...(options.backend ? { backend: options.backend } : {}) });

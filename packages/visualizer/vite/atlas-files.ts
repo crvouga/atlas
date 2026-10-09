@@ -128,7 +128,11 @@ export function summarizeRun(runsRoot: string, id: string): RunSummary | null {
   }
   const run = (manifest.run ?? {}) as Record<string, unknown>;
   const coverage = ((manifest.coverage ?? {}) as Record<string, Record<string, unknown>>).overall;
-  const paths = Array.isArray(manifest.paths) ? (manifest.paths as Record<string, unknown>[]).filter((p) => p.kind === 'journey') : [];
+  const paths = Array.isArray(manifest.journeys)
+    ? (manifest.journeys as Record<string, unknown>[])
+    : Array.isArray(manifest.paths)
+      ? (manifest.paths as Record<string, unknown>[]).filter((p) => p.kind === 'journey')
+      : [];
   const journeys: Count = { total: paths.length, passed: 0, failed: 0, flaky: 0, notReached: 0 };
   for (const p of paths) {
     if (p.status === 'passed') journeys.passed++;

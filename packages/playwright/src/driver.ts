@@ -33,6 +33,8 @@ export type PlaywrightDriverOptions = {
   traceOnFailure?: boolean;
   /** Called after the page is created and before the implementation's setup. */
   onPage?: (page: Page) => Promise<void>;
+  /** Browser contexts open at once (one per worker); unlimited when omitted. */
+  concurrency?: number;
 };
 
 /**
@@ -41,17 +43,20 @@ export type PlaywrightDriverOptions = {
  * FFmpeg as H.264 MP4 (FFmpeg on the PATH is needed for video and WebP thumbnails).
  */
 export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<PlaywrightContext> {
-  let browser: Browser | null = null;
+  let browser: Promise<Browser> | null = null;
   const device = options.device ?? PHONE;
   const scale = device.deviceScaleFactor ?? 1;
   const showcasePacing = { ...SHOWCASE_PACING, ...options.pacing };
   const ensureBrowser = async () => {
-    if (!browser || !browser.isConnected()) browser = await chromium.launch(options.launch);
+    const current = browser ? await browser.catch(() => null) : null;
+    if (current?.isConnected()) return current;
+    browser = chromium.launch(options.launch);
     return browser;
   };
   return {
     name: 'playwright',
     pacing: { before: showcasePacing.holdBeforeMs, after: showcasePacing.holdAfterMs },
+    concurrency: options.concurrency ?? Number.POSITIVE_INFINITY,
     async open({ mode, timeline }) {
       const b = await ensureBrowser();
       const context = await b.newContext(device);
@@ -95,8 +100,9 @@ export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<
     text: (ctx) => ctx.page.evaluate(() => document.body.innerText),
     hold: (ctx, ms) => ctx.page.waitForTimeout(ms),
     async dispose() {
-      await browser?.close().catch(() => undefined);
+      const current = browser;
       browser = null;
+      await current?.then((b) => b.close()).catch(() => undefined);
     }
   };
 }

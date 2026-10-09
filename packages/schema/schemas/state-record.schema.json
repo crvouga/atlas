@@ -45,6 +45,13 @@
       "description": "The client whose screen shows it, in a multi-client run",
       "type": "string"
     },
+    "seeds": {
+      "description": "Seeds that start paths with this state active",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "status": {
       "type": "string",
       "enum": [

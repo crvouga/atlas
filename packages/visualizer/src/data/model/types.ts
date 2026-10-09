@@ -63,6 +63,8 @@ export type StateResult = {
   notes: string[];
   looksLike: string[];
   recognizer: { matched: boolean; signals: { signal: string; expected: string; visible: boolean }[] } | null;
+  /** Seeds that start paths with this screen showing. */
+  seeds: string[];
 };
 
 export type StateView = {
@@ -142,6 +144,8 @@ export type JourneyStep = {
 export type JourneyRunPath = {
   id: string;
   name: string;
+  /** The seed the stretch started from; null when it started at the beginning. */
+  seed: string | null;
   status: RunStatus;
   stoppedAt: string | null;
   error: string | null;

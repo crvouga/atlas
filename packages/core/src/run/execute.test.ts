@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { CloudEvent } from '../events/cloudevents';
 import type { Driver, EventSource, Implementation, StateImplementation } from './types';
 import { defineConfig, prepare } from '../config';
-import { runPaths } from './execute';
+import { mergeRuns, runPaths, shardPaths } from './execute';
 import { functionDriver } from './types';
 
 /** A lamp: off, or on and either dim or bright. "On" is a compound state. */
@@ -93,7 +93,9 @@ function implementation(overrides: Partial<Implementation<Lamp>['events']> = {})
   };
 }
 
-async function run(impl: Implementation<Lamp>, options: { retry?: boolean; driver?: Driver<Lamp> } = {}) {
+type RunExtras = Partial<Pick<Parameters<typeof runPaths<Lamp>>[0], 'workers' | 'reuse' | 'shard'>> & { output?: string };
+
+async function run(impl: Implementation<Lamp>, options: { retry?: boolean; driver?: Driver<Lamp> } & RunExtras = {}) {
   published = [];
   let mark = 0;
   const events: EventSource = {
@@ -110,11 +112,16 @@ async function run(impl: Implementation<Lamp>, options: { retry?: boolean; drive
     composition: prepared.lint.composition,
     graph: prepared.lint.graph,
     scope: prepared.scope,
-    paths: prepared.plan.paths,
+    journeys: prepared.plan.journeys,
+    seeds: prepared.plan.seeds,
+    paths: options.shard ? shardPaths(prepared.plan.paths, options.shard) : prepared.plan.paths,
     driver: options.driver ?? functionDriver(() => new Lamp((e) => published.push(e))),
     implementation: impl,
     mode: 'fast',
-    outputRoot: path.join(directory, 'runs'),
+    outputRoot: options.output ?? path.join(directory, 'runs'),
+    workers: options.workers,
+    reuse: options.reuse,
+    shard: options.shard,
     retry: options.retry,
     stepTimeoutMs: 300,
     eventSources: [events],
@@ -182,7 +189,6 @@ describe('runPaths', () => {
     expect(manifest.transitions['Bright :: Dims']).toMatchObject({ status: 'not-reached', reason: 'Blocked: The dimmer is not wired up yet.' });
     expect(manifest.transitions['On :: Switches off']!.status).toBe('passed');
     const skipped = manifest.paths.filter((p) => p.attempts.length === 0);
-    expect(skipped.length).toBeGreaterThan(0);
     for (const p of skipped) expect(p.status).toBe('not-reached');
     expect(manifest.coverage.overall!.transitions).toMatchObject({ passed: 3, notReached: 1, failed: 0 });
   });
@@ -209,5 +215,100 @@ describe('runPaths', () => {
     expect(manifest.privacy.passed).toBe(false);
     expect(manifest.privacy.findings[0]).toMatch(/an email address outside the allowed domains \(j…@realmail\.com\)/);
     expect(JSON.stringify(manifest)).not.toContain('jane.doe@realmail.com');
+  });
+
+  describe('with seeds', () => {
+    const seeded = (overrides: Partial<Implementation<Lamp>['events']> = {}): Implementation<Lamp> => ({
+      ...implementation(overrides),
+      seeds: {
+        'Lit, dim': {
+          at: 'Dim',
+          how: 'switchOn()',
+          run: async (l) => l.switchOn()
+        }
+      }
+    });
+    const report = (m: Awaited<ReturnType<typeof run>>['manifest']) => ({
+      states: Object.fromEntries(Object.entries(m.states).map(([k, v]) => [k, [v.status, v.reachedBy, v.screenshot]])),
+      transitions: Object.fromEntries(Object.entries(m.transitions).map(([k, v]) => [k, [v.status, v.reachedBy, v.reason]])),
+      paths: m.paths.map((p) => [p.id, p.key, p.status, p.seed]),
+      journeys: m.journeys,
+      seeds: m.seeds
+    });
+
+    it('cuts journeys at seeded states, runs each stretch from its seed, and composes the journey', async () => {
+      const { manifest, ok, prepared } = await run(seeded(), { workers: 1 });
+      expect(ok).toBe(true);
+      expect(prepared.plan.journeys).toEqual([{ name: 'Reads at night', description: expect.any(String), paths: ['journey-1', 'journey-2', 'journey-3'] }]);
+      expect(manifest.paths.map((p) => [p.id, p.seed ?? 'setup', p.steps.map((s) => s.event)])).toEqual([
+        ['journey-1', 'setup', ['Switches on']],
+        ['journey-2', 'Lit, dim', ['Brightens', 'Dims']],
+        ['journey-3', 'Lit, dim', ['Switches off']]
+      ]);
+      expect(manifest.journeys).toEqual([
+        { name: 'Reads at night', description: expect.any(String), status: 'passed', paths: ['journey-1', 'journey-2', 'journey-3'], stoppedAt: null }
+      ]);
+      expect(manifest.seeds).toEqual([{ name: 'Lit, dim', at: ['Dim'], how: 'switchOn()', paths: ['journey-2', 'journey-3'], verifiedBy: ['journey-1', 'journey-2'] }]);
+      expect(manifest.states.Dim).toMatchObject({ seeds: ['Lit, dim'] });
+      expect(manifest.coverage.overall!.transitions).toMatchObject({ total: 4, passed: 4 });
+    });
+
+    it('gives the same report on many workers as on one', async () => {
+      const one = await run(seeded(), { workers: 1 });
+      const many = await run(seeded(), { workers: 4 });
+      expect(many.manifest.run).toMatchObject({ workers: 3 });
+      expect(report(many.manifest)).toEqual(report(one.manifest));
+    });
+
+    it('composes shards into the run they split', async () => {
+      const output = path.join(directory, 'sharded');
+      const whole = await run(seeded(), { workers: 1, output: path.join(directory, 'whole') });
+      const first = await run(seeded(), { shard: { index: 1, count: 2 }, output });
+      const second = await run(seeded(), { shard: { index: 2, count: 2 }, output });
+      expect(first.manifest.paths.length + second.manifest.paths.length).toBe(whole.manifest.paths.length);
+      const prepared = whole.prepared;
+      const merged = mergeRuns(
+        {
+          bundle: prepared.bundle,
+          composition: prepared.lint.composition,
+          graph: prepared.lint.graph,
+          scope: prepared.scope,
+          implementation: seeded(),
+          journeys: prepared.plan.journeys,
+          seeds: prepared.plan.seeds
+        },
+        prepared.plan.paths,
+        [first.runDir, second.runDir],
+        { outputRoot: output }
+      );
+      expect(merged.ok).toBe(true);
+      expect(report(merged.manifest)).toEqual(report(whole.manifest));
+    });
+
+    it('reruns only what did not pass, keeping the rest from the earlier run', async () => {
+      const broken = { kind: 'user' as const, how: 'brighten(), which does nothing', run: async () => undefined };
+      const first = await run(seeded({ Brightens: broken }), { retry: false });
+      expect(first.manifest.journeys[0]!.status).toBe('failed');
+      let opened = 0;
+      const counting = functionDriver(() => {
+        opened += 1;
+        return new Lamp((e) => published.push(e));
+      });
+      const second = await run(seeded(), { driver: counting, reuse: { runDir: first.runDir, outcomes: JSON.parse(readFileSync(path.join(first.runDir, 'outcomes.json'), 'utf8')).outcomes } });
+      expect(opened).toBe(1);
+      expect(second.manifest.journeys[0]!.status).toBe('passed');
+      expect(second.manifest.paths.filter((p) => p.reusedFrom).map((p) => p.id)).toEqual(['journey-1', 'journey-3']);
+    });
+
+    it('starts nowhere a seed is blocked, and reports a journey stretch no seed or setup can start', async () => {
+      const impl = seeded();
+      impl.seeds!['Lit, dim']!.blocked = 'The lamp cannot be switched on remotely yet.';
+      delete impl.setup;
+      const { manifest } = await run(impl);
+      expect(manifest.seeds[0]).toMatchObject({ blocked: 'The lamp cannot be switched on remotely yet.', paths: [] });
+      expect(manifest.paths[0]!.status).toBe('not-reached');
+      for (const step of manifest.paths[0]!.steps) expect(step).toMatchObject({ status: 'not-reached', reason: 'Not run: Start: no seed puts the system in Off' });
+      expect(manifest.journeys[0]!.status).toBe('not-reached');
+    });
   });
 });

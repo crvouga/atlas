@@ -91,6 +91,7 @@ export function httpClient(baseUrl: string, timeline: Timeline, options: HttpDri
 export function httpDriver(baseUrl: string | (() => string | Promise<string>), options: HttpDriverOptions = {}): Driver<HttpClient> {
   return {
     name: options.name ?? 'http',
+    concurrency: Number.POSITIVE_INFINITY,
     async open({ timeline }) {
       return httpClient(typeof baseUrl === 'function' ? await baseUrl() : baseUrl, timeline, options);
     },

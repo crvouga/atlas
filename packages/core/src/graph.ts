@@ -17,6 +17,13 @@ export type Config = {
   active: string[];
 };
 
+/** A configuration's identity: its state value with keys sorted, so equal configurations compare equal. */
+export function configKey(value: StateValue): string {
+  const canonical = (v: StateValue): unknown =>
+    typeof v === 'string' ? v : Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k]!)]));
+  return JSON.stringify(canonical(value));
+}
+
 export function activeKeys(value: StateValue): string[] {
   if (typeof value === 'string') return [value];
   return Object.entries(value).flatMap(([key, child]) => [key, ...activeKeys(child)]);
@@ -71,6 +78,14 @@ export class ChartGraph {
       value: snapshot.value as StateValue,
       active: activeKeys(snapshot.value as StateValue)
     };
+  }
+
+  /** The state value that names `state`: its ancestors down to it, defaults filled in by `resolve`. */
+  valueOf(state: string): StateValue {
+    if (!this.nodes.has(state)) throw new Error(`There is no state "${state}"`);
+    const trail: string[] = [];
+    for (let n: string | null = state; n; n = this.parent(n)) trail.unshift(n);
+    return trail.reduceRight<StateValue | null>((inner, name) => (inner === null ? name : { [name]: inner }), null)!;
   }
 
   resolve(value: StateValue): Config {
@@ -158,27 +173,40 @@ export class ChartGraph {
     return { ok: true as const, steps, config };
   }
 
-  /** Breadth-first: every configuration reachable from `start` using only `allowed` events. */
-  explore(start: Config, allowed: (event: string) => boolean, maxConfigs = 5_000) {
-    const key = (c: Config) => JSON.stringify(c.value);
-    const seen = new Map<string, { config: Config; path: string[] }>([
-      [key(start), { config: start, path: [] }]
-    ]);
-    const queue = [start];
+  /**
+   * Breadth-first from one or several starts at once: every configuration reachable using only
+   * `allowed` events, each with the shortest event path from its nearest start (`origin` is that
+   * start's index; ties go to the earlier start). `firstFired` holds, for every transition, the
+   * shortest way to take it: the configuration it fires from and how that configuration was
+   * reached. Exploration order is fixed by the chart, so the result is deterministic.
+   */
+  explore(start: Config | Config[], allowed: (event: string) => boolean, maxConfigs = 20_000) {
+    const starts = Array.isArray(start) ? start : [start];
+    const key = (c: Config) => configKey(c.value);
+    type Seen = { config: Config; path: string[]; origin: number };
+    const seen = new Map<string, Seen>();
+    const queue: Config[] = [];
+    starts.forEach((config, origin) => {
+      if (seen.has(key(config))) return;
+      seen.set(key(config), { config, path: [], origin });
+      queue.push(config);
+    });
     const edges: { from: string; event: string; to: string; fired: string[] }[] = [];
-    while (queue.length && seen.size < maxConfigs) {
-      const config = queue.shift()!;
+    const firstFired = new Map<string, { from: Seen; event: string }>();
+    for (let head = 0; head < queue.length && seen.size < maxConfigs; head++) {
+      const config = queue[head]!;
       const here = seen.get(key(config))!;
       for (const event of this.enabledEvents(config).filter(allowed)) {
         const next = this.step(config, event);
         if (!next) continue;
         edges.push({ from: key(config), event, to: key(next.config), fired: next.fired });
+        for (const t of next.fired) if (!firstFired.has(t)) firstFired.set(t, { from: here, event });
         if (!seen.has(key(next.config))) {
-          seen.set(key(next.config), { config: next.config, path: [...here.path, event] });
+          seen.set(key(next.config), { config: next.config, path: [...here.path, event], origin: here.origin });
           queue.push(next.config);
         }
       }
     }
-    return { seen, edges, key };
+    return { seen, edges, key, firstFired };
   }
 }

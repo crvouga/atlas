@@ -44,6 +44,14 @@
       "type": "array",
       "items": {}
     },
+    "journeys": {
+      "type": "array",
+      "items": {}
+    },
+    "seeds": {
+      "type": "array",
+      "items": {}
+    },
     "coverage": {
       "type": "object",
       "propertyNames": {

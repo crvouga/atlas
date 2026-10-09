@@ -104,7 +104,11 @@ export const RunInfoSchema = z.object({
   scope: z
     .object({ chart: z.string().optional(), start: z.string().optional(), state: z.string().optional().describe('The state the run was scoped to') })
     .optional(),
-  finishedAt: z.string().nullable().optional().describe('Proposed: null while the run is still going')
+  finishedAt: z.string().nullable().optional().describe('Proposed: null while the run is still going'),
+  workers: z.number().int().positive().optional().describe('Path attempts that ran at once'),
+  shard: z.object({ index: z.number().int().positive(), count: z.number().int().positive() }).optional().describe('The part of the plan this run covered'),
+  reused: z.object({ from: z.string(), paths: z.number().int().nonnegative() }).optional().describe('Passed paths kept from an earlier run instead of running again'),
+  mergedFrom: z.array(z.string()).optional().describe('The runs this run was composed from')
 });
 export type RunInfo = z.infer<typeof RunInfoSchema>;
 
@@ -143,6 +147,7 @@ export const StateRecordSchema = z.object({
   source: z.array(z.string()).optional(),
   expectedEvents: z.array(z.string()).optional(),
   client: z.string().optional().describe('The client whose screen shows it, in a multi-client run'),
+  seeds: z.array(z.string()).optional().describe('Seeds that start paths with this state active'),
   status: RunStatusSchema,
   screenshot: ImageSchema.nullable().optional(),
   screenshotState: MediaStateSchema.optional(),
@@ -208,9 +213,36 @@ export const PathRecordSchema = z.object({
     )
     .optional(),
   steps: z.array(z.unknown()),
-  stoppedAt: z.string().nullable().optional()
+  stoppedAt: z.string().nullable().optional(),
+  key: z.string().optional().describe('The same start and events give the same key in every run'),
+  start: z.array(z.string()).optional().describe('The active states the path starts in'),
+  seed: z.string().optional().describe('The seed that put the system in the start states; setup did when absent'),
+  journeys: z.array(z.string()).optional().describe('The journeys this stretch belongs to'),
+  durationMs: z.number().nonnegative().optional(),
+  reusedFrom: z.string().optional().describe('The run this result was kept from')
 });
 export type PathRecord = z.infer<typeof PathRecordSchema>;
+
+/** A journey's result, composed from the paths it is cut into (one per seeded stretch). */
+export const JourneyRecordSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  status: z.union([RunStatusSchema, z.literal('not-run')]),
+  paths: z.array(z.string()),
+  stoppedAt: z.string().nullable().optional().describe('The first path that did not pass')
+});
+export type JourneyRecord = z.infer<typeof JourneyRecordSchema>;
+
+/** A configuration the implementation can put the system in directly, and what checks it. */
+export const SeedRecordSchema = z.object({
+  name: z.string().min(1),
+  at: z.array(z.string()).describe('The leaf states active after seeding'),
+  how: z.string().nullable().optional(),
+  blocked: z.string().optional(),
+  paths: z.array(z.string()).describe('Paths that start from it'),
+  verifiedBy: z.array(z.string()).describe('Passed paths that reached the same states through the steps, so results either side of it compose')
+});
+export type SeedRecord = z.infer<typeof SeedRecordSchema>;
 
 /** Other formats the run wrote, relative to the manifest: JUnit XML, CTRF JSON, Mermaid. */
 export const ReportsSchema = z.object({
@@ -237,6 +269,8 @@ export const ManifestEnvelopeSchema = z.object({
   states: z.record(z.string(), z.unknown()).optional(),
   transitions: z.record(z.string(), z.unknown()).optional(),
   paths: z.array(z.unknown()).optional(),
+  journeys: z.array(z.unknown()).optional(),
+  seeds: z.array(z.unknown()).optional(),
   coverage: z.record(z.string(), z.object({ states: CountSchema, transitions: CountSchema }).partial()).optional(),
   privacy: z.unknown().optional(),
   reports: ReportsSchema.optional()

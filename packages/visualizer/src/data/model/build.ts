@@ -168,6 +168,7 @@ export function buildAtlasView(input: BuildInput): AtlasView {
             reachedBy: (record.reachedBy ?? []).map(pathRef),
             notes: record.notes ?? [],
             looksLike: record.looksLike ?? [],
+            seeds: record.seeds ?? [],
             recognizer: record.recognizer ?? null
           }
         : null,
@@ -252,11 +253,15 @@ export function buildAtlasView(input: BuildInput): AtlasView {
 
   const journeys: JourneyView[] = doc.journeys.map((j) => {
     const replay = replays.get(j.id)!;
+    const composed = run?.journeys.find((r) => r.name === j.name);
+    const stretchOrder = (id: string) => composed?.paths.indexOf(id) ?? 0;
     const runPaths = (run?.paths ?? [])
-      .filter((p) => p.kind === 'journey' && p.name === j.name)
+      .filter((p) => p.kind === 'journey' && (composed ? composed.paths.includes(p.id) : p.journeys ? p.journeys.includes(j.name) : p.name === j.name))
+      .sort((a, b) => stretchOrder(a.id) - stretchOrder(b.id))
       .map((p) => ({
         id: p.id,
         name: p.name,
+        seed: p.seed ?? null,
         status: p.status,
         stoppedAt: p.stoppedAt ?? null,
         error: p.attempts?.find((a) => a.error)?.error ?? null,

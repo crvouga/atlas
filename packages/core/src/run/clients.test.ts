@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { Driver, StateImplementation, Timeline } from './types';
 import { defineConfig, runConfig } from '../config';
-import { combineDrivers, combineImplementations } from './clients';
+import { combineDrivers, combineImplementations, mergeImplementations } from './clients';
 import { type HttpClient, httpDriver } from './http';
 
 /** A request that a customer sends, an operator approves on another device, and a partner system confirms over HTTP. */
@@ -186,5 +186,25 @@ describe('a run across several clients', () => {
     expect(() => combineImplementations<{ a: unknown; b: unknown }>({ a: { events: { Taps: run } }, b: { events: { Taps: run } } })).toThrow(
       'event "Taps" is implemented by both "a" and "b"'
     );
+  });
+});
+
+describe('mergeImplementations', () => {
+  it('merges parts of one context, runs every setup in order, and refuses a state implemented twice', async () => {
+    const order: string[] = [];
+    const part = (name: string) => ({
+      events: { [`${name} event`]: { kind: 'user' as const, how: name, run: async () => undefined } },
+      states: { [`${name} state`]: { recognize: async () => ({ matched: true, signals: [] }) } },
+      seeds: { [`${name} seed`]: { at: `${name} state`, how: name, run: async () => undefined } },
+      setup: async () => void order.push(name),
+      correlate: () => [name, 'shared']
+    });
+    const merged = mergeImplementations<unknown>(part('a'), part('b'));
+    expect(Object.keys(merged.events)).toEqual(['a event', 'b event']);
+    expect(Object.keys(merged.seeds!)).toEqual(['a seed', 'b seed']);
+    await merged.setup!(null, { path: {} as never, tools: {} as never });
+    expect(order).toEqual(['a', 'b']);
+    expect(await merged.correlate!(null)).toEqual(['a', 'shared', 'b']);
+    expect(() => mergeImplementations<unknown>(part('a'), part('a'))).toThrow(/"a event" is implemented by part 1 and part 2/);
   });
 });

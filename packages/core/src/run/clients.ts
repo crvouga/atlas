@@ -39,6 +39,7 @@ export function combineDrivers<M extends Record<string, unknown>>(
     name: names.map((n) => `${n}:${driverOf(n).name}`).join(' + '),
     clients: Object.fromEntries(names.map((n) => [n, driverOf(n).name])),
     ...(pacing ? { pacing } : {}),
+    concurrency: Math.min(...names.map((n) => driverOf(n).concurrency ?? 1)),
 
     async open(input) {
       const settled = await Promise.allSettled(
@@ -181,13 +182,39 @@ export function combineImplementations<M extends Record<string, unknown>>(
       states[name] = onClient(client, st);
     }
   }
+  const seedNames = [...new Set([...Object.keys(shared.seeds ?? {}), ...clients.flatMap((c) => Object.keys(parts[c]?.seeds ?? {}))])];
+  const seeds: NonNullable<Implementation<M>['seeds']> = {};
+  for (const name of seedNames) {
+    const shares = [shared.seeds?.[name], ...clients.map((c) => parts[c]?.seeds?.[name])].filter((s) => s !== undefined);
+    const first = shares[0]!;
+    const blocked = shares.find((s) => s.blocked)?.blocked;
+    seeds[name] = {
+      at: first.at,
+      how: shares.map((s) => s.how).join('; '),
+      ...(blocked ? { blocked } : {}),
+      async run(ctx, input) {
+        await shared.seeds?.[name]?.run(ctx, input);
+        for (const client of clients) await parts[client]?.seeds?.[name]?.run(ctx[client], { path: input.path, tools: scoped(input.tools, client) });
+      }
+    };
+  }
+  const hasSetup = Boolean(shared.setup) || clients.some((c) => parts[c]?.setup);
+  const correlators = [shared.correlate ? (ctx: M) => shared.correlate!(ctx) : null, ...clients.map((c) => (parts[c]?.correlate ? (ctx: M) => parts[c]!.correlate!(ctx[c]) : null))].filter(
+    (f): f is (ctx: M) => string[] | Promise<string[]> => f !== null
+  );
   return {
     events,
     states,
-    async setup(ctx, input) {
-      await shared.setup?.(ctx, input);
-      for (const client of clients) await parts[client]?.setup?.(ctx[client], { path: input.path, tools: scoped(input.tools, client) });
-    },
+    ...(seedNames.length ? { seeds } : {}),
+    ...(hasSetup
+      ? {
+          async setup(ctx: M, input: { path: Parameters<NonNullable<Implementation<M>['setup']>>[1]['path']; tools: StepTools }) {
+            await shared.setup?.(ctx, input);
+            for (const client of clients) await parts[client]?.setup?.(ctx[client], { path: input.path, tools: scoped(input.tools, client) });
+          }
+        }
+      : {}),
+    ...(correlators.length ? { correlate: async (ctx: M) => (await Promise.all(correlators.map((f) => f(ctx)))).flat() } : {}),
     canStart(active) {
       for (const check of [shared.canStart, ...clients.map((c) => parts[c]?.canStart)]) {
         const verdict = check?.(active) ?? true;
@@ -195,5 +222,54 @@ export function combineImplementations<M extends Record<string, unknown>>(
       }
       return true;
     }
+  };
+}
+
+/**
+ * Merge parts of one implementation written against the same context, such as one file per area
+ * of a large chart (sign-up, checkout, results). Events, states and seeds must each be
+ * implemented once; setups run in order, and correlation ids are pooled.
+ */
+export function mergeImplementations<C>(...parts: ImplementationPart<C>[]): Implementation<C> {
+  const events: Implementation<C>['events'] = {};
+  const states: Implementation<C>['states'] = {};
+  const seeds: NonNullable<Implementation<C>['seeds']> = {};
+  const owner = new Map<string, number>();
+  const claim = (key: string, part: number) => {
+    const previous = owner.get(key);
+    if (previous !== undefined) throw new Error(`${key.replace(':', ' "')}" is implemented by part ${previous + 1} and part ${part + 1}`);
+    owner.set(key, part);
+  };
+  parts.forEach((part, i) => {
+    for (const [name, ev] of Object.entries(part.events ?? {})) (claim(`event:${name}`, i), (events[name] = ev));
+    for (const [name, st] of Object.entries(part.states ?? {})) (claim(`state:${name}`, i), (states[name] = st));
+    for (const [name, seed] of Object.entries(part.seeds ?? {})) (claim(`seed:${name}`, i), (seeds[name] = seed));
+  });
+  const setups = parts.flatMap((p) => (p.setup ? [p.setup] : []));
+  const checks = parts.flatMap((p) => (p.canStart ? [p.canStart] : []));
+  const correlators = parts.flatMap((p) => (p.correlate ? [p.correlate] : []));
+  return {
+    events,
+    states,
+    ...(Object.keys(seeds).length ? { seeds } : {}),
+    ...(setups.length
+      ? {
+          async setup(ctx: C, input: { path: Parameters<NonNullable<Implementation<C>['setup']>>[1]['path']; tools: StepTools }) {
+            for (const setup of setups) await setup(ctx, input);
+          }
+        }
+      : {}),
+    ...(checks.length
+      ? {
+          canStart(active: string[]) {
+            for (const check of checks) {
+              const verdict = check(active);
+              if (verdict !== true) return verdict;
+            }
+            return true;
+          }
+        }
+      : {}),
+    ...(correlators.length ? { correlate: async (ctx: C) => [...new Set((await Promise.all(correlators.map((f) => f(ctx)))).flat())] } : {})
   };
 }

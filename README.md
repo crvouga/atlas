@@ -273,10 +273,88 @@ dismissing a toast), `transient` (shown too briefly to wait for) and `sameAs` (a
 tell apart from this one).
 
 **Setup**: `setup(ctx, { path, tools })` puts the product in the path's start configuration;
-`canStart(active)` returns `true` or the reason a start configuration cannot be set up yet.
+`canStart(active)` returns `true` or the reason a start configuration cannot be set up yet. It is
+optional when seeds cover every start.
+
+**Seeds** (`seeds: Record<string, Seed<C>>`): see [Seeds and parallel runs](#seeds-and-parallel-runs).
+
+**Correlation**: `correlate(ctx)` returns ids (a user id, a trace id) that tell this attempt's
+business events from those of attempts running beside it.
 
 Only leaf states need recognisers. `atlas lint --require-implementations` lists every event and
 leaf state in scope that has no implementation.
+
+## Seeds and parallel runs
+
+A chart of a whole product is deep: a member reaches a results screen after signing up,
+onboarding, paying and booking. Walking every path from the initial state repeats that prefix
+in every path, so a run gets slower the more of the product it covers. Seeds remove the prefix.
+
+A seed puts the system directly in one configuration of the chart, usually through an API or the
+database: create a member who has paid, sign them in, open the screen.
+
+```ts
+implementation: {
+  seeds: {
+    'Paid member': {
+      at: 'Paid',                               // a state name, or a full state value
+      how: 'Creates a paid member through the admin API and signs in.',
+      async run({ page, api }) {
+        const member = await api.createMember({ plan: 'paid' });
+        await page.goto(`/sign-in?token=${member.token}`);
+      }
+    }
+  },
+  events: { /* … */ },
+  states: { /* … */ }
+}
+```
+
+With seeds, the plan changes in three ways:
+
+- **Journeys are cut at seeded configurations.** A journey is replayed from the initial state, and
+  wherever it passes through a configuration a seed produces, it is cut. Each stretch becomes a path
+  that starts from that seed. A stretch that several journeys share becomes one path. The manifest's
+  `journeys` lists the paths each journey is made of. A journey passes when all of them pass, fails
+  when one fails, and is `not-reached` while any is blocked.
+- **Generated paths start from the nearest seed.** A breadth-first search from every start point at
+  once finds, for each uncovered transition, the shortest way to take it from any seed (or from
+  `setup`'s start). Ties go to the seed declared first.
+- **Redundant paths are dropped.** A generated path that is a prefix of another path from the same
+  start is not planned.
+
+The plan is deterministic. The same chart, journeys and seeds give the same paths, ids and keys
+(`key` hashes the start and the events) on every machine, so results can be composed:
+
+- **Workers.** `--workers n` (or `workers` in the config) runs n path attempts at once. Each attempt
+  gets its own driver context. The longest paths go first, timed by earlier runs.
+  - The driver's `concurrency` caps the worker count. Playwright and Bun contexts and HTTP clients
+    run side by side. A WebDriver session or a Detox device runs one at a time unless you raise it.
+  - The manifest is a pure fold of the path outcomes in plan order, so the same outcomes give the
+    same report whatever order they finished in.
+- **Shards.** `--shard i/n` runs one part of the plan, split by the plan alone, so every machine
+  agrees on the split. `atlas merge <run-dir>...` composes the shards into one run, with their media
+  copied in.
+- **Reruns.** `--rerun-failed` keeps the passed paths of the newest run, matched by key, and runs
+  the rest. The result is still one complete run.
+- **Areas.** `--seed <name>` (repeatable) runs only the paths that start from that seed (`start`
+  for paths `setup` starts). `--state <name>` scopes the run to one state of the chart. With these you can
+  run one area of the product on its own, then merge it into a full run.
+
+Seeds are what make the composition sound: a seed must leave the system exactly as the steps that
+lead there would. Atlas checks this both ways and reports it:
+- A seeded path must first recognise its start state.
+- The manifest's `seeds` lists, for each seed, the passed paths that reached the same states through
+  real steps (`verifiedBy`).
+
+A seed nobody reaches through the steps is a claim that has not been checked yet. In the
+visualizer, seeded states carry a "Seeded" tag.
+
+Business events and parallel runs: a shared source, such as a log file, sees every attempt's events.
+`EventSource.mark()` returns a position that `collect(mark)` reads from, so attempts don't consume
+each other's marks.
+- With `correlate(ctx)`, only events and log lines that mention one of the attempt's ids count.
+- Without it, a run on several workers reports business events as "no signal" rather than guessing.
 
 ## Drivers
 
@@ -382,6 +460,7 @@ type Driver<C> = {
   hold?(ctx: C, ms: number, focus?: Focus): Promise<void>;
   pacing?: { before: number; after: number };
   clients?: Record<string, string>;
+  concurrency?: number;
   dispose?(): Promise<void>;
 };
 ```
@@ -395,6 +474,8 @@ A driver without a native screen recorder can encode clips from screenshots with
 - `screenshot` and `record` produce media; `record` is used only in showcase mode, one clip per
   transition.
 - `text` returns the visible text, for the privacy scan.
+- `concurrency` is how many contexts can be open at once (1 when omitted). Workers never exceed
+  it, so a driver of one device stays sequential while browser contexts run side by side.
 - `timeline.add({ kind, label, ... })` logs taps, typing, system calls and time jumps; they become
   each clip's captions.
 
@@ -411,16 +492,26 @@ const driver = functionDriver(() => new TodoModel());
 
 ```
 atlas lint   [--config atlas.config.ts | --specs <dir>] [--require-implementations]
-atlas plan   [--config atlas.config.ts]
-atlas run    [--config atlas.config.ts] [--mode fast|showcase] [--paths id,id] [--no-retry] [--output <dir>]
+atlas plan   [--config atlas.config.ts] [--state <name>]
+atlas run    [--config atlas.config.ts] [--mode fast|showcase] [--workers n] [--state <name>]
+             [--seed <name>]... [--paths id,id] [--shard i/n] [--rerun-failed | --reuse <run-dir>]
+             [--no-retry] [--output <dir>]
+atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
 atlas export --specs <dir> --format scxml|mermaid|json [--out <file>]
 ```
 
 - `lint` with `--specs` checks charts and journeys alone; with a config it also lists missing
   implementations, and `--require-implementations` makes them errors.
-- `plan` prints each path, what blocks it, and how many transitions stay uncovered.
+- `plan` prints the seeds and each path with:
+  - its seed and step count;
+  - what blocks it;
+  - the paths each journey is made of;
+  - the total and longest path length, and how many transitions stay uncovered.
 - `run` exits non-zero when a path fails or the privacy scan finds something. `--paths` runs only
   the given path ids; `--no-retry` skips the retry of failed paths.
+- `--workers`, `--shard`, `--seed`, `--state`, `--rerun-failed` and `--reuse` are described in
+  [Seeds and parallel runs](#seeds-and-parallel-runs).
+- `merge` composes runs of the same plan (shards, or a rerun and its earlier run) into one run.
 - `export` writes the composed product (every child inlined) as SCXML, Mermaid or XState JSON.
 
 The config file is TypeScript (loaded with `tsx`) and defaults to `atlas.config.ts` in the current
@@ -434,11 +525,12 @@ directory. Relative paths in it resolve against the config file's directory.
 | --- | --- |
 | `specs` | The specs directory. |
 | `driver` | A `Driver<C>`, or a function returning one (called once per run). |
-| `implementation` | `{ events, states, setup, canStart? }`. |
+| `implementation` | `{ events, states, seeds?, setup?, canStart?, correlate? }`. |
 | `chart` | Run one chart of the product; the root chart when omitted. |
 | `start`, `startLabel` | Where generated paths start (an XState state value) and how to describe it; the initial state when omitted. |
 | `entryEvents` | When running one chart or one state: the only events that enter it from outside. |
 | `state` | Run one state of a chart and what is inside it, with the transitions into and out of it: one area of a chart that models the whole product. |
+| `workers` | Path attempts that run at once, capped by the driver's `concurrency`; one per CPU when omitted. |
 | `output` | Where runs are written; `atlas-runs` beside the config. |
 | `eventSources` | `() => EventSource[]`: where business events come from. |
 | `eventMatchers` | How each business event name is recognised: `{ type }`, `{ pattern }` or a function. |
@@ -454,16 +546,22 @@ steps underneath.
 
 ## How a run works
 
-1. **Plan.** Curated journeys first. When running one chart of a larger product, each journey is cut
-   to its stretch inside the chart, starting at an entry transition. Then, for each transition still
-   uncovered, the shortest path that reaches it (breadth-first, so loops stay bounded). Paths stop
-   before blocked events; a blocked path whose runnable part other paths already cover is reported
-   but not run.
-2. **Run each path.** A fresh driver context; every event's `prepare`; `setup`; the start state
-   must be recognised. Then for each step: run the event, wait for the target state, run its checks,
+1. **Plan.** Curated journeys come first.
+   - When running one chart of a larger product, each journey is cut to its stretch inside the
+     chart, starting at an entry transition.
+   - With seeds, journeys are also cut wherever they pass through a seeded configuration.
+   - Then, for each transition still uncovered, the plan adds the shortest path that takes it from
+     the nearest seed or start. The search is breadth-first, so loops stay bounded.
+   - Paths stop before blocked events. A blocked path whose runnable part other paths already cover
+     is reported but not run.
+2. **Run each path.** Paths run on a pool of workers, longest first. Each gets a fresh driver
+   context, then every event's `prepare`, then its seed's `run` (or `setup`). The start state must
+   be recognised. Then for each step: run the event, wait for the target state, run its checks,
    collect business events, screenshot, `settle`.
 3. **Retry.** A failed path runs once more. Passing the second time makes it `flaky`.
-4. **Write.** The manifest and reports are rewritten after every path, so a crash keeps what ran.
+4. **Write.** The manifest and reports are rewritten each time a path finishes, from every outcome
+   so far in plan order, so a crash keeps what ran. `outcomes.json` keeps the raw outcomes, for
+   `atlas merge` and `--rerun-failed`.
 
 Every path, state and transition ends as `passed`, `failed`, `flaky` or `not-reached`. Reaching a
 state also reaches its ancestors. A failure records the recogniser's signals and which known states
@@ -486,6 +584,7 @@ Each run writes `<output>/<timestamp>-<mode>/`:
 | `junit.xml` | One test case per path: failures, skips (with the blocking reason) and flaky passes. |
 | `ctrf.json` | The same as CTRF. |
 | `chart.mmd` | The composed chart as a Mermaid state diagram. |
+| `outcomes.json` | Each path's raw outcome by path key, which the manifest is folded from: for merging shards and reusing passed paths. |
 | `media/paths/<path>/NN.png`, `.webp` | Screenshots of each state a path reached; `failed-NN.png` where it failed. |
 | `media/clips/<path>/NN.mp4`, `.poster.webp`, `.vtt` | Showcase clips of each transition, with captions. |
 | `media/traces/<path>.zip` | Driver traces of failed attempts (Playwright traces with the Playwright driver). |
@@ -493,7 +592,8 @@ Each run writes `<output>/<timestamp>-<mode>/`:
 ## Business events
 
 States list the business events that happen on entering them in `meta.events`. An `EventSource`
-(`mark()` before each event, `collect()` after the state is recognised) says what actually happened:
+says what actually happened. `mark()` returns a position before each event, and `collect(mark)`
+returns what arrived after it, once the state is recognised:
 
 - `cloudEventsHttpSource()` starts an HTTP endpoint that accepts CloudEvents in structured, binary
   or batch mode. Point the product's event bus, webhook relay or collector at its `url`.

@@ -1,4 +1,5 @@
 import type { CloudEvent } from '../events/cloudevents';
+import type { StateValue } from '../graph';
 import type { PlannedPath } from '../plan';
 
 export type RunMode = 'fast' | 'showcase';
@@ -98,6 +99,11 @@ export type Driver<C> = {
   clients?: Record<string, string>;
   /** Pacing for showcase mode, in milliseconds. */
   pacing?: { before: number; after: number };
+  /**
+   * How many path attempts can have a context open at once (browser contexts are independent; a
+   * single device is not). Runs use at most this many workers; 1 when omitted.
+   */
+  concurrency?: number;
   dispose?(): Promise<void>;
 };
 
@@ -131,20 +137,47 @@ export type StateImplementation<C> = {
   checks?(ctx: C): Promise<CheckResult[]>;
 };
 
+/**
+ * Puts the system directly in one configuration of the chart (create the data, sign in, open the
+ * screen), so paths can start there instead of walking every step before it. A seed must leave
+ * the system exactly as the steps that lead there would: then results of the stretch before it
+ * and the stretch after it compose, and Atlas checks that by recognising the state both ways.
+ */
+export type Seed<C> = {
+  /** A state name (with the default configuration inside and beside it) or a full state value. */
+  at: string | StateValue;
+  /** A plain-language note on how the seed gets there (shown to developers). */
+  how: string;
+  run(ctx: C, input: { path: PlannedPath; tools: StepTools }): Promise<void>;
+  /** Set when the configuration cannot be seeded yet: paths start from another seed. */
+  blocked?: string;
+};
+
 export type Implementation<C> = {
   events: Record<string, EventImplementation<C>>;
   states: Record<string, StateImplementation<C>>;
-  /** Put the system in the path's starting configuration (seed data, sign in, navigate). */
-  setup(ctx: C, input: { path: PlannedPath; tools: StepTools }): Promise<void>;
+  /**
+   * Named seeds: configurations paths can start from. Journeys are cut at every seeded
+   * configuration they pass through, so each stretch runs on its own and in parallel.
+   */
+  seeds?: Record<string, Seed<C>>;
+  /** Put the system in the scope's start configuration, for paths that start without a seed. */
+  setup?(ctx: C, input: { path: PlannedPath; tools: StepTools }): Promise<void>;
   /** Whether `setup` can start a path in this configuration; a string is the reason it cannot. */
   canStart?(active: string[]): true | string;
+  /**
+   * Ids that tell this attempt's business events from those of attempts running beside it (a
+   * user id, a trace id). Shared event sources keep only events and log lines that contain one.
+   */
+  correlate?(ctx: C): string[] | Promise<string[]>;
 };
 
 /** Where business events come from: a CloudEvents endpoint, a log, a message queue. */
 export type EventSource = {
   name: string;
-  mark(): Promise<void> | void;
-  collect(): Promise<{ events: CloudEvent[]; text?: string }>;
+  /** Where "now" is in the source; `collect` returns what arrived after this mark. */
+  mark(): unknown;
+  collect(mark?: unknown): Promise<{ events: CloudEvent[]; text?: string }>;
   close?(): Promise<void>;
 };
 
@@ -164,9 +197,13 @@ export type PrivacyRules = {
  * A driver for anything you can reach from Node: a domain model, an API client, a CLI. `create`
  * returns a fresh context per path attempt; recognisers and events work on it directly.
  */
-export function functionDriver<C>(create: (input: { path: PlannedPath; timeline: Timeline }) => C | Promise<C>, options: { name?: string; dispose?: (ctx: C) => void | Promise<void> } = {}): Driver<C> {
+export function functionDriver<C>(
+  create: (input: { path: PlannedPath; timeline: Timeline }) => C | Promise<C>,
+  options: { name?: string; dispose?: (ctx: C) => void | Promise<void>; concurrency?: number } = {}
+): Driver<C> {
   return {
     name: options.name ?? 'function',
+    concurrency: options.concurrency ?? Number.POSITIVE_INFINITY,
     open: ({ path, timeline }) => Promise.resolve(create({ path, timeline })),
     close: async (ctx) => {
       await options.dispose?.(ctx);
