@@ -657,7 +657,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
       await new Promise((r) => setTimeout(r, pause));
       pause = Math.min(pause * 2, 250);
       if (s?.lookIn && Date.now() > nextLook) {
-        await s.lookIn(ctx);
+        await s.lookIn(ctx).catch(() => undefined);
         nextLook = Date.now() + 10_000;
       }
       last = await recognizeNow(ctx, state);
@@ -793,7 +793,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
         }
         const s = impl.states[target];
         if (s?.lookIn && !(await recognizeNow(ctx, target)).matched) {
-          await s.lookIn(ctx);
+          // Looking is a courtesy: if the place to look cannot be opened, recognition decides.
+          await s.lookIn(ctx).catch(() => undefined);
           timeline.add({ kind: 'note', label: 'Looks where this shows up' });
         }
         const recognizer = s?.transient ? await recognizeNow(ctx, target) : await waitFor(ctx, target);
