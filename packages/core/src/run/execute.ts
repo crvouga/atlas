@@ -743,7 +743,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
         failure,
         leaks,
         durationMs: Date.now() - attemptStarted,
-        setupMs
+        ...(setupMs !== undefined ? { setupMs } : {})
       });
       publish();
     };
