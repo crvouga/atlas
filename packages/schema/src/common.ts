@@ -22,7 +22,7 @@ export type Confidence = z.infer<typeof ConfidenceSchema>;
 
 const ScreenSchema = z.object({
   png: z.string().min(1),
-  webp: z.string().min(1).describe('About 400 px wide, for the map'),
+  webp: z.string().min(1).optional().describe('About 400 px wide, for the map; the original image is used while a thumbnail is unavailable'),
   client: z.string().optional().describe('Which client\'s screen it is, in a multi-client run')
 });
 

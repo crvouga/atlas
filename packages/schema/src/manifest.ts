@@ -104,7 +104,13 @@ export const RunInfoSchema = z.object({
   scope: z
     .object({ chart: z.string().optional(), start: z.string().optional(), state: z.string().optional().describe('The state the run was scoped to') })
     .optional(),
-  finishedAt: z.string().nullable().optional().describe('Proposed: null while the run is still going'),
+  finishedAt: z.string().nullable().optional().describe('Null while the run is still going; absent in older reports'),
+  progress: z.object({
+    totalPaths: z.number().int().nonnegative(),
+    completedPaths: z.number().int().nonnegative(),
+    activePaths: z.array(z.string()),
+    updatedAt: z.string()
+  }).optional(),
   workers: z.number().int().positive().optional().describe('Path attempts that ran at once'),
   shard: z.object({ index: z.number().int().positive(), count: z.number().int().positive() }).optional().describe('The part of the plan this run covered'),
   reused: z.object({ from: z.string(), paths: z.number().int().nonnegative() }).optional().describe('Passed paths kept from an earlier run instead of running again'),
@@ -201,6 +207,7 @@ export const PathRecordSchema = z.object({
   kind: z.enum(['journey', 'generated']),
   description: z.string().optional(),
   status: RunStatusSchema,
+  progress: z.enum(['queued', 'running', 'complete']).optional(),
   attempts: z
     .array(
       z.object({

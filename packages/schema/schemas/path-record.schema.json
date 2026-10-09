@@ -29,6 +29,14 @@
         "not-reached"
       ]
     },
+    "progress": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "complete"
+      ]
+    },
     "attempts": {
       "type": "array",
       "items": {

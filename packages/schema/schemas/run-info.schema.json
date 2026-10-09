@@ -1,0 +1,176 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/run-info.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "startedAt": {
+      "type": "string"
+    },
+    "durationMs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "commit": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "branch": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "fast",
+        "showcase"
+      ]
+    },
+    "specVersion": {
+      "type": "string"
+    },
+    "specDirectory": {
+      "type": "string"
+    },
+    "approvals": {
+      "type": "array",
+      "items": {}
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "chart": {
+          "type": "string"
+        },
+        "start": {
+          "type": "string"
+        },
+        "state": {
+          "description": "The state the run was scoped to",
+          "type": "string"
+        }
+      }
+    },
+    "finishedAt": {
+      "description": "Null while the run is still going; absent in older reports",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "progress": {
+      "type": "object",
+      "properties": {
+        "totalPaths": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "completedPaths": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "activePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "totalPaths",
+        "completedPaths",
+        "activePaths",
+        "updatedAt"
+      ]
+    },
+    "workers": {
+      "description": "Path attempts that ran at once",
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "shard": {
+      "description": "The part of the plan this run covered",
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "count": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "index",
+        "count"
+      ]
+    },
+    "reused": {
+      "description": "Passed paths kept from an earlier run instead of running again",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "from",
+        "paths"
+      ]
+    },
+    "mergedFrom": {
+      "description": "The runs this run was composed from",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "id",
+    "startedAt",
+    "durationMs",
+    "mode",
+    "specVersion"
+  ]
+}

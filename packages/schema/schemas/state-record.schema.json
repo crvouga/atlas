@@ -71,7 +71,7 @@
               "minLength": 1
             },
             "webp": {
-              "description": "About 400 px wide, for the map",
+              "description": "About 400 px wide, for the map; the original image is used while a thumbnail is unavailable",
               "type": "string",
               "minLength": 1
             },
@@ -90,7 +90,7 @@
                     "minLength": 1
                   },
                   "webp": {
-                    "description": "About 400 px wide, for the map",
+                    "description": "About 400 px wide, for the map; the original image is used while a thumbnail is unavailable",
                     "type": "string",
                     "minLength": 1
                   },
@@ -106,8 +106,7 @@
             }
           },
           "required": [
-            "png",
-            "webp"
+            "png"
           ]
         },
         {
@@ -140,7 +139,7 @@
             "minLength": 1
           },
           "webp": {
-            "description": "About 400 px wide, for the map",
+            "description": "About 400 px wide, for the map; the original image is used while a thumbnail is unavailable",
             "type": "string",
             "minLength": 1
           },
@@ -159,7 +158,7 @@
                   "minLength": 1
                 },
                 "webp": {
-                  "description": "About 400 px wide, for the map",
+                  "description": "About 400 px wide, for the map; the original image is used while a thumbnail is unavailable",
                   "type": "string",
                   "minLength": 1
                 },
@@ -175,8 +174,7 @@
           }
         },
         "required": [
-          "png",
-          "webp"
+          "png"
         ]
       }
     },

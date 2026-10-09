@@ -1,0 +1,95 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/report-sources.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 80,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "type": {
+                "type": "string",
+                "const": "directory"
+              },
+              "runs": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "type",
+              "runs"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 80,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "api"
+                ]
+              },
+              "baseUrl": {
+                "type": "string",
+                "minLength": 1
+              },
+              "eventsUrl": {
+                "type": "string",
+                "minLength": 1
+              },
+              "pollMs": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 3600000
+              },
+              "live": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "type",
+              "baseUrl"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "sources"
+  ]
+}
