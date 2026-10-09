@@ -6,6 +6,8 @@ import { splitTransitionId, transitionId, walkStates } from './spec/types';
 
 export type ChartScope = {
   chart: string;
+  /** Set when the run covers one state of the chart and what is inside it. */
+  state?: string;
   /** The configuration each generated path starts from. */
   start: StateValue;
   startLabel: string;
@@ -39,6 +41,11 @@ export type ScopeOptions = {
   startLabel?: string;
   /** Only these events enter the chart from outside it; every entering transition when omitted. */
   entryEvents?: string[];
+  /**
+   * Cover only this state and what is inside it, with the transitions into and out of it: one
+   * area of a chart that holds the whole product.
+   */
+  state?: string;
 };
 
 /**
@@ -48,10 +55,20 @@ export type ScopeOptions = {
 export function chartScope(bundle: SpecBundle, composition: Composition, graph: ChartGraph, options: ScopeOptions = {}): ChartScope {
   const chart = options.chart ?? bundle.root;
   const states = new Set<string>();
-  for (const [state, owner] of composition.chartOf) if (owner === chart) states.add(state);
-  if (chart === bundle.root) for (const name of graph.stateNames()) states.add(name);
-  const host = composition.hosts.get(chart);
-  if (host) states.add(host);
+  const area = options.state;
+  if (area) {
+    if (!graph.stateNames().includes(area)) throw new Error(`There is no state "${area}" to scope the run to`);
+    const within = (name: string) => {
+      for (let n: string | null = name; n; n = graph.parent(n)) if (n === area) return true;
+      return false;
+    };
+    for (const name of graph.stateNames()) if (within(name)) states.add(name);
+  } else {
+    for (const [state, owner] of composition.chartOf) if (owner === chart) states.add(state);
+    if (chart === bundle.root) for (const name of graph.stateNames()) states.add(name);
+    const host = composition.hosts.get(chart);
+    if (host) states.add(host);
+  }
   const transitions = new Set<string>();
   const entries = new Set<string>();
   for (const { name, node } of walkStates(composition.machine)) {
@@ -70,10 +87,18 @@ export function chartScope(bundle: SpecBundle, composition: Composition, graph: 
     const target = graph.target(h.finalState, h.event);
     if (target) states.add(target);
   }
+  if (area) {
+    for (const id of transitions) {
+      const { source, event } = splitTransitionId(id);
+      const target = graph.target(source, event);
+      if (target && !entries.has(id)) states.add(target);
+    }
+  }
   for (const id of entries) states.add(splitTransitionId(id).source);
   const start = options.start ?? graph.initial().value;
   return {
     chart,
+    ...(area ? { state: area } : {}),
     start,
     startLabel: options.startLabel ?? 'The start of the chart',
     states,
@@ -131,7 +156,7 @@ export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartSco
   const isBlocked = options.isBlocked ?? (() => false);
   const canStart = options.canStart ?? (() => true as const);
   const blockedEvents = (steps: PlannedStep[]) => [...new Set(steps.map((s) => s.event).filter(isBlocked))];
-  const isRoot = scope.chart === bundle.root;
+  const isRoot = scope.chart === bundle.root && !scope.state;
   const startActive = graph.resolve(scope.start).active;
 
   const journeys: PlannedPath[] = [];

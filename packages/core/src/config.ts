@@ -18,6 +18,8 @@ export type AtlasConfig<C = unknown> = {
   startLabel?: string;
   /** Only these events enter the chart from outside it. */
   entryEvents?: string[];
+  /** Run only this state and what is inside it, with the transitions into and out of it. */
+  state?: string;
   driver: Driver<C> | (() => Driver<C> | Promise<Driver<C>>);
   implementation: Implementation<C>;
   /** Where runs are written; `atlas-runs` beside the config when omitted. */
@@ -46,7 +48,8 @@ export function prepare<C>(config: AtlasConfig<C>, baseDirectory = process.cwd()
     chart: config.chart,
     start: config.start,
     startLabel: config.startLabel,
-    entryEvents: config.entryEvents
+    entryEvents: config.entryEvents,
+    state: config.state
   });
   const impl = config.implementation;
   const implemented = new Set(Object.entries(impl.events).filter(([, e]) => !e.blocked).map(([k]) => k));

@@ -135,4 +135,41 @@ describe('planChart', () => {
     expect(paths[0]!.blockedBy).toEqual(['Start: no seed for this start']);
     expect(paths.filter((p) => p.kind === 'generated').length).toBeGreaterThan(0);
   });
+
+  it('scopes a run to one state of a single chart, with the transitions into and out of it', () => {
+    const product: MachineConfig = {
+      id: 'Product',
+      initial: 'Browsing',
+      states: {
+        Browsing: { on: { 'Adds to cart': 'Cart' } },
+        Cart: { on: { 'Checks out': 'Checking out', 'Empties cart': 'Browsing' } },
+        'Checking out': {
+          initial: 'Entering details',
+          on: { 'Gives up': 'Cart' },
+          states: {
+            'Entering details': { on: { 'Submits details': 'Reviewing' } },
+            Reviewing: { on: { Pays: '#Order placed', 'Edits details': 'Entering details' } }
+          }
+        },
+        'Order placed': { id: 'Order placed', on: { 'Shops again': 'Browsing' } }
+      }
+    };
+    const bundle = bundleOf('.', [chart(product)], [{ name: 'Buys', description: 'Buys.', events: ['Adds to cart', 'Checks out', 'Submits details', 'Pays', 'Shops again'], endsIn: ['Browsing'] }]);
+    const { composition, graph } = lintBundle(bundle, { requiredMeta: [] });
+    const scope = chartScope(bundle, composition, graph, { state: 'Checking out', start: 'Cart', entryEvents: ['Checks out'] });
+
+    expect(scope.state).toBe('Checking out');
+    expect([...scope.states].sort()).toEqual(['Cart', 'Checking out', 'Entering details', 'Order placed', 'Reviewing']);
+    expect([...scope.transitions].sort()).toEqual([
+      'Cart :: Checks out',
+      'Checking out :: Gives up',
+      'Entering details :: Submits details',
+      'Reviewing :: Edits details',
+      'Reviewing :: Pays'
+    ]);
+    const { paths, unreachable } = planChart(bundle, graph, scope);
+    expect(unreachable).toEqual([]);
+    expect(paths.every((p) => p.steps[0]?.event === 'Checks out')).toBe(true);
+    expect(paths.find((p) => p.kind === 'journey')?.steps.map((s) => s.event)).toEqual(['Checks out', 'Submits details', 'Pays']);
+  });
 });

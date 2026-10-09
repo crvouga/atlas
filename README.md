@@ -428,7 +428,8 @@ directory. Relative paths in it resolve against the config file's directory.
 | `implementation` | `{ events, states, setup, canStart? }`. |
 | `chart` | Run one chart of the product; the root chart when omitted. |
 | `start`, `startLabel` | Where generated paths start (an XState state value) and how to describe it; the initial state when omitted. |
-| `entryEvents` | When running one chart: the only events that enter it from outside. |
+| `entryEvents` | When running one chart or one state: the only events that enter it from outside. |
+| `state` | Run one state of a chart and what is inside it, with the transitions into and out of it: one area of a chart that models the whole product. |
 | `output` | Where runs are written; `atlas-runs` beside the config. |
 | `eventSources` | `() => EventSource[]`: where business events come from. |
 | `eventMatchers` | How each business event name is recognised: `{ type }`, `{ pattern }` or a function. |

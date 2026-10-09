@@ -101,7 +101,9 @@ export const RunInfoSchema = z.object({
   specVersion: z.string(),
   specDirectory: z.string().optional(),
   approvals: z.array(z.unknown()).optional(),
-  scope: z.object({ chart: z.string().optional(), start: z.string().optional() }).optional(),
+  scope: z
+    .object({ chart: z.string().optional(), start: z.string().optional(), state: z.string().optional().describe('The state the run was scoped to') })
+    .optional(),
   finishedAt: z.string().nullable().optional().describe('Proposed: null while the run is still going')
 });
 export type RunInfo = z.infer<typeof RunInfoSchema>;

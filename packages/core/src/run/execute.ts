@@ -391,7 +391,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
         specVersion: specVersion(options.bundle),
         specDirectory: relative(process.cwd(), options.bundle.directory),
         approvals: [] as unknown[],
-        scope: { chart: scope.chart, start: scope.startLabel }
+        scope: { chart: scope.chart, start: scope.startLabel, ...(scope.state ? { state: scope.state } : {}) }
       },
       charts: options.bundle.charts.map((c) => {
         const host = options.composition.hosts.get(c.machine.id) ?? null;
