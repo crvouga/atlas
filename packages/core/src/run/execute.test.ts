@@ -310,5 +310,18 @@ describe('runPaths', () => {
       for (const step of manifest.paths[0]!.steps) expect(step).toMatchObject({ status: 'not-reached', reason: 'Not run: Start: no seed puts the system in Off' });
       expect(manifest.journeys[0]!.status).toBe('not-reached');
     });
+
+    it('checks the state a seed says it shows, and refuses one that is not where it starts', async () => {
+      const impl = seeded();
+      impl.seeds!['Lit, dim'] = { ...impl.seeds!['Lit, dim']!, at: 'On', shows: 'Dim' };
+      const { manifest, ok } = await run(impl);
+      expect(ok).toBe(true);
+      expect(manifest.seeds[0]).toMatchObject({ at: ['Dim'], shows: 'Dim' });
+      expect(manifest.paths.every((p) => typeof p.setupMs === 'number')).toBe(true);
+      impl.seeds!['Lit, dim']!.shows = 'Bright';
+      expect(() => prepare(defineConfig<Lamp>({ specs: directory, driver: functionDriver(() => new Lamp(() => undefined)), implementation: impl }))).toThrow(
+        /The seed "Lit, dim" shows "Bright", which is not active where it starts/
+      );
+    });
   });
 });

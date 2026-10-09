@@ -31,6 +31,11 @@ export type PlaywrightDriverOptions = {
   clock?: boolean;
   /** Save a Playwright trace for failed attempts (default true). */
   traceOnFailure?: boolean;
+  /**
+   * Which attempts record a trace: `retry` (default) traces only the retry of a failed path, which
+   * keeps first attempts fast; `always` traces every attempt so even a first failure has one.
+   */
+  trace?: 'retry' | 'always';
   /** Called after the page is created and before the implementation's setup. */
   onPage?: (page: Page) => Promise<void>;
   /** Browser contexts open at once (one per worker); unlimited when omitted. */
@@ -44,6 +49,7 @@ export type PlaywrightDriverOptions = {
  */
 export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<PlaywrightContext> {
   let browser: Promise<Browser> | null = null;
+  const tracedContexts = new WeakSet<BrowserContext>();
   const device = options.device ?? PHONE;
   const scale = device.deviceScaleFactor ?? 1;
   const showcasePacing = { ...SHOWCASE_PACING, ...options.pacing };
@@ -57,10 +63,13 @@ export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<
     name: 'playwright',
     pacing: { before: showcasePacing.holdBeforeMs, after: showcasePacing.holdAfterMs },
     concurrency: options.concurrency ?? Number.POSITIVE_INFINITY,
-    async open({ mode, timeline }) {
+    async open({ mode, timeline, attempt }) {
       const b = await ensureBrowser();
       const context = await b.newContext(device);
-      if (options.traceOnFailure !== false) await context.tracing.start({ screenshots: true, snapshots: true });
+      const tracing = options.traceOnFailure !== false && (options.trace === 'always' || attempt > 1);
+      if (tracing) await context.tracing.start({ screenshots: true, snapshots: true });
+      tracedContexts.add(context);
+      if (!tracing) tracedContexts.delete(context);
       const page = await context.newPage();
       const showcase = mode === 'showcase';
       if (showcase) await UserActions.install(page);
@@ -80,7 +89,7 @@ export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<
     },
     async close(ctx, { failed, traceFile }) {
       let trace: string | undefined;
-      if (options.traceOnFailure !== false) {
+      if (tracedContexts.delete(ctx.context)) {
         if (failed) {
           await ctx.context.tracing.stop({ path: traceFile }).catch(() => undefined);
           trace = traceFile;

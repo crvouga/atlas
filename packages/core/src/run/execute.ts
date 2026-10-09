@@ -102,6 +102,8 @@ export type PathOutcome = {
   failure: { state: string; recognizer: RecognizerResult | null; looksLike: string[]; shot: Image | null } | null;
   leaks: string[];
   durationMs: number;
+  /** How long the last attempt took to seed (or set up) and recognise its start. */
+  setupMs?: number;
   /** The run the outcome was taken from, when it was reused rather than run again. */
   reusedFrom?: string;
 };
@@ -362,6 +364,7 @@ export function buildManifest<C>(
       steps: outcome.steps,
       stoppedAt: outcome.stoppedAt,
       durationMs: outcome.durationMs,
+      ...(outcome.setupMs !== undefined ? { setupMs: outcome.setupMs } : {}),
       ...(outcome.reusedFrom ? { reusedFrom: outcome.reusedFrom } : {})
     });
     resultStatus.set(planned.id, outcome.status);
@@ -393,6 +396,8 @@ export function buildManifest<C>(
       name: s.name,
       at: s.active.filter((n) => graph.isLeaf(n)),
       how: seed?.how ?? null,
+      ...(seed?.shows ? { shows: seed.shows } : {}),
+      ...(seed?.for ? { for: seed.for } : {}),
       ...(s.blocked ? { blocked: s.blocked } : {}),
       paths: started,
       verifiedBy
@@ -498,6 +503,7 @@ export function buildManifest<C>(
       stoppedAt: string | null;
       seed?: string;
       durationMs?: number;
+      setupMs?: number;
       reusedFrom?: string;
     }[],
     journeys,
@@ -614,6 +620,23 @@ export async function runPaths<C>(options: RunOptions<C>) {
     reused.add(p.key);
   }
 
+  /** The state a path must show before its first step: what its seed says it shows, or the last active leaf. */
+  const startStateOf = (planned: PlannedPath) => {
+    const seed = planned.seed ? impl.seeds?.[planned.seed] : undefined;
+    const recognizable = planned.start.filter((n) => graph.isLeaf(n) && impl.states[n]);
+    if (seed?.shows) return seed.shows;
+    if (typeof seed?.at === 'string') {
+      const at = seed.at;
+      if (graph.isLeaf(at)) return at;
+      const within = recognizable.filter((n) => {
+        for (let p = graph.parent(n); p; p = graph.parent(p)) if (p === at) return true;
+        return false;
+      });
+      if (within.length) return within.at(-1)!;
+    }
+    return recognizable.at(-1) ?? planned.steps[0]?.from.at(-1) ?? '';
+  };
+
   const leafTarget = (step: PlannedStep) => {
     const first = step.transitions[0];
     const target = first ? graph.target(splitTransitionId(first).source, step.event) : undefined;
@@ -643,12 +666,9 @@ export async function runPaths<C>(options: RunOptions<C>) {
   };
 
   const looksLike = async (ctx: C, except: string) => {
-    const matches: string[] = [];
-    for (const name of Object.keys(impl.states)) {
-      if (name === except || impl.states[name]?.sameAs === except || impl.states[except]?.sameAs === name) continue;
-      if ((await recognizeNow(ctx, name).catch(() => ({ matched: false, signals: [] }))).matched) matches.push(name);
-    }
-    return matches;
+    const names = Object.keys(impl.states).filter((name) => name !== except && impl.states[name]?.sameAs !== except && impl.states[except]?.sameAs !== name);
+    const seen = await Promise.all(names.map((name) => recognizeNow(ctx, name).then((r) => r.matched, () => false)));
+    return names.filter((_, i) => seen[i]);
   };
 
   const collectEvents = async (ctx: C, marks: unknown[], expected: string[]) => {
@@ -691,6 +711,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
     let error: string | null = null;
     let stoppedAt: string | null = null;
     let failed = false;
+    const attemptStarted = Date.now();
+    let setupMs: number | undefined;
     const shotFile = (name: string) => path.join(mediaDir, 'paths', tag, `${name}.png`);
     const clipFile = (index: number) => path.join(mediaDir, 'clips', tag, `${pad(index + 1)}.mp4`);
     const shoot = async (name: string, at: Focus) => {
@@ -708,9 +730,10 @@ export async function runPaths<C>(options: RunOptions<C>) {
       } else {
         throw new Error('The path starts without a seed and the implementation has no setup');
       }
-      const startState = planned.start.filter((n) => graph.isLeaf(n) && impl.states[n]).at(-1) ?? planned.steps[0]?.from.at(-1) ?? '';
-      const startCheck = await waitFor(ctx, startState);
-      if (!startCheck.matched) {
+      const startState = startStateOf(planned);
+      const startTransient = impl.states[startState]?.transient === true;
+      const startCheck = startTransient ? await recognizeNow(ctx, startState) : await waitFor(ctx, startState);
+      if (!startCheck.matched && !startTransient) {
         stoppedAt = startState;
         const like = await looksLike(ctx, startState);
         const by = planned.seed ? `the seed "${planned.seed}" did not show` : 'expected';
@@ -721,6 +744,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
           stepIndex: 0
         });
       }
+      setupMs = Date.now() - attemptStarted;
       observed.push({
         step: { event: '(start)', transitions: [], handOff: false, from: [], to: [] },
         target: startState,
@@ -829,7 +853,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
     const closed = await driver.close(ctx, { failed, traceFile }).catch(() => undefined);
     const trace = closed && closed.trace ? relative(runDir, closed.trace) : null;
     const traces = closed && closed.traces ? Object.fromEntries(Object.entries(closed.traces).map(([client, file]) => [client, relative(runDir, file)])) : undefined;
-    return { error, stoppedAt, steps, observed, trace, traces, failure, leaks };
+    return { error, stoppedAt, steps, observed, trace, traces, failure, leaks, setupMs };
   }
 
   async function safeAttempt(planned: PlannedPath, attemptNumber: number) {
@@ -850,7 +874,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
         trace: null,
         traces: undefined,
         failure: null,
-        leaks: [] as string[]
+        leaks: [] as string[],
+        setupMs: undefined as number | undefined
       };
     }
   }
@@ -883,7 +908,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
       observed: outcome.observed,
       failure: outcome.failure,
       leaks: outcome.leaks,
-      durationMs: Date.now() - started
+      durationMs: Date.now() - started,
+      ...(outcome.setupMs !== undefined ? { setupMs: outcome.setupMs } : {})
     };
   }
 
@@ -906,14 +932,24 @@ export async function runPaths<C>(options: RunOptions<C>) {
   if (reused.size) log(`Reusing ${reused.size} passed path(s) from ${path.basename(options.reuse!.runDir)}`);
   log(`Running ${queue.length} path(s) on ${workers} worker(s)`);
   writeRun(runDir, options, options.paths, outcomes, runInfo(false));
-  await Promise.all(
-    Array.from({ length: workers }, async () => {
-      for (let next = queue.shift(); next; next = queue.shift()) {
-        outcomes.set(next.key, await runPath(next));
-        writeRun(runDir, options, options.paths, outcomes, runInfo(false));
-      }
-    })
-  );
+  // A driver can throw outside any awaited call (a message for a context that just closed); it
+  // belongs to one attempt, so it is logged and the run goes on instead of the process dying.
+  const stray = (error: unknown) => log(`  (ignored an error thrown outside any step: ${(error instanceof Error ? error.message : String(error)).split('\n')[0]})`);
+  process.on('uncaughtException', stray);
+  process.on('unhandledRejection', stray);
+  try {
+    await Promise.all(
+      Array.from({ length: workers }, async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          outcomes.set(next.key, await runPath(next));
+          writeRun(runDir, options, options.paths, outcomes, runInfo(false));
+        }
+      })
+    );
+  } finally {
+    process.off('uncaughtException', stray);
+    process.off('unhandledRejection', stray);
+  }
   await driver.dispose?.();
   await Promise.all(sources.map((s) => s.close?.()));
   const manifest = writeRun(runDir, options, options.paths, outcomes, runInfo(true));

@@ -219,6 +219,7 @@ export const PathRecordSchema = z.object({
   seed: z.string().optional().describe('The seed that put the system in the start states; setup did when absent'),
   journeys: z.array(z.string()).optional().describe('The journeys this stretch belongs to'),
   durationMs: z.number().nonnegative().optional(),
+  setupMs: z.number().nonnegative().optional().describe('How long seeding (or setup) and the start check took'),
   reusedFrom: z.string().optional().describe('The run this result was kept from')
 });
 export type PathRecord = z.infer<typeof PathRecordSchema>;
@@ -238,6 +239,8 @@ export const SeedRecordSchema = z.object({
   name: z.string().min(1),
   at: z.array(z.string()).describe('The leaf states active after seeding'),
   how: z.string().nullable().optional(),
+  shows: z.string().optional().describe('The state it leaves on screen, checked before the first step'),
+  for: z.array(z.string()).optional().describe('The events this variant seed exists for'),
   blocked: z.string().optional(),
   paths: z.array(z.string()).describe('Paths that start from it'),
   verifiedBy: z.array(z.string()).describe('Passed paths that reached the same states through the steps, so results either side of it compose')

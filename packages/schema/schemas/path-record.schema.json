@@ -123,6 +123,11 @@
       "type": "number",
       "minimum": 0
     },
+    "setupMs": {
+      "description": "How long seeding (or setup) and the start check took",
+      "type": "number",
+      "minimum": 0
+    },
     "reusedFrom": {
       "description": "The run this result was kept from",
       "type": "string"

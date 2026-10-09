@@ -145,7 +145,7 @@ function withoutAutomaticHandOffs(graph: ChartGraph, start: Config, events: stri
 }
 
 /** A named seed: a configuration the implementation can put the system in directly. */
-export type SeedPoint = { name: string; at: StateValue; blocked?: string };
+export type SeedPoint = { name: string; at: StateValue; blocked?: string; for?: string[]; shows?: string };
 
 /** A journey as the paths it is cut into, one per seeded stretch, in order. */
 export type PlannedJourney = { name: string; description: string; paths: string[] };
@@ -195,14 +195,34 @@ export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartSco
   const isRoot = scope.chart === bundle.root && !scope.state;
 
   const seeds = (options.seeds ?? []).map((seed) => ({ ...seed, config: graph.resolve(seed.at) }));
-  const startPoints: { seed?: string; config: Config }[] = [
-    ...seeds.filter((s) => !s.blocked).map((s) => ({ seed: s.name, config: s.config })),
+  type StartPoint = { seed?: string; config: Config; for?: string[]; shows?: string };
+  const startPoints: StartPoint[] = [
+    ...seeds.filter((s) => !s.blocked).map((s) => ({ seed: s.name, config: s.config, ...(s.for ? { for: s.for } : {}), ...(s.shows ? { shows: s.shows } : {}) })),
     ...(hasSetup ? [{ config: graph.resolve(scope.start) }] : [])
   ];
-  const startAt = (config: Config) => startPoints.find((p) => configKey(p.config.value) === configKey(config.value));
-  const startVerdict = (config: Config) => {
-    const point = startAt(config);
+  const variantEvents = new Set(startPoints.flatMap((p) => p.for ?? []));
+  /** A variant seed starts only paths that take one of its events; those events start only from it. */
+  const suits = (point: StartPoint, events: string[]) => {
+    const needed = events.filter((e) => variantEvents.has(e));
+    return point.for ? needed.length > 0 && needed.every((e) => point.for!.includes(e)) : needed.length === 0;
+  };
+  /** The region of a parallel state a state sits in: the child of its nearest parallel ancestor. */
+  const regionOf = (state: string) => {
+    for (let n: string | null = state, p = graph.parent(state); p; n = p, p = graph.parent(p)) if (graph.node(p)?.type === 'parallel') return n;
+    return null;
+  };
+  /** Whether the first event acts in the region whose screen the seed leaves open. */
+  const sameRegion = (config: Config, event: string, shows: string) => {
+    const sources = graph.firedBy(config, event).map((t) => splitTransitionId(t).source);
+    return sources.some((source) => regionOf(source) === regionOf(shows));
+  };
+  const startsAt = (config: Config) => startPoints.filter((p) => configKey(p.config.value) === configKey(config.value));
+  const startVerdict = (config: Config, events: string[]) => {
+    const candidates = startsAt(config);
+    const point = candidates.find((p) => suits(p, events));
     if (point?.seed) return { point, supported: true as const };
+    const needed = events.filter((e) => variantEvents.has(e));
+    if (!point && needed.length && candidates.length) return { point, supported: `no seed at ${leaves(graph, config.active).join(' + ')} is for ${needed.map((e) => `"${e}"`).join(', ')}` };
     if (!hasSetup) return { point, supported: `no seed puts the system in ${leaves(graph, config.active).join(' + ')}` };
     return { point, supported: canStart(config.active) };
   };
@@ -222,7 +242,7 @@ export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartSco
       const startConfig = current[0]!.from;
       const steps = toSteps(current);
       current = null;
-      const { point, supported } = startVerdict(startConfig);
+      const { point, supported } = startVerdict(startConfig, steps.map((s) => s.event));
       const key = pathKey(point?.seed, startConfig, steps.map((s) => s.event));
       const existing = byKey.get(key);
       if (existing) {
@@ -251,10 +271,10 @@ export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartSco
         flush();
         continue;
       }
-      const seeded = startAt(step.from);
+      const seeded = startsAt(step.from).length > 0;
       if (current && seeded) flush();
       if (!current) {
-        const entering = isRoot || Boolean(seeded) || step.transitions.some((t) => scope.entries.has(t));
+        const entering = isRoot || seeded || step.transitions.some((t) => scope.entries.has(t));
         if (!entering) continue;
         current = [];
       }
@@ -270,19 +290,25 @@ export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartSco
   let generated: PlannedPath[] = [];
   if (startPoints.length) {
     for (const avoidBlocked of [true, false]) {
-      const allowed = (event: string) => scope.events.has(event) && (!avoidBlocked || !isBlocked(event));
-      const explored = graph.explore(
-        startPoints.map((p) => p.config),
-        allowed
+      const explored = startPoints.map((point) =>
+        graph.explore(point.config, (event) => scope.events.has(event) && (!avoidBlocked || !isBlocked(event)) && (!variantEvents.has(event) || Boolean(point.for?.includes(event))))
       );
       for (const target of scope.transitions) {
         if (covered.has(target) || planned.has(target)) continue;
         const { source, event } = splitTransitionId(target);
         if (avoidBlocked && isBlocked(event)) continue;
-        const first = explored.firstFired.get(target);
-        if (!first) continue;
-        const origin = startPoints[first.from.origin]!;
-        const replay = graph.replay(origin.config, withoutAutomaticHandOffs(graph, origin.config, [...first.from.path, first.event]));
+        let best: { origin: StartPoint; path: string[] } | null = null;
+        startPoints.forEach((point, i) => {
+          if (point.for ? !point.for.includes(event) : variantEvents.has(event)) return;
+          const first = explored[i]!.firstFired.get(target);
+          if (!first) return;
+          const path = [...first.from.path, first.event];
+          if (point.shows && !sameRegion(point.config, path[0]!, point.shows)) return;
+          if (!best || path.length < best.path.length) best = { origin: point, path };
+        });
+        if (!best) continue;
+        const { origin, path: events } = best as { origin: StartPoint; path: string[] };
+        const replay = graph.replay(origin.config, withoutAutomaticHandOffs(graph, origin.config, events));
         const steps = toSteps(replay.steps).filter((s) => inScope(scope, s.transitions));
         for (const s of runnableSteps(steps, isBlocked)) for (const t of s.transitions) covered.add(t);
         if (!avoidBlocked) for (const s of steps) for (const t of s.transitions) planned.add(t);

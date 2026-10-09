@@ -237,5 +237,25 @@ describe('planChart', () => {
       expect(paths.filter((p) => p.kind === 'generated').every((p) => p.seed === 'Free member')).toBe(true);
       expect(unreachable).toEqual(['Visitor :: Signs up']);
     });
+
+    it('starts a variant seed only for its events, and those events only from it', () => {
+      const bundle = bundleOf('.', [chart(product)], journeys);
+      const { composition, graph } = lintBundle(bundle, { requiredMeta: [] });
+      const scope = chartScope(bundle, composition, graph);
+      const { paths } = planChart(bundle, graph, scope, {
+        seeds: [
+          { name: 'Free member', at: graph.valueOf('Member') },
+          { name: 'Paid member', at: { Member: { Plan: 'Paid' } } },
+          { name: 'Free member with a gift card', at: graph.valueOf('Member'), for: ['Orders'] }
+        ]
+      });
+      const byEvents = (events: string[]) => paths.filter((p) => p.steps.map((s) => s.event).join(' > ') === events.join(' > '));
+      expect(byEvents(['Orders', 'Order arrives']).map((p) => [p.seed, p.blockedBy])).toEqual([
+        ['Free member with a gift card', []],
+        [undefined, ['Start: no seed at Paid + None is for "Orders"']]
+      ]);
+      expect(paths.filter((p) => p.seed === 'Free member with a gift card').every((p) => p.steps.some((s) => s.event === 'Orders'))).toBe(true);
+      expect(paths.filter((p) => p.steps.some((s) => s.event === 'Orders') && !p.blockedBy.length).every((p) => p.seed === 'Free member with a gift card')).toBe(true);
+    });
   });
 });

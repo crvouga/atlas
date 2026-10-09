@@ -24,6 +24,8 @@ export type AtlasConfig<C = unknown> = {
   state?: string;
   /** Path attempts that run at once (capped by the driver's `concurrency`); one per CPU when omitted. */
   workers?: number;
+  /** Runs once before any path: prepare what every seed relies on (reference data, config). */
+  beforeRun?: () => Promise<void> | void;
   driver: Driver<C> | (() => Driver<C> | Promise<Driver<C>>);
   implementation: Implementation<C>;
   /** Where runs are written; `atlas-runs` beside the config when omitted. */
@@ -72,8 +74,15 @@ export function prepare<C>(config: AtlasConfig<C>, baseDirectory = process.cwd()
   const seeds = Object.entries(impl.seeds ?? {}).map(([name, seed]) => ({
     name,
     at: typeof seed.at === 'string' ? full.graph.valueOf(seed.at) : seed.at,
-    ...(seed.blocked ? { blocked: seed.blocked } : {})
+    ...(seed.blocked ? { blocked: seed.blocked } : {}),
+    ...(seed.for ? { for: seed.for } : {}),
+    ...(seed.shows ? { shows: seed.shows } : {})
   }));
+  for (const seed of seeds) {
+    const shows = impl.seeds![seed.name]!.shows;
+    if (shows && !full.graph.resolve(seed.at).active.includes(shows)) throw new Error(`The seed "${seed.name}" shows "${shows}", which is not active where it starts`);
+    for (const event of seed.for ?? []) if (!full.graph.stateNames().some((n) => full.graph.node(n)?.on?.[event])) throw new Error(`The seed "${seed.name}" is for "${event}", which no state handles`);
+  }
   const plan = planChart(bundle, full.graph, scope, { isBlocked, canStart: impl.canStart, seeds, hasSetup: Boolean(impl.setup) });
   return { bundle, lint: full, scope, plan, specs };
 }
@@ -115,6 +124,7 @@ export async function runConfig<C>(config: AtlasConfig<C>, options: RunCommandOp
     throw new Error(`The spec is not executable:\n${structural.map((f) => `  [${f.rule}] ${f.message}`).join('\n')}`);
   }
   assertAllowedTarget(config.targets ?? [], mergePrivacy(config.privacy));
+  await config.beforeRun?.();
   const driver = typeof config.driver === 'function' ? await config.driver() : config.driver;
   const outputRoot = path.resolve(baseDirectory, options.output ?? config.output ?? 'atlas-runs');
   let paths = prepared.plan.paths.filter(

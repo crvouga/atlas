@@ -149,6 +149,18 @@ export type Seed<C> = {
   /** A plain-language note on how the seed gets there (shown to developers). */
   how: string;
   run(ctx: C, input: { path: PlannedPath; tools: StepTools }): Promise<void>;
+  /**
+   * The state the seed leaves on screen, recognised before the first step. In a parallel state
+   * it says which region the seed opens. The state `at` names (or its active leaf), or the last
+   * active leaf, when omitted.
+   */
+  shows?: string;
+  /**
+   * Events this seed exists for: a variant of a configuration (the same states, different data,
+   * such as a member at an address no lab serves). It starts only paths that take one of these
+   * events, and paths that take one start from a seed that lists it.
+   */
+  for?: string[];
   /** Set when the configuration cannot be seeded yet: paths start from another seed. */
   blocked?: string;
 };

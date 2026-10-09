@@ -188,10 +188,14 @@ export function combineImplementations<M extends Record<string, unknown>>(
     const shares = [shared.seeds?.[name], ...clients.map((c) => parts[c]?.seeds?.[name])].filter((s) => s !== undefined);
     const first = shares[0]!;
     const blocked = shares.find((s) => s.blocked)?.blocked;
+    const shows = shares.find((s) => s.shows)?.shows;
+    const variantOf = shares.find((s) => s.for)?.for;
     seeds[name] = {
       at: first.at,
       how: shares.map((s) => s.how).join('; '),
       ...(blocked ? { blocked } : {}),
+      ...(shows ? { shows } : {}),
+      ...(variantOf ? { for: variantOf } : {}),
       async run(ctx, input) {
         await shared.seeds?.[name]?.run(ctx, input);
         for (const client of clients) await parts[client]?.seeds?.[name]?.run(ctx[client], { path: input.path, tools: scoped(input.tools, client) });

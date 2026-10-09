@@ -531,6 +531,7 @@ directory. Relative paths in it resolve against the config file's directory.
 | `entryEvents` | When running one chart or one state: the only events that enter it from outside. |
 | `state` | Run one state of a chart and what is inside it, with the transitions into and out of it: one area of a chart that models the whole product. |
 | `workers` | Path attempts that run at once, capped by the driver's `concurrency`; one per CPU when omitted. |
+| `beforeRun` | Runs once before any path: prepare what every seed relies on (reference data, configuration). |
 | `output` | Where runs are written; `atlas-runs` beside the config. |
 | `eventSources` | `() => EventSource[]`: where business events come from. |
 | `eventMatchers` | How each business event name is recognised: `{ type }`, `{ pattern }` or a function. |
