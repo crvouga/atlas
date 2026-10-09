@@ -41,6 +41,10 @@
         }
       ]
     },
+    "client": {
+      "description": "The client that does it, in a multi-client run",
+      "type": "string"
+    },
     "status": {
       "type": "string",
       "enum": [
@@ -68,6 +72,10 @@
             },
             "captions": {
               "description": "Proposed: a WebVTT file",
+              "type": "string"
+            },
+            "client": {
+              "description": "The client whose screen was recorded",
               "type": "string"
             },
             "state": {

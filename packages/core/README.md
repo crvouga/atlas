@@ -54,12 +54,20 @@ atlas export --specs ./specs --format mermaid
 | `chartScope`, `planChart`, `runnableSteps` | What a run covers and the paths that cover it |
 | `ChartGraph` | A pure simulator: replay, explore, which transitions an event fires |
 | `runPaths`, `functionDriver`, `Timeline` | The runner and the simplest driver |
+| `httpDriver`, `httpClient` | An HTTP API client as a driver: base URL, cookie jar, every call on the timeline |
+| `combineDrivers`, `combineImplementations`, `onClient` | Several clients in one run (a phone, a web dashboard, an API), each on its own driver |
+| `recordFrames` | Clips encoded from screenshots, for drivers without a screen recorder |
 | `cloudEventsHttpSource`, `cloudEventsFromHttp`, `logFileSource`, `compareBusinessEvents` | Business events |
 | `DEFAULT_PRIVACY`, `mergePrivacy`, `privacyFindings`, `assertAllowedTarget` | Privacy rules |
 | `toJUnit`, `toCtrf`, `toWebVtt`, `toMermaid` | Report formats |
 
 `@crvouga/atlas/spec` exports the browser-safe part (types, parsing, SCXML conversion and
 composition) with no Node built-ins.
+
+`@crvouga/atlas/signals` exports the driver-neutral screen vocabulary: the signals (`testId`,
+`role`, `label`, `text`, `css`), `SignalContext` (what the Playwright, Bun, WebDriver and Detox
+contexts all provide), `screen` (a recogniser for any `SignalContext`), `signatureScreen` (build
+`screen` for a new driver) and `DOM_PROBE` (resolve a signal inside a page).
 
 Spec conventions, the driver interface, the config reference and the manifest are documented in the
 [Atlas README](../../README.md).

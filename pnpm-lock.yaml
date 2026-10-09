@@ -13,12 +13,18 @@ importers:
       '@crvouga/atlas':
         specifier: workspace:*
         version: link:../../packages/core
+      '@crvouga/atlas-bun':
+        specifier: workspace:*
+        version: link:../../packages/bun
       '@crvouga/atlas-playwright':
         specifier: workspace:*
         version: link:../../packages/playwright
       '@crvouga/atlas-vitest':
         specifier: workspace:*
         version: link:../../packages/vitest
+      '@crvouga/atlas-webdriver':
+        specifier: workspace:*
+        version: link:../../packages/webdriver
     devDependencies:
       '@types/node':
         specifier: ^22.20.3
@@ -29,6 +35,22 @@ importers:
       tsx:
         specifier: 4.23.13
         version: 4.23.13
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.11.1)(tsx@4.23.13)(yaml@2.9.1)
+
+  packages/bun:
+    dependencies:
+      '@crvouga/atlas':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.3
+        version: 22.20.5
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -207,6 +229,22 @@ importers:
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.11.1)(tsx@4.23.13)(yaml@2.9.1)
 
   packages/vitest:
+    dependencies:
+      '@crvouga/atlas':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.3
+        version: 22.20.5
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.11.1)(tsx@4.23.13)(yaml@2.9.1)
+
+  packages/webdriver:
     dependencies:
       '@crvouga/atlas':
         specifier: workspace:*

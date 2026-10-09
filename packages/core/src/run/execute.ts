@@ -13,6 +13,7 @@ import type {
   Clip,
   Driver,
   EventMatcher,
+  Focus,
   EventSource,
   Image,
   Implementation,
@@ -78,7 +79,7 @@ type PathResult = {
   kind: PlannedPath['kind'];
   description: string;
   status: Status;
-  attempts: { status: 'passed' | 'failed'; error: string | null; stoppedAt: string | null; trace: string | null }[];
+  attempts: { status: 'passed' | 'failed'; error: string | null; stoppedAt: string | null; trace: string | null; traces?: Record<string, string> }[];
   steps: StepResult[];
   stoppedAt: string | null;
 };
@@ -194,16 +195,18 @@ export async function runPaths<C>(options: RunOptions<C>) {
     const timeline = new Timeline();
     const ctx = await driver.open({ path: planned, attempt: attemptNumber, mode: options.mode, directory: path.join(runDir, '.work', tag), timeline });
     const pacing = showcase ? (driver.pacing ?? { before: 500, after: 1_000 }) : { before: 0, after: 0 };
+    let focus: Focus = {};
     const tools: StepTools = {
       timeline,
       mode: options.mode,
       data: {},
       hold: async (ms) => {
         if (ms <= 0) return;
-        if (driver.hold) await driver.hold(ctx, ms);
+        if (driver.hold) await driver.hold(ctx, ms, focus);
         else await new Promise((r) => setTimeout(r, ms));
       }
     };
+    const on = (client: string | undefined): Focus => (client ? { client } : {});
     const steps: StepResult[] = [];
     const observed: Observed[] = [];
     let error: string | null = null;
@@ -211,7 +214,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
     let failed = false;
     const shotFile = (name: string) => path.join(mediaDir, 'paths', tag, `${name}.png`);
     const clipFile = (index: number) => path.join(mediaDir, 'clips', tag, `${pad(index + 1)}.mp4`);
-    const shoot = async (name: string) => (driver.screenshot ? driver.screenshot(ctx, shotFile(name)).catch(() => null) : null);
+    const shoot = async (name: string, at: Focus) => (driver.screenshot ? driver.screenshot(ctx, shotFile(name), at).catch(() => null) : null);
     try {
       for (const event of new Set(planned.steps.map((s) => s.event))) await impl.events[event]?.prepare?.(ctx, tools);
       await impl.setup(ctx, { path: planned, tools });
@@ -234,7 +237,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
         timeline: [],
         events: { expected: [], observed: [], missing: [], noSignal: [], events: [] },
         recognizer: startCheck,
-        shot: await shoot('00-start'),
+        shot: await shoot('00-start', on(impl.states[startState]?.client)),
         transient: false,
         checks: (await impl.states[startState]?.checks?.(ctx)) ?? []
       });
@@ -256,7 +259,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
           }
           break;
         }
-        const recording = showcase && !step.handOff && driver.record ? await driver.record(ctx, path.join(runDir, '.frames', tag, String(index))) : null;
+        focus = on(ev.client ?? impl.states[target]?.client);
+        const recording = showcase && !step.handOff && driver.record ? await driver.record(ctx, path.join(runDir, '.frames', tag, String(index)), focus) : null;
         timeline.restart();
         await tools.hold(pacing.before);
         await Promise.all(sources.map((s) => s.mark()));
@@ -296,7 +300,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
         const collected = await collectEvents();
         const events = compareBusinessEvents(metaOf.get(target)?.events ?? [], collected, options.eventMatchers ?? {}, hasCloudEvents);
         if (driver.text) leaks.push(...privacyFindings(await driver.text(ctx).catch(() => ''), `${planned.id} / ${target}`, privacy));
-        const shot = transient ? null : await shoot(pad(index + 1));
+        const shot = transient ? null : await shoot(pad(index + 1), on(s?.client));
         observed.push({ step, target, clip, timeline: [...timeline.entries], events, recognizer, shot, transient, checks });
         await s?.settle?.(ctx);
         steps.push({ transition, event: step.event, status: 'passed', reason: null });
@@ -307,7 +311,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
       error = err.message;
       stoppedAt = err.state ?? stoppedAt;
       const index = err.stepIndex ?? 0;
-      const failedShot = await shoot(`failed-${pad(index + 1)}`);
+      const failedShot = await shoot(`failed-${pad(index + 1)}`, on(err.state ? impl.states[err.state]?.client : undefined));
       if (err.state && states[err.state]) {
         states[err.state]!.recognizer = err.recognizer ?? null;
         states[err.state]!.looksLike = err.looksLike ?? [];
@@ -326,11 +330,17 @@ export async function runPaths<C>(options: RunOptions<C>) {
     const traceFile = path.join(mediaDir, 'traces', `${tag}.zip`);
     const closed = await driver.close(ctx, { failed, traceFile }).catch(() => undefined);
     const trace = closed && closed.trace ? relative(runDir, closed.trace) : null;
-    return { error, stoppedAt, steps, observed, trace };
+    const traces = closed && closed.traces ? Object.fromEntries(Object.entries(closed.traces).map(([client, file]) => [client, relative(runDir, file)])) : undefined;
+    return { error, stoppedAt, steps, observed, trace, traces };
   }
 
   function rel(image: Image): Image {
-    return { png: relative(runDir, image.png), ...(image.webp ? { webp: relative(runDir, image.webp) } : {}) };
+    return {
+      png: relative(runDir, image.png),
+      ...(image.webp ? { webp: relative(runDir, image.webp) } : {}),
+      ...(image.client ? { client: image.client } : {}),
+      ...(image.also?.length ? { also: image.also.map(rel) } : {})
+    };
   }
 
   async function safeAttempt(planned: PlannedPath, attemptNumber: number) {
@@ -348,7 +358,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
           reason: i === 0 ? message : 'Not reached: the path could not be set up.'
         })),
         observed: [] as Observed[],
-        trace: null
+        trace: null,
+        traces: undefined
       };
     }
   }
@@ -375,7 +386,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
         durationMs: Date.now() - startedAt.getTime(),
         commit: git('rev-parse HEAD'),
         branch: git('rev-parse --abbrev-ref HEAD'),
-        environment: { driver: driver.name, ...options.environment },
+        environment: { driver: driver.name, ...(driver.clients ? { clients: driver.clients } : {}), ...options.environment },
         mode: options.mode,
         specVersion: specVersion(options.bundle),
         specDirectory: relative(process.cwd(), options.bundle.directory),
@@ -422,6 +433,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
               chart: options.composition.chartOf.get(name) ?? null,
               description: meta?.description ?? '',
               snapshot: meta?.snapshot ?? '',
+              ...(impl.states[name]?.client ? { client: impl.states[name]!.client } : {}),
               confidence: meta?.confidence ?? 'assumed',
               source: meta?.source ?? [],
               expectedEvents: meta?.events ?? [],
@@ -433,7 +445,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
       transitions: Object.fromEntries(
         Object.entries(transitions).map(([id, record]) => {
           const { source, event } = splitTransitionId(id);
-          return [id, { id, source, target: graph.target(source, event) ?? null, event, kind: kindOf(event), how: impl.events[event]?.how ?? null, ...record }];
+          const client = impl.events[event]?.client;
+          return [id, { id, source, target: graph.target(source, event) ?? null, event, kind: kindOf(event), how: impl.events[event]?.how ?? null, ...(client ? { client } : {}), ...record }];
         })
       ),
       paths: results,
@@ -481,11 +494,11 @@ export async function runPaths<C>(options: RunOptions<C>) {
     log(`▶ ${planned.id} ${planned.name}`);
     const attempts: PathResult['attempts'] = [];
     let outcome = await safeAttempt(planned, 1);
-    attempts.push({ status: outcome.error ? 'failed' : 'passed', error: outcome.error, stoppedAt: outcome.stoppedAt, trace: outcome.trace });
+    attempts.push({ status: outcome.error ? 'failed' : 'passed', error: outcome.error, stoppedAt: outcome.stoppedAt, trace: outcome.trace, ...(outcome.traces ? { traces: outcome.traces } : {}) });
     let flaky = false;
     if (outcome.error && options.retry !== false) {
       const second = await safeAttempt(planned, 2);
-      attempts.push({ status: second.error ? 'failed' : 'passed', error: second.error, stoppedAt: second.stoppedAt, trace: second.trace });
+      attempts.push({ status: second.error ? 'failed' : 'passed', error: second.error, stoppedAt: second.stoppedAt, trace: second.trace, ...(second.traces ? { traces: second.traces } : {}) });
       flaky = !second.error;
       outcome = second;
     }
@@ -527,8 +540,11 @@ export async function runPaths<C>(options: RunOptions<C>) {
             video: relative(runDir, item.clip.video),
             ...(item.clip.poster ? { poster: relative(runDir, item.clip.poster) } : {}),
             durationMs: item.clip.durationMs,
-            captions: relative(runDir, captions)
+            captions: relative(runDir, captions),
+            ...(item.clip.client ? { client: item.clip.client } : {})
           };
+          tr.timeline = item.timeline;
+        } else if (!tr.timeline.length) {
           tr.timeline = item.timeline;
         }
       }

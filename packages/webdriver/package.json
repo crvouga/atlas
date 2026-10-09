@@ -1,0 +1,24 @@
+{
+  "name": "@crvouga/atlas-webdriver",
+  "version": "0.1.0",
+  "description": "W3C WebDriver driver for Atlas, with no dependencies: run statecharts against Safari, Chrome or Firefox (safaridriver, chromedriver, geckodriver) and against native iOS and Android apps (Appium).",
+  "license": "MIT",
+  "type": "module",
+  "repository": { "type": "git", "url": "https://github.com/crvouga/atlas", "directory": "packages/webdriver" },
+  "exports": { ".": "./src/index.ts" },
+  "publishConfig": { "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } } },
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@crvouga/atlas": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.6"
+  }
+}

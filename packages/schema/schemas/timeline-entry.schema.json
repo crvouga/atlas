@@ -110,6 +110,10 @@
           "type": "string"
         }
       }
+    },
+    "client": {
+      "description": "The client that did it, in a multi-client run",
+      "type": "string"
     }
   },
   "required": [

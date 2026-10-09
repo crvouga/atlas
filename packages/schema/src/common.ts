@@ -20,9 +20,14 @@ export const CONFIDENCES = ['confirmed', 'assumed'] as const;
 export const ConfidenceSchema = z.enum(CONFIDENCES);
 export type Confidence = z.infer<typeof ConfidenceSchema>;
 
-export const ImageSchema = z.object({
+const ScreenSchema = z.object({
   png: z.string().min(1),
-  webp: z.string().min(1).describe('About 400 px wide, for the map')
+  webp: z.string().min(1).describe('About 400 px wide, for the map'),
+  client: z.string().optional().describe('Which client\'s screen it is, in a multi-client run')
+});
+
+export const ImageSchema = ScreenSchema.extend({
+  also: z.array(ScreenSchema.partial({ webp: true })).optional().describe("The other clients' screens at the same moment")
 });
 export type Image = z.infer<typeof ImageSchema>;
 

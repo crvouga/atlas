@@ -41,8 +41,9 @@ Then declare only the packages the consuming app or package needs, using the wor
 }
 ```
 
-Other available packages are `@crvouga/atlas-vitest`, `@crvouga/atlas-detox`, and
-`@crvouga/atlas-schema`. Install the consumer workspace normally after changing its manifest:
+Other available packages are `@crvouga/atlas-bun`, `@crvouga/atlas-webdriver`,
+`@crvouga/atlas-vitest`, `@crvouga/atlas-detox`, `@crvouga/atlas-schema` and
+`@crvouga/atlas-visualizer`. Install the consumer workspace normally after changing its manifest:
 
 ```sh
 pnpm install

@@ -66,6 +66,16 @@
                 "type": "null"
               }
             ]
+          },
+          "traces": {
+            "description": "One trace per client, in a multi-client run",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": [

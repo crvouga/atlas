@@ -48,7 +48,8 @@ export const TimelineEntrySchema = z.object({
   text: z.string().optional().describe('What was typed'),
   system: SystemCallSchema.optional(),
   time: TimeJumpSchema.optional(),
-  notification: NotificationSchema.optional()
+  notification: NotificationSchema.optional(),
+  client: z.string().optional().describe('The client that did it, in a multi-client run')
 });
 export type TimelineEntry = z.infer<typeof TimelineEntrySchema>;
 
@@ -139,6 +140,7 @@ export const StateRecordSchema = z.object({
   confidence: z.enum(['confirmed', 'assumed']).optional(),
   source: z.array(z.string()).optional(),
   expectedEvents: z.array(z.string()).optional(),
+  client: z.string().optional().describe('The client whose screen shows it, in a multi-client run'),
   status: RunStatusSchema,
   screenshot: ImageSchema.nullable().optional(),
   screenshotState: MediaStateSchema.optional(),
@@ -158,6 +160,7 @@ export const ClipSchema = z.object({
   poster: z.string().optional(),
   durationMs: z.number().nonnegative().optional(),
   captions: z.string().optional().describe('Proposed: a WebVTT file'),
+  client: z.string().optional().describe('The client whose screen was recorded'),
   state: MediaStateSchema.optional()
 });
 export type Clip = z.infer<typeof ClipSchema>;
@@ -169,6 +172,7 @@ export const TransitionRecordSchema = z.object({
   event: z.string(),
   kind: EventKindSchema.optional(),
   how: z.string().nullable().optional(),
+  client: z.string().optional().describe('The client that does it, in a multi-client run'),
   status: RunStatusSchema,
   clip: ClipSchema.nullable().optional(),
   timeline: z.array(z.unknown()).optional(),
@@ -196,7 +200,8 @@ export const PathRecordSchema = z.object({
         status: z.string(),
         error: z.string().nullable().optional(),
         stoppedAt: z.string().nullable().optional(),
-        trace: z.string().nullable().optional()
+        trace: z.string().nullable().optional(),
+        traces: z.record(z.string(), z.string()).optional().describe('One trace per client, in a multi-client run')
       })
     )
     .optional(),

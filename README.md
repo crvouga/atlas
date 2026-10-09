@@ -30,10 +30,12 @@ and the implementation says how a driver makes each event happen and recognises 
 
 | Package | What it is |
 | --- | --- |
-| [`@crvouga/atlas`](packages/core) | Spec loading (SCXML and XState), composition, lint, planning, the runner, reports, CloudEvents, privacy, config and the `atlas` CLI. `@crvouga/atlas/spec` is a browser-safe subset. |
+| [`@crvouga/atlas`](packages/core) | Spec loading (SCXML and XState), composition, lint, planning, the runner, multi-client runs (`combineDrivers`), `httpDriver` and `functionDriver`, reports, CloudEvents, privacy, config and the `atlas` CLI. `@crvouga/atlas/spec` is a browser-safe subset; `@crvouga/atlas/signals` holds the driver-neutral signals. |
 | [`@crvouga/atlas-playwright`](packages/playwright) | Playwright driver: signal-based screen recognisers, paced taps and typing with a touch overlay, device-resolution screenshots and H.264 clips. |
-| [`@crvouga/atlas-vitest`](packages/vitest) | Run a config as a Vitest (or Jest-style) suite, one test per planned path, plus `functionDriver`. |
-| [`@crvouga/atlas-detox`](packages/detox) | Detox driver for iOS and Android apps. |
+| [`@crvouga/atlas-bun`](packages/bun) | Bun WebView driver: Bun's built-in headless browser (the system WebKit on macOS, Chrome elsewhere), nothing to download. |
+| [`@crvouga/atlas-webdriver`](packages/webdriver) | W3C WebDriver driver with no dependencies: Safari, Chrome, Firefox and Edge, and native iOS and Android apps through Appium. |
+| [`@crvouga/atlas-detox`](packages/detox) | Detox driver for iOS and Android apps, inside a Detox test run. |
+| [`@crvouga/atlas-vitest`](packages/vitest) | Run a config as a Vitest (or Jest-style) suite, one test per planned path. |
 | [`@crvouga/atlas-schema`](packages/schema) | The contract: Zod schemas and JSON Schemas for specs, journeys, manifests, timelines and the runs index. |
 | [`@crvouga/atlas-visualizer`](packages/visualizer) | Browse charts and runs: every state with its screenshots, every transition with its clip. |
 
@@ -51,6 +53,8 @@ understand.
 | [CTRF](https://ctrf.io) | `ctrf.json`: Common Test Report Format |
 | [WebVTT](https://www.w3.org/TR/webvtt1/) | Captions for every clip: each tap, keystroke, system call and screen change |
 | [CloudEvents 1.0](https://cloudevents.io) | Business events the product emits (HTTP structured, binary and batch modes) |
+| [W3C WebDriver](https://www.w3.org/TR/webdriver2/) | Driving browsers and, through Appium, native iOS and Android apps |
+| [WAI-ARIA](https://www.w3.org/TR/wai-aria/) roles and accessible names | Signals that recognise screens the same way on every driver |
 | MP4 / H.264 | Clips of each transition, encoded with FFmpeg |
 | PNG / WebP | Screenshots at device resolution, with WebP thumbnails |
 | [Mermaid](https://mermaid.js.org/syntax/stateDiagram.html) `stateDiagram-v2` | `chart.mmd`, and `atlas export --format mermaid` |
@@ -85,6 +89,9 @@ pnpm atlas:plan   # 4 journeys + 1 generated path cover all 14 transitions
 pnpm atlas:fast   # run every path quickly
 pnpm atlas:run    # showcase mode: paced, with a touch overlay, screenshots and a clip per transition
 pnpm test         # the same spec against an in-memory model, through Vitest
+
+pnpm atlas:clients      # clients/: one chart across a phone, a desktop and the sync server at once
+pnpm atlas:clients:bun  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
 ```
 
 A showcase run ends with:
@@ -262,24 +269,117 @@ tell apart from this one).
 Only leaf states need recognisers. `atlas lint --require-implementations` lists every event and
 leaf state in scope that has no implementation.
 
+## Drivers
+
+| Driver | Package | Plays | Speed | Clips |
+| --- | --- | --- | --- | --- |
+| `functionDriver(create)` | `@crvouga/atlas` | A domain model, a CLI, anything reachable from code | Microseconds | No |
+| `httpDriver(baseUrl)` | `@crvouga/atlas` | An API client with a cookie jar: a partner system, an operator API, a back office job | Milliseconds | No |
+| `bunWebViewDriver()` | `@crvouga/atlas-bun` | A web app in Bun's built-in browser (WebKit on macOS, Chrome elsewhere) | A view in milliseconds, screenshots in about 10 ms | From screenshots |
+| `playwrightDriver()` | `@crvouga/atlas-playwright` | A web app (or React Native on the web) in Chromium, with a fake clock | About a second per context | Screencast with a touch overlay |
+| `webdriverDriver()` | `@crvouga/atlas-webdriver` | Safari, Chrome, Firefox, Edge; native iOS and Android apps through Appium | Depends on the server | From screenshots, or Appium's recorder |
+| `detoxDriver()` | `@crvouga/atlas-detox` | A React Native app, inside a Detox test run | Depends on the device | Detox artifacts |
+
+The Bun, Playwright, WebDriver and Detox contexts all provide a `SignalContext` (`goto`,
+`isVisible`, `user.tap`, `user.type`), and they resolve the same signals (`testId`, `role`, `label`,
+`text`, `css` from `@crvouga/atlas/signals`), each against its own UI tree: the DOM, or the
+accessibility tree of a native app, where a test ID is the accessibility identifier (React
+Native's `testID`). An implementation written
+against `SignalContext` with `screen` from `@crvouga/atlas/signals` runs on any of them unchanged.
+
+`bunWebViewDriver` needs the Bun runtime: run `bun --bun atlas run`. The `atlas` binary runs on
+Node (through tsx) or Bun, and Playwright works under Bun too, so one run can mix Bun's WebKit and
+Playwright's Chromium.
+
+## Several clients in one run
+
+Product flows cross devices: a member books on an iOS app, an operator approves in a web
+dashboard, a partner confirms over an API. `combineDrivers` runs several drivers as the named
+clients of one run, and `combineImplementations` merges what each client does and shows:
+
+```ts
+import { combineDrivers, combineImplementations, defineConfig, httpDriver, type HttpClient } from '@crvouga/atlas';
+import { role, screen, text, type SignalContext } from '@crvouga/atlas/signals';
+import { playwrightDriver } from '@crvouga/atlas-playwright';
+import { accessibilityId, webdriverDriver } from '@crvouga/atlas-webdriver';
+
+type Clients = { member: SignalContext; operator: SignalContext; partner: HttpClient };
+
+export default defineConfig<Clients>({
+  specs: './specs',
+  driver: combineDrivers<Clients>(
+    {
+      member: webdriverDriver({
+        url: 'http://127.0.0.1:4723', // Appium
+        capabilities: { platformName: 'iOS', 'appium:automationName': 'XCUITest', 'appium:app': './build/App.app' }
+      }),
+      operator: playwrightDriver({ baseUrl: 'http://127.0.0.1:3000', device: { viewport: { width: 1280, height: 800 } } }),
+      partner: httpDriver('http://127.0.0.1:4000')
+    },
+    { screens: 'all' }
+  ),
+  implementation: combineImplementations<Clients>(
+    {
+      member: {
+        events: { 'Requests a visit': { kind: 'user', how: 'Taps "Request".', run: (m) => m.user.tap(role('button', 'Request'), 'Request') } },
+        states: { 'Visit confirmed': screen({ all: [text('Confirmed')] }) }
+      },
+      operator: {
+        setup: (o) => o.goto('/queue'),
+        events: { 'Operator approves': { kind: 'user', how: 'Approves it in the queue.', run: (o) => o.user.tap(role('button', 'Approve'), 'Approve') } },
+        states: { 'Waiting for approval': screen({ all: [role('row', 'New request')] }) }
+      },
+      partner: {
+        events: { 'Partner confirms': { kind: 'system', how: 'POSTs the confirmation webhook.', run: (p) => p.post('/webhooks/confirm', { ok: true }).then(() => undefined) } }
+      }
+    },
+    { setup: async ({ partner }) => void (await partner.post('/test/reset')) }
+  )
+});
+```
+
+- Each client's part is written against that client's own context, so every driver's helpers
+  work unchanged; `shared` (the second argument) holds setup and events that need several clients
+  at once. `shared.setup` runs first, then each client's setup in order.
+- `onClient(name, impl)` lifts a single event or state implementation to a client.
+- An event's client is recorded for its clip; a state's client is the screen it is recognised and
+  photographed on. With `screens: 'all'`, every other client's screen is captured at the same
+  moment (`screenshot.also`).
+- Timeline entries, clips, states and transitions carry `client` in the manifest;
+  `run.environment.clients` names the driver each client ran on; a failed attempt keeps one trace
+  per client.
+- If one client cannot open (no simulator booted), the others are closed and the attempt fails
+  naming that client.
+
+[`examples/todo/clients`](examples/todo/clients) runs a chart across a phone, a desktop and the
+sync server; pick each device's driver with `ATLAS_PHONE` and `ATLAS_DESKTOP`
+(`playwright`, `bun` or `webdriver`).
+
 ## Writing a driver
 
 A driver owns the thing under test for one path attempt: a browser context, a device, a model or
 an API client. Only `open` and `close` are required.
 
 ```ts
+type Focus = { client?: string };
+
 type Driver<C> = {
   name: string;
   open(input: { path: PlannedPath; attempt: number; mode: RunMode; directory: string; timeline: Timeline }): Promise<C>;
-  close(ctx: C, input: { failed: boolean; traceFile: string }): Promise<{ trace?: string } | void>;
-  screenshot?(ctx: C, file: string): Promise<{ png: string; webp?: string } | null>;
-  record?(ctx: C, workDirectory: string): Promise<{ stop(output: string): Promise<{ video: string; poster?: string; durationMs: number } | null> }>;
-  text?(ctx: C): Promise<string>;
-  hold?(ctx: C, ms: number): Promise<void>;
+  close(ctx: C, input: { failed: boolean; traceFile: string }): Promise<{ trace?: string; traces?: Record<string, string> } | void>;
+  screenshot?(ctx: C, file: string, focus?: Focus): Promise<Image | null>;
+  record?(ctx: C, workDirectory: string, focus?: Focus): Promise<{ stop(output: string): Promise<Clip | null> }>;
+  text?(ctx: C, focus?: Focus): Promise<string>;
+  hold?(ctx: C, ms: number, focus?: Focus): Promise<void>;
   pacing?: { before: number; after: number };
+  clients?: Record<string, string>;
   dispose?(): Promise<void>;
 };
 ```
+
+`focus` says which client a multi-client run is looking at; single-client drivers ignore it.
+A driver without a native screen recorder can encode clips from screenshots with
+`recordFrames(capture, workDirectory)`.
 
 - `open` returns a fresh context for each attempt; `close` may return the path of a trace file
   (Playwright writes one for failed attempts).

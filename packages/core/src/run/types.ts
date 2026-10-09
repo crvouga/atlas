@@ -5,8 +5,9 @@ export type RunMode = 'fast' | 'showcase';
 export type Status = 'passed' | 'failed' | 'flaky' | 'not-reached';
 export type EventKind = 'user' | 'system' | 'time' | 'hand-off';
 
-export type Image = { png: string; webp?: string };
-export type Clip = { video: string; poster?: string; durationMs: number };
+/** `client` names which client's screen it is in a multi-client run; `also` holds the other clients' screens at the same moment. */
+export type Image = { png: string; webp?: string; client?: string; also?: Image[] };
+export type Clip = { video: string; poster?: string; durationMs: number; client?: string };
 
 export type TimelineEntry = {
   atMs: number;
@@ -16,20 +17,40 @@ export type TimelineEntry = {
   y?: number;
   text?: string;
   system?: { source?: string; endpoint?: string; eventType?: string; payload?: unknown; responseStatus?: number };
+  /** The client that did it, in a multi-client run. */
+  client?: string;
 };
 
-/** What a step records while it runs: taps, typing, system calls, the screen change. */
+type TimelineState = { origin: number; entries: TimelineEntry[] };
+
+/**
+ * What a step records while it runs: taps, typing, system calls, the screen change. `for(client)`
+ * returns a view onto the same timeline that tags every entry with that client.
+ */
 export class Timeline {
-  private origin = Date.now();
-  entries: TimelineEntry[] = [];
+  private readonly state: TimelineState;
+  readonly client?: string;
+
+  constructor(state: TimelineState = { origin: Date.now(), entries: [] }, client?: string) {
+    this.state = state;
+    this.client = client;
+  }
+
+  get entries() {
+    return this.state.entries;
+  }
 
   restart() {
-    this.origin = Date.now();
-    this.entries = [];
+    this.state.origin = Date.now();
+    this.state.entries = [];
   }
 
   add(entry: Omit<TimelineEntry, 'atMs'>) {
-    this.entries.push({ atMs: Date.now() - this.origin, ...entry });
+    this.state.entries.push({ atMs: Date.now() - this.state.origin, ...(this.client ? { client: this.client } : {}), ...entry });
+  }
+
+  for(client: string) {
+    return new Timeline(this.state, client);
   }
 }
 
@@ -51,22 +72,30 @@ export type StepTools = {
 };
 
 /**
+ * Which client a media hook should look at, in a multi-client run: the client a state is
+ * recognised on, or the client an event is done on. Single-client drivers ignore it.
+ */
+export type Focus = { client?: string };
+
+/**
  * A driver owns the thing under test for one path attempt: a browser context (Playwright), a
- * device (Detox), a model or an API client (Vitest). Only `open` and `close` are required; media
- * hooks are used when present.
+ * device (Detox, WebDriver/Appium), a model or an API client. Only `open` and `close` are
+ * required; media hooks are used when present. `combineDrivers` runs several at once.
  */
 export type Driver<C> = {
   name: string;
   open(input: { path: PlannedPath; attempt: number; mode: RunMode; directory: string; timeline: Timeline }): Promise<C>;
-  close(ctx: C, input: { failed: boolean; traceFile: string }): Promise<{ trace?: string } | void>;
+  close(ctx: C, input: { failed: boolean; traceFile: string }): Promise<{ trace?: string; traces?: Record<string, string> } | void>;
   /** A settled, deterministic screenshot of the current screen. */
-  screenshot?(ctx: C, file: string): Promise<Image | null>;
+  screenshot?(ctx: C, file: string, focus?: Focus): Promise<Image | null>;
   /** Start recording one transition; `stop` encodes it and returns the clip. */
-  record?(ctx: C, workDirectory: string): Promise<{ stop(output: string): Promise<Clip | null> }>;
-  /** Visible text of the screen, for the privacy scan. */
-  text?(ctx: C): Promise<string>;
+  record?(ctx: C, workDirectory: string, focus?: Focus): Promise<{ stop(output: string): Promise<Clip | null> }>;
+  /** Visible text of the screen, for the privacy scan (every client's screen when unfocused). */
+  text?(ctx: C, focus?: Focus): Promise<string>;
   /** Pause between actions; drivers can show it (a touch overlay idling) or ignore it. */
-  hold?(ctx: C, ms: number): Promise<void>;
+  hold?(ctx: C, ms: number, focus?: Focus): Promise<void>;
+  /** The clients of a multi-client driver, by name, with the driver each runs on. */
+  clients?: Record<string, string>;
   /** Pacing for showcase mode, in milliseconds. */
   pacing?: { before: number; after: number };
   dispose?(): Promise<void>;
@@ -75,6 +104,8 @@ export type Driver<C> = {
 /** How one event is made to happen. Keyed by the event's exact name in the spec. */
 export type EventImplementation<C> = {
   kind: EventKind;
+  /** The client that does it, in a multi-client run: its screen is recorded for the clip. */
+  client?: string;
   /** A plain-language note on how the runner makes it happen (shown to developers). */
   how: string;
   /** Test data the event needs before the path starts (a condition modelled as an event). */
@@ -87,6 +118,8 @@ export type EventImplementation<C> = {
 /** How one state is recognised from the outside, and what is checked there. */
 export type StateImplementation<C> = {
   recognize(ctx: C): Promise<RecognizerResult>;
+  /** The client whose screen shows it, in a multi-client run: that screen is the screenshot. */
+  client?: string;
   /** Shown too briefly to wait for: not seeing it is not a failure. */
   transient?: boolean;
   /** States the UI cannot tell apart; never reported as "looks like" each other. */

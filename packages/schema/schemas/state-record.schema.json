@@ -41,6 +41,10 @@
         "type": "string"
       }
     },
+    "client": {
+      "description": "The client whose screen shows it, in a multi-client run",
+      "type": "string"
+    },
     "status": {
       "type": "string",
       "enum": [
@@ -63,6 +67,35 @@
               "description": "About 400 px wide, for the map",
               "type": "string",
               "minLength": 1
+            },
+            "client": {
+              "description": "Which client's screen it is, in a multi-client run",
+              "type": "string"
+            },
+            "also": {
+              "description": "The other clients' screens at the same moment",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "png": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "webp": {
+                    "description": "About 400 px wide, for the map",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "client": {
+                    "description": "Which client's screen it is, in a multi-client run",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "png"
+                ]
+              }
             }
           },
           "required": [
@@ -103,6 +136,35 @@
             "description": "About 400 px wide, for the map",
             "type": "string",
             "minLength": 1
+          },
+          "client": {
+            "description": "Which client's screen it is, in a multi-client run",
+            "type": "string"
+          },
+          "also": {
+            "description": "The other clients' screens at the same moment",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "png": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "webp": {
+                  "description": "About 400 px wide, for the map",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "client": {
+                  "description": "Which client's screen it is, in a multi-client run",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "png"
+              ]
+            }
           }
         },
         "required": [

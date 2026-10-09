@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One list used from two devices at once, in W3C SCXML. Each state is seen on one client (the
+  phone or the desktop); each event is done by one client (a person on a device, or the sync
+  server). The chart itself says nothing about drivers: atlas.config.ts decides which driver
+  plays each client.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:atlas="https://github.com/crvouga/atlas/ns/1"
+       version="1.0"
+       datamodel="null"
+       name="Shared list"
+       initial="welcome-on-the-phone">
+  <atlas:meta>
+    <atlas:description>A person starts a list on their phone, finishes it on their desktop, and both devices agree.</atlas:description>
+  </atlas:meta>
+
+  <state id="welcome-on-the-phone" atlas:name="Welcome on the phone">
+    <atlas:meta>
+      <atlas:description>The phone shows the welcome screen; there is no list yet.</atlas:description>
+      <atlas:snapshot>"Plan your day" with a "Get started" button, on the phone.</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+    <transition event="sets-up-on-the-phone" atlas:name="Sets up on the phone" target="empty-list-on-the-phone"/>
+  </state>
+
+  <state id="empty-list-on-the-phone" atlas:name="Empty list on the phone">
+    <atlas:meta>
+      <atlas:description>The default list is open on the phone and empty.</atlas:description>
+      <atlas:snapshot>"My todos" and "Nothing to do yet", on the phone.</atlas:snapshot>
+      <atlas:event>List created</atlas:event>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+    <transition event="adds-a-todo-on-the-phone" atlas:name="Adds a todo on the phone" target="todo-open-on-the-phone"/>
+  </state>
+
+  <state id="todo-open-on-the-phone" atlas:name="Todo open on the phone">
+    <atlas:meta>
+      <atlas:description>The phone lists one open todo.</atlas:description>
+      <atlas:snapshot>The todo and "1 left", on the phone.</atlas:snapshot>
+      <atlas:event>Todo added</atlas:event>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+    <transition event="opens-the-list-on-the-desktop" atlas:name="Opens the list on the desktop" target="todo-open-on-the-desktop"/>
+  </state>
+
+  <state id="todo-open-on-the-desktop" atlas:name="Todo open on the desktop">
+    <atlas:meta>
+      <atlas:description>The desktop opens the same list and shows the todo added on the phone.</atlas:description>
+      <atlas:snapshot>The todo and "1 left", on the desktop.</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+    <transition event="marks-all-done-on-the-desktop" atlas:name="Marks all done on the desktop" target="done-on-the-desktop"/>
+  </state>
+
+  <state id="done-on-the-desktop" atlas:name="Done on the desktop">
+    <atlas:meta>
+      <atlas:description>Every todo is done, as the desktop shows it.</atlas:description>
+      <atlas:snapshot>"All done!", on the desktop.</atlas:snapshot>
+      <atlas:event>Todos completed</atlas:event>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+    <transition event="refreshes-the-phone" atlas:name="Refreshes the phone" target="done-on-both"/>
+  </state>
+
+  <state id="done-on-both" atlas:name="Done on both">
+    <atlas:meta>
+      <atlas:description>The phone catches up: both devices show every todo done.</atlas:description>
+      <atlas:snapshot>"All done!", on the phone.</atlas:snapshot>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+    <transition event="sync-server-drops-the-connection" atlas:name="Sync server drops the connection" target="offline-on-the-phone"/>
+  </state>
+
+  <final id="offline-on-the-phone" atlas:name="Offline on the phone">
+    <atlas:meta>
+      <atlas:description>The sync server dropped the connection; the phone keeps changes on the device.</atlas:description>
+      <atlas:snapshot>"Offline" with a note that changes are kept on this device, on the phone.</atlas:snapshot>
+      <atlas:event>Sync interrupted</atlas:event>
+      <atlas:confidence>confirmed</atlas:confidence>
+    </atlas:meta>
+  </final>
+</scxml>

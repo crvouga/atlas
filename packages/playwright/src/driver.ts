@@ -1,12 +1,17 @@
 import type { Driver } from '@crvouga/atlas';
+import type { SignalContext } from '@crvouga/atlas/signals';
 import type { Browser, BrowserContext, BrowserContextOptions, LaunchOptions, Page } from 'playwright';
 import { chromium } from 'playwright';
 
 import type { Pacing } from './media';
 import { captureScreen, FAST_PACING, PHONE, ScreencastRecorder, SHOWCASE_PACING, UserActions } from './media';
+import { locate } from './signals';
 
-/** What every Playwright event and recogniser receives for one path attempt. */
-export type PlaywrightContext = {
+/**
+ * What every Playwright event and recogniser receives for one path attempt. It is a
+ * `SignalContext` too, so implementations written against signals run here unchanged.
+ */
+export type PlaywrightContext = SignalContext & {
   page: Page;
   context: BrowserContext;
   browser: Browser;
@@ -15,6 +20,8 @@ export type PlaywrightContext = {
 };
 
 export type PlaywrightDriverOptions = {
+  /** Where `goto` paths resolve; the implementation's setup decides where to open. */
+  baseUrl?: string | (() => string | Promise<string>);
   /** Browser context options; a 390×844 phone at device scale factor 3 with touch by default. */
   device?: BrowserContextOptions;
   launch?: LaunchOptions;
@@ -54,7 +61,17 @@ export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<
       if (showcase) await UserActions.install(page);
       if (options.clock) await page.clock.install();
       await options.onPage?.(page);
-      return { page, context, browser: b, user: new UserActions(page, showcase ? showcasePacing : FAST_PACING, timeline, showcase) };
+      const baseUrl = typeof options.baseUrl === 'function' ? await options.baseUrl() : options.baseUrl;
+      return {
+        page,
+        context,
+        browser: b,
+        user: new UserActions(page, showcase ? showcasePacing : FAST_PACING, timeline, showcase),
+        goto: async (url) => {
+          await page.goto(baseUrl ? new URL(url, baseUrl).href : url);
+        },
+        isVisible: (signal) => locate(page, signal).isVisible().catch(() => false)
+      };
     },
     async close(ctx, { failed, traceFile }) {
       let trace: string | undefined;

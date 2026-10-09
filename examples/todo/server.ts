@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  * The todo example's server: it serves the static app, keeps the list, and announces business
  * events as CloudEvents (structured mode) to `eventSink`, the way a product's event bus or webhook
  * relay would. `/control/*` endpoints exist for tests only: they reset the server and make the next
- * sync check fail, so a test can trigger a system event through a real HTTP call.
+ * sync checks fail (one, or `{ "checks": n }`), so a test can trigger a system event through a real HTTP call.
  */
 
 /** Business event name (as written in the charts' `meta.events`) → CloudEvent `type`. */
@@ -69,7 +69,7 @@ export async function startTodoServer(options: { port?: number; host?: string; e
   const host = options.host ?? '127.0.0.1';
   let listName: string | null = null;
   let todos: Todo[] = [];
-  let syncFailureArmed = false;
+  let syncFailuresArmed = 0;
 
   const emit = async (event: BusinessEvent, data: Record<string, unknown> = {}) => {
     if (!options.eventSink) return;
@@ -106,7 +106,7 @@ export async function startTodoServer(options: { port?: number; host?: string; e
   const reset = () => {
     listName = null;
     todos = [];
-    syncFailureArmed = false;
+    syncFailuresArmed = 0;
   };
 
   const handle = async (req: IncomingMessage, res: ServerResponse) => {
@@ -135,8 +135,8 @@ export async function startTodoServer(options: { port?: number; host?: string; e
         return send(res, 200, { todos });
       }
       case 'GET /api/sync-status': {
-        if (!syncFailureArmed) return send(res, 200, { ok: true });
-        syncFailureArmed = false;
+        if (syncFailuresArmed === 0) return send(res, 200, { ok: true });
+        syncFailuresArmed -= 1;
         await emit('Sync interrupted');
         return send(res, 503, { ok: false, retryAfterMs: RETRY_AFTER_MS });
       }
@@ -147,9 +147,11 @@ export async function startTodoServer(options: { port?: number; host?: string; e
       case 'POST /control/reset':
         reset();
         return send(res, 204);
-      case 'POST /control/sync-failure':
-        syncFailureArmed = true;
+      case 'POST /control/sync-failure': {
+        const body = (await readJson(req)) as { checks?: unknown };
+        syncFailuresArmed = typeof body.checks === 'number' && body.checks > 0 ? Math.floor(body.checks) : 1;
         return send(res, 202);
+      }
       default:
         return send(res, 404, { error: 'not found' });
     }

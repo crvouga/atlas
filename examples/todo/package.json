@@ -2,7 +2,7 @@
   "name": "atlas-example-todo",
   "version": "0.0.0",
   "private": true,
-  "description": "A tiny todo app specified as statecharts and run by Atlas, through Playwright and through Vitest.",
+  "description": "A tiny todo app specified as statecharts and run by Atlas: through Playwright, through Vitest, and across a phone, a desktop and a server at once.",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -11,13 +11,17 @@
     "atlas:plan": "atlas plan",
     "atlas:run": "atlas run --mode showcase",
     "atlas:fast": "atlas run --mode fast",
+    "atlas:clients": "atlas run --config clients/atlas.config.ts --mode showcase",
+    "atlas:clients:bun": "ATLAS_DESKTOP=bun bun --bun atlas run --config clients/atlas.config.ts --mode showcase",
     "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@crvouga/atlas": "workspace:*",
+    "@crvouga/atlas-bun": "workspace:*",
     "@crvouga/atlas-playwright": "workspace:*",
-    "@crvouga/atlas-vitest": "workspace:*"
+    "@crvouga/atlas-vitest": "workspace:*",
+    "@crvouga/atlas-webdriver": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",
