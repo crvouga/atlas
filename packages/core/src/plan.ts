@@ -299,10 +299,10 @@ export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartSco
         if (avoidBlocked && isBlocked(event)) continue;
         let best: { origin: StartPoint; path: string[] } | null = null;
         startPoints.forEach((point, i) => {
-          if (point.for ? !point.for.includes(event) : variantEvents.has(event)) return;
           const first = explored[i]!.firstFired.get(target);
           if (!first) return;
           const path = [...first.from.path, first.event];
+          if (point.for && !path.some((e) => point.for!.includes(e))) return;
           if (point.shows && !sameRegion(point.config, path[0]!, point.shows)) return;
           if (!best || path.length < best.path.length) best = { origin: point, path };
         });

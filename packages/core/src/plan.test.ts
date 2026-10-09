@@ -256,6 +256,17 @@ describe('planChart', () => {
       ]);
       expect(paths.filter((p) => p.seed === 'Free member with a gift card').every((p) => p.steps.some((s) => s.event === 'Orders'))).toBe(true);
       expect(paths.filter((p) => p.steps.some((s) => s.event === 'Orders') && !p.blockedBy.length).every((p) => p.seed === 'Free member with a gift card')).toBe(true);
+
+      // With no journey to cover it, the step after the variant's event still starts from the variant.
+      const bare = bundleOf('.', [chart(product)], []);
+      const lone = planChart(bare, graph, chartScope(bare, composition, graph), {
+        seeds: [
+          { name: 'Free member', at: graph.valueOf('Member') },
+          { name: 'Free member with a gift card', at: graph.valueOf('Member'), for: ['Orders'] }
+        ]
+      });
+      expect(lone.unreachable).toEqual([]);
+      expect(lone.paths.find((p) => p.name === 'Covers: Ordered → Order arrives')).toMatchObject({ seed: 'Free member with a gift card' });
     });
   });
 });
