@@ -67,12 +67,12 @@ export const STATE_TYPES = ['atomic', 'compound', 'parallel', 'final'] as const;
 export type StateType = (typeof STATE_TYPES)[number];
 
 export type StateNodeConfig = {
-  id?: string;
-  initial?: string;
-  type?: 'parallel' | 'final';
-  meta?: StateMeta;
-  states?: Record<string, StateNodeConfig>;
-  on?: Record<string, z.infer<typeof TransitionTargetSchema>>;
+  id?: string | undefined;
+  initial?: string | undefined;
+  type?: 'parallel' | 'final' | undefined;
+  meta?: StateMeta | undefined;
+  states?: Record<string, StateNodeConfig> | undefined;
+  on?: Record<string, z.infer<typeof TransitionTargetSchema>> | undefined;
 };
 
 export const StateNodeSchema: z.ZodType<StateNodeConfig> = z.lazy(() =>
