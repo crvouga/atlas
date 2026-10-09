@@ -78,6 +78,8 @@ export async function main(argv = process.argv.slice(2)) {
   const [command] = argv;
   const configFile = flag(argv, 'config') ?? 'atlas.config.ts';
   const specs = flag(argv, 'specs');
+  const output = flag(argv, 'output');
+  const state = flag(argv, 'state');
 
   if (command === 'export') {
     if (!specs) throw new Error('export needs --specs <dir>');
@@ -102,7 +104,7 @@ export async function main(argv = process.argv.slice(2)) {
     const { config, base } = await loadConfig(configFile);
     const dirs = positionals(argv);
     if (dirs.length < 1) throw new Error('merge needs the run directories to compose');
-    const { runDir, manifest, ok } = mergeConfigRuns(config, dirs, { output: flag(argv, 'output'), state: flag(argv, 'state') }, base);
+    const { runDir, manifest, ok } = mergeConfigRuns(config, dirs, { ...(output === undefined ? {} : { output }), ...(state === undefined ? {} : { state }) }, base);
     const c = manifest.coverage.overall!;
     process.stdout.write(`Merged ${dirs.length} run(s): transitions ${c.transitions.passed}/${c.transitions.total} passed, ${c.transitions.failed} failed\n`);
     process.stdout.write(`Manifest: ${path.join(runDir, 'manifest.json')}\n`);
@@ -111,7 +113,7 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (command === 'lint' || command === 'plan' || command === 'run') {
     const { config, base } = await loadConfig(configFile);
-    const prepared = prepare(config, base, { state: flag(argv, 'state') });
+    const prepared = prepare(config, base, state === undefined ? {} : { state });
     const strict = argv.includes('--require-implementations');
     const structural = prepared.lint.findings.filter((f) => f.rule !== 'implemented');
     const missing = prepared.lint.findings.filter((f) => f.rule === 'implemented');
@@ -136,18 +138,23 @@ export async function main(argv = process.argv.slice(2)) {
       return 0;
     }
     if (structural.length) return 1;
+    const paths = flag(argv, 'paths')?.split(',');
+    const seeds = flags(argv, 'seed');
+    const workers = parseWorkers(flag(argv, 'workers'));
+    const shard = parseShard(flag(argv, 'shard'));
+    const reuse = argv.includes('--rerun-failed') ? 'latest' : flag(argv, 'reuse');
     const { runDir, manifest, ok } = await runConfig(
       config,
       {
         mode: (flag(argv, 'mode') ?? 'fast') as RunMode,
-        paths: flag(argv, 'paths')?.split(','),
-        seeds: flags(argv, 'seed').length ? flags(argv, 'seed') : undefined,
-        state: flag(argv, 'state'),
+        ...(paths === undefined ? {} : { paths }),
+        ...(seeds.length ? { seeds } : {}),
+        ...(state === undefined ? {} : { state }),
         retry: !argv.includes('--no-retry'),
-        output: flag(argv, 'output'),
-        workers: parseWorkers(flag(argv, 'workers')),
-        shard: parseShard(flag(argv, 'shard')),
-        reuse: argv.includes('--rerun-failed') ? 'latest' : flag(argv, 'reuse')
+        ...(output === undefined ? {} : { output }),
+        ...(workers === undefined ? {} : { workers }),
+        ...(shard === undefined ? {} : { shard }),
+        ...(reuse === undefined ? {} : { reuse })
       },
       base
     );

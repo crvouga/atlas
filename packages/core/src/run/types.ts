@@ -30,7 +30,7 @@ type TimelineState = { origin: number; entries: TimelineEntry[] };
  */
 export class Timeline {
   private readonly state: TimelineState;
-  readonly client?: string;
+  readonly client: string | undefined;
 
   constructor(state: TimelineState = { origin: Date.now(), entries: [] }, client?: string) {
     this.state = state;

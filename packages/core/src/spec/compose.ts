@@ -66,9 +66,9 @@ export function composeCharts(bundle: SpecBundle): Composition {
           })
         );
       const states = retarget(child.states ?? {});
-      const { invoke: _invoke, ...withoutInvoke } = node;
+      const { invoke: _invoke, initial: _initial, on: _on, ...withoutInvoke } = node;
       const on = Object.fromEntries(Object.entries(node.on ?? {}).filter(([event]) => !consumed.has(event)));
-      return { ...withoutInvoke, initial: child.initial, states, ...(Object.keys(on).length ? { on } : { on: undefined }) };
+      return { ...withoutInvoke, ...(child.initial === undefined ? {} : { initial: child.initial }), states, ...(Object.keys(on).length ? { on } : {}) };
     }
     if (!node.states) return node;
     return {

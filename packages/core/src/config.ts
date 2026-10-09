@@ -55,18 +55,20 @@ export type PrepareOptions = {
 export function prepare<C>(config: AtlasConfig<C>, baseDirectory = process.cwd(), options: PrepareOptions = {}) {
   const specs = path.resolve(baseDirectory, config.specs);
   const bundle = loadSpecDirectory(specs);
-  const structure = lintBundle(bundle, { requiredMeta: config.requiredMeta });
+  const metadata = config.requiredMeta ? { requiredMeta: config.requiredMeta } : {};
+  const structure = lintBundle(bundle, metadata);
+  const state = options.state ?? config.state;
   const scope = chartScope(bundle, structure.composition, structure.graph, {
-    chart: config.chart,
-    start: config.start,
-    startLabel: config.startLabel,
-    entryEvents: config.entryEvents,
-    state: options.state ?? config.state
+    ...(config.chart === undefined ? {} : { chart: config.chart }),
+    ...(config.start === undefined ? {} : { start: config.start }),
+    ...(config.startLabel === undefined ? {} : { startLabel: config.startLabel }),
+    ...(config.entryEvents === undefined ? {} : { entryEvents: config.entryEvents }),
+    ...(state === undefined ? {} : { state })
   });
   const impl = config.implementation;
   const implemented = new Set(Object.entries(impl.events).filter(([, e]) => !e.blocked).map(([k]) => k));
   const full = lintBundle(bundle, {
-    requiredMeta: config.requiredMeta,
+    ...metadata,
     scope: { states: scope.states, events: scope.events },
     implementations: { events: implemented, states: new Set(Object.keys(impl.states)) }
   });
@@ -83,7 +85,7 @@ export function prepare<C>(config: AtlasConfig<C>, baseDirectory = process.cwd()
     if (shows && !full.graph.resolve(seed.at).active.includes(shows)) throw new Error(`The seed "${seed.name}" shows "${shows}", which is not active where it starts`);
     for (const event of seed.for ?? []) if (!full.graph.stateNames().some((n) => full.graph.node(n)?.on?.[event])) throw new Error(`The seed "${seed.name}" is for "${event}", which no state handles`);
   }
-  const plan = planChart(bundle, full.graph, scope, { isBlocked, canStart: impl.canStart, seeds, hasSetup: Boolean(impl.setup) });
+  const plan = planChart(bundle, full.graph, scope, { isBlocked, ...(impl.canStart ? { canStart: impl.canStart } : {}), seeds, hasSetup: Boolean(impl.setup) });
   return { bundle, lint: full, scope, plan, specs };
 }
 
@@ -95,9 +97,9 @@ const contextOf = <C>(config: AtlasConfig<C>, prepared: ReturnType<typeof prepar
   implementation: config.implementation,
   journeys: prepared.plan.journeys,
   seeds: prepared.plan.seeds,
-  eventMatchers: config.eventMatchers,
-  privacy: config.privacy,
-  environment: config.environment
+  ...(config.eventMatchers ? { eventMatchers: config.eventMatchers } : {}),
+  ...(config.privacy ? { privacy: config.privacy } : {}),
+  ...(config.environment ? { environment: config.environment } : {})
 });
 
 export type RunCommandOptions = PrepareOptions & {
@@ -140,13 +142,13 @@ export async function runConfig<C>(config: AtlasConfig<C>, options: RunCommandOp
     driver,
     mode: options.mode ?? 'fast',
     outputRoot,
-    retry: options.retry,
-    stepTimeoutMs: config.stepTimeoutMs,
+    ...(options.retry === undefined ? {} : { retry: options.retry }),
+    ...(config.stepTimeoutMs === undefined ? {} : { stepTimeoutMs: config.stepTimeoutMs }),
     eventSources: config.eventSources ? await config.eventSources() : [],
     workers: options.workers ?? config.workers ?? availableParallelism(),
     ...(options.shard ? { shard: options.shard } : {}),
     ...(reused && reuseDir ? { reuse: { runDir: reuseDir, outcomes: reused.outcomes } } : {}),
-    log: options.log
+    ...(options.log ? { log: options.log } : {})
   });
 }
 

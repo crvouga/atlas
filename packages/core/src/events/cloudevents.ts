@@ -38,6 +38,8 @@ export function cloudEventsFromHttp(headers: Record<string, string | string[] | 
   if (contentType.startsWith('application/cloudevents+json')) return [JSON.parse(body) as CloudEvent];
   const type = header('ce-type');
   if (!type) return [];
+  const time = header('ce-time');
+  const subject = header('ce-subject');
   const extensions = Object.fromEntries(
     Object.entries(headers)
       .filter(([k]) => k.startsWith('ce-') && !['ce-specversion', 'ce-id', 'ce-source', 'ce-type', 'ce-time', 'ce-subject'].includes(k))
@@ -58,8 +60,8 @@ export function cloudEventsFromHttp(headers: Record<string, string | string[] | 
       id: header('ce-id') ?? randomUUID(),
       source: header('ce-source') ?? 'unknown',
       type,
-      ...(header('ce-time') ? { time: header('ce-time') } : {}),
-      ...(header('ce-subject') ? { subject: header('ce-subject') } : {}),
+      ...(time ? { time } : {}),
+      ...(subject ? { subject } : {}),
       ...(contentType ? { datacontenttype: contentType } : {}),
       data
     }
