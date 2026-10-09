@@ -48,7 +48,7 @@ afterEach(async () => {
   container.remove();
 });
 
-async function mount() {
+async function mount(exploration = false) {
   const rootRoute = createRootRoute();
   const route = createRoute({
     getParentRoute: () => rootRoute,
@@ -59,7 +59,7 @@ async function mount() {
         view={view}
         chartId="Coffee order"
         layout={layout}
-        selection={useSearch({ strict: false })}
+        selection={{ ...useSearch({ strict: false }), ...(exploration ? { journey: undefined, step: undefined, active: ['Paid, waiting for the barista', 'Updates on'] } : {}) }}
         busy={false}
         hadSavedViewport={false}
         camera={camera}
@@ -97,4 +97,19 @@ it('does not hijack a manually panned viewport when run data refreshes', async (
   flow.setViewport.mockClear();
   await act(async () => router.invalidate());
   expect(flow.setViewport).not.toHaveBeenCalled();
+});
+
+it('focuses all active parallel model states during free exploration', async () => {
+  await mount(true);
+  const [viewport] = flow.setViewport.mock.calls.at(-1)!;
+  expect(viewport.zoom).toBeGreaterThan(0.4);
+  for (const node of layout.nodes.slice(1)) {
+    const x = (node.absX + node.width / 2) * viewport.zoom + viewport.x;
+    const y = (node.absY + node.height / 2) * viewport.zoom + viewport.y;
+    expect(x).toBeGreaterThan(0);
+    expect(x).toBeLessThan(1200);
+    expect(y).toBeGreaterThan(40);
+    expect(y).toBeLessThan(700);
+  }
+  expect(container.querySelector('a')?.getAttribute('href')).toContain('explore=true');
 });
