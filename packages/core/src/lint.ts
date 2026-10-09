@@ -86,8 +86,10 @@ export function lintBundle(bundle: SpecBundle, options: LintOptions = {}) {
   }
 
   const reached = new Set<string>();
-  for (const { config } of graph.explore(graph.initial(), () => true).seen.values()) {
-    for (const name of config.active) reached.add(name);
+  for (const regions of graph.regionSets()) {
+    for (const { config } of graph.explore(graph.initial(), (event) => graph.actsIn(event, regions)).seen.values()) {
+      for (const name of config.active) reached.add(name);
+    }
   }
   for (const name of graph.stateNames()) {
     if (!reached.has(name)) findings.push({ rule: 'reachable', message: `${name} is unreachable from the initial state` });

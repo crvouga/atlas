@@ -290,14 +290,33 @@ export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartSco
   let generated: PlannedPath[] = [];
   if (startPoints.length) {
     for (const avoidBlocked of [true, false]) {
-      const explored = startPoints.map((point) =>
-        graph.explore(point.config, (event) => scope.events.has(event) && (!avoidBlocked || !isBlocked(event)) && (!variantEvents.has(event) || Boolean(point.for?.includes(event))))
-      );
+      const explorations = new Map<string, ReturnType<typeof graph.explore>[]>();
+      const exploredFor = (source: string) => {
+        const regions = graph.regionsOf(source);
+        const key = regions.join('\u0000');
+        if (!explorations.has(key)) {
+          explorations.set(
+            key,
+            startPoints.map((point) =>
+              graph.explore(
+                point.config,
+                (event) =>
+                  scope.events.has(event) &&
+                  (!avoidBlocked || !isBlocked(event)) &&
+                  (!variantEvents.has(event) || Boolean(point.for?.includes(event))) &&
+                  graph.actsIn(event, regions)
+              )
+            )
+          );
+        }
+        return explorations.get(key)!;
+      };
       for (const target of scope.transitions) {
         if (covered.has(target) || planned.has(target)) continue;
         const { source, event } = splitTransitionId(target);
         if (avoidBlocked && isBlocked(event)) continue;
         let best: { origin: StartPoint; path: string[] } | null = null;
+        const explored = exploredFor(source);
         startPoints.forEach((point, i) => {
           const first = explored[i]!.firstFired.get(target);
           if (!first) return;

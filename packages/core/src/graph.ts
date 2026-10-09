@@ -72,6 +72,42 @@ export class ChartGraph {
     return [...this.nodes.keys()];
   }
 
+  /** The parallel regions a state sits in, outermost first: each the child of a parallel ancestor. */
+  regionsOf(state: string): string[] {
+    const regions: string[] = [];
+    for (let child: string | null = state, parent = this.parent(state); parent; child = parent, parent = this.parent(parent)) {
+      if (this.nodes.get(parent)?.type === 'parallel') regions.unshift(child);
+    }
+    return regions;
+  }
+
+  /**
+   * Whether an event can matter to what happens in `regions`: some state that handles it sits in
+   * those regions or outside them (never only in a sibling region). Regions of a statechart
+   * without guards are independent, so exploring one region with the others held still loses
+   * nothing and keeps the search from multiplying across regions.
+   */
+  actsIn(event: string, regions: string[]) {
+    let handled = false;
+    for (const [name, node] of this.nodes) {
+      if (!node.on?.[event]) continue;
+      handled = true;
+      const own = this.regionsOf(name);
+      if (own.every((region, i) => regions[i] === region)) return true;
+    }
+    return !handled;
+  }
+
+  /** Every distinct set of regions a state sits in, the empty set (outside every parallel) first. */
+  regionSets() {
+    const keyed = new Map<string, string[]>([['', []]]);
+    for (const name of this.nodes.keys()) {
+      const regions = this.regionsOf(name);
+      keyed.set(regions.join('\u0000'), regions);
+    }
+    return [...keyed.values()];
+  }
+
   initial(): Config {
     const [snapshot] = initialTransition(this.machine);
     return {

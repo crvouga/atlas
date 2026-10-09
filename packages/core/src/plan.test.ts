@@ -269,4 +269,33 @@ describe('planChart', () => {
       expect(lone.paths.find((p) => p.name === 'Covers: Ordered → Order arrives')).toMatchObject({ seed: 'Free member with a gift card' });
     });
   });
+
+  it('explores one parallel region at a time, holding the others where the seed left them', () => {
+    const chain = (prefix: string, n: number) =>
+      Object.fromEntries(Array.from({ length: n }, (_, i) => [`${prefix} ${i}`, i + 1 < n ? { on: { [`${prefix} next ${i}`]: `${prefix} ${i + 1}` } } : { on: { [`${prefix} back`]: `${prefix} 0` } }]));
+    const machine: MachineConfig = {
+      id: 'Product',
+      initial: 'Member',
+      states: {
+        Member: {
+          type: 'parallel',
+          states: {
+            Left: { initial: 'L 0', states: chain('L', 40) },
+            Right: { initial: 'R 0', states: chain('R', 40) }
+          }
+        }
+      }
+    };
+    const bundle = bundleOf('.', [chart(machine)], []);
+    const { composition, graph, findings } = lintBundle(bundle, { requiredMeta: [] });
+    expect(findings.filter((f) => f.rule === 'reachable')).toEqual([]);
+    const { paths, unreachable } = planChart(bundle, graph, chartScope(bundle, composition, graph));
+    expect(unreachable).toEqual([]);
+    for (const path of paths) {
+      const sides = new Set(path.steps.map((s) => s.event.charAt(0)));
+      expect(sides.size, path.name).toBe(1);
+    }
+    expect(graph.regionsOf('L 3')).toEqual(['Left']);
+    expect(graph.actsIn('R next 1', ['Left'])).toBe(false);
+  });
 });
