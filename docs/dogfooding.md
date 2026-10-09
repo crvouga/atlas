@@ -92,6 +92,15 @@ pnpm -C vendor/atlas test
 pnpm -C vendor/atlas build
 ```
 
+Installing inside the submodule links Atlas's packages to the submodule's own `node_modules`, which
+the consumer's workspace install then trusts as current. Afterwards, relink the consumer before using
+Atlas there (a visualizer that loads two copies of React is the usual symptom):
+
+```sh
+rm -rf vendor/atlas/node_modules vendor/atlas/packages/*/node_modules vendor/atlas/examples/*/node_modules
+pnpm install
+```
+
 Continuously pull and integrate concurrent work rather than waiting until the end. Pull before
 starting. During longer changes, make focused checkpoint commits on `main`, then immediately pull
 again. Also pull immediately before validation and pushing, and whenever upstream movement is
