@@ -11,7 +11,7 @@ import { StatusDot } from '../components/Status';
 import type { ChartLayout } from '../layout/layout';
 import { useUiStore } from '../state/ui-store';
 import type { MapSelection } from './ChartMap';
-import { chartScope, initialState, journeyPath, stepFocus, visibleRepresentative } from './navigation';
+import { chartScope, initialState, journeyPath, rootChart, stepFocus, visibleRepresentative } from './navigation';
 import styles from './map.module.css';
 
 import type { CameraController } from './use-camera';
@@ -106,7 +106,7 @@ export function MapControls({
         return;
       }
     }
-    const focus = stepFocus(view, journey, selection.step);
+    const focus = selection.active ?? stepFocus(view, journey, selection.step);
     if (focus.length) {
       fit(focus, !first);
       return;
@@ -159,7 +159,7 @@ export function MapControls({
   const choose = (name: string) => {
     setSearching(false);
     setQuery('');
-    void navigate({ to: '/chart/$chartId', params: { chartId }, search: (prev) => ({ run: prev.run, journey: prev.journey, step: prev.step, screen: name }) });
+    void navigate({ to: '/chart/$chartId', params: { chartId }, search: (prev) => ({ ...prev, screen: name, event: undefined }) });
   };
   const containers = [...view.states.values()].filter((state) => scope.has(state.chartId) && (state.childChartId || state.children.length));
   const chart = view.charts.get(chartId);
@@ -170,6 +170,7 @@ export function MapControls({
   return (
     <>
       <div className={`${styles.toolbar} nodrag nopan`} role="toolbar" aria-label="Map controls">
+        <Link to="/chart/$chartId" params={{ chartId: rootChart(view, chartId) }} search={(prev) => ({ ...prev, explore: true, journey: undefined, step: undefined })} className={styles.toolButton} data-active={Boolean(selection.active)}>Explore freely</Link>
         {journeys.length > 0 && (
           <Popover.Root>
             <Popover.Trigger className={styles.toolButton} data-active={Boolean(journey)}>

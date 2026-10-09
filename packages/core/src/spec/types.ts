@@ -27,6 +27,7 @@ export type StateMeta = {
   confidence?: 'confirmed' | 'assumed';
   source?: string[];
   checks?: string[];
+  contracts?: { id: string; name: string; source: string; description?: string; steps: { keyword: string; text: string; table?: string[][]; docString?: string }[] }[];
   deadEnd?: string;
   /** Legacy composition: the chart that runs inside this state. Prefer `invoke`. */
   childMachine?: string;

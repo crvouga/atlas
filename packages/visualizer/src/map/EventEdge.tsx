@@ -46,7 +46,7 @@ export const EventEdge = memo(function EventEdge({ data, id }: EdgeProps<EventEd
         <Link
           to="/chart/$chartId"
           params={{ chartId }}
-          search={(prev) => ({ run: prev.run, event: t.id, journey: prev.journey, step: step === null ? prev.step : step - 1 })}
+          search={(prev) => ({ ...prev, screen: undefined, event: t.id, step: step === null ? prev.step : step - 1 })}
           className={`${styles.chip} nodrag nopan`}
           data-kind={t.kind}
           data-status={t.status}

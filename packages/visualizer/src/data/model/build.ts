@@ -6,6 +6,7 @@ import type { SpecDocument } from '../parse/spec';
 import { resolveEventKind } from './event-kind';
 import { createJourneyReplayer, type ReplayResult } from './journeys';
 import { emptyCounts, worstOf } from './status';
+import { createSimulationFactory } from './simulation';
 import type {
   AtlasView,
   ChartView,
@@ -146,6 +147,7 @@ export function buildAtlasView(input: BuildInput): AtlasView {
       tier: s.meta.tier ?? null,
       quint: s.meta.quint ?? null,
       gherkin: s.meta.gherkin ?? [],
+      contracts: s.meta.contracts ?? [],
       design: s.meta.design ?? null,
       hints: s.meta.hints ?? [],
       specChecks: s.meta.checks ?? [],
@@ -298,6 +300,7 @@ export function buildAtlasView(input: BuildInput): AtlasView {
       dir: c.dir,
       contextId: c.contextId,
       description: c.meta.description ?? '',
+      contracts: c.meta.contracts ?? [],
       parent: c.parent,
       childChartIds: doc.charts.filter((x) => x.parent?.chartId === c.id).map((x) => x.id),
       initial: c.initial,
@@ -360,6 +363,7 @@ export function buildAtlasView(input: BuildInput): AtlasView {
     : null;
 
   return {
+    simulation: createSimulationFactory(doc),
     title: doc.title,
     description: doc.description,
     ref: doc.ref,

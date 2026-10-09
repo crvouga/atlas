@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { loadFixture } from '../data/testing/load-fixture';
-import { ancestors, chartScope, journeyChart, journeyPath, stepFocus, visibleRepresentative } from './navigation';
+import { ancestors, chartScope, journeyChart, journeyPath, rootChart, stepFocus, visibleRepresentative } from './navigation';
 
 const { view } = loadFixture('full');
 const journey = view.journeys.find((j) => j.name === 'Orders a drink and pays by card')!;
@@ -46,5 +46,10 @@ describe('journey navigation across composition boundaries', () => {
   it('includes child charts in navigation scope', () => {
     expect(chartScope(view, 'Coffee order')).toEqual(new Set(['Coffee order', 'Checkout']));
     expect(chartScope(view, 'Checkout')).toEqual(new Set(['Checkout']));
+  });
+
+  it('starts free exploration of a child from its complete composed product', () => {
+    expect(rootChart(view, 'Checkout')).toBe('Coffee order');
+    expect(rootChart(view, 'Coffee order')).toBe('Coffee order');
   });
 });

@@ -14,7 +14,7 @@ import { MapControls } from './MapControls';
 import { nodeTypes, type ChartLinkNodeType, type ContextNodeType, type GroupNodeType, type ScreenNodeType } from './nodes';
 
 type MapNode = ScreenNodeType | GroupNodeType | ChartLinkNodeType | ContextNodeType;
-export type MapSelection = { screen?: string; event?: string; journey?: string; step?: number };
+export type MapSelection = { screen?: string; event?: string; journey?: string; step?: number; active?: string[]; fired?: string[] };
 const MINIMAP_COLOR: Record<ItemStatus, string> = {
   passed: '#8fd0ab',
   flaky: '#f0c072',
@@ -37,7 +37,7 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout, 
   const path = useMemo(() => journeyPath(view, journey), [view, journey]);
   return useMemo(() => {
     const visible = new Set(layout.nodes.map((n) => n.id));
-    const active = new Set(stepFocus(view, journey, selection.step).map((id) => visibleRepresentative(view, id, visible)));
+    const active = new Set((selection.active ?? stepFocus(view, journey, selection.step)).map((id) => visibleRepresentative(view, id, visible)));
     const nodes: MapNode[] = layout.nodes.flatMap((n): MapNode[] => {
       const state = view.states.get(n.id);
       if (!state) return [];
@@ -83,7 +83,7 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout, 
       const transition = view.transitions.get(e.transitionId);
       if (!transition) return [];
       const indices = path.transitions.get(e.transitionId);
-      const current = selection.step !== undefined && Boolean(indices?.includes(selection.step));
+      const current = Boolean(selection.fired?.includes(e.transitionId)) || (selection.step !== undefined && Boolean(indices?.includes(selection.step)));
       const step = indices ? (current ? selection.step! : indices[0]!) + 1 : null;
       return [
         {
@@ -98,7 +98,7 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout, 
       ];
     });
     return { nodes, edges };
-  }, [view, chartId, layout, journey, path, selection.screen, selection.event, selection.step, compact]);
+  }, [view, chartId, layout, journey, path, selection.screen, selection.event, selection.step, selection.active, selection.fired, compact]);
 }
 
 function Flow({
@@ -208,7 +208,7 @@ export function ChartMap({ view, chartId, selection }: { view: AtlasView; chartI
       ? [selection.screen]
       : event
         ? [event.source, ...(event.target ? [event.target] : [])]
-        : stepFocus(view, journey, selection.step);
+        : (selection.active ?? stepFocus(view, journey, selection.step));
     if (!targets.length) return;
     const scope = chartScope(view, chartId);
     const parents = new Set(targets.flatMap((id) => ancestors(view, id)).filter((id) => scope.has(view.states.get(id)?.chartId ?? '')));
@@ -217,7 +217,7 @@ export function ChartMap({ view, chartId, selection }: { view: AtlasView; chartI
     const collapsed = current.collapsed.filter((id) => !parents.has(id));
     if (expanded.length !== current.expanded.length || collapsed.length !== current.collapsed.length)
       useUiStore.getState().setDetails(chartId, { expanded, collapsed });
-  }, [chartId, selection.screen, selection.event, selection.journey, selection.step, view]);
+  }, [chartId, selection.screen, selection.event, selection.journey, selection.step, selection.active, view]);
   const input = useMemo(() => {
     let graph = chartGraph(view, chartId, details);
     if (!graph) return graph;

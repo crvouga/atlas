@@ -12,7 +12,10 @@ const ChartSearch = RootSearch.extend({
   event: z.string().min(1).optional().catch(undefined),
   journey: z.string().min(1).optional().catch(undefined),
   step: z.coerce.number().int().nonnegative().optional().catch(undefined),
-  t: z.coerce.number().nonnegative().optional().catch(undefined)
+  t: z.coerce.number().nonnegative().optional().catch(undefined),
+  explore: z.boolean().optional().catch(undefined),
+  choices: z.array(z.string().min(1)).max(1000).optional().catch(undefined),
+  cursor: z.coerce.number().int().nonnegative().optional().catch(undefined)
 });
 
 export type ChartSearch = z.infer<typeof ChartSearch>;

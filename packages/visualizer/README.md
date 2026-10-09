@@ -35,6 +35,31 @@ keeping selection, zoom and pan.
 
 ### Explore large charts
 
+Choose **Explore** on the product page, or **Explore freely** on any chart, to start an interactive
+model session from the composed root. The current states are shown together and highlighted on
+the map. Available events are grouped into a person's choices, outside outcomes and time passing;
+each choice previews its destination. Child-machine hand-offs complete automatically. Outcome
+names and the source rules explain their conditions: this pure model does not invent identities,
+payments, clocks or other application data.
+
+**Undo**, **Redo**, **Reset** and the choice history let you revisit and branch from any point.
+The choice sequence and history position live in the URL, so reloads, browser history and **Share**
+replay the same model session. A changed spec or unavailable event stops visibly; it never silently
+skips the input. Search matches available events, states and embedded business rules. **Find a route**
+searches from the current configuration and offers the shortest sequence of choices, including
+automatic hand-offs. Following it replays those choices rather than teleporting. Transient child
+finals are searchable too. Exhaustive unreachability is distinguished from the 2,000-configuration
+search budget: a budget stop means reachability is unknown. Guards, executable actions and other
+unsupported statechart behavior disable free exploration instead of being ignored.
+
+Optional `meta.contracts` embeds a capability's authoritative examples alongside the chart:
+`{ id, name, source, description?, steps: [{ keyword, text, table?, docString? }] }`. State details
+show the nearest owning capability's catalog as **Rules for this capability**, preserving exact
+Given/When/Then text, tables, doc strings and source references. Chart-level contracts form a root
+catalog. Search includes the rules, and can find a route to their owning capability. Generate these
+records from your specifications to keep one authored source of truth. They explain behavior;
+exploration never marks them as executed checks or application evidence.
+
 Use **Show details** on a child machine or collapsed group to explore its interior in place.
 **Hide details** returns it to a summary card; incoming and outgoing events stay connected.
 **Collapse all** gives a high-level map, while **Expand all** opens every nested group and child.

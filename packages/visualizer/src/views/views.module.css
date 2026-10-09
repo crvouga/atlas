@@ -69,6 +69,9 @@
   grid-template-columns: 18rem minmax(0, 1fr) var(--panel-w);
 }
 
+.chartView[data-explore='true'] { grid-template-columns: 22rem minmax(0, 1fr); }
+.chartView[data-explore='true'][data-panel='true'] { grid-template-columns: 22rem minmax(0, 1fr) var(--panel-w); }
+
 .mapArea {
   position: relative;
   min-width: 0;
@@ -1075,6 +1078,8 @@
 }
 
 @media (max-width: 1100px) {
+  .chartView[data-explore='true'][data-panel='true'] { grid-template-columns: 20rem minmax(0, 1fr); }
+  .chartView[data-explore='true'][data-panel='true'] .panel { position: fixed; right: 0; top: 4rem; bottom: 0; width: var(--panel-w); z-index: 30; box-shadow: var(--shadow-pop); }
   .chartView[data-journey='true'][data-panel='true'] {
     grid-template-columns: minmax(0, 1fr) var(--panel-w);
   }
@@ -1084,6 +1089,9 @@
 }
 
 @media (max-width: 900px) {
+  .chartView[data-explore='true'], .chartView[data-explore='true'][data-panel='true'] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .chartView[data-explore='true'] .mapArea { grid-row: 1; }
+  .chartView[data-explore='true'][data-panel='true'] .panel { top: auto; left: 0; width: auto; }
   .chartView[data-panel='true'],
   .chartView[data-journey='true'],
   .chartView[data-journey='true'][data-panel='true'] {

@@ -1,5 +1,6 @@
 import type {
   BusinessEvents,
+  BusinessContract,
   CheckResult,
   Confidence,
   DataIssue,
@@ -12,6 +13,7 @@ import type {
   StateType,
   TimelineEntry
 } from '@crvouga/atlas-schema';
+import type { ChartSimulation } from './simulation';
 
 export const ITEM_STATUSES = ['passed', 'flaky', 'failed', 'not-reached', 'not-yet-run', 'spec-only'] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
@@ -87,6 +89,7 @@ export type StateView = {
   tier: string | null;
   quint: string | null;
   gherkin: string[];
+  contracts: BusinessContract[];
   design: DesignLink | null;
   hints: string[];
   specChecks: string[];
@@ -175,6 +178,7 @@ export type ChartView = {
   dir: string;
   contextId: string;
   description: string;
+  contracts: BusinessContract[];
   parent: { chartId: string; state: string } | null;
   childChartIds: string[];
   initial: string | null;
@@ -241,6 +245,7 @@ export type RemovedTransition = {
 };
 
 export type AtlasView = {
+  simulation: (chartId: string) => ChartSimulation;
   title: string;
   description: string;
   ref: string | null;

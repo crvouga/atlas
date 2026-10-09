@@ -31,6 +31,7 @@ export function ProductPage() {
             {view.description ||
               'How the product behaves, part by part: every screen a user can see, every event that moves them on, and whether the latest run of the app did what the spec says.'}
           </p>
+          {[...view.charts.values()].filter((chart) => !chart.parent).map((chart) => <Link key={chart.id} to="/chart/$chartId" params={{ chartId: chart.id }} search={(prev) => ({ run: prev.run, explore: true })} className={styles.button}>Explore {chart.name}</Link>)}
         </div>
         <div className={styles.contexts}>
           {view.contexts.map((ctx) => {

@@ -55,6 +55,16 @@ export function chartScope(view: AtlasView, chartId: string): Set<string> {
   return scope;
 }
 
+export function rootChart(view: AtlasView, chartId: string): string {
+  const seen = new Set<string>();
+  let chart = view.charts.get(chartId);
+  while (chart?.parent && !seen.has(chart.id)) {
+    seen.add(chart.id);
+    chart = view.charts.get(chart.parent.chartId);
+  }
+  return chart?.id ?? chartId;
+}
+
 /** Keep a journey in its composed root when a step leaves a drilled-in child chart. */
 export function journeyChart(view: AtlasView, chartId: string, journey: JourneyView, index: number | undefined): string {
   const scope = chartScope(view, chartId);

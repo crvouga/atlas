@@ -8,6 +8,8 @@ import { KIND_LABEL, KindIcon } from '../components/labels';
 import { ScreenImage } from '../components/Screen';
 import { StatusBadge, StatusDot } from '../components/Status';
 import type { MapSelection } from '../map/ChartMap';
+import { contractsForState } from '../data/model/contracts';
+import { RuleCards } from './RuleCards';
 import styles from './views.module.css';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -26,7 +28,7 @@ function EventLink({ t, view, direction }: { t: TransitionView; view: AtlasView;
     <Link
       to="/chart/$chartId"
       params={{ chartId: view.states.get(direction === 'in' ? (t.target ?? t.source) : t.source)?.chartId ?? t.chartId }}
-      search={(prev) => ({ run: prev.run, event: t.id, journey: prev.journey, step: prev.step })}
+      search={(prev) => ({ ...prev, screen: undefined, event: t.id })}
       className={styles.eventRow}
     >
       <span className={styles.inlineChip} data-kind={t.kind} data-status={t.status}>
@@ -104,6 +106,7 @@ function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
         <h2 className={styles.panelTitle}>{state.name}</h2>
       </div>
       {state.description && <p className={styles.lead}>{state.description}</p>}
+      <RuleCards {...contractsForState(view, state.name)} />
       <p className={styles.statusNote}>{STATUS_DESCRIPTION[state.status]}</p>
       {(state.kind === 'screen' || state.kind === 'final') && (
         <div className={styles.bigShot}>
@@ -357,7 +360,7 @@ export function SidePanel({ view, chartId, selection }: { view: AtlasView; chart
       <Link
         to="/chart/$chartId"
         params={{ chartId }}
-        search={(prev) => ({ run: prev.run, journey: state || transition ? prev.journey : undefined, step: prev.step })}
+        search={(prev) => ({ ...prev, screen: undefined, event: undefined, journey: state || transition ? prev.journey : undefined })}
         className={styles.close}
         aria-label="Close panel"
       >

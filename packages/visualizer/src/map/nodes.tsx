@@ -27,7 +27,7 @@ export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNod
     <Link
       to="/chart/$chartId"
       params={{ chartId }}
-      search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey, step: prev.step })}
+      search={(prev) => ({ ...prev, screen: state.name, event: undefined })}
       className={styles.screen}
       data-status={state.status}
       data-selected={selected}
@@ -77,7 +77,7 @@ export const GroupNode = memo(function GroupNode({ data }: NodeProps<GroupNodeTy
         <Link
           to="/chart/$chartId"
           params={{ chartId }}
-          search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey, step: prev.step })}
+          search={(prev) => ({ ...prev, screen: state.name, event: undefined })}
           className={styles.groupName}
           title={state.name}
         >
@@ -89,7 +89,7 @@ export const GroupNode = memo(function GroupNode({ data }: NodeProps<GroupNodeTy
           <Link
             to="/chart/$chartId"
             params={{ chartId: state.childChartId }}
-            search={(prev) => ({ run: prev.run, journey: prev.journey, step: prev.step })}
+            search={(prev) => ({ ...prev, screen: undefined, event: undefined })}
             className={styles.chartCta}
           >
             Open chart
@@ -134,7 +134,7 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
         <Link
           to="/chart/$chartId"
           params={{ chartId }}
-          search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey, step: prev.step })}
+          search={(prev) => ({ ...prev, screen: state.name, event: undefined })}
           className={styles.groupName}
         >
           {state.name}
@@ -156,7 +156,7 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
           <Link
             to="/chart/$chartId"
             params={{ chartId: chart.id }}
-            search={(prev) => ({ run: prev.run, journey: prev.journey, step: prev.step })}
+            search={(prev) => ({ ...prev, screen: undefined, event: undefined })}
             className={styles.chartCta}
           >
             Open chart
@@ -177,7 +177,7 @@ export const ContextNode = memo(function ContextNode({ data }: NodeProps<Context
     <Link
       to="/chart/$chartId"
       params={{ chartId: state.chartId }}
-      search={(prev) => ({ run: prev.run, screen: state.name })}
+      search={(prev) => ({ ...prev, screen: state.name, event: undefined })}
       className={styles.context}
       data-dimmed={dimmed}
       aria-label={`${state.name}, in ${chart?.name ?? 'another chart'}. ${STATUS_LABEL[state.status]}.`}

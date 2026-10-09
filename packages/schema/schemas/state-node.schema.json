@@ -83,6 +83,67 @@
             "type": "string"
           }
         },
+        "contracts": {
+          "description": "Business rules and their exact Given/When/Then examples, copied from the authoritative source",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string"
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "keyword": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "table": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "docString": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "keyword",
+                    "text"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "source",
+              "steps"
+            ]
+          }
+        },
         "design": {
           "type": "object",
           "properties": {

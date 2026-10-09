@@ -11,6 +11,21 @@ export const DesignLinkSchema = z.object({
 });
 export type DesignLink = z.infer<typeof DesignLinkSchema>;
 
+export const ContractStepSchema = z.object({
+  keyword: z.string().min(1),
+  text: z.string(),
+  table: z.array(z.array(z.string())).optional(),
+  docString: z.string().optional()
+});
+export const BusinessContractSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  source: z.string().min(1),
+  description: z.string().optional(),
+  steps: z.array(ContractStepSchema)
+});
+export type BusinessContract = z.infer<typeof BusinessContractSchema>;
+
 /**
  * Every field a state's `meta` may carry. Each one is optional on its own: the visualizer keeps
  * the fields that parse and reports the ones that don't.
@@ -29,6 +44,7 @@ export const StateMetaShape = {
   tier: z.string(),
   quint: z.string().describe('Quint model reference'),
   gherkin: z.array(z.string()).describe('Feature files or scenarios that cover the state'),
+  contracts: z.array(BusinessContractSchema).describe('Business rules and their exact Given/When/Then examples, copied from the authoritative source'),
   design: DesignLinkSchema,
   hints: z.array(z.string()).describe('What the screen shows, for the placeholder sketch'),
   eventKinds: z
