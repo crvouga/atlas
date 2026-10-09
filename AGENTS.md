@@ -11,11 +11,16 @@ changing Atlas from inside a consumer project's submodule.
 
 Assume other agents working in other consumer projects may push Atlas changes at any time:
 
-- Fetch `origin` before starting and again immediately before publishing a change.
-- Develop on a short-lived, uniquely named branch based on the latest `origin/main`; submodules
-  commonly start on a detached HEAD, so do not commit there.
-- Rebase onto the latest `origin/main`, resolve conflicts deliberately, and rerun relevant checks.
-- Never force-push a shared branch and never overwrite or discard changes merely because they came
+- Work only on `main`. If a submodule starts on a detached HEAD, switch to `main` before editing or
+  committing. Do not create any branch.
+- Keep local `main` continuously synchronized with upstream by running
+  `git pull --rebase origin main` before editing, after every focused checkpoint commit during
+  longer work, immediately before validation and pushing, and whenever upstream movement is
+  detected. Never continue working from a known-stale checkout.
+- Always expect conflicts from other projects. Resolve them deliberately on `main`, preserve the
+  intent of concurrent changes, rerun relevant checks, and keep integrating until the push
+  succeeds.
+- Never force-push, destructively reset, or overwrite or discard changes merely because they came
   from another project.
 - Commit and push the Atlas change in this repository before updating a consumer repository's
   submodule pointer. A consumer must never point at a commit that exists only locally.

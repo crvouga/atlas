@@ -71,17 +71,18 @@ First decide where the change belongs:
 - Reusable library, driver, schema, documentation, or tooling behavior belongs in Atlas.
 
 From the consumer repository, prepare the submodule for an Atlas change. A freshly initialized
-submodule is usually on a detached HEAD, so always create a branch before committing:
+submodule is usually on a detached HEAD, so attach it to `main` before editing and remain on
+`main` for the entire change:
 
 ```sh
 git -C vendor/atlas status --short --branch
-git -C vendor/atlas fetch origin
-git -C vendor/atlas switch -c dogfood/<consumer>-<change> origin/main
+git -C vendor/atlas switch main
+git -C vendor/atlas pull --rebase origin main
 ```
 
-Use a unique, descriptive branch name because agents in other projects are doing the same work.
-Make the change inside `vendor/atlas`, add or update Atlas tests, and validate it from the Atlas
-root:
+Do not create any branch. Other projects continuously publish to the same `main`, so expect upstream
+to move and expect conflicts while working. Make the change inside `vendor/atlas`, add or update
+Atlas tests, and validate it from the Atlas root:
 
 ```sh
 pnpm -C vendor/atlas install --frozen-lockfile
@@ -90,26 +91,27 @@ pnpm -C vendor/atlas test
 pnpm -C vendor/atlas build
 ```
 
-Before pushing, account for concurrent work:
+Continuously pull and integrate concurrent work rather than waiting until the end. Pull before
+starting. During longer changes, make focused checkpoint commits on `main`, then immediately pull
+again. Also pull immediately before validation and pushing, and whenever upstream movement is
+detected. Never knowingly continue from a stale checkout:
 
 ```sh
-git -C vendor/atlas fetch origin
-git -C vendor/atlas rebase origin/main
-# Rerun the relevant checks after any rebase or conflict resolution.
-git -C vendor/atlas push -u origin HEAD
+git -C vendor/atlas pull --rebase origin main
+git -C vendor/atlas push origin main
 ```
 
-Open and merge the Atlas change through the repository's normal review flow. Do not force-push over
-someone else's branch or push directly to `main`. If upstream moved, fetch, rebase, revalidate, and
-retry. Resolve conflicts according to intended behavior; never discard an unfamiliar change just
-to make the rebase pass.
+Conflicts are a normal and expected part of this workflow, not a reason to stop or create a branch.
+Inspect both sides, preserve the intent of concurrent changes, resolve each conflict on `main`,
+stage the resolutions, continue the rebase, and rerun relevant checks. If a push is rejected because
+upstream moved again, immediately pull with rebase, resolve, revalidate, and retry until the change
+is integrated. Never force-push, destructively reset, or discard unfamiliar work just to make the
+integration pass.
 
-Only after the Atlas commit is pushed and merged should the consumer move its submodule pointer to
-the merged commit:
+Only after the Atlas commit is pushed to `main` should the consumer move its submodule pointer to
+that commit:
 
 ```sh
-git -C vendor/atlas fetch origin
-git -C vendor/atlas switch --detach origin/main
 git add vendor/atlas
 git commit -m "chore: update Atlas submodule"
 ```
@@ -124,8 +126,8 @@ To deliberately advance a consumer to the current upstream `main`:
 
 ```sh
 git -C vendor/atlas status --short
-git -C vendor/atlas fetch origin
-git -C vendor/atlas switch --detach origin/main
+git -C vendor/atlas switch main
+git -C vendor/atlas pull --rebase origin main
 pnpm install
 ```
 
@@ -134,15 +136,19 @@ command shows local Atlas changes; preserve or publish that work before moving t
 
 ## Rules that keep concurrent dogfooding safe
 
-1. Fetch before starting and immediately before publishing Atlas work.
+1. Work only on `main`; do not create branches for Atlas dogfooding changes.
 2. Never commit Atlas work on a detached HEAD.
-3. Use a new branch based on `origin/main` for each independent change.
-4. Keep each Atlas change reusable and focused; do not add a consumer project's private behavior.
-5. Push the Atlas commit before recording it in a consumer repository.
-6. Never use a force push or destructive reset to erase concurrent work.
-7. Re-run Atlas checks after rebasing, then test the consuming integration before updating its
+3. Pull with rebase continuously: before editing, after every focused checkpoint commit during
+   longer work, immediately before validation and pushing, and whenever upstream changes are
+   detected. Never knowingly work from stale `main`.
+4. Always expect conflicts from other projects. Resolve them deliberately on `main` and keep
+   integrating until the push succeeds.
+5. Keep each Atlas change reusable and focused; do not add a consumer project's private behavior.
+6. Push the Atlas commit before recording it in a consumer repository.
+7. Never use a force push or destructive reset to erase concurrent work.
+8. Re-run Atlas checks after rebasing, then test the consuming integration before updating its
    pointer.
-8. Commit submodule pointer updates explicitly so every consumer upgrade is reproducible and
+9. Commit submodule pointer updates explicitly so every consumer upgrade is reproducible and
    reviewable.
 
 ## Later npm migration
