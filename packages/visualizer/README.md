@@ -33,6 +33,29 @@ to where you ran it, or the current directory) and `ATLAS_FIXTURE`. With nothing
 Editing a spec file or a run finishing updates the open page in about a second, without a reload,
 keeping selection, zoom and pan.
 
+### Explore large charts
+
+Use **Show details** on a child machine or collapsed group to explore its interior in place.
+**Hide details** returns it to a summary card; incoming and outgoing events stay connected.
+**Collapse all** gives a high-level map, while **Expand all** opens every nested group and child.
+Detail levels are remembered per chart during the browser session, along with zoom and pan.
+**Compact** replaces screenshot cards with smaller state cards. Saved layout pins apply to the
+original view; alternate detail levels are laid out automatically.
+
+Select a journey to open its navigator. The full path is highlighted and unrelated branches fade.
+Choose any step, use **Previous / Next**, or **Play / Pause** to follow the journey. Each step reveals
+its destination and focuses the camera, including parallel branches and child-machine hand-offs.
+**Inspect this event** opens the recording and details while keeping your place in the journey.
+**Path only** hides unrelated states and events and lays out the remaining path. **Fit journey**
+shows the full route; **Back to path overview** leaves step mode. Journey and step live in the URL
+so browser history and shared links preserve your place.
+
+Search **Find a state** to jump directly into any nested state; its ancestors open automatically.
+Use arrow keys and Enter in search. On the map, `/` opens search, `F` fits the map or journey,
+`←` / `→` moves through journey steps, Space plays or pauses, and Escape returns to path overview.
+Minimap and legend controls keep orientation and event meanings available without covering the map.
+On smaller screens the journey navigator moves below the map and details open as a bottom sheet.
+
 ### Commands
 
 ```sh

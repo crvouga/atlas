@@ -12,6 +12,8 @@
     "test": "pnpm -r test",
     "type-check": "pnpm -r type-check",
     "schemas": "pnpm --filter @crvouga/atlas-schema schemas",
-    "example": "pnpm --filter atlas-example-todo run atlas:run"
+    "example": "pnpm --filter atlas-example-todo run atlas:run",
+    "example:run": "pnpm --filter atlas-example-todo run atlas:run",
+    "example:viz": "node packages/visualizer/bin/atlas-visualizer.mjs dev --specs examples/todo/specs --runs examples/todo/atlas-runs"
   }
 }

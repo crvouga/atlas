@@ -4,7 +4,8 @@ import { memo } from 'react';
 
 import { STATUS_LABEL, type ChartView, type StateView } from '../data/model';
 import { ScreenImage } from '../components/Screen';
-import { StatusDot, SummaryBar } from '../components/Status';
+import { StatusDot } from '../components/Status';
+import { useUiStore } from '../state/ui-store';
 import styles from './map.module.css';
 
 function Handles() {
@@ -16,25 +17,29 @@ function Handles() {
   );
 }
 
-export type ScreenNodeData = { state: StateView; chartId: string; selected: boolean; dimmed: boolean };
+export type ScreenNodeData = { state: StateView; chartId: string; selected: boolean; dimmed: boolean; active: boolean; onPath: boolean; compact: boolean };
 export type ScreenNodeType = Node<ScreenNodeData, 'screen'>;
 
 export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNodeType>) {
-  const { state, chartId, selected, dimmed } = data;
+  const { state, chartId, selected, dimmed, active, onPath, compact } = data;
   return (
     <Link
       to="/chart/$chartId"
       params={{ chartId }}
-      search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey })}
+      search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey, step: prev.step })}
       className={styles.screen}
       data-status={state.status}
       data-selected={selected}
       data-dimmed={dimmed}
+      data-active={active}
+      data-path={onPath}
+      data-compact={compact}
       data-final={state.kind === 'final'}
       aria-label={`${state.name}. Screen, ${STATUS_LABEL[state.status]}.`}
       aria-current={selected ? 'true' : undefined}
     >
-      <ScreenImage state={state} size="thumb" />
+      {!compact && <ScreenImage state={state} size="thumb" />}
+      {compact && <span className={styles.chartEyebrow}>{state.kind === 'final' ? 'Final state' : 'Screen'}</span>}
       <span className={styles.screenLabel}>
         <StatusDot status={state.status} />
         <span>{state.name}</span>
@@ -45,49 +50,114 @@ export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNod
   );
 });
 
-export type GroupNodeData = { state: StateView; variant: 'group' | 'region' | 'parallel'; dimmed: boolean };
+export type GroupNodeData = { state: StateView; chartId: string; variant: 'group' | 'region' | 'parallel'; dimmed: boolean; active: boolean; onPath: boolean };
 export type GroupNodeType = Node<GroupNodeData, 'group'>;
 
 export const GroupNode = memo(function GroupNode({ data }: NodeProps<GroupNodeType>) {
-  const { state, variant, dimmed } = data;
+  const { state, chartId, variant, dimmed, active, onPath } = data;
+  const toggle = useUiStore((s) => s.toggleDetail);
   return (
-    <div className={styles.group} data-variant={variant} data-dimmed={dimmed} role="group" aria-label={`${state.name}${variant === 'parallel' ? ', parts that run side by side' : ''}`}>
+    <div
+      className={styles.group}
+      data-variant={variant}
+      data-dimmed={dimmed}
+      data-active={active}
+      data-path={onPath}
+      role="group"
+      aria-label={`${state.name}${variant === 'parallel' ? ', parts that run side by side' : ''}`}
+    >
       <span className={styles.groupLabel}>
         <StatusDot status={state.status} />
-        {state.name}
-        {variant === 'parallel' && <span className={styles.groupTag}>Side by side</span>}
+        <Link
+          to="/chart/$chartId"
+          params={{ chartId }}
+          search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey, step: prev.step })}
+          className={styles.groupName}
+          title={state.name}
+        >
+          {state.name}
+        </Link>
+        {variant === 'parallel' && <span className={styles.groupTag}>Parallel</span>}
+        {state.childChartId && <span className={styles.groupTag}>Child machine</span>}
+        {state.childChartId && (
+          <Link
+            to="/chart/$chartId"
+            params={{ chartId: state.childChartId }}
+            search={(prev) => ({ run: prev.run, journey: prev.journey, step: prev.step })}
+            className={styles.chartCta}
+          >
+            Open ↗
+          </Link>
+        )}
+        <button
+          type="button"
+          className={`${styles.detailToggle} nodrag nopan`}
+          onClick={() => toggle(chartId, state.name, Boolean(state.childChartId))}
+          aria-expanded="true"
+          aria-label={`Hide details of ${state.name}`}
+        >
+          − Hide details
+        </button>
       </span>
       <Handles />
     </div>
   );
 });
 
-export type ChartLinkNodeData = { state: StateView; chart: ChartView | null; dimmed: boolean };
+export type ChartLinkNodeData = {
+  state: StateView;
+  chart: ChartView | null;
+  chartId: string;
+  dimmed: boolean;
+  active: boolean;
+  onPath: boolean;
+  count: number;
+};
 export type ChartLinkNodeType = Node<ChartLinkNodeData, 'chartLink'>;
 
 export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<ChartLinkNodeType>) {
-  const { state, chart, dimmed } = data;
-  const body = (
-    <>
-      <span className={styles.chartEyebrow}>Part of the journey</span>
-      <strong className={styles.chartTitle}>{state.name}</strong>
-      {chart?.description && <span className={styles.chartDescription}>{chart.description}</span>}
-      {chart && <SummaryBar noun="screen" nounPlural="screens" counts={chart.screens} verb="working" />}
-      {chart && <span className={styles.chartCta}>Open {chart.name} →</span>}
-      <Handles />
-    </>
-  );
-  if (!chart) {
-    return (
-      <div className={styles.chartLink} data-dimmed={dimmed}>
-        {body}
-      </div>
-    );
-  }
+  const { state, chart, chartId, dimmed, active, onPath, count } = data;
+  const toggle = useUiStore((s) => s.toggleDetail);
   return (
-    <Link to="/chart/$chartId" params={{ chartId: chart.id }} search={(prev) => ({ run: prev.run })} className={styles.chartLink} data-dimmed={dimmed} aria-label={`${state.name}: open the ${chart.name} chart`}>
-      {body}
-    </Link>
+    <div className={styles.chartLink} data-dimmed={dimmed} data-active={active} data-path={onPath}>
+      <span className={styles.chartEyebrow}>
+        {state.childChartId ? 'Child machine' : state.kind === 'parallel' ? 'Parallel states' : 'State group'} · {count} hidden states
+      </span>
+      <strong className={styles.chartTitle}>
+        <StatusDot status={state.status} />
+        <Link
+          to="/chart/$chartId"
+          params={{ chartId }}
+          search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey, step: prev.step })}
+          className={styles.groupName}
+        >
+          {state.name}
+        </Link>
+      </strong>
+      <span className={styles.chartDescription}>{state.description || chart?.description || 'Expand to explore the states and events inside.'}</span>
+      <div className={styles.cardActions}>
+        <button
+          type="button"
+          className={`${styles.expandButton} nodrag nopan`}
+          onClick={() => toggle(chartId, state.name, Boolean(state.childChartId))}
+          aria-expanded="false"
+          aria-label={`Show details of ${state.name}`}
+        >
+          + Show details
+        </button>
+        {chart && (
+          <Link
+            to="/chart/$chartId"
+            params={{ chartId: chart.id }}
+            search={(prev) => ({ run: prev.run, journey: prev.journey, step: prev.step })}
+            className={styles.chartCta}
+          >
+            Open chart ↗
+          </Link>
+        )}
+      </div>
+      <Handles />
+    </div>
   );
 });
 
