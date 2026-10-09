@@ -41,4 +41,5 @@ export { httpDriver, httpClient, type HttpClient, type HttpDriverOptions, type H
 export { cloudEventsHttpSource, cloudEventsFromHttp, logFileSource, compareBusinessEvents, correlated, type CloudEvent, type BusinessEventResult } from './events/cloudevents';
 export { DEFAULT_PRIVACY, mergePrivacy, privacyFindings, assertAllowedTarget } from './privacy';
 export { toJUnit, toCtrf, toWebVtt, toMermaid } from './report/formats';
+export { toMarkdown } from './report/markdown';
 export { defineConfig, mergeConfigRuns, prepare, runConfig, type AtlasConfig, type PrepareOptions, type RunCommandOptions } from './config';

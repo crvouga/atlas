@@ -497,7 +497,7 @@ atlas run    [--config atlas.config.ts] [--mode fast|showcase] [--workers n] [--
              [--seed <name>]... [--paths id,id] [--shard i/n] [--rerun-failed | --reuse <run-dir>]
              [--no-retry] [--output <dir>]
 atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
-atlas export --specs <dir> --format scxml|mermaid|json [--out <file>]
+atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
 ```
 
 - `lint` with `--specs` checks charts and journeys alone; with a config it also lists missing
@@ -512,7 +512,11 @@ atlas export --specs <dir> --format scxml|mermaid|json [--out <file>]
 - `--workers`, `--shard`, `--seed`, `--state`, `--rerun-failed` and `--reuse` are described in
   [Seeds and parallel runs](#seeds-and-parallel-runs).
 - `merge` composes runs of the same plan (shards, or a rerun and its earlier run) into one run.
-- `export` writes the composed product (every child inlined) as SCXML, Mermaid or XState JSON.
+- `export` writes the composed product (every child inlined) as SCXML, Mermaid, Markdown or
+  XState JSON. The Markdown is a readable map for the people who own the product: one section per
+  area (each parallel region apart), every state with its description and what the user sees (a
+  `snapshot` written as an identifier is left out), a table of every event that can happen there
+  and where it leads, then the named journeys.
 
 The config file is TypeScript (loaded with `tsx`) and defaults to `atlas.config.ts` in the current
 directory. Relative paths in it resolve against the config file's directory.

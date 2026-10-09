@@ -7,6 +7,7 @@ import type { RunMode } from './run/types';
 import { mergeConfigRuns, prepare, runConfig } from './config';
 import { lintBundle } from './lint';
 import { toMermaid } from './report/formats';
+import { toMarkdown } from './report/markdown';
 import { composeCharts } from './spec/compose';
 import { loadSpecDirectory } from './spec/load';
 import { machineToScxml } from './spec/scxml';
@@ -19,7 +20,7 @@ const USAGE = `atlas — executable statecharts
                [--seed <name>]... [--paths id,id] [--shard i/n] [--rerun-failed | --reuse <run-dir>]
                [--no-retry] [--output <dir>]
   atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
-  atlas export --specs <dir> --format scxml|mermaid|json [--out <file>]
+  atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
 
   --workers       path attempts that run at once (default: one per CPU, capped by the driver)
   --seed          only paths that start from this seed ("start" for paths setup starts); repeatable
@@ -83,10 +84,18 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (command === 'export') {
     if (!specs) throw new Error('export needs --specs <dir>');
-    const composition = composeCharts(loadSpecDirectory(path.resolve(specs)));
+    const bundle = loadSpecDirectory(path.resolve(specs));
+    const composition = composeCharts(bundle);
     const format = flag(argv, 'format') ?? 'scxml';
-    const text =
-      format === 'scxml' ? machineToScxml(composition.machine) : format === 'mermaid' ? toMermaid(composition.machine) : `${JSON.stringify(composition.machine, null, 2)}\n`;
+    const exporters: Record<string, () => string> = {
+      scxml: () => machineToScxml(composition.machine),
+      mermaid: () => toMermaid(composition.machine),
+      markdown: () => toMarkdown(composition.machine, bundle.journeys),
+      json: () => `${JSON.stringify(composition.machine, null, 2)}\n`
+    };
+    const exporter = exporters[format];
+    if (!exporter) throw new Error(`export --format takes ${Object.keys(exporters).join('|')} (got "${format}")`);
+    const text = exporter();
     const out = flag(argv, 'out');
     if (out) writeFileSync(out, text);
     else process.stdout.write(text);
