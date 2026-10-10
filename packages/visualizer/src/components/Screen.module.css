@@ -16,13 +16,13 @@
 
 .phone[data-variant='sketch'] {
   background:
-    radial-gradient(circle at 1px 1px, rgba(124, 58, 237, 0.13) 1px, transparent 0) 0 0 / 10px 10px,
-    linear-gradient(180deg, #fbfaff 0%, #f6f4fd 100%);
-  border: 1.5px dashed var(--user-line);
+    radial-gradient(circle at 1px 1px, rgba(28, 36, 48, 0.08) 1px, transparent 0) 0 0 / 10px 10px,
+    linear-gradient(180deg, #f7fafb 0%, var(--bg) 100%);
+  border: 1px dashed var(--line-2);
 }
 
 .phone[data-size='full'][data-variant='sketch'] {
-  border-width: 2px;
+  border-width: 1px;
 }
 
 .notch {
@@ -33,7 +33,7 @@
   height: 7px;
   transform: translateX(-50%);
   border-radius: var(--pill);
-  background: rgba(76, 29, 149, 0.12);
+  background: rgba(28, 36, 48, 0.1);
 }
 
 .phone[data-size='full'] .notch {
@@ -60,14 +60,12 @@
 .reason {
   align-self: flex-start;
   font-size: 7.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 400;
   padding: 2px 6px;
   border-radius: var(--pill);
-  background: var(--card);
-  color: var(--user-ink);
-  border: 1px solid var(--user-ring);
+  background: var(--bg);
+  color: var(--ink-3);
+  border: 1px solid var(--line);
 }
 
 .reason[data-reason='not-reached'] {
@@ -90,11 +88,20 @@
   font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
-  color: var(--user-deep);
+  color: var(--ink);
 }
 
 .phone[data-size='full'] .title {
   font-size: 1.15rem;
+}
+
+.missing {
+  font-size: 8px;
+  color: var(--ink-3);
+}
+
+.phone[data-size='full'] .missing {
+  font-size: 0.85rem;
 }
 
 .description {
@@ -172,7 +179,7 @@
   display: block;
   height: 5px;
   border-radius: var(--pill);
-  background: rgba(124, 58, 237, 0.1);
+  background: rgba(28, 36, 48, 0.08);
 }
 
 .barNarrow {
@@ -185,7 +192,7 @@
   border-radius: 6px;
   margin-bottom: 4px;
   background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(124, 58, 237, 0.12);
+  border: 1px solid var(--line);
 }
 
 .phone[data-size='full'] .card {
@@ -196,7 +203,7 @@
 .button {
   height: 12px;
   margin-top: 4px;
-  background: rgba(124, 58, 237, 0.18);
+  background: rgba(28, 36, 48, 0.12);
 }
 
 .phone[data-size='full'] .barWide,
@@ -222,12 +229,12 @@
   bottom: 6px;
   text-align: center;
   font-size: 8px;
-  font-weight: 700;
+  font-weight: 400;
   padding: 3px 4px;
   border-radius: var(--pill);
-  color: var(--user-ink);
+  color: var(--ink-2);
   background: rgba(255, 255, 255, 0.94);
-  border: 1px solid var(--user-line);
+  border: 1px solid var(--line);
 }
 
 .phone[data-size='full'] .designTag {

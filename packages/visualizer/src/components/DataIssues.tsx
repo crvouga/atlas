@@ -12,7 +12,7 @@ const SEVERITY_LABEL = { error: 'Problem', warning: 'Warning', info: 'Note' } as
  * A quiet count of what went wrong while reading the data. It never interrupts; the list opens
  * only when asked for.
  */
-export function DataIssues({ issues }: { issues: DataIssue[] }) {
+export function DataIssues({ issues, onDark = false }: { issues: DataIssue[]; onDark?: boolean }) {
   const open = useUiStore((s) => s.issuesOpen);
   const setOpen = useUiStore((s) => s.setIssuesOpen);
   const problems = issues.filter((i) => i.severity !== 'info').length;
@@ -25,7 +25,7 @@ export function DataIssues({ issues }: { issues: DataIssue[] }) {
   const label = problems ? `${problems} data ${problems === 1 ? 'problem' : 'problems'}` : `${issues.length} data ${issues.length === 1 ? 'note' : 'notes'}`;
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className={styles.trigger} data-has-problems={problems > 0}>
+      <Dialog.Trigger className={styles.trigger} data-on-dark={onDark || undefined} data-has-problems={problems > 0}>
         {problems ? <WarnIcon size={13} /> : <NoteIcon size={13} />}
         {label}
       </Dialog.Trigger>

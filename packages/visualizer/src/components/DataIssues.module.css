@@ -21,6 +21,12 @@
   color: var(--system-ink);
 }
 
+.trigger[data-on-dark='true'],
+.trigger[data-on-dark='true'][data-has-problems='true'] {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
 .overlay {
   position: fixed;
   inset: 0;

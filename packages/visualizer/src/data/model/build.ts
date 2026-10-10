@@ -144,8 +144,6 @@ export function buildAtlasView(input: BuildInput): AtlasView {
       sources: s.meta.source ?? [],
       owner: s.meta.owner ?? null,
       tier: s.meta.tier ?? null,
-      quint: s.meta.quint ?? null,
-      gherkin: s.meta.gherkin ?? [],
       design: s.meta.design ?? null,
       hints: s.meta.hints ?? [],
       specChecks: s.meta.checks ?? [],

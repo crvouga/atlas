@@ -11,14 +11,18 @@ import { Recording } from './recording';
 import { SpecOutline } from './spec-outline';
 import { ReportLayers } from './report-layers';
 
-export function EvidenceBrowser({ fallbackSpecs = [], readSpec }: { fallbackSpecs?: readonly SpecEntry[]; readSpec?: (path: string) => Promise<string> }) {
-  const [query, setQuery] = useState('');
+export function EvidenceBrowser({ fallbackSpecs = [], readSpec, selected: controlledSelected, onSelect, embedded = false, query: controlledQuery }: { fallbackSpecs?: readonly SpecEntry[]; readSpec?: (path: string) => Promise<string>; selected?: string; onSelect?: (path: string) => void; embedded?: boolean; query?: string }) {
+  const [localQuery, setQuery] = useState('');
   const [outcome, setOutcome] = useState('all');
-  const [selected, setSelected] = useState('');
+  const [localSelected, setSelected] = useState('');
+  const selected = controlledSelected ?? localSelected;
+  const query = controlledQuery ?? localQuery;
+  const select = (path: string) => { if (onSelect) onSelect(path); else setSelected(path); };
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [location, updateLocation] = useReportLocation();
+  const active = useQuery({ queryKey: ['report-active-runs'], queryFn: ({ signal }) => reportJson<{ runs: { packageDir: string; bucket: string; startedAtMs: number; plannedChecks?: number }[] }>('/active', signal), staleTime: 0, refetchInterval: 1500, refetchIntervalInBackground: true, retry: false });
   const outline = useQuery({ queryKey: ['report-outline'], queryFn: ({ signal }) => reportJson<ReportOutline>('/outline', signal), staleTime: 30_000, retry: false });
-  const evidence = useInfiniteQuery({ queryKey: ['report-layers'], initialPageParam: null as string | null, queryFn: ({ pageParam, signal }) => reportJson<LayerPage>(`/layers${pageParam ? `?cursor=${encodeURIComponent(pageParam)}` : ''}`, signal), getNextPageParam: page => page.cursor, staleTime: 30_000, retry: false });
+  const evidence = useInfiniteQuery({ queryKey: ['report-layers'], initialPageParam: null as string | null, queryFn: ({ pageParam, signal }) => reportJson<LayerPage>(`/layers${pageParam ? `?cursor=${encodeURIComponent(pageParam)}` : ''}`, signal), getNextPageParam: page => page.cursor, staleTime: 30_000, refetchInterval: active.data?.runs.length ? 3000 : false, refetchIntervalInBackground: true, retry: false });
   // Show cached/new results immediately, then fill gaps from older pages in the background.
   useEffect(() => { if (evidence.hasNextPage && !evidence.isFetching && !evidence.isError) void evidence.fetchNextPage(); }, [evidence.hasNextPage, evidence.isFetching, evidence.isError, evidence.fetchNextPage]);
   const layers = useMemo(() => distinctLayers(evidence.data?.pages.flatMap(page => page.layers) ?? []), [evidence.data]);
@@ -30,26 +34,37 @@ export function EvidenceBrowser({ fallbackSpecs = [], readSpec }: { fallbackSpec
   const document = useQuery({ queryKey: ['outline-document', selected], queryFn: () => readSpec ? readSpec(selected) : reportText(`/outline/spec?path=${encodeURIComponent(selected)}`), enabled: !!selected, retry: false });
   const opened = layers.find(layer => layer.id === location.layer);
   const open = (result: LayerResult) => updateLocation({ layer: result.layer.id, test: result.testId, moment: null, revision: null, source: null });
+  const closeRecording = () => updateLocation({ layer: null, test: null, moment: null });
   const notices = [...new Set(evidence.data?.pages.flatMap(page => page.notices) ?? [])];
   const visibleSpecs = combined.specs.filter(({ spec, results }) => matches(`${spec.path} ${spec.title}`) || results.some(result => matches(result.check.title)));
   const selectedSpec = current.specs.find(spec => spec.path === selected);
   const filtered = !!query || outcome !== 'all';
-  return <section className="atlas-reports" aria-label="Specs and evidence">
-    <header className="report-heading"><div><h1>Specs & evidence</h1><p className="report-muted">One outline. Evidence from every run.</p></div>
+  if (embedded && opened && location.test) return <section className="atlas-reports atlas-plate" aria-label="Recorded test">
+    <Recording layer={opened.recording?.type === 'layer' ? opened.id : undefined} sha={opened.sha ?? ''} source={opened.source?.source ?? ''} id={location.test} />
+    <button onClick={closeRecording}>Close recording</button>
+  </section>;
+  if (embedded && !selected) return <section className="atlas-reports atlas-plate" aria-label="Specs and evidence">
+    <h1 className="plate-title">Specs</h1>
+    <p>Pick a spec in the index. Each file is one row, whatever kind it is.</p>
+    {(outline.isError || evidence.isError) && <p>Recorded results aren’t available from this server.</p>}
+  </section>;
+  return <section className={embedded ? 'atlas-reports atlas-plate' : 'atlas-reports'} aria-label="Specs and evidence">
+    <header className="report-heading"><div><h1 className={embedded ? 'plate-title' : undefined}>{selectedSpec?.title ?? (embedded ? 'All evidence' : 'Specs & evidence')}</h1><p className="report-muted">{selectedSpec?.path ?? `${current.specs.length} specs, ${layers.length} layers, ${all.length} results. Earlier results stay visible. This is accumulated evidence, not a fresh verification.`}</p></div>
       <button disabled={evidence.isFetching || outline.isFetching} onClick={() => { void outline.refetch(); void evidence.refetch(); }}>{evidence.isFetching || outline.isFetching ? 'Refreshing…' : 'Refresh layers'}</button>
     </header>
-    <div className="report-summary" aria-label="Report summary"><span><strong>{current.specs.length}</strong> specs</span><span><strong>{layers.length}</strong> layers</span><span><strong>{all.length}</strong> combined results</span><small>Earlier results stay visible. This is accumulated evidence, not a fresh verification.</small></div>
-    <div className="report-controls"><label className="report-search">Find specs or results<input type="search" placeholder="Search names, paths, branches…" value={query} onChange={event => setQuery(event.target.value)} /></label><label>Outcome<select value={outcome} onChange={event => setOutcome(event.target.value)}><option value="all">All outcomes</option><option value="failed">Failed</option><option value="passed">Passed</option><option value="not-run">Not run</option><option value="running">Running</option></select></label>{filtered && <button onClick={() => { setQuery(''); setOutcome('all'); }}>Clear filters</button>}</div>
+    {embedded && selected && <div className="report-document" key={selected}>{document.isError ? <p className="report-notice" role="alert">The spec could not be read. <button onClick={() => void document.refetch()}>Retry document</button></p> : document.data !== undefined ? <SpecDocument path={selected} text={document.data} heading={false} /> : <p role="status">Loading spec…</p>}</div>}
+    {!!active.data?.runs.length && <p className="report-notice" role="status">Spec checks are running: {active.data.runs.map(run => `${run.packageDir} (${run.bucket})`).join(', ')}. Completed package results will appear here as they finish.</p>}
+    <div className="report-controls">{controlledQuery === undefined && <label className="report-search">Find specs or results<input type="search" placeholder="Search names, paths, branches…" value={query} onChange={event => setQuery(event.target.value)} /></label>}<label>Outcome<select value={outcome} onChange={event => setOutcome(event.target.value)}><option value="all">All outcomes</option><option value="failed">Failed</option><option value="passed">Passed</option><option value="not-run">Not run</option><option value="running">Running</option></select></label>{filtered && <button onClick={() => { if (controlledQuery === undefined) setQuery(''); setOutcome('all'); }}>Clear filters</button>}</div>
     {outline.isError && <p className="report-notice" role="alert">Freshness information is unavailable. Available specs and loaded layers remain visible.</p>}
     {evidence.isError && <p className="report-notice" role="alert">Some evidence could not be loaded. <button onClick={() => void (evidence.data ? evidence.fetchNextPage() : evidence.refetch())}>Try again</button></p>}
     {notices.map(notice => <p className="report-notice" role="status" key={notice}>{notice}</p>)}
-    <div className="atlas-report-columns"><SpecOutline entries={visibleSpecs} selected={selected} select={setSelected} searching={!!query} />
-      <section className="report-workspace" aria-label="Spec details and results"><header className="report-content-heading"><div><h2>{selectedSpec?.title ?? 'All evidence'}</h2><p className="report-muted">{selectedSpec?.path ?? 'Latest completed outcomes for each check and parameter set.'}</p></div>{selected && <button onClick={() => setSelected('')}>All specs</button>}</header>
-        {selected && <details className="report-document" key={selected} open><summary>Current spec <span className="report-count">{selectedSpec?.kind}</span></summary>{document.isError ? <p className="report-notice" role="alert">The spec could not be read. <button onClick={() => void document.refetch()}>Retry document</button></p> : document.data !== undefined ? <SpecDocument path={selected} text={document.data} /> : <p role="status">Loading spec…</p>}</details>}
+    <div className="atlas-report-columns">{!embedded && <SpecOutline entries={visibleSpecs} selected={selected} select={select} searching={!!query} />}
+      <section className="report-workspace" aria-label="Spec details and results"><header className="report-content-heading">{!embedded && <div><h2>{selectedSpec?.title ?? 'All evidence'}</h2><p className="report-muted">{selectedSpec?.path ?? 'Latest completed outcomes for each check and parameter set.'}</p></div>}{selected && <button onClick={() => select('')}>All specs</button>}</header>
+        {selected && !embedded && <details className="report-document" key={selected} open><summary>Current spec <span className="report-count">{selectedSpec?.kind}</span></summary>{document.isError ? <p className="report-notice" role="alert">The spec could not be read. <button onClick={() => void document.refetch()}>Retry document</button></p> : document.data !== undefined ? <SpecDocument path={selected} text={document.data} /> : <p role="status">Loading spec…</p>}</details>}
         <LayerResults results={results} open={open} loading={evidence.isFetching} filtered={filtered} />
         {!!combined.unassigned.length && !selected && <p className="report-muted">{combined.unassigned.length} results refer to specs outside the current outline.</p>}
         <ReportLayers layers={layers} excluded={excluded} toggle={id => setExcluded(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; })} />
-        {opened && location.test && <section className="report-recording"><button onClick={() => updateLocation({ layer: null, test: null, moment: null })}>Close recording</button><Recording layer={opened.recording?.type === 'layer' ? opened.id : undefined} sha={opened.sha ?? ''} source={opened.source?.source ?? ''} id={location.test} /></section>}
+        {opened && location.test && !embedded && <section className="report-recording"><button onClick={closeRecording}>Close recording</button><Recording layer={opened.recording?.type === 'layer' ? opened.id : undefined} sha={opened.sha ?? ''} source={opened.source?.source ?? ''} id={location.test} /></section>}
       </section>
     </div>
   </section>;

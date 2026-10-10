@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { memo } from 'react';
 
-import { STATUS_LABEL, type ChartView, type StateView } from '../data/model';
+import { STATUS_LABEL, type ChartView, type ItemStatus, type StateView } from '../data/model';
 import { ScreenImage } from '../components/Screen';
 import { StatusDot, SummaryBar } from '../components/Status';
 import styles from './map.module.css';
@@ -26,7 +26,7 @@ export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNod
       to="/chart/$chartId"
       params={{ chartId }}
       search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey })}
-      className={styles.screen}
+      className={`${styles.screen} nopan nodrag`}
       data-status={state.status}
       data-selected={selected}
       data-dimmed={dimmed}
@@ -69,7 +69,6 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
   const { state, chart, dimmed } = data;
   const body = (
     <>
-      <span className={styles.chartEyebrow}>Part of the journey</span>
       <strong className={styles.chartTitle}>{state.name}</strong>
       {chart?.description && <span className={styles.chartDescription}>{chart.description}</span>}
       {chart && <SummaryBar noun="screen" nounPlural="screens" counts={chart.screens} verb="working" />}
@@ -85,7 +84,7 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
     );
   }
   return (
-    <Link to="/chart/$chartId" params={{ chartId: chart.id }} search={(prev) => ({ run: prev.run })} className={styles.chartLink} data-dimmed={dimmed} aria-label={`${state.name}: open the ${chart.name} chart`}>
+    <Link to="/chart/$chartId" params={{ chartId: chart.id }} search={(prev) => ({ run: prev.run })} className={`${styles.chartLink} nopan nodrag`} data-dimmed={dimmed} aria-label={`${state.name}: open the ${chart.name} chart`}>
       {body}
     </Link>
   );
@@ -101,18 +100,46 @@ export const ContextNode = memo(function ContextNode({ data }: NodeProps<Context
       to="/chart/$chartId"
       params={{ chartId: state.chartId }}
       search={(prev) => ({ run: prev.run, screen: state.name })}
-      className={styles.context}
+      className={`${styles.context} nopan nodrag`}
       data-dimmed={dimmed}
       aria-label={`${state.name}, in ${chart?.name ?? 'another chart'}. ${STATUS_LABEL[state.status]}.`}
     >
-      <span className={styles.contextEyebrow}>In {chart?.name ?? 'another chart'}</span>
       <span className={styles.contextName}>
         <StatusDot status={state.status} />
         {state.name}
+      </span>
+      <span className={styles.contextChart}>In {chart?.name ?? 'another chart'}</span>
+      <Handles />
+    </Link>
+  );
+});
+
+export type SummaryNodeData = { state: StateView; places: number; status: ItemStatus; dimmed: boolean };
+export type SummaryNodeType = Node<SummaryNodeData, 'summary'>;
+
+export const SummaryNode = memo(function SummaryNode({ data }: NodeProps<SummaryNodeType>) {
+  const { state, places, status, dimmed } = data;
+  const noun = places === 1 ? 'place' : 'places';
+  return (
+    <Link
+      to="/chart/$chartId"
+      params={{ chartId: state.chartId }}
+      search={(prev) => ({ run: prev.run, group: state.name, screen: undefined, event: undefined, journey: undefined })}
+      className={`${styles.summary} nopan nodrag`}
+      data-status={status}
+      data-dimmed={dimmed}
+      aria-label={`${state.name}. ${places} ${noun}. ${STATUS_LABEL[status]}.`}
+    >
+      <span className={styles.summaryName}>
+        <StatusDot status={status} />
+        {state.name}
+      </span>
+      <span className={styles.summaryCount}>
+        {places} {noun}
       </span>
       <Handles />
     </Link>
   );
 });
 
-export const nodeTypes = { screen: ScreenNode, group: GroupNode, chartLink: ChartLinkNode, context: ContextNode };
+export const nodeTypes = { screen: ScreenNode, group: GroupNode, chartLink: ChartLinkNode, context: ContextNode, summary: SummaryNode };

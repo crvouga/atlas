@@ -22,7 +22,7 @@ export type ChartLayout = {
   pinned: boolean;
 };
 
-const LAYOUT_VERSION = 3;
+const LAYOUT_VERSION = 4;
 const STORAGE_PREFIX = `atlas-layout:v${LAYOUT_VERSION}:`;
 const memory = new Map<string, ChartLayout>();
 

@@ -25,8 +25,22 @@ export function placeholderReason(status: ItemStatus, media: ImageMedia | null):
  * What a screen should look like, sketched from the spec: its name, description, and the checks
  * or hints that say what it shows. Clearly not a screenshot.
  */
-export function ScreenPlaceholder({ state, reason, size }: { state: StateView; reason: PlaceholderReason; size: 'thumb' | 'full' }) {
-  const sketch = (state.hints.length ? state.hints : state.specChecks).slice(0, size === 'thumb' ? 3 : 8);
+export function ScreenPlaceholder({
+  state,
+  reason,
+  size,
+  description = true,
+  lines = true,
+  caption = true
+}: {
+  state: StateView;
+  reason: PlaceholderReason;
+  size: 'thumb' | 'full';
+  description?: boolean;
+  lines?: boolean;
+  caption?: boolean;
+}) {
+  const sketch = lines ? (state.hints.length ? state.hints : state.specChecks).slice(0, size === 'thumb' ? 3 : 8) : [];
   if (state.design) {
     return (
       <div className={styles.phone} data-size={size} data-variant="design">
@@ -39,11 +53,7 @@ export function ScreenPlaceholder({ state, reason, size }: { state: StateView; r
     <div className={styles.phone} data-size={size} data-variant="sketch" role="img" aria-label={`${state.name}: ${REASON_LABEL[reason]}`}>
       <div className={styles.notch} aria-hidden="true" />
       <div className={styles.sketch} aria-hidden="true">
-        <span className={styles.reason} data-reason={reason}>
-          {REASON_LABEL[reason]}
-        </span>
-        <span className={styles.title}>{state.name}</span>
-        {state.description && <span className={styles.description}>{state.description}</span>}
+        {description && state.description && <span className={styles.description}>{state.description}</span>}
         {sketch.length > 0 && (
           <span className={styles.lines}>
             {sketch.map((line) => (
@@ -54,6 +64,7 @@ export function ScreenPlaceholder({ state, reason, size }: { state: StateView; r
             ))}
           </span>
         )}
+        {caption && <span className={styles.missing}>{REASON_LABEL[reason]}</span>}
         <span className={styles.bars}>
           <span className={styles.card} />
           <span className={styles.barWide} />
@@ -108,11 +119,23 @@ export function Screenshot({ src, alt, size, underlay }: { src: string; alt: str
 }
 
 /** The real screenshot when there is one, the placeholder otherwise. */
-export function ScreenImage({ state, size }: { state: StateView; size: 'thumb' | 'full' }) {
+export function ScreenImage({
+  state,
+  size,
+  description = true,
+  lines = true,
+  caption = true
+}: {
+  state: StateView;
+  size: 'thumb' | 'full';
+  description?: boolean;
+  lines?: boolean;
+  caption?: boolean;
+}) {
   const media = state.result?.screenshot ?? null;
   const src = media?.state === 'available' ? (size === 'thumb' ? media.thumb ?? media.full : media.full ?? media.thumb) : null;
   const startedAsPlaceholder = useRef(src === null);
-  const placeholder = <ScreenPlaceholder state={state} reason={placeholderReason(state.status, media)} size={size} />;
+  const placeholder = <ScreenPlaceholder state={state} reason={placeholderReason(state.status, media)} size={size} description={description} lines={lines} caption={caption} />;
   if (src) return <Screenshot src={src} alt={`Screenshot of ${state.name}`} size={size} underlay={startedAsPlaceholder.current ? placeholder : undefined} />;
   return placeholder;
 }

@@ -2,15 +2,17 @@ import { Link } from '@tanstack/react-router';
 import { EdgeLabelRenderer, type Edge, type EdgeProps } from '@xyflow/react';
 import { memo } from 'react';
 
-import { STATUS_LABEL, type TransitionView } from '../data/model';
+import { STATUS_LABEL, type ItemStatus, type TransitionView } from '../data/model';
 import { KIND_LABEL, KindIcon } from '../components/labels';
+import type { LayoutBundle } from '../layout/graph';
 import type { PlacedEdge } from '../layout/layout';
 import styles from './map.module.css';
 import { roundedPath } from './path';
 
 export type EventEdgeData = {
   placed: PlacedEdge;
-  transition: TransitionView;
+  transition: TransitionView | null;
+  bundle: LayoutBundle | null;
   chartId: string;
   selected: boolean;
   step: number | null;
@@ -21,9 +23,55 @@ export type EventEdgeType = Edge<EventEdgeData, 'event'>;
 
 const UNCHECKED = new Set(['not-reached', 'not-yet-run', 'spec-only']);
 
+function markerFor(status: ItemStatus, selected: boolean, step: number | null, kind: string) {
+  if (selected || step !== null) return 'active';
+  if (UNCHECKED.has(status)) return 'muted';
+  return kind;
+}
+
 export const EventEdge = memo(function EventEdge({ data, id }: EdgeProps<EventEdgeType>) {
   if (!data) return null;
-  const { placed, transition: t, chartId, selected, step, dimmed } = data;
+  const { placed, transition: t, bundle, chartId, selected, step, dimmed } = data;
+  if (bundle && bundle.count > 1) {
+    const unchecked = UNCHECKED.has(bundle.status);
+    const d = roundedPath(placed.points);
+    return (
+      <>
+        <path
+          id={id}
+          d={d}
+          className={styles.edge}
+          data-status={bundle.status}
+          data-unchecked={unchecked}
+          data-dimmed={dimmed}
+          markerEnd={`url(#atlas-arrow-${unchecked ? 'muted' : 'user'})`}
+        />
+        <EdgeLabelRenderer>
+          <Link
+            to="/chart/$chartId"
+            params={{ chartId }}
+            search={(prev) => ({
+              run: prev.run,
+              journey: prev.journey,
+              event: undefined,
+              screen: bundle.screen ?? undefined,
+              group: bundle.group ?? undefined
+            })}
+            className={`${styles.chip} nodrag nopan`}
+            data-status={bundle.status}
+            data-unchecked={unchecked}
+            data-dimmed={dimmed}
+            style={{ transform: `translate(${placed.label.x}px, ${placed.label.y}px)`, width: placed.label.width }}
+            aria-label={`${bundle.label}. ${STATUS_LABEL[bundle.status]}.`}
+            title={bundle.label}
+          >
+            <span className={styles.chipText}>{bundle.label}</span>
+          </Link>
+        </EdgeLabelRenderer>
+      </>
+    );
+  }
+  if (!t) return null;
   const unchecked = UNCHECKED.has(t.status);
   const d = roundedPath(placed.points);
   return (
@@ -38,7 +86,7 @@ export const EventEdge = memo(function EventEdge({ data, id }: EdgeProps<EventEd
         data-selected={selected}
         data-highlight={step !== null}
         data-dimmed={dimmed}
-        markerEnd={`url(#atlas-arrow-${selected || step !== null ? 'active' : unchecked ? 'muted' : t.kind})`}
+        markerEnd={`url(#atlas-arrow-${markerFor(t.status, selected, step, t.kind)})`}
       />
       <EdgeLabelRenderer>
         <Link
@@ -78,12 +126,12 @@ export function EdgeMarkers() {
   return (
     <svg className={styles.markers} aria-hidden="true">
       <defs>
-        {marker('user', '#a78bfa')}
-        {marker('system', '#f59e0b')}
-        {marker('time', '#38bdf8')}
-        {marker('hand-off', '#2dd4bf')}
-        {marker('muted', '#94a3b8')}
-        {marker('active', '#7c3aed')}
+        {marker('user', 'var(--user)')}
+        {marker('system', 'var(--system)')}
+        {marker('time', 'var(--time)')}
+        {marker('hand-off', 'var(--handoff)')}
+        {marker('muted', 'var(--line-2)')}
+        {marker('active', 'var(--place)')}
       </defs>
     </svg>
   );

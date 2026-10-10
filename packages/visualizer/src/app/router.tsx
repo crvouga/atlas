@@ -1,10 +1,13 @@
 import { createHashHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 import { z } from 'zod/v4';
 
+import { GherkinPage } from '../gherkin/gherkin-page';
+import { QuintPage } from '../quint/quint-page';
 import { ChartPage } from '../views/ChartPage';
 import { SpecsPage } from '../views/specs-page';
 import { ProductPage } from '../views/ProductPage';
 import { AppShell } from './AppShell';
+import { SpecsSearch } from './specs-search';
 
 const RootSearch = z.object({ run: z.string().min(1).optional().catch(undefined) });
 
@@ -12,6 +15,7 @@ const ChartSearch = RootSearch.extend({
   screen: z.string().min(1).optional().catch(undefined),
   event: z.string().min(1).optional().catch(undefined),
   journey: z.string().min(1).optional().catch(undefined),
+  group: z.string().min(1).optional().catch(undefined),
   t: z.coerce.number().nonnegative().optional().catch(undefined)
 });
 
@@ -35,8 +39,11 @@ export const chartRoute = createRoute({
   component: ChartPage
 });
 
-const specsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/specs', validateSearch: (search) => z.record(z.string(), z.string()).parse(search), component: SpecsPage });
-const routeTree = rootRoute.addChildren([productRoute, chartRoute, specsRoute]);
+const specSearch = (search: Record<string, unknown>) => SpecsSearch.parse(search);
+const gherkinRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gherkin', validateSearch: specSearch, component: GherkinPage });
+const quintRoute = createRoute({ getParentRoute: () => rootRoute, path: '/quint', validateSearch: specSearch, component: QuintPage });
+const specsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/specs', validateSearch: specSearch, component: SpecsPage });
+const routeTree = rootRoute.addChildren([productRoute, chartRoute, gherkinRoute, quintRoute, specsRoute]);
 
 export const router = createRouter({
   routeTree,

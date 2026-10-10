@@ -83,8 +83,6 @@ export type StateView = {
   sources: string[];
   owner: string | null;
   tier: string | null;
-  quint: string | null;
-  gherkin: string[];
   design: DesignLink | null;
   hints: string[];
   specChecks: string[];

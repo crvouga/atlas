@@ -81,12 +81,31 @@
 .atlas-reports .report-heatmap { display: flex; flex-wrap: wrap; gap: .25rem; }
 .atlas-reports .report-heatmap button[data-slow='true'] { border-color: var(--failed); }
 @media (max-width: 1000px) { .atlas-reports { padding: 1rem; } .report-workspace { padding: 1rem; } .report-summary small { width: 100%; margin-left: 0; } }
+.atlas-plate { margin: 16px; background: var(--card); border-radius: 16px; box-shadow: var(--shadow-sheet); height: calc(100% - 32px); }
+.atlas-plate .atlas-report-columns { grid-template-columns: minmax(0, 1fr); border: 0; background: transparent; }
+.plate-title { font-size: clamp(1.75rem, 2.4vw, 2.25rem); letter-spacing: -.03em; line-height: 1.05; }
+.atlas-reports h1.plate-title,
+.atlas-reports h2.plate-title { font-size: clamp(1.75rem, 2.4vw, 2.25rem); font-weight: 700; letter-spacing: -.03em; line-height: 1.05; }
+.moment-split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(14rem, 22rem); gap: 1.5rem; align-items: start; }
+.moment-plate .plate-title { margin: 0 0 8px; }
+.moment-meta { margin: 0 0 1.25rem; color: var(--ink-2); }
+.moment-meta [data-status='failed'] { color: var(--failed); font-weight: 700; }
+.moment-mark { margin: 0 0 1rem; font-size: clamp(1.35rem, 2.2vw, 1.75rem); font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+.moment-mark[data-status='failed'] { color: var(--failed); }
+.moment-steps { list-style: none; margin: 0; padding: 0; }
+.atlas-reports .moment-steps button { width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.atlas-reports .moment-steps button[data-status='failed'] { color: var(--failed); font-weight: 700; }
+.atlas-reports .moment-steps button[data-current='true'] { background: var(--place); color: #fff; }
+.atlas-reports .moment-steps button[data-status='failed'][data-current='true'],
+.atlas-reports .moment-steps button[data-status='failed'][data-current='true']:hover { background: var(--failed); color: #fff; }
+.moment-stage h4 { font-size: 1.25rem; margin-bottom: .5rem; }
+@media (max-width: 800px) { .moment-split { grid-template-columns: 1fr; } .atlas-plate { margin: 0; height: auto; border-radius: 0; } }
 @media (max-width: 760px) {
   .atlas-report-columns { grid-template-columns: minmax(0, 1fr); }
   .report-sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
   .report-outline { position: static; max-height: 16rem; }
   .report-heading { align-items: start; }
-  .report-heading h1 { font-size: 1.25rem; }
+  .report-heading h1:not(.plate-title) { font-size: 1.25rem; }
   .report-result-table, .report-result-table tbody, .report-result-table tr, .report-result-table td { display: block; width: 100%; }
   .report-result-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .report-result-table tr { padding: 1rem 0; border-bottom: 1px solid var(--line); }
@@ -98,3 +117,18 @@
 .report-document ol > li { padding: .125rem 0; }
 .report-document article > section > ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .375rem; }
 .report-document article > section > ul button { min-height: 2rem; font-family: var(--mono); font-size: .75rem; }
+
+.gherkin-description { max-width: 62ch; color: var(--ink-2); margin: 12px 0 0; }
+.gherkin-rule { margin-top: 28px; }
+.gherkin-rule h2, .gherkin-scenario h3, .quint-group h2, .quint-source-heading { margin: 0 0 8px; font-size: 1.25rem; }
+.gherkin-scenario { margin-top: 20px; }
+.gherkin-steps { list-style: none; margin: 8px 0 0; padding: 0; }
+.gherkin-steps li { padding: 6px 0; }
+.gherkin-keyword { color: var(--ink); font-weight: 700; margin-right: 0.35rem; }
+.gherkin-examples { width: 100%; border-collapse: collapse; margin: 8px 0 0; }
+.gherkin-examples th, .gherkin-examples td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.quint-group { margin-top: 24px; }
+.quint-list { list-style: none; margin: 0; padding: 0; }
+.quint-list button { width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; padding: 10px 0; text-align: left; font-family: var(--mono); font-size: 0.85rem; cursor: pointer; }
+.quint-source-heading { margin-top: 28px; }
+.quint-source { white-space: pre-wrap; }

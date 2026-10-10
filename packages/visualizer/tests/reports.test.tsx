@@ -6,7 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LayerSummary } from '@crvouga/atlas-reports/layer-types';
 import { combineLayers, textFingerprint } from '@crvouga/atlas-reports/layer-merge';
 import type { RunReport } from '@crvouga/atlas-reports/report-types';
-import { SpecDocument, parseFeature, quintOutline } from '../src/reports/document';
+import { SpecDocument, parseFeature } from '../src/reports/document';
+import { QuintDocument, quintOutline } from '../src/quint/quint-document';
 import { LayerResults } from '../src/reports/layer-results';
 import { Timeline } from '../src/reports/recording';
 import { EvidenceBrowser } from '../src/reports/evidence-browser';
@@ -34,9 +35,17 @@ test('Gherkin rules, scenario outlines, steps and example tables remain structur
   expect(parseFeature(feature).feature?.children[0]?.rule?.children[0]?.scenario?.examples[0]?.tableBody).toHaveLength(1);
   const html = renderToStaticMarkup(<SpecDocument path="lists/add.feature" text={feature} />);
   expect(html).toContain('Owners add items'); expect(html).toContain('<td>Tea</td>'); expect(html).toContain('Scenario Outline: Add an item');
+  expect(html).not.toContain('Model outline');
+  expect(html).not.toContain('module ');
 });
 test('Quint outlines identify declarations without treating source as verification', () => {
-  expect(quintOutline('module list {\n var size: int\n action add = size\' = size + 1\n val invSize = size >= 0\n}').map(item => item.kind)).toEqual(['module', 'var', 'action', 'val']);
+  const source = 'module list {\n var size: int\n action add = size\' = size + 1\n val invSize = size >= 0\n}';
+  expect(quintOutline(source).map(item => item.kind)).toEqual(['module', 'var', 'action', 'val']);
+  const html = renderToStaticMarkup(<QuintDocument path="list.qnt" text={source} />);
+  expect(html).toContain('State');
+  expect(html).toContain('Actions');
+  expect(html).not.toContain('Scenario');
+  expect(html).not.toContain('Feature:');
 });
 test('DMN displays conditions and outcomes together', () => {
   // regression: atlas-dmn-namespace-parser
@@ -110,10 +119,13 @@ test('Quint replay recordings expose actual captured assignments and actions', a
   const steps = report.steps.map((step, index) => ({ ...step, kind: 'quint' as const, title: `add(item: ${index})`, detail: `count = ${index}\nitems = Set(${index})` }));
   const recorded = recordedModelStates(steps);
   expect(recorded[1]?.state).toEqual({ '#action': 'add(item: 1)', count: '1', items: 'Set(1)' });
+  const trace = await mount(<ModelTrace states={recorded.map(entry => entry.state)} />);
+  await click(trace, 'State 3');
+  expect(trace.textContent).toContain('Changed');
   const host = await mount(<Timeline report={{ ...report, steps }} base="/quint" css="" />);
-  await click(host, 'State 3');
-  expect(host.textContent).toContain('Moment 3 / 3');
-  expect(host.textContent).toContain('Changed');
+  expect(host.textContent).toContain('Moment 2 / 3');
+  expect(host.textContent).not.toContain('Model trace');
+  expect(host.textContent).not.toContain('quint ·');
 });
 
 test('highlighting a captured picture preserves its content and security policy', () => {

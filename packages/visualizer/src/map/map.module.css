@@ -1,5 +1,7 @@
 .flow {
-  background: radial-gradient(circle at 1px 1px, #e2e8f0 1px, transparent 0) 0 0 / 22px 22px;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 1px 1px, #d5e0e7 1px, transparent 0) 0 0 / 22px 22px;
 }
 
 .markers {
@@ -43,7 +45,7 @@
 }
 
 .screen:hover {
-  box-shadow: 0 6px 18px rgba(76, 29, 149, 0.12);
+  box-shadow: var(--shadow-raised);
 }
 
 .screen[data-status='passed'] {
@@ -70,12 +72,13 @@
 }
 
 .screen[data-selected='true'] {
-  box-shadow: 0 0 0 4px var(--user-line);
+  box-shadow: 0 0 0 2px var(--place);
 }
 
 .screen[data-dimmed='true'],
 .chartLink[data-dimmed='true'],
-.context[data-dimmed='true'] {
+.context[data-dimmed='true'],
+.summary[data-dimmed='true'] {
   opacity: 0.35;
 }
 
@@ -116,7 +119,7 @@
 .group {
   width: 100%;
   height: 100%;
-  border: 1.5px solid var(--user-ring);
+  border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   background: rgba(255, 255, 255, 0.55);
 }
@@ -128,8 +131,7 @@
 }
 
 .group[data-variant='parallel'] {
-  border-width: 2px;
-  background: rgba(250, 245, 255, 0.45);
+  border-style: dashed;
 }
 
 .groupLabel {
@@ -141,8 +143,8 @@
   gap: 0.45rem;
   align-items: center;
   font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--user-deep);
+  font-weight: 400;
+  color: var(--ink-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -154,11 +156,9 @@
 
 .groupTag {
   font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--user);
-  background: var(--user-soft);
+  font-weight: 400;
+  color: var(--ink-3);
+  background: var(--bg);
   border-radius: var(--pill);
   padding: 0.1rem 0.5rem;
 }
@@ -173,21 +173,13 @@
   gap: 0.45rem;
   justify-content: center;
   padding: 1rem 1.1rem;
-  background: var(--user-soft);
-  border: 2px solid var(--user);
+  background: var(--card);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   color: var(--ink);
   text-decoration: none;
-  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.12);
+  box-shadow: var(--shadow-card);
   transition: opacity var(--fade) var(--ease);
-}
-
-.chartEyebrow {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--user);
 }
 
 .chartTitle {
@@ -206,8 +198,7 @@
 
 .chartCta {
   font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--user);
+  color: var(--place);
 }
 
 /* Screens from other charts */
@@ -229,15 +220,65 @@
 }
 
 .context:hover {
-  border-color: var(--user-line);
+  border-color: var(--place);
 }
 
-.contextEyebrow {
+.contextChart {
   font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-weight: 400;
   color: var(--muted);
+}
+
+/* A collapsed section: the name and how many places are inside. */
+
+.summary {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.85rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: var(--shadow-card);
+}
+
+.summary:hover {
+  border-color: var(--place);
+}
+
+.summary[data-status='failed'] {
+  border-color: var(--failed);
+}
+
+.summary[data-status='flaky'] {
+  border-color: var(--flaky);
+}
+
+.summaryName {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.summaryCount {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+
+/* The flow pane owns the drag. These boxes still need their own clicks. */
+.screen,
+.summary,
+.chartLink,
+.context {
+  pointer-events: all;
 }
 
 .contextName {
@@ -284,8 +325,8 @@
 }
 .edge[data-selected='true'],
 .edge[data-highlight='true'] {
-  stroke: var(--user);
-  stroke-width: 3.5;
+  stroke: var(--place);
+  stroke-width: 2.5;
   stroke-dasharray: none;
 }
 .edge[data-dimmed='true'] {
@@ -341,17 +382,19 @@
   border-style: dashed;
 }
 .chip[data-status='failed'] {
-  box-shadow: 0 0 0 2px var(--failed);
+  border-color: var(--failed);
+  color: var(--failed-ink);
 }
 .chip[data-status='flaky'] {
-  box-shadow: 0 0 0 2px var(--flaky);
+  border-color: var(--flaky-ink);
+  color: var(--flaky-ink);
 }
 .chip[data-selected='true'] {
-  outline: 3px solid var(--user);
+  outline: 2px solid var(--place);
   outline-offset: 1px;
 }
 .chip[data-highlight='true'] {
-  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+  box-shadow: var(--shadow-raised);
 }
 .chip[data-dimmed='true'] {
   opacity: 0.3;
@@ -426,8 +469,8 @@
 }
 
 .zoomButton:hover {
-  border-color: var(--user-line);
-  color: var(--user);
+  border-color: var(--place);
+  color: var(--place);
 }
 
 .legendSlot {

@@ -1,3 +1,4 @@
+@import './fonts.css';
 @import './tokens.css';
 
 * {
@@ -10,6 +11,15 @@ body,
   height: 100%;
 }
 
+@media (max-width: 760px) {
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+  }
+}
+
 body {
   margin: 0;
   font-family: var(--font);
@@ -20,7 +30,17 @@ body {
 }
 
 a {
-  color: var(--user);
+  color: var(--place);
+}
+
+::selection {
+  background: var(--place);
+  color: #fff;
+}
+
+input,
+textarea {
+  caret-color: var(--place);
 }
 
 button {
