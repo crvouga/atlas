@@ -2,7 +2,7 @@ export * from './spec/types';
 export { parseChart, parseJourneys, loadSpecDirectory, bundleOf, childChartIds } from './spec/load';
 export { scxmlToMachine, machineToScxml, scxmlToken, ATLAS_NS } from './spec/scxml';
 export { composeCharts, type Composition, type HandOff } from './spec/compose';
-export { ChartGraph, activeKeys, type Config, type StateValue } from './graph';
+export { ChartGraph, activeKeys, configKey, type Config, type StateValue } from './graph';
 export { lintBundle, type LintFinding, type LintOptions } from './lint';
 export { chartScope, planChart, runnableSteps, type ChartScope, type PlannedPath, type PlannedStep, type PlanOptions, type ScopeOptions } from './plan';
 export * from './run/types';
@@ -11,3 +11,5 @@ export { cloudEventsHttpSource, cloudEventsFromHttp, logFileSource, compareBusin
 export { DEFAULT_PRIVACY, mergePrivacy, privacyFindings, assertAllowedTarget } from './privacy';
 export { toJUnit, toCtrf, toWebVtt, toMermaid } from './report/formats';
 export { defineConfig, prepare, runConfig, type AtlasConfig, type RunCommandOptions } from './config';
+
+export { pathKey } from './path-key';

@@ -54,14 +54,16 @@ describe('listSpecFiles', () => {
   touch('specs/c/journeys.yaml');
   touch('specs/node_modules/x/machine.yaml');
 
-  it('lists charts in both formats, and journeys and notes only beside a chart', () => {
+  it('lists charts in both formats, and all specification documents even without a chart', () => {
     expect(listSpecFiles(path.join(tmp, 'specs'))).toEqual([
+      'README.md',
       'a/chart.layout.json',
       'a/chart.scxml',
       'a/journeys.yaml',
       'atlas.yaml',
       'b/machine.yaml',
-      'b/open-questions.md'
+      'b/open-questions.md',
+      'c/journeys.yaml'
     ]);
   });
 
@@ -70,8 +72,12 @@ describe('listSpecFiles', () => {
     ['x.machine.json', true],
     ['machine.yml', true],
     ['journeys.yaml', true],
-    ['x.yaml', false],
-    ['notes.md', false]
+    ['x.yaml', true],
+    ['notes.md', true],
+    ['domain/behavior.feature', true],
+    ['domain/model.qnt', true],
+    ['domain/access.dmn', true],
+    ['domain/schema.als', true]
   ])('%s is a spec file: %s', (file, expected) => {
     expect(isSpecFile(file)).toBe(expected);
   });

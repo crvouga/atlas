@@ -1,0 +1,96 @@
+context: Developer tools
+purpose: >-
+  The team investigates separate copies of the app, keeps useful questions
+  and checkpoints, reads automated evidence, and decides whether an edition
+  of the app has met every release obligation.
+
+terms:
+  - term: spec
+    definition: A written promise about what people can do and observe in the app.
+    forms: [specs]
+
+  - term: report part
+    definition: >-
+      One independently completed collection of automated evidence, combined
+      with other collections while retaining the origin of each outcome.
+    forms: [report parts]
+
+  - term: UI quality check
+    definition: An automated judgement of how clearly and consistently the app is presented.
+    forms: [UI quality checks]
+
+  - term: performance check
+    definition: An automated judgement of how promptly the app responds to people.
+    forms: [performance checks]
+
+  - term: the testing tool
+    definition: >-
+      The existing place beside the app where the team builds and
+      investigates test worlds.
+    forms: [testing tool]
+    published: true
+
+  - term: test world
+    definition: >-
+      A separate copy of the app with named people and devices used for
+      investigation.
+    forms: [test worlds, test world's, test worlds']
+
+  - term: checkpoint
+    definition: A saved test world the team can restore later.
+    forms: [checkpoints, checkpoint's]
+
+  - term: test run
+    definition: >-
+      One automated execution of checks against a particular edition of the app.
+    forms: [test runs, test run's]
+
+  - term: test report
+    definition: >-
+      The recorded outcomes, steps, and captured observations of a test run.
+    forms: [test reports, test report's]
+
+  - term: recorded moment
+    definition: >-
+      What a test run captured at one point, shown for each participating person.
+    forms: [recorded moments, recorded moment's]
+
+  - term: heatmap
+    definition: >-
+      A coloured view of a test report that shows which steps took the most
+      time and marks steps that took longer than the team's chosen allowance.
+    forms: [heatmaps, heatmap's]
+
+  - term: data notebook
+    definition: >-
+      The team's saved questions about a selected test world's data and their answers.
+    forms: [data notebooks, data notebook's]
+
+  - term: release check
+    definition: >-
+      The automated verdict that decides whether an edition of the app
+      satisfies its required obligations.
+    forms: [release checks, release check's]
+
+  - term: address
+    definition: A shareable location that opens a report at a selected recorded moment.
+    forms: [addresses]
+
+  - term: version of the app
+    definition: The edition checked by a test run, shown as the origin of its recorded outcomes.
+    forms: [versions of the app]
+
+  - term: control
+    definition: Something a person acts on in a recorded picture, such as a button or field.
+    forms: [controls]
+
+  - term: report layer
+    definition: A saved collection of recorded outcomes that contributes to the combined report without erasing other useful outcomes.
+    forms: [report layers, report layer's]
+
+  - term: report parameter
+    definition: A recorded choice for a test run, such as the device or example used.
+    forms: [report parameters]
+
+  - term: potentially outdated
+    definition: Evidence that remains available although the app or a related spec may have changed since it was recorded.

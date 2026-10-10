@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 
-import { CountSchema } from './common';
+import { CountSchema } from './common.js';
 
 export const RUN_PROGRESS = ['running', 'complete'] as const;
 

@@ -182,3 +182,11 @@ export class ChartGraph {
     return { seen, edges, key };
   }
 }
+
+/** Stable identity for a configuration, including parallel regions in any insertion order. */
+export function configKey(value: StateValue): string {
+  const canonical = (state: StateValue): unknown => typeof state === 'string'
+    ? state
+    : Object.keys(state).sort().map(key => [key, canonical(state[key]!)]);
+  return JSON.stringify(canonical(value));
+}

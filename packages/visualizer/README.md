@@ -130,3 +130,7 @@ of about 500 states that mixes `invoke`, SCXML children and the legacy compositi
 ## License
 
 MIT
+
+## Specifications and evidence
+
+Use **Specs and evidence** to browse nested specification folders even when they contain no statecharts. Structured Gherkin and DMN views accompany source documents; recorded Quint traces show state transitions and changed variables. The evidence view consumes the Atlas reports API or a static `data/evidence` export. See [Atlas reports](../reports/README.md) for host configuration.

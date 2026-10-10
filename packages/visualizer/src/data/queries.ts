@@ -1,4 +1,4 @@
-import { SpecIndexSchema, type DataIssue, type RunSummary } from '@crvouga/atlas-schema';
+import { isStatechartFile, SpecIndexSchema, type DataIssue, type RunSummary } from '@crvouga/atlas-schema';
 import { QueryClient, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo } from 'react';
 
@@ -95,8 +95,9 @@ export function useAtlasData(runParam: string | undefined): AtlasData {
     return parsed.success ? parsed.data : null;
   }, [specIndex.data]);
 
+  const chartPaths = useMemo(() => (index?.files ?? []).filter(isStatechartFile), [index]);
   const files = useQueries({
-    queries: (index?.files ?? []).map((path) => ({
+    queries: chartPaths.map((path) => ({
       queryKey: keys.specFile(path),
       queryFn: () => adapter.specFile(path)
     })),
@@ -133,12 +134,12 @@ export function useAtlasData(runParam: string | undefined): AtlasData {
     const doc = parseSpec(
       {
         ref: index.ref ?? null,
-        files: index.files.map((path, i) => ({ path, text: files.texts[i] ?? null, error: files.errors[i] ?? undefined }))
+        files: chartPaths.map((path, i) => ({ path, text: files.texts[i] ?? null, error: files.errors[i] ?? undefined }))
       },
       sink
     );
     return { doc, issues: sink.issues };
-  }, [index, files]);
+  }, [index, chartPaths, files]);
 
   const runParsed = useMemo(() => {
     if (!runId || manifest.data === undefined) return null;

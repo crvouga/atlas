@@ -19,6 +19,10 @@ export type ChartScope = {
 export type PlannedStep = { event: string; transitions: string[]; handOff: boolean; from: string[]; to: string[] };
 
 export type PlannedPath = {
+  /** Stable identity supplied by exhaustive planners. */
+  key?: string;
+  /** Curated journeys whose event sequences share this path. */
+  journeys?: string[];
   id: string;
   name: string;
   kind: 'journey' | 'generated';

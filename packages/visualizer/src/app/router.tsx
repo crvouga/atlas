@@ -2,6 +2,7 @@ import { createHashHistory, createRootRoute, createRoute, createRouter } from '@
 import { z } from 'zod/v4';
 
 import { ChartPage } from '../views/ChartPage';
+import { SpecsPage } from '../views/specs-page';
 import { ProductPage } from '../views/ProductPage';
 import { AppShell } from './AppShell';
 
@@ -34,7 +35,8 @@ export const chartRoute = createRoute({
   component: ChartPage
 });
 
-const routeTree = rootRoute.addChildren([productRoute, chartRoute]);
+const specsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/specs', validateSearch: (search) => z.record(z.string(), z.string()).parse(search), component: SpecsPage });
+const routeTree = rootRoute.addChildren([productRoute, chartRoute, specsRoute]);
 
 export const router = createRouter({
   routeTree,

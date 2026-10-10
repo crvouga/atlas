@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 
 import { useAtlas } from '../app/atlas-context';
 import { emptyCounts, type AtlasView } from '../data/model';
@@ -146,6 +146,7 @@ function Breadcrumbs({ view, chartId }: { view: AtlasView | null; chartId: strin
 }
 
 export function Header() {
+  const documents = useLocation().pathname === '/specs';
   const { view } = useAtlas();
   const params = useParams({ strict: false });
   const chartId = params.chartId;
@@ -157,9 +158,9 @@ export function Header() {
     <header className={styles.header}>
       <div className={styles.brand}>
         <Breadcrumbs view={view} chartId={chartId} />
-        <RunMeta view={view} />
+        {!documents && <RunMeta view={view} />}
       </div>
-      <div className={styles.summaries} aria-label="Summary">
+      {!documents && <div className={styles.summaries} aria-label="Summary">
         {view ? (
           <>
             <SummaryBar noun="screen" nounPlural="screens" counts={counts.screens} verb="working" />
@@ -173,9 +174,10 @@ export function Header() {
             <span className={styles.summarySkeleton} />
           </>
         )}
-      </div>
+      </div>}
       <div className={styles.tools}>
-        {view && <RunPicker view={view} />}
+        <Link to="/specs">Specs and evidence</Link>
+        {view && !documents && <RunPicker view={view} />}
         {view && <DataIssues issues={view.issues} />}
       </div>
       {view && chartId && <JourneyBar view={view} chartId={chartId} />}

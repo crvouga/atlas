@@ -16,7 +16,7 @@ Usage
   atlas-visualizer publish-data [--specs <dir>] [--runs <dir>] [--out <dir>] [--keep <n>]
 
 Options
-  --specs <dir>    statecharts (*.scxml, *.machine.yaml|yml|json), journeys.yaml, notes   (default: ./specs)
+  --specs <dir>    all specs: statecharts, Gherkin, Quint, DMN, Alloy, notes   (default: ./specs)
   --runs <dir>     run directories, each with a manifest.json                              (default: ./atlas-runs)
   --fixture <name> show a bundled example instead (spec-only, partial, full, failures, removed, malformed, large)
   --out <dir>      build: the static site (default ./atlas-site); publish-data: the data (default ./atlas-data)

@@ -1,4 +1,4 @@
-import { Outlet, useSearch } from '@tanstack/react-router';
+import { Outlet, useSearch, useLocation } from '@tanstack/react-router';
 
 import { Header } from '../components/Header';
 import styles from '../views/views.module.css';
@@ -6,6 +6,8 @@ import { AtlasProvider, useAtlas } from './atlas-context';
 
 function Body() {
   const { view, spec } = useAtlas();
+  const location = useLocation();
+  if (location.pathname === "/specs") return <Outlet />;
   if (!view && spec.error) {
     return (
       <div className={styles.message} role="alert">

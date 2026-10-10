@@ -41,8 +41,9 @@
     "publish-data": "tsx scripts/publish-data.ts",
     "fixtures": "tsx scripts/make-fixtures.ts",
     "type-check": "tsc --noEmit",
-    "test": "vitest run",
-    "test:check": "vitest run"
+    "test": "vitest run && bun run test:reports",
+    "test:check": "vitest run",
+    "test:reports": "bun test --preload ./tests/preload.ts tests"
   },
   "dependencies": {
     "@crvouga/atlas": "workspace:*",
@@ -65,7 +66,11 @@
     "xstate": "5.33.2",
     "yaml": "^2.9.0",
     "zod": "^3.25.76",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "@crvouga/atlas-reports": "workspace:*",
+    "@cucumber/gherkin": "^42.0.1",
+    "@cucumber/messages": "^34.2.1",
+    "fast-xml-parser": "5.11.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",
