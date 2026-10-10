@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" />
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1440px; height: 900px; overflow: hidden; background: #e7eef2; color: #1c2430; font-family: "Atkinson Hyperlegible", sans-serif; }
+  header { height: 64px; display: flex; align-items: center; gap: 20px; padding: 0 24px; background: #1d4e89; color: #fff; }
+  header h1 { font-size: 26px; }
+  header input { margin-left: auto; height: 36px; width: 280px; border: 0; border-radius: 8px; padding: 0 12px; }
+  .body { display: grid; grid-template-columns: 300px 1fr; height: 836px; }
+  nav { background: #f4f8fa; border-right: 1px solid #c5d3dc; padding: 16px; }
+  nav h2 { font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: #4c6270; margin: 12px 8px; }
+  nav a { display: flex; justify-content: space-between; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
+  nav a.on { background: #1d4e89; color: #fff; }
+  .plate { margin: 28px; background: #fff; border-radius: 16px; padding: 28px 32px; box-shadow: 0 10px 28px rgba(28, 36, 48, 0.08); }
+  .plate h2 { font-size: 48px; letter-spacing: -0.03em; }
+  .plate p { margin-top: 8px; max-width: 46ch; color: #3d4d5c; }
+  .row { display: grid; grid-template-columns: 280px 1fr; gap: 28px; margin-top: 24px; }
+  .shot { height: 460px; border-radius: 24px; background: #1c2430; color: #fff; padding: 24px; }
+  .shot strong { font-size: 28px; display: block; margin-top: 180px; }
+  ul { list-style: none; padding: 0; }
+  li { padding: 12px 0; border-bottom: 1px solid #e1e8ee; }
+  .bad { color: #b42318; font-weight: 700; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Coffee order</h1>
+    <span>Latest run · 14 screens</span>
+    <input placeholder="Find a place" />
+  </header>
+  <div class="body">
+    <nav>
+      <h2>Places</h2>
+      <a>Browsing the menu <span>passed</span></a>
+      <a>Choosing a size <span>passed</span></a>
+      <a>Reviewing the cart <span>passed</span></a>
+      <a class="on">Checking out <span>failed</span></a>
+      <a>Order in progress <span>not reached</span></a>
+      <h2>Specs</h2>
+      <a>ordering/machine.yaml</a>
+      <a>checkout.scxml</a>
+      <a>journeys.yaml</a>
+    </nav>
+    <article class="plate">
+      <h2>Checking out</h2>
+      <p>Checkout runs as its own chart. Payment fails on the latest run.</p>
+      <div class="row">
+        <div class="shot"><strong>Card declined</strong><span>$6.40 still due</span></div>
+        <ul>
+          <li>Starts checkout → enters the card</li>
+          <li class="bad">Payment fails → back to the cart</li>
+          <li>Payment goes through → order in progress</li>
+          <li>Leaves checkout → reviewing the cart</li>
+        </ul>
+      </div>
+    </article>
+  </div>
+</body>
+</html>

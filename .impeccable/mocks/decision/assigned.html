@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" />
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1440px; height: 900px; overflow: hidden; background: #f6f1e8; color: #14120f; font-family: "Source Sans 3", sans-serif; }
+  .bar { height: 72px; background: #14120f; color: #f6f1e8; display: flex; align-items: center; gap: 28px; padding: 0 28px; }
+  .bar h1 { font-family: "Archivo Narrow", sans-serif; font-size: 34px; font-weight: 700; letter-spacing: -0.03em; }
+  .bar select, .bar input { background: transparent; color: #f6f1e8; border: 1px solid #3a342c; border-radius: 8px; height: 36px; padding: 0 12px; font: inherit; }
+  .bar input { width: 280px; margin-left: auto; }
+  .body { display: grid; grid-template-columns: 280px 1fr; height: 828px; }
+  nav { border-right: 1px solid #ddd4c6; padding: 18px 14px; }
+  nav p { font-size: 13px; color: #6d6458; margin: 14px 8px 6px; }
+  nav button { display: block; width: 100%; text-align: left; background: transparent; border: 0; color: #8a8174; padding: 7px 10px; font: inherit; font-size: 15px; }
+  nav button.on { color: #14120f; font-weight: 600; background: #fff; border-radius: 8px; }
+  main { display: grid; grid-template-rows: 1fr 92px; }
+  .stage { display: grid; grid-template-columns: 1fr 300px; gap: 24px; padding: 22px 28px 8px; }
+  .phone { background: #fff; border-radius: 28px; width: 280px; height: 520px; margin: 0 auto; border: 10px solid #14120f; display: flex; flex-direction: column; padding: 22px 16px; }
+  .phone strong { font-family: "Archivo Narrow", sans-serif; font-size: 28px; }
+  .phone span { margin-top: 8px; color: #6d6458; }
+  .phone .fail { margin-top: auto; background: #fde8e4; color: #c4322a; border-radius: 10px; padding: 12px; font-weight: 600; }
+  aside h2 { font-family: "Archivo Narrow", sans-serif; font-size: 32px; letter-spacing: -0.03em; }
+  aside ol { margin-top: 16px; padding-left: 18px; line-height: 1.7; }
+  .strip { display: flex; gap: 8px; align-items: center; padding: 0 28px 18px; }
+  .strip b { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; background: #e7e0d4; font-size: 14px; }
+  .strip b.bad { background: #c4322a; color: #fff; }
+  .strip b.now { outline: 2px solid #14120f; }
+</style>
+</head>
+<body>
+  <header class="bar">
+    <h1>Checking out</h1>
+    <select><option>Latest · with videos</option></select>
+    <input placeholder="Find a place or a spec" />
+  </header>
+  <div class="body">
+    <nav>
+      <p>Coffee order</p>
+      <button>Browsing the menu</button>
+      <button>Customizing the drink</button>
+      <button>Reviewing the cart</button>
+      <button class="on">Checking out</button>
+      <button>Order in progress</button>
+      <p>Specs</p>
+      <button>checkout.scxml</button>
+      <button>journeys.yaml</button>
+    </nav>
+    <main>
+      <div class="stage">
+        <div class="phone">
+          <strong>Card declined</strong>
+          <span>The total is $6.40. Try another card.</span>
+          <div class="fail">Scene 9 failed · Payment fails</div>
+        </div>
+        <aside>
+          <h2>Payment fails</h2>
+          <ol>
+            <li>Starts checkout</li>
+            <li>Enters the card</li>
+            <li>Payment fails</li>
+          </ol>
+        </aside>
+      </div>
+      <div class="strip" aria-label="Running order">
+        <b>1</b><b>2</b><b>3</b><b>4</b><b>5</b><b>6</b><b>7</b><b>8</b><b class="bad now">9</b><b>10</b><b>11</b><b>12</b>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

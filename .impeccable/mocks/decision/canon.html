@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1440px; height: 900px; overflow: hidden; background: #f8fafc; color: #0f172a; font-family: ui-sans-serif, system-ui, sans-serif; }
+  .body { display: grid; grid-template-columns: 260px 1fr 300px; grid-template-rows: 1fr 120px; height: 900px; }
+  nav, aside, .time { background: #fff; border-color: #e2e8f0; border-style: solid; }
+  nav { border-right-width: 1px; padding: 16px; grid-row: 1 / span 2; }
+  nav h1 { font-size: 16px; margin-bottom: 12px; }
+  nav button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 8px; border-radius: 6px; font: inherit; font-size: 14px; }
+  nav button.on { background: #dbeafe; color: #1d4ed8; }
+  main { padding: 24px; }
+  .screen { height: 560px; background: #0f172a; color: #fff; border-radius: 12px; padding: 28px; }
+  .screen b { display: block; margin-top: 200px; font-size: 32px; }
+  aside { border-left-width: 1px; padding: 16px; }
+  aside h2 { font-size: 16px; }
+  aside li { margin: 10px 0 0 16px; font-size: 14px; }
+  .bad { color: #b91c1c; font-weight: 700; }
+  .time { grid-column: 2 / span 2; border-top-width: 1px; display: flex; align-items: center; gap: 6px; padding: 0 20px; }
+  .time i { flex: 1; height: 8px; background: #cbd5e1; border-radius: 99px; display: block; }
+  .time i.bad { background: #dc2626; }
+  .time i.on { outline: 2px solid #2563eb; }
+</style>
+</head>
+<body>
+  <div class="body">
+    <nav>
+      <h1>Coffee order</h1>
+      <button>Browsing the menu</button>
+      <button>Reviewing the cart</button>
+      <button class="on">Checking out</button>
+      <button>checkout.scxml</button>
+      <button>journeys.yaml</button>
+    </nav>
+    <main><div class="screen"><b>Card declined</b><span>$6.40 still due</span></div></main>
+    <aside>
+      <h2>Payment fails</h2>
+      <ol>
+        <li>Starts checkout</li>
+        <li>Enters the card</li>
+        <li class="bad">Payment fails</li>
+      </ol>
+    </aside>
+    <div class="time"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="bad on"></i><i></i><i></i><i></i></div>
+  </div>
+</body>
+</html>
