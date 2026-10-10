@@ -1,33 +1,53 @@
 import { Hono } from 'hono';
 import { catalogEntries, catalogLayers } from './layer-catalog';
 import { createBundleReader } from './bundle';
-import { LAYER_INDEX, readLayer } from './layer-store';
+import { readLayer } from './layer-store';
 import type { LayerPage, LayerSummary } from './layer-types';
 import type { ReportsAppDeps } from './reports-route';
 import { eachLimited } from './completion-order';
 import { isFramePath, isKeySegment } from './keys';
+import { readUtf8 } from './object-io';
 
 const TTL = 30_000;
+const LOCAL_TTL = 1_500;
 const PAGE = 20;
-/** Bounded, warm metadata caches. Refresh may lag publication by thirty seconds. */
+/** Bounded, warm metadata caches for the live local report feed. */
 export function createLayersApp(deps: ReportsAppDeps) {
   const stores = [...new Set([deps.localStore, deps.store].filter(store => store != null))];
-  type Catalog = { at: number; entries: { store: number; key: string }[]; notices: string[] };
+  type Catalog = { localAt: number; remoteAt: number; entries: { store: number; key: string }[]; notices: string[] };
   let catalog: Catalog | null = null;
   let pending: Promise<Catalog> | null = null;
   const summaries = new Map<string, { at: number; value: readonly LayerSummary[] }>();
   const readers = new Map<string, ReturnType<typeof createBundleReader>>();
   async function discover(): Promise<Catalog> {
-    if (catalog && deps.clock.now() - catalog.at < TTL) return catalog;
+    const now = deps.clock.now();
+    if (catalog && now - catalog.localAt < LOCAL_TTL && now - catalog.remoteAt < TTL) return catalog;
     pending ??= (async () => {
-      const entries: { store: number; key: string }[] = [], notices: string[] = [];
-      await Promise.all(stores.map(async (store, i) => {
-        try { for (const key of await catalogEntries(store)) entries.push({ store: i, key }); }
-        catch { notices.push('A report store is unavailable. Loaded layers remain usable.'); }
+      const previous = catalog;
+      const entries: { store: number; key: string }[] = [];
+      const notices: string[] = [];
+      const refreshed = await Promise.all(stores.map(async (store, i) => {
+        const isLocal = store === deps.localStore;
+        const freshFor = isLocal ? LOCAL_TTL : TTL;
+        const lastAt = isLocal ? previous?.localAt ?? -Infinity : previous?.remoteAt ?? -Infinity;
+        if (previous && now - lastAt < freshFor) {
+          return { i, keys: previous.entries.filter(entry => entry.store === i).map(entry => entry.key), notice: null, at: lastAt };
+        }
+        try { return { i, keys: await catalogEntries(store), notice: null, at: now }; }
+        catch { return { i, keys: previous?.entries.filter(entry => entry.store === i).map(entry => entry.key) ?? [], notice: 'A report store is unavailable. Loaded layers remain usable.', at: lastAt }; }
       }));
+      for (const store of refreshed) {
+        entries.push(...store.keys.map(key => ({ store: store.i, key })));
+        if (store.notice) notices.push(store.notice);
+      }
       if (!stores.length) notices.push('No report store is configured.');
       entries.sort((a, b) => Number(b.key.startsWith('layer:')) - Number(a.key.startsWith('layer:')) || (a.key < b.key ? -1 : a.key > b.key ? 1 : a.store - b.store));
-      catalog = { at: deps.clock.now(), entries, notices };
+      catalog = {
+        localAt: refreshed.find(store => stores[store.i] === deps.localStore)?.at ?? now,
+        remoteAt: refreshed.find(store => stores[store.i] !== deps.localStore)?.at ?? now,
+        entries,
+        notices,
+      };
       return catalog;
     })();
     try { return await pending; } finally { pending = null; }
@@ -69,6 +89,20 @@ export function createLayersApp(deps: ReportsAppDeps) {
     const text = await outline.readSpec(path);
     return text === null ? c.notFound() : c.text(text);
   });
+  app.get('/active', async c => {
+    const local = deps.localStore;
+    if (!local) return c.json({ runs: [] }, 200, { 'cache-control': 'no-store' });
+    const runs = await Promise.all((await local.listKeys('active/')).map(async key => {
+      try {
+        const raw = await readUtf8(local, key);
+        if (raw === null) return null;
+        const run = JSON.parse(raw) as { packageDir?: string; bucket?: string; startedAtMs?: number; plannedChecks?: number };
+        if (!run.packageDir || !run.bucket || typeof run.startedAtMs !== 'number') return null;
+        return run;
+      } catch { return null; }
+    }));
+    return c.json({ runs: runs.filter((run): run is NonNullable<typeof run> => run !== null) }, 200, { 'cache-control': 'no-store' });
+  });
   app.get('/layers', async c => {
     const cursor = c.req.query('cursor') ?? '';
     const index = await discover();
@@ -81,7 +115,8 @@ export function createLayersApp(deps: ReportsAppDeps) {
       const cacheKey = `${entry.store}:${entry.key}`;
       try {
         let cached = summaries.get(cacheKey);
-        if (!cached || (!entry.key.startsWith(`layer:${LAYER_INDEX}`) && deps.clock.now() - cached.at >= TTL)) {
+        const cacheTtl = stores[entry.store] === deps.localStore ? LOCAL_TTL : TTL;
+        if (!cached || deps.clock.now() - cached.at >= cacheTtl) {
           cached = { at: deps.clock.now(), value: await catalogLayers(stores[entry.store]!, entry.key) };
           if (summaries.size >= 256) summaries.delete(summaries.keys().next().value!);
           summaries.set(cacheKey, cached);
