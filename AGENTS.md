@@ -22,8 +22,14 @@ Assume other agents working in other consumer projects may push Atlas changes at
   succeeds.
 - Never force-push, destructively reset, or overwrite or discard changes merely because they came
   from another project.
+- Resolve each conflict hunk by hunk. Never take one side's whole file or directory
+  (`git checkout --ours` / `--theirs`, `-X ours` / `-X theirs`): that once replaced a redesigned
+  explorer with the interface it superseded while every check stayed green. Before pushing a merge,
+  compare the result with each parent (`git diff --stat <parent> HEAD`) and account for every file
+  that lost a parent's change.
 - Commit and push the Atlas change in this repository before updating a consumer repository's
-  submodule pointer. A consumer must never point at a commit that exists only locally.
+  submodule pointer. A consumer must never point at a commit that exists only locally, or at one
+  that is not on `main`.
 - Keep consumer-specific specs, configuration, fixtures, and generated runs in the consumer
   repository. Change Atlas itself only for reusable library, driver, schema, documentation, or
   tooling improvements.
