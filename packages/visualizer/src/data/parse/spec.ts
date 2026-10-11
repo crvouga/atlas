@@ -68,6 +68,8 @@ export type ParsedChart = {
   states: string[];
   parent: { chartId: string; state: string } | null;
   layout: LayoutFile | null;
+  type?: 'parallel';
+  explorationError?: string;
 };
 
 export type ParsedJourney = {
@@ -156,8 +158,8 @@ export function isMachineFile(path: string) {
 }
 
 /** `meta` fields that hold lists or maps; SCXML carries them as text in the `atlas:` namespace. */
-const STRUCTURED_META = new Set(['events', 'source', 'checks', 'hints', 'gherkin', 'design', 'eventKinds', 'timeEvents', 'childFinalEvents']);
-const LIST_META = new Set(['events', 'source', 'checks', 'hints', 'gherkin']);
+const STRUCTURED_META = new Set(['events', 'source', 'checks', 'hints', 'gherkin', 'contracts', 'design', 'eventKinds', 'timeEvents', 'childFinalEvents']);
+const LIST_META = new Set(['events', 'source', 'checks', 'hints', 'gherkin', 'contracts']);
 
 /** SCXML metadata arrives as text: JSON for lists and maps, or one plain item of a list. */
 function normalizeScxmlMeta(meta: unknown) {
@@ -230,6 +232,29 @@ function readTarget(raw: unknown, sink: IssueSink, file: string, path: (string |
   if (isRecord(raw) && typeof raw.target === 'string' && raw.target.trim()) return { target: raw.target };
   sink.add('warning', file, path, 'has no destination screen, so it is left off the map.');
   return null;
+}
+
+/** The map remains tolerant, but exploration must never silently erase executable conditions. */
+function explorationIssue(raw: Record<string, unknown>): string | undefined {
+  const allowed = new Set(['id', 'initial', 'type', 'meta', 'states', 'on', 'invoke', 'description']);
+  const target = (value: unknown) => value === null || value === undefined || typeof value === 'string' || (isRecord(value) && typeof value.target === 'string' && Object.keys(value).every((key) => key === 'target'));
+  const visit = (node: Record<string, unknown>): string | undefined => {
+    const key = Object.keys(node).find((key) => !allowed.has(key));
+    if (key) return `“${key}” needs executable code and is outside Atlas’s pure exploration model.`;
+    if (node.type !== undefined && node.type !== 'parallel' && node.type !== 'final') return 'This state type is outside Atlas’s pure exploration model.';
+    if (node.on !== undefined && (!isRecord(node.on) || Object.values(node.on).some((value) => !target(value)))) return 'Conditional, multiple or invalid transition destinations cannot be explored safely.';
+    if (node.invoke !== undefined) {
+      const invokes = Array.isArray(node.invoke) ? node.invoke : [node.invoke];
+      if (invokes.length !== 1 || invokes.some((invoke) => !isRecord(invoke) || typeof invoke.src !== 'string' || Object.keys(invoke).some((key) => !['src', 'id', 'onDone'].includes(key)) || (invoke.onDone !== undefined && !target(invoke.onDone)))) return 'Only one statically named child chart per state can be explored safely.';
+    }
+    if (isRecord(node.states)) for (const child of Object.values(node.states)) {
+      if (!isRecord(child)) return 'A state with invalid details cannot be explored safely.';
+      const issue = visit(child);
+      if (issue) return issue;
+    }
+    return undefined;
+  };
+  return visit(raw);
 }
 
 /**
@@ -323,6 +348,9 @@ export function parseSpec(source: SpecSource, sink: IssueSink = createIssueSink(
       parent: null,
       layout
     };
+    if (fields.type === 'parallel') chart.type = 'parallel';
+    chart.explorationError = explorationIssue(raw);
+    if (chart.explorationError) sink.add('warning', file, [], `Free exploration is disabled: ${chart.explorationError}`);
     charts.push(chart);
     const ids = new Map<string, string>();
     idToName.set(id, ids);

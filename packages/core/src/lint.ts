@@ -51,11 +51,11 @@ function sanitized(bundle: SpecBundle): SpecBundle {
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(node)) if (STATE_KEYS.has(key)) out[key] = value;
     if (node.on) {
-      out.on = Object.fromEntries(
+      out['on'] = Object.fromEntries(
         Object.entries(node.on).map(([event, t]) => [event, typeof t === 'string' ? t : { target: (t as { target: string }).target }])
       );
     }
-    if (node.states) out.states = Object.fromEntries(Object.entries(node.states).map(([k, v]) => [k, clean(v)]));
+    if (node.states) out['states'] = Object.fromEntries(Object.entries(node.states).map(([k, v]) => [k, clean(v)]));
     return out as StateConfig;
   };
   return { ...bundle, charts: bundle.charts.map((c) => ({ ...c, machine: clean(c.machine) as typeof c.machine })) };
@@ -86,8 +86,10 @@ export function lintBundle(bundle: SpecBundle, options: LintOptions = {}) {
   }
 
   const reached = new Set<string>();
-  for (const { config } of graph.explore(graph.initial(), () => true).seen.values()) {
-    for (const name of config.active) reached.add(name);
+  for (const regions of graph.regionSets()) {
+    for (const { config } of graph.explore(graph.initial(), (event) => graph.actsIn(event, regions)).seen.values()) {
+      for (const name of config.active) reached.add(name);
+    }
   }
   for (const name of graph.stateNames()) {
     if (!reached.has(name)) findings.push({ rule: 'reachable', message: `${name} is unreachable from the initial state` });

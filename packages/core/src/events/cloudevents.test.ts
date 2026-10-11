@@ -5,7 +5,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { CloudEvent } from './cloudevents';
-import { cloudEventsFromHttp, cloudEventsHttpSource, compareBusinessEvents, logFileSource } from './cloudevents';
+import { cloudEventsFromHttp, cloudEventsHttpSource, compareBusinessEvents, correlated, logFileSource } from './cloudevents';
 
 const ORDER_PLACED: CloudEvent = {
   specversion: '1.0',
@@ -81,13 +81,13 @@ describe('cloudEventsHttpSource', () => {
       const post = (headers: Record<string, string>, body: string) => fetch(source.url, { method: 'POST', headers, body });
 
       await post({ 'content-type': 'application/cloudevents+json' }, JSON.stringify({ ...ORDER_PLACED, id: 'before-mark' }));
-      await source.mark();
+      const mark = await source.mark();
       const structured = await post({ 'content-type': 'application/cloudevents+json' }, JSON.stringify(ORDER_PLACED));
       const binary = await post({ 'content-type': 'application/json', 'ce-specversion': '1.0', 'ce-id': 'b', 'ce-source': '/s', 'ce-type': 'com.example.order.paid' }, '{}');
       const bad = await post({ 'content-type': 'application/cloudevents+json' }, 'not json');
 
       expect([structured.status, binary.status, bad.status]).toEqual([202, 202, 400]);
-      const { events } = await source.collect();
+      const { events } = await source.collect(mark);
       expect(events.map((e) => e.type)).toEqual(['com.example.order.placed', 'com.example.order.paid']);
     } finally {
       await source.close?.();
@@ -102,9 +102,13 @@ describe('logFileSource', () => {
     try {
       writeFileSync(file, 'boot\n');
       const source = logFileSource(file, { settleMs: 0 });
-      await source.mark();
+      const first = await source.mark();
       appendFileSync(file, 'order placed id=7\n');
-      expect(await source.collect()).toEqual({ events: [], text: 'order placed id=7\n' });
+      const second = await source.mark();
+      appendFileSync(file, 'order placed id=8 user=u-2\n');
+      expect(await source.collect(first)).toEqual({ events: [], text: 'order placed id=7\norder placed id=8 user=u-2\n' });
+      expect(await source.collect(second)).toEqual({ events: [], text: 'order placed id=8 user=u-2\n' });
+      expect(correlated({ events: [], text: 'order placed id=7\norder placed id=8 user=u-2\n' }, ['u-2']).text).toBe('order placed id=8 user=u-2');
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

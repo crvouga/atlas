@@ -157,12 +157,29 @@
 
 /* Index */
 
+.specFrame {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+}
+
 .index {
   min-height: 0;
   overflow: auto;
   padding: 12px 8px 32px;
   background: var(--bg);
   border-right: 1px solid var(--line);
+}
+
+.find {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
 }
 
 .filters {

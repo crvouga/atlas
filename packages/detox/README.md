@@ -56,7 +56,13 @@ it('follows the todo statechart', async () => {
   attempt and terminates it afterwards; screenshots come from `device.takeScreenshot`. Pass `api` to
   use something other than the globals.
 - **`DetoxContext`**: Detox's `device`, `element`, `by` and `waitFor`, plus `tap(matcher, label)` and
-  `type(matcher, text, label)`, which log each action to the step's timeline.
+  `type(matcher, text, label)`, which log each action to the step's timeline. It is a
+  `SignalContext` too (`goto` opens a deep link, `isVisible`, `user.tap`, `user.type`), so an
+  implementation written against `@crvouga/atlas/signals` runs here unchanged; `detoxMatcher`
+  maps a signal to `by.id`, `by.label` or `by.text`.
+
+To combine a native app with other clients (a web dashboard, an API) from the `atlas` CLI rather
+than from inside a Detox test, use `@crvouga/atlas-webdriver` with Appium.
 - **`detoxScreen({ all, none, checks })`**: a state recogniser from Detox matchers.
 
 Detox records video per test through its artifacts plugin rather than per call, so this driver does

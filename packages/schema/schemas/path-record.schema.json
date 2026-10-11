@@ -29,6 +29,14 @@
         "not-reached"
       ]
     },
+    "progress": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "complete"
+      ]
+    },
     "attempts": {
       "type": "array",
       "items": {
@@ -66,6 +74,16 @@
                 "type": "null"
               }
             ]
+          },
+          "traces": {
+            "description": "One trace per client, in a multi-client run",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -86,6 +104,41 @@
           "type": "null"
         }
       ]
+    },
+    "key": {
+      "description": "The same start and events give the same key in every run",
+      "type": "string"
+    },
+    "start": {
+      "description": "The active states the path starts in",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "seed": {
+      "description": "The seed that put the system in the start states; setup did when absent",
+      "type": "string"
+    },
+    "journeys": {
+      "description": "The journeys this stretch belongs to",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "durationMs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "setupMs": {
+      "description": "How long seeding (or setup) and the start check took",
+      "type": "number",
+      "minimum": 0
+    },
+    "reusedFrom": {
+      "description": "The run this result was kept from",
+      "type": "string"
     }
   },
   "required": [

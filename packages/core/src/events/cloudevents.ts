@@ -38,6 +38,8 @@ export function cloudEventsFromHttp(headers: Record<string, string | string[] | 
   if (contentType.startsWith('application/cloudevents+json')) return [JSON.parse(body) as CloudEvent];
   const type = header('ce-type');
   if (!type) return [];
+  const time = header('ce-time');
+  const subject = header('ce-subject');
   const extensions = Object.fromEntries(
     Object.entries(headers)
       .filter(([k]) => k.startsWith('ce-') && !['ce-specversion', 'ce-id', 'ce-source', 'ce-type', 'ce-time', 'ce-subject'].includes(k))
@@ -58,8 +60,8 @@ export function cloudEventsFromHttp(headers: Record<string, string | string[] | 
       id: header('ce-id') ?? randomUUID(),
       source: header('ce-source') ?? 'unknown',
       type,
-      ...(header('ce-time') ? { time: header('ce-time') } : {}),
-      ...(header('ce-subject') ? { subject: header('ce-subject') } : {}),
+      ...(time ? { time } : {}),
+      ...(subject ? { subject } : {}),
       ...(contentType ? { datacontenttype: contentType } : {}),
       data
     }
@@ -72,7 +74,6 @@ export function cloudEventsFromHttp(headers: Record<string, string | string[] | 
  */
 export async function cloudEventsHttpSource(options: { port?: number; host?: string } = {}): Promise<EventSource & { url: string }> {
   const received: CloudEvent[] = [];
-  let mark = 0;
   const server: Server = createServer(async (req, res) => {
     try {
       const events = cloudEventsFromHttp(req.headers, await readBody(req));
@@ -88,28 +89,26 @@ export async function cloudEventsHttpSource(options: { port?: number; host?: str
   return {
     name: 'cloudevents-http',
     url: `http://${options.host ?? '127.0.0.1'}:${port}/`,
-    mark: () => {
-      mark = received.length;
-    },
-    collect: async () => ({ events: received.slice(mark) }),
+    mark: () => received.length,
+    collect: async (from) => ({ events: received.slice(typeof from === 'number' ? from : 0) }),
     close: () => new Promise<void>((resolve) => server.close(() => resolve()))
   };
 }
 
 /** Lines appended to a log file during a step, for products whose only event stream is a log. */
 export function logFileSource(file: string, options: { settleMs?: number } = {}): EventSource {
-  let offset = 0;
   return {
     name: `log:${file}`,
     mark: () => {
       try {
-        offset = statSync(file).size;
+        return statSync(file).size;
       } catch {
-        offset = 0;
+        return 0;
       }
     },
-    collect: async () => {
+    collect: async (from) => {
       await new Promise((r) => setTimeout(r, options.settleMs ?? 1_000));
+      const offset = typeof from === 'number' ? from : 0;
       try {
         const size = statSync(file).size;
         const length = Math.max(0, size - offset);
@@ -132,6 +131,20 @@ export type BusinessEventResult = {
   noSignal: string[];
   events: CloudEvent[];
 };
+
+/**
+ * Keep what belongs to one attempt when attempts run side by side: events and log lines that
+ * mention one of its correlation ids. With no ids, everything is kept.
+ */
+export function correlated(collected: { events: CloudEvent[]; text: string }, ids: string[]) {
+  const wanted = ids.filter(Boolean);
+  if (!wanted.length) return collected;
+  const mentions = (value: string) => wanted.some((id) => value.includes(id));
+  return {
+    events: collected.events.filter((e) => mentions(JSON.stringify(e))),
+    text: collected.text.split('\n').filter(mentions).join('\n')
+  };
+}
 
 /**
  * Compare the business events a state expects with what the sources saw. A business event is

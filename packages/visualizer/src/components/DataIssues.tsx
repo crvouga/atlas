@@ -33,13 +33,13 @@ export function DataIssues({ issues }: { issues: DataIssue[] }) {
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content className={styles.sheet}>
           <div className={styles.head}>
-            <Dialog.Title className={styles.title}>What we couldn’t read</Dialog.Title>
+            <Dialog.Title className={styles.title}>Parts of the data that couldn’t be read</Dialog.Title>
             <Dialog.Close className={styles.close} aria-label="Close">
               <CloseIcon size={16} />
             </Dialog.Close>
           </div>
           <Dialog.Description className={styles.lead}>
-            Everything else on the map is shown as usual. These are the parts of the spec and the runs that were skipped or guessed, file by file.
+            Everything else on the map is shown as usual. These parts of the spec and the runs were skipped or guessed, listed by file.
           </Dialog.Description>
           <div className={styles.list}>
             {byFile.map(([file, list]) => (

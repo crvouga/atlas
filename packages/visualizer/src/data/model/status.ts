@@ -31,6 +31,15 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
   'spec-only': 'Spec only'
 };
 
+export const STATUS_DESCRIPTION: Record<ItemStatus, string> = {
+  passed: 'The app did what the spec says.',
+  flaky: 'It worked only on a retry.',
+  failed: 'The app did not do what the spec says.',
+  'not-reached': 'The run tried, but no path got here.',
+  'not-yet-run': 'This run did not cover it.',
+  'spec-only': 'No run has checked it yet.'
+};
+
 /** A sentence only when the status word does not already say it, or when the run gave its own reason. */
 export function statusNote(status: ItemStatus, reason?: string | null): string | null {
   const specific = reason?.trim();

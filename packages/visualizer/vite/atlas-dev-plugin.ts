@@ -4,12 +4,14 @@ import path from 'node:path';
 
 import type { Plugin, ViteDevServer } from 'vite';
 
-import { isSpecFile, resolveRoots, runsIndex, safeJoin, specIndex, type AtlasRoots } from './atlas-files';
+import type { AtlasChange, ReportSource } from '@crvouga/atlas-schema';
+
+import { isSpecFile, publicReportSources, resolveReportSources, resolveRoots, runsIndex, safeJoin, specIndex, type AtlasRoots } from './atlas-files';
 
 export const ATLAS_DEV_PREFIX = '/__atlas';
 export const ATLAS_CHANGE_EVENT = 'atlas:change';
 
-export type AtlasChange = { scope: 'specs' | 'runs'; files: string[]; runIds: string[] };
+export type { AtlasChange } from '@crvouga/atlas-schema';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.json': 'application/json; charset=utf-8',
@@ -82,7 +84,7 @@ function sendFile(res: ServerResponse, file: string, range: string | undefined, 
   pipe(file, res);
 }
 
-function watch(server: ViteDevServer, roots: AtlasRoots) {
+function watch(server: ViteDevServer, roots: AtlasRoots, sourceId = 'workspace') {
   const pending = { specs: new Set<string>(), runs: new Set<string>() };
   let timer: ReturnType<typeof setTimeout> | null = null;
   const flush = () => {
@@ -92,50 +94,68 @@ function watch(server: ViteDevServer, roots: AtlasRoots) {
       const files = [...pending[scope]];
       pending[scope].clear();
       const runIds = scope === 'runs' ? [...new Set(files.map((f) => f.split('/')[0]!).filter(Boolean))] : [];
-      const change: AtlasChange = { scope, files, runIds };
+      const change: AtlasChange = { scope, files, runIds, sourceId };
       server.ws.send({ type: 'custom', event: ATLAS_CHANGE_EVENT, data: change });
     }
   };
   const onFs = (file: string) => {
     for (const scope of ['specs', 'runs'] as const) {
+      if (scope === 'specs' && sourceId !== 'workspace') continue;
       const rel = path.relative(roots[scope], file);
       if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
       const relPosix = rel.split(path.sep).join('/');
       if (scope === 'specs' && !isSpecFile(relPosix) && relPosix.includes('.')) return;
-      if (relPosix.includes('/.frames')) return;
+      if (relPosix.split('/').some((part) => part.startsWith('.'))) return;
       pending[scope].add(relPosix);
       timer ??= setTimeout(flush, 200);
     }
   };
   server.watcher.add([roots.specs, roots.runs]);
   for (const event of ['add', 'change', 'unlink', 'addDir', 'unlinkDir'] as const) server.watcher.on(event, onFs);
+  server.httpServer?.once('close', () => {
+    if (timer) clearTimeout(timer);
+    for (const event of ['add', 'change', 'unlink', 'addDir', 'unlinkDir'] as const) server.watcher.off(event, onFs);
+  });
 }
 
 /**
  * The dev adapter: serves the specs and runs folders under `/__atlas`, in the same layout the
  * static build publishes, and tells the browser over Vite's HMR channel when either changes.
  */
-export function atlasDevPlugin(options: { roots?: AtlasRoots } = {}): Plugin {
+export function atlasDevPlugin(options: { roots?: AtlasRoots; sources?: ReportSource[] } = {}): Plugin {
   let roots: AtlasRoots;
+  let sources: ReportSource[];
   return {
     name: 'atlas-dev',
     apply: 'serve',
     configResolved() {
       roots = options.roots ?? resolveRoots();
+      sources = options.sources ?? resolveReportSources(roots);
     },
     configureServer(server) {
       server.config.logger.info(`  atlas  specs ${roots.specs}\n         runs  ${roots.runs}  (${roots.label})`);
       watch(server, roots);
+      for (const source of sources) if (source.type === 'directory' && source.id !== 'workspace') watch(server, { ...roots, runs: source.runs }, source.id);
       server.middlewares.use(ATLAS_DEV_PREFIX, (req, res, next) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
-        const pathname = url.pathname;
+        let pathname = url.pathname;
+        let servedRoots = roots;
+        if (pathname === '/sources.json') return sendJson(res, { schemaVersion: 1, sources: publicReportSources(sources) });
+        const sourced = pathname.match(/^\/sources\/([a-zA-Z0-9_-]+)(\/.*)$/);
+        if (sourced) {
+          const source = sources.find((item) => item.id === sourced[1]);
+          if (source?.type !== 'directory') return notFound(res);
+          servedRoots = { ...roots, runs: source.runs };
+          pathname = sourced[2]!;
+          if (!pathname.startsWith('/runs/')) return notFound(res);
+        }
         if (pathname === '/specs/index.json') return sendJson(res, specIndex(roots.specs, null));
-        if (pathname === '/runs/index.json') return sendJson(res, runsIndex(roots.runs));
+        if (pathname === '/runs/index.json') return sendJson(res, runsIndex(servedRoots.runs));
         const [, scope, ...rest] = pathname.split('/');
         if (scope !== 'specs' && scope !== 'runs') return next();
         const relative = rest.join('/');
         if (scope === 'specs' && !isSpecFile(safeDecode(relative))) return notFound(res);
-        const file = safeJoin(roots[scope], relative);
+        const file = safeJoin(servedRoots[scope], relative);
         if (!file || !existsSync(file) || !statSync(file).isFile()) return notFound(res);
         const immutable = scope === 'runs' && !relative.endsWith('manifest.json');
         try {

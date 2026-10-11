@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 
-import { keys, useAdapter } from '../data/queries';
+import { keys, specKey, useAdapter } from '../data/queries';
 import { outlinePath, specFile, specKind } from '../spec-kind';
 import type { SelectCheck } from './check-detail';
 import { DocumentPage } from './document-page';
@@ -22,7 +22,7 @@ export function SpecPage() {
   const kind = specKind(params.kind);
   const file = search.spec ? specFile(search.spec) : '';
   const readable = kind !== null && file.length > 0 && kind.accepts(file);
-  const text = useQuery({ queryKey: keys.specFile(file), queryFn: () => adapter.specFile(file), enabled: readable, retry: false });
+  const text = useQuery({ queryKey: keys.specFile(specKey(adapter), file), queryFn: () => adapter.specFile(file), enabled: readable, retry: false });
 
   if (!kind) {
     return (

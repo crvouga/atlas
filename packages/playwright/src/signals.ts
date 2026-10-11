@@ -1,37 +1,22 @@
 import type { CheckResult, RecognizerResult, StateImplementation } from '@crvouga/atlas';
+import type { Signal } from '@crvouga/atlas/signals';
 import type { Locator, Page } from 'playwright';
+import { describeSignal } from '@crvouga/atlas/signals';
 
-/**
- * A UI signal: something visible (or not) that proves where the app is. Test IDs first, then
- * accessible roles and names, then text, as the Testing Library guidance orders them.
- */
-export type Signal =
-  | { testId: string }
-  | { role: Parameters<Page['getByRole']>[0]; name?: string | RegExp }
-  | { text: string | RegExp }
-  | { label: string | RegExp }
-  | { css: string };
+export { css, describeSignal, label, role, testId, text, type Signal } from '@crvouga/atlas/signals';
 
-export const testId = (id: string): Signal => ({ testId: id });
-export const text = (value: string | RegExp): Signal => ({ text: value });
-export const role = (r: Parameters<Page['getByRole']>[0], name?: string | RegExp): Signal => ({ role: r, ...(name ? { name } : {}) });
-export const label = (value: string | RegExp): Signal => ({ label: value });
-export const css = (selector: string): Signal => ({ css: selector });
+type AriaRole = Parameters<Page['getByRole']>[0];
 
+/** A signal as a Playwright locator: the first visible match, with Playwright's own role and text rules. */
 export function locate(page: Page, signal: Signal): Locator {
   if ('testId' in signal) return page.getByTestId(signal.testId).filter({ visible: true }).first();
-  if ('role' in signal) return page.getByRole(signal.role, signal.name ? { name: signal.name } : {}).filter({ visible: true }).first();
+  if ('role' in signal) {
+    const options = { ...(signal.name ? { name: signal.name } : {}), ...(signal.exact ? { exact: true } : {}) };
+    return page.getByRole(signal.role as AriaRole, options).filter({ visible: true }).first();
+  }
   if ('label' in signal) return page.getByLabel(signal.label).filter({ visible: true }).first();
   if ('css' in signal) return page.locator(signal.css).filter({ visible: true }).first();
-  return page.getByText(signal.text).filter({ visible: true }).first();
-}
-
-export function describeSignal(signal: Signal) {
-  if ('testId' in signal) return `test ID "${signal.testId}"`;
-  if ('role' in signal) return `${signal.role}${signal.name ? ` "${String(signal.name)}"` : ''}`;
-  if ('label' in signal) return `label ${String(signal.label)}`;
-  if ('css' in signal) return `selector ${signal.css}`;
-  return `text ${String(signal.text)}`;
+  return page.getByText(signal.text, signal.exact ? { exact: true } : {}).filter({ visible: true }).first();
 }
 
 const isVisible = (page: Page, signal: Signal) => locate(page, signal).isVisible().catch(() => false);

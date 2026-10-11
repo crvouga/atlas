@@ -1,13 +1,19 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 import { useAtlasData, useLiveUpdates, type AtlasData } from '../data/queries';
 
-const AtlasContext = createContext<AtlasData | null>(null);
+type AtlasSession = AtlasData & { live: boolean; setLive: (enabled: boolean) => void };
+const AtlasContext = createContext<AtlasSession | null>(null);
 
 export function AtlasProvider({ run, children }: { run: string | undefined; children: ReactNode }) {
-  useLiveUpdates();
-  const data = useAtlasData(run);
-  return <AtlasContext.Provider value={data}>{children}</AtlasContext.Provider>;
+  const [live, setLiveState] = useState(true);
+  useLiveUpdates(live);
+  const data = useAtlasData(run, live);
+  const setLive = (enabled: boolean) => {
+    setLiveState(enabled);
+    if (enabled) data.refresh();
+  };
+  return <AtlasContext.Provider value={{ ...data, live, setLive }}>{children}</AtlasContext.Provider>;
 }
 
 export function useAtlas() {

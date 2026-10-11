@@ -41,6 +41,17 @@
         "type": "string"
       }
     },
+    "client": {
+      "description": "The client whose screen shows it, in a multi-client run",
+      "type": "string"
+    },
+    "seeds": {
+      "description": "Seeds that start paths with this state active",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "status": {
       "type": "string",
       "enum": [
@@ -60,14 +71,42 @@
               "minLength": 1
             },
             "webp": {
-              "description": "About 400 px wide, for the map",
+              "description": "About 400 px wide, for the map; the original image is used while a thumbnail is unavailable",
               "type": "string",
               "minLength": 1
+            },
+            "client": {
+              "description": "Which client's screen it is, in a multi-client run",
+              "type": "string"
+            },
+            "also": {
+              "description": "The other clients' screens at the same moment",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "png": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "webp": {
+                    "description": "About 400 px wide, for the map; the original image is used while a thumbnail is unavailable",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "client": {
+                    "description": "Which client's screen it is, in a multi-client run",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "png"
+                ]
+              }
             }
           },
           "required": [
-            "png",
-            "webp"
+            "png"
           ]
         },
         {
@@ -100,14 +139,42 @@
             "minLength": 1
           },
           "webp": {
-            "description": "About 400 px wide, for the map",
+            "description": "About 400 px wide, for the map; the original image is used while a thumbnail is unavailable",
             "type": "string",
             "minLength": 1
+          },
+          "client": {
+            "description": "Which client's screen it is, in a multi-client run",
+            "type": "string"
+          },
+          "also": {
+            "description": "The other clients' screens at the same moment",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "png": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "webp": {
+                  "description": "About 400 px wide, for the map; the original image is used while a thumbnail is unavailable",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "client": {
+                  "description": "Which client's screen it is, in a multi-client run",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "png"
+              ]
+            }
           }
         },
         "required": [
-          "png",
-          "webp"
+          "png"
         ]
       }
     },

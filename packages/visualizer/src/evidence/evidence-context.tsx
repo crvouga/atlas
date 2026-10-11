@@ -7,7 +7,7 @@ import { SpecIndexSchema } from '@crvouga/atlas-schema';
 import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
-import { keys, useAdapter } from '../data/queries';
+import { keys, specKey, useAdapter } from '../data/queries';
 import { fileName, folderOf, kindOfFile, outlinePath } from '../spec-kind';
 import { useUiStore } from '../state/ui-store';
 import { reportJson, staticEvidence } from './api';
@@ -65,10 +65,11 @@ function outlineOf(files: readonly string[]): ReportOutline {
 
 export function EvidenceProvider({ children }: { children: ReactNode }) {
   const adapter = useAdapter();
+  const source = specKey(adapter);
   const excluded = useUiStore((s) => s.excluded);
   const setExcluded = useUiStore((s) => s.setExcluded);
 
-  const specIndex = useQuery({ queryKey: keys.specIndex, queryFn: adapter.specIndex, retry: false });
+  const specIndex = useQuery({ queryKey: keys.specIndex(source), queryFn: adapter.specIndex, retry: false });
   const files = useMemo(() => {
     const parsed = SpecIndexSchema.safeParse(specIndex.data);
     return parsed.success ? parsed.data.files : [];

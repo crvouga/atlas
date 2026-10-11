@@ -1,5 +1,6 @@
 import type {
   BusinessEvents,
+  BusinessContract,
   CheckResult,
   Confidence,
   DataIssue,
@@ -12,6 +13,7 @@ import type {
   StateType,
   TimelineEntry
 } from '@crvouga/atlas-schema';
+import type { ChartSimulation } from './simulation';
 
 export const ITEM_STATUSES = ['passed', 'flaky', 'failed', 'not-reached', 'not-yet-run', 'spec-only'] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
@@ -63,6 +65,8 @@ export type StateResult = {
   notes: string[];
   looksLike: string[];
   recognizer: { matched: boolean; signals: { signal: string; expected: string; visible: boolean }[] } | null;
+  /** Seeds that start paths with this screen showing. */
+  seeds: string[];
 };
 
 export type StateView = {
@@ -83,6 +87,9 @@ export type StateView = {
   sources: string[];
   owner: string | null;
   tier: string | null;
+  quint: string | null;
+  gherkin: string[];
+  contracts: BusinessContract[];
   design: DesignLink | null;
   hints: string[];
   specChecks: string[];
@@ -140,7 +147,10 @@ export type JourneyStep = {
 export type JourneyRunPath = {
   id: string;
   name: string;
+  /** The seed the stretch started from; null when it started at the beginning. */
+  seed: string | null;
   status: RunStatus;
+  progress: 'queued' | 'running' | 'complete';
   stoppedAt: string | null;
   error: string | null;
   steps: { transition: string | null; event: string; status: RunStatus | null; reason: string | null }[];
@@ -169,6 +179,7 @@ export type ChartView = {
   dir: string;
   contextId: string;
   description: string;
+  contracts: BusinessContract[];
   parent: { chartId: string; state: string } | null;
   childChartIds: string[];
   initial: string | null;
@@ -216,6 +227,19 @@ export type RunView = {
   outOfDate: boolean;
   /** Links to the other formats the run wrote: JUnit, CTRF, Mermaid. */
   reports: RunReport[];
+  paths: {
+    id: string;
+    name: string;
+    kind: 'journey' | 'generated';
+    status: ItemStatus;
+    progress: 'queued' | 'running' | 'complete';
+    steps: number;
+    seed: string | null;
+    durationMs: number | null;
+    error: string | null;
+    stoppedAt: string | null;
+    traces: RunReport[];
+  }[];
 };
 
 export type RemovedState = {
@@ -235,6 +259,7 @@ export type RemovedTransition = {
 };
 
 export type AtlasView = {
+  simulation: (chartId: string) => ChartSimulation;
   title: string;
   description: string;
   ref: string | null;

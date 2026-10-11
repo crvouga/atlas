@@ -10,6 +10,10 @@ import {
   ManifestEnvelopeSchema,
   PathRecordSchema,
   RunsIndexSchema,
+  RunInfoSchema,
+  RunSummarySchema,
+  ReportSourcesSchema,
+  AtlasChangeSchema,
   StateNodeSchema,
   StateRecordSchema,
   TimelineEntrySchema,
@@ -29,7 +33,11 @@ const schemas: Record<string, z.ZodType> = {
   'path-record': PathRecordSchema,
   'timeline-entry': TimelineEntrySchema,
   'cloud-event': CloudEventSchema,
-  'runs-index': RunsIndexSchema
+  'runs-index': RunsIndexSchema,
+  'run-info': RunInfoSchema,
+  'run-summary': RunSummarySchema,
+  'report-sources': ReportSourcesSchema,
+  'atlas-change': AtlasChangeSchema
 };
 
 for (const [name, schema] of Object.entries(schemas)) {

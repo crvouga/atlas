@@ -3,6 +3,11 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { CDPSession, Locator, Page } from 'playwright';
 import type { Timeline } from '@crvouga/atlas';
+import type { Signal } from '@crvouga/atlas/signals';
+
+import { locate } from './signals';
+
+const isLocator = (target: Locator | Signal): target is Locator => 'waitFor' in target;
 
 export type Pacing = {
   moveMs: number;
@@ -107,7 +112,9 @@ export class UserActions {
       .catch(() => undefined) as Promise<T>;
   }
 
-  async tap(locator: Locator, label: string) {
+  /** Tap a locator or a signal (resolved with `locate`). */
+  async tap(target: Locator | Signal, label: string) {
+    const locator = isLocator(target) ? target : locate(this.page, target);
     await locator.waitFor({ state: 'visible', timeout: 15_000 });
     await locator.scrollIntoViewIfNeeded().catch(() => undefined);
     const box = await locator.boundingBox();
@@ -127,7 +134,8 @@ export class UserActions {
     }
   }
 
-  async type(locator: Locator, text: string, label: string) {
+  async type(target: Locator | Signal, text: string, label: string) {
+    const locator = isLocator(target) ? target : locate(this.page, target);
     await this.tap(locator, label);
     this.timeline.add({ kind: 'type', label, text });
     await locator.fill('');

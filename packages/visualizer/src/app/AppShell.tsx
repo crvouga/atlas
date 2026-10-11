@@ -1,25 +1,22 @@
 import { Outlet, useLocation, useSearch } from '@tanstack/react-router';
 
 import { Header } from '../components/Header';
+import { ReportActivity, Sidebar } from '../components/Sidebar';
+import workspace from '../components/Workspace.module.css';
 import { EvidenceProvider } from '../evidence/evidence-context';
+import evidence from '../evidence/evidence.module.css';
 import { SourcesPanel } from '../evidence/sources-panel';
 import { SpecIndex } from '../evidence/spec-index';
 import { kindOfAddress } from '../spec-kind';
 import styles from '../views/views.module.css';
 import { AtlasProvider, useAtlas } from './atlas-context';
-import { Gazetteer } from './gazetteer';
 import { SearchQueryProvider } from './search-query';
-
-function Index() {
-  const { pathname } = useLocation();
-  const kind = kindOfAddress(pathname);
-  return kind ? <SpecIndex kind={kind} /> : pathname.startsWith('/specs/') ? <nav aria-label="Specs" /> : <Gazetteer />;
-}
 
 function Body() {
   const { view, spec } = useAtlas();
-  const { pathname } = useLocation();
-  if (!pathname.startsWith('/specs/') && !view && spec.error) {
+  const location = useLocation();
+  const onSpec = location.pathname.startsWith('/specs/');
+  if (!onSpec && !view && spec.error && location.pathname !== '/sources' && location.pathname !== '/runs') {
     return (
       <div className={styles.message} role="alert">
         <h1>The spec couldn’t be loaded</h1>
@@ -33,22 +30,41 @@ function Body() {
   return <Outlet />;
 }
 
+function Frame() {
+  const { pathname } = useLocation();
+  const kind = kindOfAddress(pathname);
+  if (!kind) {
+    return (
+      <main className={styles.main}>
+        <Body />
+      </main>
+    );
+  }
+  return (
+    <div className={evidence.specFrame}>
+      <SpecIndex kind={kind} />
+      <main className={styles.main}>
+        <Body />
+      </main>
+    </div>
+  );
+}
+
 export function AppShell() {
   const { run } = useSearch({ strict: false });
   return (
     <AtlasProvider run={run}>
       <EvidenceProvider>
         <SearchQueryProvider>
-          <div className={styles.app}>
-            <Header />
-            <div className={styles.frame}>
-              <Index />
-              <main className={styles.main}>
-                <Body />
-              </main>
+          <div className={workspace.workspace}>
+            <Sidebar />
+            <div className={workspace.content}>
+              <Header />
+              <ReportActivity />
+              <Frame />
             </div>
-            <SourcesPanel />
           </div>
+          <SourcesPanel />
         </SearchQueryProvider>
       </EvidenceProvider>
     </AtlasProvider>

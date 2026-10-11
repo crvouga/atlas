@@ -1,0 +1,24 @@
+{
+  "name": "@crvouga/atlas-bun",
+  "version": "0.1.0",
+  "description": "Bun WebView driver for Atlas: run statecharts against a web app in Bun's built-in headless browser (system WebKit on macOS, Chrome elsewhere), with no browser download.",
+  "license": "MIT",
+  "type": "module",
+  "repository": { "type": "git", "url": "https://github.com/crvouga/atlas", "directory": "packages/bun" },
+  "exports": { ".": "./src/index.ts" },
+  "publishConfig": { "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } } },
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@crvouga/atlas": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.6"
+  }
+}

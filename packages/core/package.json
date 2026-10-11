@@ -21,7 +21,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./spec": "./src/spec/index.ts"
+    "./spec": "./src/spec/index.ts",
+    "./signals": "./src/signals.ts"
   },
   "publishConfig": {
     "exports": {
@@ -32,6 +33,10 @@
       "./spec": {
         "types": "./dist/spec/index.d.ts",
         "default": "./dist/spec/index.js"
+      },
+      "./signals": {
+        "types": "./dist/signals.d.ts",
+        "default": "./dist/signals.js"
       }
     }
   },

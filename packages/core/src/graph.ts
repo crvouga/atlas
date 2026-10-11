@@ -17,6 +17,13 @@ export type Config = {
   active: string[];
 };
 
+/** A configuration's identity: its state value with keys sorted, so equal configurations compare equal. */
+export function configKey(value: StateValue): string {
+  const canonical = (v: StateValue): unknown =>
+    typeof v === 'string' ? v : Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k]!)]));
+  return JSON.stringify(canonical(value));
+}
+
 export function activeKeys(value: StateValue): string[] {
   if (typeof value === 'string') return [value];
   return Object.entries(value).flatMap(([key, child]) => [key, ...activeKeys(child)]);
@@ -65,12 +72,56 @@ export class ChartGraph {
     return [...this.nodes.keys()];
   }
 
+  /** The parallel regions a state sits in, outermost first: each the child of a parallel ancestor. */
+  regionsOf(state: string): string[] {
+    const regions: string[] = [];
+    for (let child: string | null = state, parent = this.parent(state); parent; child = parent, parent = this.parent(parent)) {
+      if (this.nodes.get(parent)?.type === 'parallel') regions.unshift(child);
+    }
+    return regions;
+  }
+
+  /**
+   * Whether an event can matter to what happens in `regions`: some state that handles it sits in
+   * those regions or outside them (never only in a sibling region). Regions of a statechart
+   * without guards are independent, so exploring one region with the others held still loses
+   * nothing and keeps the search from multiplying across regions.
+   */
+  actsIn(event: string, regions: string[]) {
+    let handled = false;
+    for (const [name, node] of this.nodes) {
+      if (!node.on?.[event]) continue;
+      handled = true;
+      const own = this.regionsOf(name);
+      if (own.every((region, i) => regions[i] === region)) return true;
+    }
+    return !handled;
+  }
+
+  /** Every distinct set of regions a state sits in, the empty set (outside every parallel) first. */
+  regionSets() {
+    const keyed = new Map<string, string[]>([['', []]]);
+    for (const name of this.nodes.keys()) {
+      const regions = this.regionsOf(name);
+      keyed.set(regions.join('\u0000'), regions);
+    }
+    return [...keyed.values()];
+  }
+
   initial(): Config {
     const [snapshot] = initialTransition(this.machine);
     return {
       value: snapshot.value as StateValue,
       active: activeKeys(snapshot.value as StateValue)
     };
+  }
+
+  /** The state value that names `state`: its ancestors down to it, defaults filled in by `resolve`. */
+  valueOf(state: string): StateValue {
+    if (!this.nodes.has(state)) throw new Error(`There is no state "${state}"`);
+    const trail: string[] = [];
+    for (let n: string | null = state; n; n = this.parent(n)) trail.unshift(n);
+    return trail.reduceRight<StateValue | null>((inner, name) => (inner === null ? name : { [name]: inner }), null)!;
   }
 
   resolve(value: StateValue): Config {
@@ -158,35 +209,40 @@ export class ChartGraph {
     return { ok: true as const, steps, config };
   }
 
-  /** Breadth-first: every configuration reachable from `start` using only `allowed` events. */
-  explore(start: Config, allowed: (event: string) => boolean, maxConfigs = 5_000) {
-    const key = (c: Config) => JSON.stringify(c.value);
-    const seen = new Map<string, { config: Config; path: string[] }>([
-      [key(start), { config: start, path: [] }]
-    ]);
-    const queue = [start];
+  /**
+   * Breadth-first from one or several starts at once: every configuration reachable using only
+   * `allowed` events, each with the shortest event path from its nearest start (`origin` is that
+   * start's index; ties go to the earlier start). `firstFired` holds, for every transition, the
+   * shortest way to take it: the configuration it fires from and how that configuration was
+   * reached. Exploration order is fixed by the chart, so the result is deterministic.
+   */
+  explore(start: Config | Config[], allowed: (event: string) => boolean, maxConfigs = 20_000) {
+    const starts = Array.isArray(start) ? start : [start];
+    const key = (c: Config) => configKey(c.value);
+    type Seen = { config: Config; path: string[]; origin: number };
+    const seen = new Map<string, Seen>();
+    const queue: Config[] = [];
+    starts.forEach((config, origin) => {
+      if (seen.has(key(config))) return;
+      seen.set(key(config), { config, path: [], origin });
+      queue.push(config);
+    });
     const edges: { from: string; event: string; to: string; fired: string[] }[] = [];
-    while (queue.length && seen.size < maxConfigs) {
-      const config = queue.shift()!;
+    const firstFired = new Map<string, { from: Seen; event: string }>();
+    for (let head = 0; head < queue.length && seen.size < maxConfigs; head++) {
+      const config = queue[head]!;
       const here = seen.get(key(config))!;
       for (const event of this.enabledEvents(config).filter(allowed)) {
         const next = this.step(config, event);
         if (!next) continue;
         edges.push({ from: key(config), event, to: key(next.config), fired: next.fired });
+        for (const t of next.fired) if (!firstFired.has(t)) firstFired.set(t, { from: here, event });
         if (!seen.has(key(next.config))) {
-          seen.set(key(next.config), { config: next.config, path: [...here.path, event] });
+          seen.set(key(next.config), { config: next.config, path: [...here.path, event], origin: here.origin });
           queue.push(next.config);
         }
       }
     }
-    return { seen, edges, key };
+    return { seen, edges, key, firstFired };
   }
-}
-
-/** Stable identity for a configuration, including parallel regions in any insertion order. */
-export function configKey(value: StateValue): string {
-  const canonical = (state: StateValue): unknown => typeof state === 'string'
-    ? state
-    : Object.keys(state).sort().map(key => [key, canonical(state[key]!)]);
-  return JSON.stringify(canonical(value));
 }

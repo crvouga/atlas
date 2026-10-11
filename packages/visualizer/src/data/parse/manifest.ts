@@ -1,5 +1,6 @@
 import {
   LATEST_MANIFEST_SCHEMA_VERSION,
+  JourneyRecordSchema,
   ManifestChartSchema,
   MapEdgeSchema,
   PathRecordSchema,
@@ -9,12 +10,15 @@ import {
   RunInfoSchema,
   RunSummarySchema,
   RunsIndexSchema,
+  SeedRecordSchema,
   StateRecordSchema,
   TimelineEntrySchema,
   TransitionRecordSchema,
   transitionId,
   type EventKind,
+  type JourneyRecord,
   type PathRecord,
+  type SeedRecord,
   type RunInfo,
   type RunSummary,
   type StateRecord,
@@ -38,6 +42,9 @@ export type ParsedRun = {
   states: Map<string, StateRecord>;
   transitions: Map<string, ParsedTransitionRecord>;
   paths: ParsedPath[];
+  /** Journeys as the run composed them from their seeded stretches. */
+  journeys: JourneyRecord[];
+  seeds: SeedRecord[];
   mapKinds: Map<string, EventKind>;
   privacy: z.infer<typeof PrivacySchema> | null;
   /** Other formats the run wrote beside its manifest: JUnit XML, CTRF JSON, a Mermaid diagram. */
@@ -141,7 +148,15 @@ export function parseManifest(runId: string, file: string, raw: unknown, sink: I
 
   const privacy = raw.privacy === undefined ? null : parseOne(PrivacySchema, raw.privacy, sink, file, ['privacy']);
   const reports = raw.reports === undefined ? null : parseOne(ReportsSchema, raw.reports, sink, file, ['reports']);
-  return { id: runId, file, schemaVersion, info, charts, states, transitions, paths, mapKinds, privacy, reports };
+  const journeys = (Array.isArray(raw.journeys) ? raw.journeys : []).flatMap((j, i) => {
+    const parsed = parseOne(JourneyRecordSchema, j, sink, file, ['journeys', i]);
+    return parsed ? [parsed] : [];
+  });
+  const seeds = (Array.isArray(raw.seeds) ? raw.seeds : []).flatMap((s, i) => {
+    const parsed = parseOne(SeedRecordSchema, s, sink, file, ['seeds', i]);
+    return parsed ? [parsed] : [];
+  });
+  return { id: runId, file, schemaVersion, info, charts, states, transitions, paths, journeys, seeds, mapKinds, privacy, reports };
 }
 
 export type ParsedRunsIndex = { runs: RunSummary[]; excluded: string[] };

@@ -57,13 +57,17 @@ export default defineConfig<PlaywrightContext>({
   Playwright's fake clock before the app loads, so time events can call `page.clock.fastForward`;
   a Playwright trace for failed attempts (`traceOnFailure`, default on); `onPage` to prepare each
   page; `pacing` to tune showcase timing.
-- **`PlaywrightContext`**: `{ page, context, browser, user }`. `user.tap(locator, label)` and
-  `user.type(locator, text, label)` log to the step's timeline; in showcase mode they move a soft
-  touch indicator to the target, pause like a person and type at human speed.
+- **`PlaywrightContext`**: `{ page, context, browser, user, goto, isVisible }`, a `SignalContext`
+  (see `@crvouga/atlas/signals`), so implementations written against signals run here and on the
+  Bun, WebDriver and Detox drivers alike. `user.tap(target, label)` and
+  `user.type(target, text, label)` take a Playwright locator or a signal, and log to the step's
+  timeline; in showcase mode they move a soft touch indicator to the target, pause like a person
+  and type at human speed. `goto` resolves paths against `baseUrl`.
 - **`screen({ all, any, none, checks, transient, sameAs, lookIn, settle })`**: a state recogniser
   from a UI signature. Every `all` signal visible, at least one `any`, no `none`.
-- **Signals**: `testId(id)`, `role(role, name?)`, `text(string | RegExp)`, `label(string | RegExp)`,
-  `css(selector)`. Prefer roles, labels and text as a person would; reach for test ids last.
+- **Signals**: `testId(id)`, `role(role, name?, { exact? })`, `text(string | RegExp, { exact? })`,
+  `label(string | RegExp)`, `css(selector)`, the same values every driver resolves. Prefer roles,
+  labels and text as a person would; reach for test ids last.
 - **Media**: screenshots at the device's physical resolution with the touch layer hidden, plus WebP
   thumbnails; in showcase mode a clip per transition, captured at device resolution and encoded as
   H.264 MP4 with a poster frame.

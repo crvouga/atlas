@@ -96,6 +96,7 @@ describe('composeCharts', () => {
     expect(machine.states?.['Checking out']?.states?.Abandoned?.on).toEqual({ 'Checkout abandoned': { target: '#Home' } });
   });
 
+  // regression: atlas-consumed-completion-events
   it('supports the legacy meta.childMachine and meta.childFinalEvents', () => {
     const shop: MachineConfig = {
       id: 'Shop',

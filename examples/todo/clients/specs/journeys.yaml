@@ -1,0 +1,13 @@
+# A journey that crosses clients: the phone, the desktop and the sync server each play a part.
+journeys:
+  Starts on the phone, finishes on the desktop:
+    description: Starts a list on the phone, finishes it on the desktop, and the phone catches up.
+    events:
+      - Sets up on the phone
+      - Adds a todo on the phone
+      - Opens the list on the desktop
+      - Marks all done on the desktop
+      - Refreshes the phone
+      - Sync server drops the connection
+    endsIn:
+      - Offline on the phone

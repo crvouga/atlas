@@ -9,6 +9,14 @@ reads two independent sources and works with whatever exists:
 2. **Partial runs.** Real screenshots and clips replace each placeholder as a run writes them.
 3. **Full runs.** Everything is populated, with history across runs.
 
+The application has a product overview, searchable screens, journey library, report history
+with active path progress, and source management. Local directories, published HTTP files and
+HTTP APIs can supply reports simultaneously. Reports update through file watching, polling or
+server events. Latest includes running reports; one unavailable backend leaves the others usable.
+
+See [report backends and live snapshots](../../docs/report-backends.md) for configuration,
+the API contract, streaming notifications and adding another transport.
+
 ## Point it at your project
 
 ```sh
@@ -19,6 +27,7 @@ atlas-visualizer dev --specs ./specs --runs ./atlas-runs
 | ----------------- | -------------------------------------------------------------------------------------------------------- |
 | `--specs <dir>`   | Statecharts, journeys and notes. Default `./specs`.                                                      |
 | `--runs <dir>`    | One directory per run, each with a `manifest.json` (what `atlas run` writes). Default `./atlas-runs`.    |
+| `--sources <file>` | JSON configuration for additional directories, HTTP files or HTTP API sources. |
 | `--fixture <name>`| Show a bundled example instead: `spec-only`, `partial`, `full`, `failures`, `removed`, `malformed`, `large`. |
 | `--out <dir>`     | `build`: the static site (default `./atlas-site`). `publish-data`: the data only (default `./atlas-data`). |
 | `--keep <n>`      | How many of the newest runs to publish (default 30).                                                     |
@@ -30,8 +39,66 @@ environment is read: `ATLAS_SPECS_ROOT`, `ATLAS_RUNS_ROOT` (relative to `INIT_CW
 to where you ran it, or the current directory) and `ATLAS_FIXTURE`. With nothing configured and no
 `specs/` directory, the `full` example is shown.
 
-Editing a spec file or a run finishing updates the open page in about a second, without a reload,
+Editing a spec file or a run publishing a snapshot updates the open page in about a second, without a reload,
 keeping selection, zoom and pan.
+
+### Explore large charts
+
+Choose **Explore** on the product page, or **Explore freely** on any chart, to start an interactive
+model session from the composed root. The current states are shown together and highlighted on
+the map. Available events are grouped into a person's choices, outside outcomes and time passing;
+each choice previews its destination. Child-machine hand-offs complete automatically. Outcome
+names and the source rules explain their conditions: this pure model does not invent identities,
+payments, clocks or other application data.
+
+**Undo**, **Redo**, **Reset** and the choice history let you revisit and branch from any point.
+The choice sequence and history position live in the URL, so reloads, browser history and **Share**
+replay the same model session. A changed spec or unavailable event stops visibly; it never silently
+skips the input. Search matches available events, states and embedded business rules. **Find a route**
+searches from the current configuration and offers the shortest sequence of choices, including
+automatic hand-offs. Following it replays those choices rather than teleporting. Transient child
+finals are searchable too. Exhaustive unreachability is distinguished from the 2,000-configuration
+search budget: a budget stop means reachability is unknown. Guards, executable actions and other
+unsupported statechart behavior disable free exploration instead of being ignored.
+
+Optional `meta.contracts` embeds a capability's authoritative examples alongside the chart:
+`{ id, name, source, description?, steps: [{ keyword, text, table?, docString? }] }`. State details
+show the nearest owning capability's catalog as **Rules for this capability**, preserving exact
+Given/When/Then text, tables, doc strings and source references. Chart-level contracts form a root
+catalog. Search includes the rules, and can find a route to their owning capability. Generate these
+records from your specifications to keep one authored source of truth. They explain behavior;
+exploration never marks them as executed checks or application evidence.
+
+Use **Show details** on a child machine or collapsed group to explore its interior in place.
+**Hide details** returns it to a summary card; incoming and outgoing events stay connected.
+**Collapse all** gives a high-level map, while **Expand all** opens every nested group and child.
+Detail levels are remembered per chart during the browser session, along with zoom and pan.
+**Compact** replaces screenshot cards with smaller state cards. Saved layout pins apply to the
+original view; alternate detail levels are laid out automatically.
+
+Select a journey to open its navigator. The full path is highlighted and unrelated branches fade.
+Choose any step, use **Previous / Next**, or **Play / Pause** to follow the journey. Each step reveals
+its destination and focuses the camera, including parallel branches and child-machine hand-offs.
+**Inspect this event** opens the recording and details while keeping your place in the journey.
+**Path only** hides unrelated states and events and lays out the remaining path. **Fit journey**
+shows the full route; **Back to path overview** leaves step mode. Journey and step live in the URL
+so browser history and shared links preserve your place.
+
+Camera navigation slides smoothly between objects and can be interrupted by panning or another
+selection. It follows the browser's **prefers-reduced-motion** setting, including changes made
+while the visualizer is open. Reduced motion and initial positioning use an immediate move.
+
+**Watch journey** plays starting screenshots, each available event recording, and resulting
+screens as a continuous slideshow. Videos play to completion; screenshot duration is adjustable.
+Pause, jump to a step, skip a slide, replay, loop, or enable sound. Parallel screens appear together,
+and unavailable media gets a placeholder or is skipped. Closing returns to the current graph step.
+The player loads one video at a time and preloads only the next screenshots.
+
+Search **Find a state** to jump directly into any nested state; its ancestors open automatically.
+Use arrow keys and Enter in search. On the map, `/` opens search, `F` fits the map or journey,
+`←` / `→` moves through journey steps, Space plays or pauses, and Escape returns to path overview.
+Minimap and legend controls keep orientation and event meanings available without covering the map.
+On smaller screens the journey navigator moves below the map and details open as a bottom sheet.
 
 ### Commands
 
@@ -41,7 +108,7 @@ atlas-visualizer build        --specs <dir> --runs <dir> --out site  # static si
 atlas-visualizer publish-data --specs <dir> --runs <dir> --out data  # data only
 ```
 
-`build` writes a static site that any file server can host, with the spec and the newest runs
+`build` writes a static site that any file server can host, with the spec and the newest privacy-checked snapshots
 under `<out>/data`. URLs use the hash, so deep links work without server rewrites. A run whose
 privacy check failed or is missing is never published. With `--no-data`, set
 `VITE_ATLAS_BASE_URL` at build time to where `publish-data` output is hosted; `VITE_ATLAS_POLL_MS`
@@ -57,7 +124,8 @@ pnpm --filter @crvouga/atlas-visualizer fixtures                  # regenerate t
 ```
 
 `publish-data` and `build` scripts do the same as the CLI, writing to `public/data` (or
-`ATLAS_OUT`) and `dist`.
+`ATLAS_OUT`) and `dist`. `ATLAS_SOURCES_FILE` supplies additional sources, and
+`VITE_ATLAS_SOURCES_URL` can point a hosted viewer at a separate source descriptor file.
 
 ## What it reads
 

@@ -8,6 +8,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { router } from './app/router';
+import { ReportSourcesProvider } from './app/report-sources';
 import { AdapterContext } from './data/queries';
 import { createAdapter } from './data/adapters';
 import { createQueryClient } from './data/queries';
@@ -18,9 +19,11 @@ if (root) {
     <StrictMode>
       <AdapterContext.Provider value={createAdapter()}>
         <QueryClientProvider client={createQueryClient()}>
-          <Tooltip.Provider delayDuration={300}>
-            <RouterProvider router={router} />
-          </Tooltip.Provider>
+          <ReportSourcesProvider>
+            <Tooltip.Provider delayDuration={300}>
+              <RouterProvider router={router} />
+            </Tooltip.Provider>
+          </ReportSourcesProvider>
         </QueryClientProvider>
       </AdapterContext.Provider>
     </StrictMode>

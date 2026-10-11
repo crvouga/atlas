@@ -46,20 +46,29 @@ atlas export --specs ./specs --format mermaid
 
 | Export | Purpose |
 | --- | --- |
-| `defineConfig`, `prepare`, `runConfig` | Typed config; load + lint + plan; run and write reports |
+| `defineConfig`, `prepare`, `runConfig`, `mergeConfigRuns` | Typed config; load + lint + plan; run and write reports; compose runs |
 | `loadSpecDirectory`, `parseChart`, `parseJourneys`, `bundleOf` | Read charts and journeys |
 | `scxmlToMachine`, `machineToScxml`, `scxmlToken`, `ATLAS_NS` | SCXML ↔ XState config |
 | `composeCharts` | Inline invoked child charts into one machine, with their hand-offs |
 | `lintBundle` | Purity, reachability, dead ends, journeys, implementations |
-| `chartScope`, `planChart`, `runnableSteps` | What a run covers and the paths that cover it |
+| `chartScope`, `planChart`, `runnableSteps`, `pathKey` | What a run covers and the paths that cover it, from seeds; stable path keys |
 | `ChartGraph` | A pure simulator: replay, explore, which transitions an event fires |
-| `runPaths`, `functionDriver`, `Timeline` | The runner and the simplest driver |
-| `cloudEventsHttpSource`, `cloudEventsFromHttp`, `logFileSource`, `compareBusinessEvents` | Business events |
+| `runPaths`, `functionDriver`, `Timeline` | The runner (seeds, a worker pool) and the simplest driver |
+| `buildManifest`, `writeRun`, `mergeRuns`, `shardPaths`, `readOutcomes`, `latestRun`, `durationHistory` | Fold outcomes into a manifest in plan order; shards, merges and reruns |
+| `httpDriver`, `httpClient` | An HTTP API client as a driver: base URL, cookie jar, every call on the timeline |
+| `combineDrivers`, `combineImplementations`, `onClient` | Several clients in one run (a phone, a web dashboard, an API), each on its own driver |
+| `recordFrames` | Clips encoded from screenshots, for drivers without a screen recorder |
+| `cloudEventsHttpSource`, `cloudEventsFromHttp`, `logFileSource`, `compareBusinessEvents`, `correlated` | Business events |
 | `DEFAULT_PRIVACY`, `mergePrivacy`, `privacyFindings`, `assertAllowedTarget` | Privacy rules |
 | `toJUnit`, `toCtrf`, `toWebVtt`, `toMermaid` | Report formats |
 
 `@crvouga/atlas/spec` exports the browser-safe part (types, parsing, SCXML conversion and
 composition) with no Node built-ins.
+
+`@crvouga/atlas/signals` exports the driver-neutral screen vocabulary: the signals (`testId`,
+`role`, `label`, `text`, `css`), `SignalContext` (what the Playwright, Bun, WebDriver and Detox
+contexts all provide), `screen` (a recogniser for any `SignalContext`), `signatureScreen` (build
+`screen` for a new driver) and `DOM_PROBE` (resolve a signal inside a page).
 
 Spec conventions, the driver interface, the config reference and the manifest are documented in the
 [Atlas README](../../README.md).

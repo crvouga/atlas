@@ -24,7 +24,7 @@ function hit(query: string, text: string) {
 /** Every spec of one kind, grouped by folder, each with what the combined report holds for it. */
 export function SpecIndex({ kind }: { kind: SpecKind }) {
   const evidence = useEvidence();
-  const { query } = useSearchQuery();
+  const { query, setQuery } = useSearchQuery();
   const search = useSearch({ strict: false });
   const filter = useUiStore((s) => s.resultFilter);
   const setFilter = useUiStore((s) => s.setResultFilter);
@@ -44,6 +44,7 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
   }, [visible]);
   return (
     <nav className={styles.index} aria-label={`${kind.label} ${kind.many}`}>
+      <input className={styles.find} type="search" value={query} aria-label={`Find a ${kind.one}`} placeholder={`Find a ${kind.one}`} onChange={(event) => setQuery(event.target.value)} />
       <div className={styles.filters} role="group" aria-label="Show">
         {FILTERS.map((entry) => (
           <button key={entry.id} type="button" aria-pressed={filter === entry.id} onClick={() => setFilter(entry.id)}>

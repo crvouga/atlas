@@ -1,12 +1,17 @@
 import type { Driver } from '@crvouga/atlas';
+import type { SignalContext } from '@crvouga/atlas/signals';
 import type { Browser, BrowserContext, BrowserContextOptions, LaunchOptions, Page } from 'playwright';
 import { chromium } from 'playwright';
 
 import type { Pacing } from './media';
 import { captureScreen, FAST_PACING, PHONE, ScreencastRecorder, SHOWCASE_PACING, UserActions } from './media';
+import { locate } from './signals';
 
-/** What every Playwright event and recogniser receives for one path attempt. */
-export type PlaywrightContext = {
+/**
+ * What every Playwright event and recogniser receives for one path attempt. It is a
+ * `SignalContext` too, so implementations written against signals run here unchanged.
+ */
+export type PlaywrightContext = SignalContext & {
   page: Page;
   context: BrowserContext;
   browser: Browser;
@@ -15,6 +20,8 @@ export type PlaywrightContext = {
 };
 
 export type PlaywrightDriverOptions = {
+  /** Where `goto` paths resolve; the implementation's setup decides where to open. */
+  baseUrl?: string | (() => string | Promise<string>);
   /** Browser context options; a 390×844 phone at device scale factor 3 with touch by default. */
   device?: BrowserContextOptions;
   launch?: LaunchOptions;
@@ -24,8 +31,15 @@ export type PlaywrightDriverOptions = {
   clock?: boolean;
   /** Save a Playwright trace for failed attempts (default true). */
   traceOnFailure?: boolean;
+  /**
+   * Which attempts record a trace: `retry` (default) traces only the retry of a failed path, which
+   * keeps first attempts fast; `always` traces every attempt so even a first failure has one.
+   */
+  trace?: 'retry' | 'always';
   /** Called after the page is created and before the implementation's setup. */
   onPage?: (page: Page) => Promise<void>;
+  /** Browser contexts open at once (one per worker); unlimited when omitted. */
+  concurrency?: number;
 };
 
 /**
@@ -34,31 +48,48 @@ export type PlaywrightDriverOptions = {
  * FFmpeg as H.264 MP4 (FFmpeg on the PATH is needed for video and WebP thumbnails).
  */
 export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<PlaywrightContext> {
-  let browser: Browser | null = null;
+  let browser: Promise<Browser> | null = null;
+  const tracedContexts = new WeakSet<BrowserContext>();
   const device = options.device ?? PHONE;
   const scale = device.deviceScaleFactor ?? 1;
   const showcasePacing = { ...SHOWCASE_PACING, ...options.pacing };
   const ensureBrowser = async () => {
-    if (!browser || !browser.isConnected()) browser = await chromium.launch(options.launch);
+    const current = browser ? await browser.catch(() => null) : null;
+    if (current?.isConnected()) return current;
+    browser = chromium.launch(options.launch);
     return browser;
   };
   return {
     name: 'playwright',
     pacing: { before: showcasePacing.holdBeforeMs, after: showcasePacing.holdAfterMs },
-    async open({ mode, timeline }) {
+    concurrency: options.concurrency ?? Number.POSITIVE_INFINITY,
+    async open({ mode, timeline, attempt }) {
       const b = await ensureBrowser();
       const context = await b.newContext(device);
-      if (options.traceOnFailure !== false) await context.tracing.start({ screenshots: true, snapshots: true });
+      const tracing = options.traceOnFailure !== false && (options.trace === 'always' || attempt > 1);
+      if (tracing) await context.tracing.start({ screenshots: true, snapshots: true });
+      tracedContexts.add(context);
+      if (!tracing) tracedContexts.delete(context);
       const page = await context.newPage();
       const showcase = mode === 'showcase';
       if (showcase) await UserActions.install(page);
       if (options.clock) await page.clock.install();
       await options.onPage?.(page);
-      return { page, context, browser: b, user: new UserActions(page, showcase ? showcasePacing : FAST_PACING, timeline, showcase) };
+      const baseUrl = typeof options.baseUrl === 'function' ? await options.baseUrl() : options.baseUrl;
+      return {
+        page,
+        context,
+        browser: b,
+        user: new UserActions(page, showcase ? showcasePacing : FAST_PACING, timeline, showcase),
+        goto: async (url) => {
+          await page.goto(baseUrl ? new URL(url, baseUrl).href : url);
+        },
+        isVisible: (signal) => locate(page, signal).isVisible().catch(() => false)
+      };
     },
     async close(ctx, { failed, traceFile }) {
       let trace: string | undefined;
-      if (options.traceOnFailure !== false) {
+      if (tracedContexts.delete(ctx.context)) {
         if (failed) {
           await ctx.context.tracing.stop({ path: traceFile }).catch(() => undefined);
           trace = traceFile;
@@ -78,8 +109,9 @@ export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<
     text: (ctx) => ctx.page.evaluate(() => document.body.innerText),
     hold: (ctx, ms) => ctx.page.waitForTimeout(ms),
     async dispose() {
-      await browser?.close().catch(() => undefined);
+      const current = browser;
       browser = null;
+      await current?.then((b) => b.close()).catch(() => undefined);
     }
   };
 }

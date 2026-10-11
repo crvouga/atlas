@@ -32,10 +32,12 @@ Atlas also owns specification and test-evidence visualization: Gherkin, Quint, D
 
 | Package | What it is |
 | --- | --- |
-| [`@crvouga/atlas`](packages/core) | Spec loading (SCXML and XState), composition, lint, planning, the runner, reports, CloudEvents, privacy, config and the `atlas` CLI. `@crvouga/atlas/spec` is a browser-safe subset. |
+| [`@crvouga/atlas`](packages/core) | Spec loading (SCXML and XState), composition, lint, planning, the runner, multi-client runs (`combineDrivers`), `httpDriver` and `functionDriver`, reports, CloudEvents, privacy, config and the `atlas` CLI. `@crvouga/atlas/spec` is a browser-safe subset; `@crvouga/atlas/signals` holds the driver-neutral signals. |
 | [`@crvouga/atlas-playwright`](packages/playwright) | Playwright driver: signal-based screen recognisers, paced taps and typing with a touch overlay, device-resolution screenshots and H.264 clips. |
-| [`@crvouga/atlas-vitest`](packages/vitest) | Run a config as a Vitest (or Jest-style) suite, one test per planned path, plus `functionDriver`. |
-| [`@crvouga/atlas-detox`](packages/detox) | Detox driver for iOS and Android apps. |
+| [`@crvouga/atlas-bun`](packages/bun) | Bun WebView driver: Bun's built-in headless browser (the system WebKit on macOS, Chrome elsewhere), nothing to download. |
+| [`@crvouga/atlas-webdriver`](packages/webdriver) | W3C WebDriver driver with no dependencies: Safari, Chrome, Firefox and Edge, and native iOS and Android apps through Appium. |
+| [`@crvouga/atlas-detox`](packages/detox) | Detox driver for iOS and Android apps, inside a Detox test run. |
+| [`@crvouga/atlas-vitest`](packages/vitest) | Run a config as a Vitest (or Jest-style) suite, one test per planned path. |
 | [`@crvouga/atlas-schema`](packages/schema) | The contract: Zod schemas and JSON Schemas for specs, journeys, manifests, timelines and the runs index. |
 | [`@crvouga/atlas-visualizer`](packages/visualizer) | Browse charts and runs: every state with its screenshots, every transition with its clip. |
 
@@ -53,6 +55,8 @@ understand.
 | [CTRF](https://ctrf.io) | `ctrf.json`: Common Test Report Format |
 | [WebVTT](https://www.w3.org/TR/webvtt1/) | Captions for every clip: each tap, keystroke, system call and screen change |
 | [CloudEvents 1.0](https://cloudevents.io) | Business events the product emits (HTTP structured, binary and batch modes) |
+| [W3C WebDriver](https://www.w3.org/TR/webdriver2/) | Driving browsers and, through Appium, native iOS and Android apps |
+| [WAI-ARIA](https://www.w3.org/TR/wai-aria/) roles and accessible names | Signals that recognise screens the same way on every driver |
 | MP4 / H.264 | Clips of each transition, encoded with FFmpeg |
 | PNG / WebP | Screenshots at device resolution, with WebP thumbnails |
 | [Mermaid](https://mermaid.js.org/syntax/stateDiagram.html) `stateDiagram-v2` | `chart.mmd`, and `atlas export --format mermaid` |
@@ -87,6 +91,18 @@ pnpm atlas:plan   # 4 journeys + 1 generated path cover all 14 transitions
 pnpm atlas:fast   # run every path quickly
 pnpm atlas:run    # showcase mode: paced, with a touch overlay, screenshots and a clip per transition
 pnpm test         # the same spec against an in-memory model, through Vitest
+
+pnpm atlas:clients      # clients/: one chart across a phone, a desktop and the sync server at once
+pnpm atlas:clients:bun  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
+```
+
+For development, the repository root has shortcuts for producing a showcase run and keeping its
+specs and latest results open in the visualizer. Run these in separate terminals; the visualizer
+updates when a run finishes.
+
+```sh
+pnpm example:run
+pnpm example:viz
 ```
 
 A showcase run ends with:
@@ -259,10 +275,174 @@ dismissing a toast), `transient` (shown too briefly to wait for) and `sameAs` (a
 tell apart from this one).
 
 **Setup**: `setup(ctx, { path, tools })` puts the product in the path's start configuration;
-`canStart(active)` returns `true` or the reason a start configuration cannot be set up yet.
+`canStart(active)` returns `true` or the reason a start configuration cannot be set up yet. It is
+optional when seeds cover every start.
+
+**Seeds** (`seeds: Record<string, Seed<C>>`): see [Seeds and parallel runs](#seeds-and-parallel-runs).
+
+**Correlation**: `correlate(ctx)` returns ids (a user id, a trace id) that tell this attempt's
+business events from those of attempts running beside it.
 
 Only leaf states need recognisers. `atlas lint --require-implementations` lists every event and
 leaf state in scope that has no implementation.
+
+## Seeds and parallel runs
+
+A chart of a whole product is deep: a member reaches a results screen after signing up,
+onboarding, paying and booking. Walking every path from the initial state repeats that prefix
+in every path, so a run gets slower the more of the product it covers. Seeds remove the prefix.
+
+A seed puts the system directly in one configuration of the chart, usually through an API or the
+database: create a member who has paid, sign them in, open the screen.
+
+```ts
+implementation: {
+  seeds: {
+    'Paid member': {
+      at: 'Paid',                               // a state name, or a full state value
+      how: 'Creates a paid member through the admin API and signs in.',
+      async run({ page, api }) {
+        const member = await api.createMember({ plan: 'paid' });
+        await page.goto(`/sign-in?token=${member.token}`);
+      }
+    }
+  },
+  events: { /* … */ },
+  states: { /* … */ }
+}
+```
+
+With seeds, the plan changes in three ways:
+
+- **Journeys are cut at seeded configurations.** A journey is replayed from the initial state, and
+  wherever it passes through a configuration a seed produces, it is cut. Each stretch becomes a path
+  that starts from that seed. A stretch that several journeys share becomes one path. The manifest's
+  `journeys` lists the paths each journey is made of. A journey passes when all of them pass, fails
+  when one fails, and is `not-reached` while any is blocked.
+- **Generated paths start from the nearest seed.** A breadth-first search from every start point at
+  once finds, for each uncovered transition, the shortest way to take it from any seed (or from
+  `setup`'s start). Ties go to the seed declared first.
+- **Redundant paths are dropped.** A generated path that is a prefix of another path from the same
+  start is not planned.
+
+The plan is deterministic. The same chart, journeys and seeds give the same paths, ids and keys
+(`key` hashes the start and the events) on every machine, so results can be composed:
+
+- **Workers.** `--workers n` (or `workers` in the config) runs n path attempts at once. Each attempt
+  gets its own driver context. The longest paths go first, timed by earlier runs.
+  - The driver's `concurrency` caps the worker count. Playwright and Bun contexts and HTTP clients
+    run side by side. A WebDriver session or a Detox device runs one at a time unless you raise it.
+  - The manifest is a pure fold of the path outcomes in plan order, so the same outcomes give the
+    same report whatever order they finished in.
+- **Shards.** `--shard i/n` runs one part of the plan, split by the plan alone, so every machine
+  agrees on the split. `atlas merge <run-dir>...` composes the shards into one run, with their media
+  copied in.
+- **Reruns.** `--rerun-failed` keeps the passed paths of the newest run, matched by key, and runs
+  the rest. The result is still one complete run.
+- **Areas.** `--seed <name>` (repeatable) runs only the paths that start from that seed (`start`
+  for paths `setup` starts). `--state <name>` scopes the run to one state of the chart. With these you can
+  run one area of the product on its own, then merge it into a full run.
+
+Seeds are what make the composition sound: a seed must leave the system exactly as the steps that
+lead there would. Atlas checks this both ways and reports it:
+- A seeded path must first recognise its start state.
+- The manifest's `seeds` lists, for each seed, the passed paths that reached the same states through
+  real steps (`verifiedBy`).
+
+A seed nobody reaches through the steps is a claim that has not been checked yet. In the
+visualizer, seeded states carry a "Seeded" tag.
+
+Business events and parallel runs: a shared source, such as a log file, sees every attempt's events.
+`EventSource.mark()` returns a position that `collect(mark)` reads from, so attempts don't consume
+each other's marks.
+- With `correlate(ctx)`, only events and log lines that mention one of the attempt's ids count.
+- Without it, a run on several workers reports business events as "no signal" rather than guessing.
+
+## Drivers
+
+| Driver | Package | Plays | Speed | Clips |
+| --- | --- | --- | --- | --- |
+| `functionDriver(create)` | `@crvouga/atlas` | A domain model, a CLI, anything reachable from code | Microseconds | No |
+| `httpDriver(baseUrl)` | `@crvouga/atlas` | An API client with a cookie jar: a partner system, an operator API, a back office job | Milliseconds | No |
+| `bunWebViewDriver()` | `@crvouga/atlas-bun` | A web app in Bun's built-in browser (WebKit on macOS, Chrome elsewhere) | A view in milliseconds, screenshots in about 10 ms | From screenshots |
+| `playwrightDriver()` | `@crvouga/atlas-playwright` | A web app (or React Native on the web) in Chromium, with a fake clock | About a second per context | Screencast with a touch overlay |
+| `webdriverDriver()` | `@crvouga/atlas-webdriver` | Safari, Chrome, Firefox, Edge; native iOS and Android apps through Appium | Depends on the server | From screenshots, or Appium's recorder |
+| `detoxDriver()` | `@crvouga/atlas-detox` | A React Native app, inside a Detox test run | Depends on the device | Detox artifacts |
+
+The Bun, Playwright, WebDriver and Detox contexts all provide a `SignalContext` (`goto`,
+`isVisible`, `user.tap`, `user.type`), and they resolve the same signals (`testId`, `role`, `label`,
+`text`, `css` from `@crvouga/atlas/signals`), each against its own UI tree: the DOM, or the
+accessibility tree of a native app, where a test ID is the accessibility identifier (React
+Native's `testID`). An implementation written
+against `SignalContext` with `screen` from `@crvouga/atlas/signals` runs on any of them unchanged.
+
+`bunWebViewDriver` needs the Bun runtime: run `bun --bun atlas run`. The `atlas` binary runs on
+Node (through tsx) or Bun, and Playwright works under Bun too, so one run can mix Bun's WebKit and
+Playwright's Chromium.
+
+## Several clients in one run
+
+Product flows cross devices: a member books on an iOS app, an operator approves in a web
+dashboard, a partner confirms over an API. `combineDrivers` runs several drivers as the named
+clients of one run, and `combineImplementations` merges what each client does and shows:
+
+```ts
+import { combineDrivers, combineImplementations, defineConfig, httpDriver, type HttpClient } from '@crvouga/atlas';
+import { role, screen, text, type SignalContext } from '@crvouga/atlas/signals';
+import { playwrightDriver } from '@crvouga/atlas-playwright';
+import { accessibilityId, webdriverDriver } from '@crvouga/atlas-webdriver';
+
+type Clients = { member: SignalContext; operator: SignalContext; partner: HttpClient };
+
+export default defineConfig<Clients>({
+  specs: './specs',
+  driver: combineDrivers<Clients>(
+    {
+      member: webdriverDriver({
+        url: 'http://127.0.0.1:4723', // Appium
+        capabilities: { platformName: 'iOS', 'appium:automationName': 'XCUITest', 'appium:app': './build/App.app' }
+      }),
+      operator: playwrightDriver({ baseUrl: 'http://127.0.0.1:3000', device: { viewport: { width: 1280, height: 800 } } }),
+      partner: httpDriver('http://127.0.0.1:4000')
+    },
+    { screens: 'all' }
+  ),
+  implementation: combineImplementations<Clients>(
+    {
+      member: {
+        events: { 'Requests a visit': { kind: 'user', how: 'Taps "Request".', run: (m) => m.user.tap(role('button', 'Request'), 'Request') } },
+        states: { 'Visit confirmed': screen({ all: [text('Confirmed')] }) }
+      },
+      operator: {
+        setup: (o) => o.goto('/queue'),
+        events: { 'Operator approves': { kind: 'user', how: 'Approves it in the queue.', run: (o) => o.user.tap(role('button', 'Approve'), 'Approve') } },
+        states: { 'Waiting for approval': screen({ all: [role('row', 'New request')] }) }
+      },
+      partner: {
+        events: { 'Partner confirms': { kind: 'system', how: 'POSTs the confirmation webhook.', run: (p) => p.post('/webhooks/confirm', { ok: true }).then(() => undefined) } }
+      }
+    },
+    { setup: async ({ partner }) => void (await partner.post('/test/reset')) }
+  )
+});
+```
+
+- Each client's part is written against that client's own context, so every driver's helpers
+  work unchanged; `shared` (the second argument) holds setup and events that need several clients
+  at once. `shared.setup` runs first, then each client's setup in order.
+- `onClient(name, impl)` lifts a single event or state implementation to a client.
+- An event's client is recorded for its clip; a state's client is the screen it is recognised and
+  photographed on. With `screens: 'all'`, every other client's screen is captured at the same
+  moment (`screenshot.also`).
+- Timeline entries, clips, states and transitions carry `client` in the manifest;
+  `run.environment.clients` names the driver each client ran on; a failed attempt keeps one trace
+  per client.
+- If one client cannot open (no simulator booted), the others are closed and the attempt fails
+  naming that client.
+
+[`examples/todo/clients`](examples/todo/clients) runs a chart across a phone, a desktop and the
+sync server; pick each device's driver with `ATLAS_PHONE` and `ATLAS_DESKTOP`
+(`playwright`, `bun` or `webdriver`).
 
 ## Writing a driver
 
@@ -270,24 +450,34 @@ A driver owns the thing under test for one path attempt: a browser context, a de
 an API client. Only `open` and `close` are required.
 
 ```ts
+type Focus = { client?: string };
+
 type Driver<C> = {
   name: string;
   open(input: { path: PlannedPath; attempt: number; mode: RunMode; directory: string; timeline: Timeline }): Promise<C>;
-  close(ctx: C, input: { failed: boolean; traceFile: string }): Promise<{ trace?: string } | void>;
-  screenshot?(ctx: C, file: string): Promise<{ png: string; webp?: string } | null>;
-  record?(ctx: C, workDirectory: string): Promise<{ stop(output: string): Promise<{ video: string; poster?: string; durationMs: number } | null> }>;
-  text?(ctx: C): Promise<string>;
-  hold?(ctx: C, ms: number): Promise<void>;
+  close(ctx: C, input: { failed: boolean; traceFile: string }): Promise<{ trace?: string; traces?: Record<string, string> } | void>;
+  screenshot?(ctx: C, file: string, focus?: Focus): Promise<Image | null>;
+  record?(ctx: C, workDirectory: string, focus?: Focus): Promise<{ stop(output: string): Promise<Clip | null> }>;
+  text?(ctx: C, focus?: Focus): Promise<string>;
+  hold?(ctx: C, ms: number, focus?: Focus): Promise<void>;
   pacing?: { before: number; after: number };
+  clients?: Record<string, string>;
+  concurrency?: number;
   dispose?(): Promise<void>;
 };
 ```
+
+`focus` says which client a multi-client run is looking at; single-client drivers ignore it.
+A driver without a native screen recorder can encode clips from screenshots with
+`recordFrames(capture, workDirectory)`.
 
 - `open` returns a fresh context for each attempt; `close` may return the path of a trace file
   (Playwright writes one for failed attempts).
 - `screenshot` and `record` produce media; `record` is used only in showcase mode, one clip per
   transition.
 - `text` returns the visible text, for the privacy scan.
+- `concurrency` is how many contexts can be open at once (1 when omitted). Workers never exceed
+  it, so a driver of one device stays sequential while browser contexts run side by side.
 - `timeline.add({ kind, label, ... })` logs taps, typing, system calls and time jumps; they become
   each clip's captions.
 
@@ -304,17 +494,31 @@ const driver = functionDriver(() => new TodoModel());
 
 ```
 atlas lint   [--config atlas.config.ts | --specs <dir>] [--require-implementations]
-atlas plan   [--config atlas.config.ts]
-atlas run    [--config atlas.config.ts] [--mode fast|showcase] [--paths id,id] [--no-retry] [--output <dir>]
-atlas export --specs <dir> --format scxml|mermaid|json [--out <file>]
+atlas plan   [--config atlas.config.ts] [--state <name>]
+atlas run    [--config atlas.config.ts] [--mode fast|showcase] [--workers n] [--state <name>]
+             [--seed <name>]... [--paths id,id] [--shard i/n] [--rerun-failed | --reuse <run-dir>]
+             [--no-retry] [--output <dir>]
+atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
+atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
 ```
 
 - `lint` with `--specs` checks charts and journeys alone; with a config it also lists missing
   implementations, and `--require-implementations` makes them errors.
-- `plan` prints each path, what blocks it, and how many transitions stay uncovered.
+- `plan` prints the seeds and each path with:
+  - its seed and step count;
+  - what blocks it;
+  - the paths each journey is made of;
+  - the total and longest path length, and how many transitions stay uncovered.
 - `run` exits non-zero when a path fails or the privacy scan finds something. `--paths` runs only
   the given path ids; `--no-retry` skips the retry of failed paths.
-- `export` writes the composed product (every child inlined) as SCXML, Mermaid or XState JSON.
+- `--workers`, `--shard`, `--seed`, `--state`, `--rerun-failed` and `--reuse` are described in
+  [Seeds and parallel runs](#seeds-and-parallel-runs).
+- `merge` composes runs of the same plan (shards, or a rerun and its earlier run) into one run.
+- `export` writes the composed product (every child inlined) as SCXML, Mermaid, Markdown or
+  XState JSON. The Markdown is a readable map for the people who own the product: one section per
+  area (each parallel region apart), every state with its description and what the user sees (a
+  `snapshot` written as an identifier is left out), a table of every event that can happen there
+  and where it leads, then the named journeys.
 
 The config file is TypeScript (loaded with `tsx`) and defaults to `atlas.config.ts` in the current
 directory. Relative paths in it resolve against the config file's directory.
@@ -327,10 +531,13 @@ directory. Relative paths in it resolve against the config file's directory.
 | --- | --- |
 | `specs` | The specs directory. |
 | `driver` | A `Driver<C>`, or a function returning one (called once per run). |
-| `implementation` | `{ events, states, setup, canStart? }`. |
+| `implementation` | `{ events, states, seeds?, setup?, canStart?, correlate? }`. |
 | `chart` | Run one chart of the product; the root chart when omitted. |
 | `start`, `startLabel` | Where generated paths start (an XState state value) and how to describe it; the initial state when omitted. |
-| `entryEvents` | When running one chart: the only events that enter it from outside. |
+| `entryEvents` | When running one chart or one state: the only events that enter it from outside. |
+| `state` | Run one state of a chart and what is inside it, with the transitions into and out of it: one area of a chart that models the whole product. |
+| `workers` | Path attempts that run at once, capped by the driver's `concurrency`; one per CPU when omitted. |
+| `beforeRun` | Runs once before any path: prepare what every seed relies on (reference data, configuration). |
 | `output` | Where runs are written; `atlas-runs` beside the config. |
 | `eventSources` | `() => EventSource[]`: where business events come from. |
 | `eventMatchers` | How each business event name is recognised: `{ type }`, `{ pattern }` or a function. |
@@ -346,16 +553,22 @@ steps underneath.
 
 ## How a run works
 
-1. **Plan.** Curated journeys first. When running one chart of a larger product, each journey is cut
-   to its stretch inside the chart, starting at an entry transition. Then, for each transition still
-   uncovered, the shortest path that reaches it (breadth-first, so loops stay bounded). Paths stop
-   before blocked events; a blocked path whose runnable part other paths already cover is reported
-   but not run.
-2. **Run each path.** A fresh driver context; every event's `prepare`; `setup`; the start state
-   must be recognised. Then for each step: run the event, wait for the target state, run its checks,
+1. **Plan.** Curated journeys come first.
+   - When running one chart of a larger product, each journey is cut to its stretch inside the
+     chart, starting at an entry transition.
+   - With seeds, journeys are also cut wherever they pass through a seeded configuration.
+   - Then, for each transition still uncovered, the plan adds the shortest path that takes it from
+     the nearest seed or start. The search is breadth-first, so loops stay bounded.
+   - Paths stop before blocked events. A blocked path whose runnable part other paths already cover
+     is reported but not run.
+2. **Run each path.** Paths run on a pool of workers, longest first. Each gets a fresh driver
+   context, then every event's `prepare`, then its seed's `run` (or `setup`). The start state must
+   be recognised. Then for each step: run the event, wait for the target state, run its checks,
    collect business events, screenshot, `settle`.
 3. **Retry.** A failed path runs once more. Passing the second time makes it `flaky`.
-4. **Write.** The manifest and reports are rewritten after every path, so a crash keeps what ran.
+4. **Write.** The manifest and reports are rewritten each time a path finishes, from every outcome
+   so far in plan order, so a crash keeps what ran. `outcomes.json` keeps the raw outcomes, for
+   `atlas merge` and `--rerun-failed`.
 
 Every path, state and transition ends as `passed`, `failed`, `flaky` or `not-reached`. Reaching a
 state also reaches its ancestors. A failure records the recogniser's signals and which known states
@@ -378,6 +591,7 @@ Each run writes `<output>/<timestamp>-<mode>/`:
 | `junit.xml` | One test case per path: failures, skips (with the blocking reason) and flaky passes. |
 | `ctrf.json` | The same as CTRF. |
 | `chart.mmd` | The composed chart as a Mermaid state diagram. |
+| `outcomes.json` | Each path's raw outcome by path key, which the manifest is folded from: for merging shards and reusing passed paths. |
 | `media/paths/<path>/NN.png`, `.webp` | Screenshots of each state a path reached; `failed-NN.png` where it failed. |
 | `media/clips/<path>/NN.mp4`, `.poster.webp`, `.vtt` | Showcase clips of each transition, with captions. |
 | `media/traces/<path>.zip` | Driver traces of failed attempts (Playwright traces with the Playwright driver). |
@@ -385,7 +599,8 @@ Each run writes `<output>/<timestamp>-<mode>/`:
 ## Business events
 
 States list the business events that happen on entering them in `meta.events`. An `EventSource`
-(`mark()` before each event, `collect()` after the state is recognised) says what actually happened:
+says what actually happened. `mark()` returns a position before each event, and `collect(mark)`
+returns what arrived after it, once the state is recognised:
 
 - `cloudEventsHttpSource()` starts an HTTP endpoint that accepts CloudEvents in structured, binary
   or batch mode. Point the product's event bus, webhook relay or collector at its `url`.
@@ -413,6 +628,11 @@ Runs produce media and manifests that get shared, so Atlas refuses to leak real 
 [`@crvouga/atlas-visualizer`](packages/visualizer) renders the charts from the specs directory and
 overlays runs from the runs directory: screenshots on states, clips on transitions, statuses and
 history. See its README for how to point it at a project.
+
+It is a complete product browser with a screen catalog, journey library, live report history
+and source management. Connect multiple local directories, HTTP report stores and streaming
+APIs using [report backends](docs/report-backends.md). The runner publishes reached screens
+and completed steps while paths are still running.
 
 ## License
 

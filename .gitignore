@@ -5,3 +5,4 @@ atlas-runs/
 test-results/
 *.tsbuildinfo
 .DS_Store
+.turbo/

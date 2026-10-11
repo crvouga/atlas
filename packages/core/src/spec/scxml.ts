@@ -62,7 +62,7 @@ function readMeta(node: XmlNode): StateMeta {
       meta[listKey] = [...((meta[listKey] as string[] | undefined) ?? []), text(child)];
     } else if (key === 'deadEnd' || key === 'dead-end') {
       meta.deadEnd = text(child);
-    } else if (attrs(child).type === 'json') {
+    } else if (attrs(child)['type'] === 'json') {
       try {
         meta[key] = JSON.parse(text(child)) as unknown;
       } catch {
@@ -90,7 +90,7 @@ function collectNames(nodes: XmlNode[], names: Map<string, string>) {
     const tag = local(tagOf(node));
     if (tag === 'state' || tag === 'parallel' || tag === 'final') {
       const a = attrs(node);
-      if (a.id) names.set(a.id, a['atlas:name'] ?? a.id);
+      if (a['id']) names.set(a['id'], a['atlas:name'] ?? a['id']);
     }
     collectNames(children(node), names);
   }
@@ -102,7 +102,7 @@ const nameOf = (id: string) => currentNames.get(id) ?? id;
 function readState(node: XmlNode, invokeIds: Map<string, InvokeConfig>): [string, StateConfig] {
   const tag = local(tagOf(node));
   const a = attrs(node);
-  const name = nameOf(a.id ?? '');
+  const name = nameOf(a['id'] ?? '');
   const state: StateConfig = { id: name };
   if (tag === 'parallel') state.type = 'parallel';
   if (tag === 'final') state.type = 'final';
@@ -111,10 +111,10 @@ function readState(node: XmlNode, invokeIds: Map<string, InvokeConfig>): [string
   for (const child of children(node)) {
     if (local(tagOf(child)) !== 'invoke') continue;
     const ca = attrs(child);
-    const src = (ca.src ?? '').replace(/\.scxml$/, '').replace(/^.*\//, '');
-    const invoke: InvokeConfig = { src: ca['atlas:name'] ?? src, ...(ca.id ? { id: ca.id } : {}) };
+    const src = (ca['src'] ?? '').replace(/\.scxml$/, '').replace(/^.*\//, '');
+    const invoke: InvokeConfig = { src: ca['atlas:name'] ?? src, ...(ca['id'] ? { id: ca['id'] } : {}) };
     invokes.push(invoke);
-    if (ca.id) invokeIds.set(ca.id, invoke);
+    if (ca['id']) invokeIds.set(ca['id'], invoke);
   }
   for (const child of children(node)) {
     const childTag = local(tagOf(child));
@@ -123,9 +123,9 @@ function readState(node: XmlNode, invokeIds: Map<string, InvokeConfig>): [string
       const [k, v] = readState(child, invokeIds);
       states[k] = v;
     } else if (childTag === 'transition') {
-      const event = ca['atlas:name'] ?? ca.event;
-      if (!event || !ca.target) continue;
-      const target = nameOf(ca.target);
+      const event = ca['atlas:name'] ?? ca['event'];
+      if (!event || !ca['target']) continue;
+      const target = nameOf(ca['target']);
       const raw = ca['atlas:name'] ? '' : event;
       if (raw === 'done.invoke' || raw.startsWith('done.invoke.')) {
         const id = raw.slice('done.invoke.'.length);
@@ -142,8 +142,8 @@ function readState(node: XmlNode, invokeIds: Map<string, InvokeConfig>): [string
   }
   const doneEvent = a['atlas:done-event'];
   if (doneEvent) state.meta = { ...state.meta, doneEvent };
-  if (a.initial) state.initial = nameOf(a.initial);
-  else if (Object.keys(states).length && tag !== 'parallel') state.initial = Object.keys(states)[0];
+  if (a['initial']) state.initial = nameOf(a['initial']);
+  else if (Object.keys(states).length && tag !== 'parallel') state.initial = Object.keys(states)[0]!;
   if (Object.keys(states).length) state.states = states;
   if (invokes.length) state.invoke = invokes.length === 1 ? invokes[0]! : invokes;
   return [name, state];
@@ -158,7 +158,7 @@ export function scxmlToMachine(xml: string, fallbackId = 'machine'): MachineConf
   currentNames = new Map();
   collectNames(children(root), currentNames);
   const invokeIds = new Map<string, InvokeConfig>();
-  const machine: MachineConfig = { id: a.name ?? fallbackId };
+  const machine: MachineConfig = { id: a['name'] ?? fallbackId };
   const states: Record<string, StateConfig> = {};
   for (const child of children(root)) {
     const tag = local(tagOf(child));
@@ -169,7 +169,8 @@ export function scxmlToMachine(xml: string, fallbackId = 'machine'): MachineConf
       machine.meta = { ...machine.meta, ...readMeta(child) };
     }
   }
-  machine.initial = a.initial ? nameOf(a.initial) : Object.keys(states)[0];
+  const initial = a['initial'] ? nameOf(a['initial']) : Object.keys(states)[0];
+  if (initial !== undefined) machine.initial = initial;
   for (const [name, state] of Object.entries(states)) state.id = name;
   machine.states = states;
   return machine;
@@ -205,7 +206,7 @@ function stateToXml(name: string, node: StateConfig): XmlNode {
   }
   for (const [k, v] of Object.entries(node.states ?? {})) kids.push(stateToXml(k, v));
   const at: Record<string, string> = { id: scxmlToken(name), 'atlas:name': name };
-  if (node.initial && node.type !== 'parallel') at.initial = scxmlToken(node.initial);
+  if (node.initial && node.type !== 'parallel') at['initial'] = scxmlToken(node.initial);
   if (typeof node.meta?.doneEvent === 'string') at['atlas:done-event'] = node.meta.doneEvent;
   return { [tag]: kids, ':@': at };
 }
@@ -221,7 +222,7 @@ export function machineToScxml(machine: MachineConfig): string {
     name: machine.id,
     datamodel: 'null'
   };
-  if (machine.initial) at.initial = scxmlToken(machine.initial);
+  if (machine.initial) at['initial'] = scxmlToken(machine.initial);
   const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '', preserveOrder: true, format: true, suppressEmptyNode: true });
   return `<?xml version="1.0" encoding="UTF-8"?>\n${String(builder.build([{ scxml: kids, ':@': at }])).trim()}\n`;
 }
