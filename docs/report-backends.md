@@ -32,8 +32,7 @@ containing letters, numbers, underscores or hyphens. `workspace` is reserved for
 Credentials must not appear in this file or URLs: descriptors are sent to the browser and
 included in static output.
 
-Sources can also be added, enabled or disabled in the Sources page. Those preferences are saved
-in this browser; shared configuration remains authoritative. Remote services must allow requests
+Remote services must allow requests
 from the viewer's origin. For private services, use an authenticated same-origin gateway. Atlas
 does not download private GitHub artifacts or sign object-storage requests itself: expose their
 published data over HTTP or implement a gateway using the contract below.

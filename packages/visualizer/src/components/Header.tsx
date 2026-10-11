@@ -1,176 +1,58 @@
-import * as Popover from '@radix-ui/react-popover';
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
+import { useEffect, useMemo } from 'react';
 
 import { useAtlas } from '../app/atlas-context';
-import { emptyCounts, type AtlasView } from '../data/model';
+import { useSearchQuery } from '../app/search-query';
+import type { AtlasView } from '../data/model';
 import { LATEST } from '../data/queries';
 import { useEvidence } from '../evidence/evidence-context';
 import { plural } from '../evidence/format';
 import { excludedCount } from '../evidence/sources-panel';
+import { kindOfAddress, outlinePath, SPEC_KINDS } from '../spec-kind';
 import { useUiStore } from '../state/ui-store';
 import { DataIssues } from './DataIssues';
 import styles from './Header.module.css';
-import { CheckIcon, ChevronDownIcon, ChevronIcon, ExternalIcon } from './icons';
-import { SummaryBar } from './Status';
 
 const dateTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-/** The product's own name, without the subtitle a spec title may carry. */
-export function productName(title: string | undefined) {
-  const name = title?.split(/\s+[—–|-]\s+|:\s+/)[0]?.trim();
-  return name || 'Atlas';
-}
 
 export function formatRunTime(iso: string) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? 'Unknown time' : dateTime.format(d);
 }
 
-function minutes(ms: number | undefined) {
-  if (!ms) return null;
-  const m = Math.round(ms / 60_000);
-  return m < 1 ? 'Under a minute' : `${m} min`;
+/** The product's own name, without the subtitle a spec title may carry: "Gamezilla — the whole product" is Gamezilla. */
+export function productName(title: string | undefined) {
+  const name = title?.split(/\s+[—–|-]\s+|:\s+/)[0]?.trim();
+  return name || 'Atlas';
 }
 
-function AtlasMark() {
-  return (
-    <svg className={styles.mark} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor" />
-      <path d="M7.5 7.5 16.5 12 7.5 16.5" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
-      <circle cx="7.5" cy="7.5" r="2.4" fill="#fff" />
-      <circle cx="16.5" cy="12" r="2.4" fill="#fff" />
-      <circle cx="7.5" cy="16.5" r="2.4" fill="#fff" />
-    </svg>
-  );
-}
-
-function runLabel(view: AtlasView | null, loading: { run: boolean; runs: boolean }) {
-  if (!view) return 'Loading the spec…';
-  if (loading.run) return 'Loading the run…';
-  if (!view.run) return loading.runs ? 'Looking for runs…' : view.runs.length ? 'Waiting for results…' : 'Not run yet';
-  return formatRunTime(view.run.info.startedAt);
-}
-
-/** The run being shown, what it was, and every other run to switch to. */
-function RunMenu({ view }: { view: AtlasView | null }) {
-  const { run, runs, reports, latestRunId } = useAtlas();
+function RunPicker({ view }: { view: AtlasView }) {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
-  const label = runLabel(view, { run: run.loading, runs: runs.loading });
-  const current = view?.run;
-  const selected = search.run ? run.id ?? search.run : LATEST;
-  const latest = view?.runs.find((r) => r.id === latestRunId);
-  const choose = (id: string) => void navigate({ to: '.', search: (prev) => ({ ...prev, run: id === LATEST ? undefined : id }) });
-  const info = current?.info;
-  const rows: [string, string | null | undefined][] = info
-    ? [
-        ['Checked', formatRunTime(info.startedAt)],
-        ['Took', minutes(info.durationMs)],
-        ['Recording', info.mode === 'showcase' ? 'With videos' : 'Quick check'],
-        ['Branch', info.branch],
-        ['Commit', info.commit?.slice(0, 7)],
-        ['Source', run.summary?.sourceLabel]
-      ]
-    : [];
+  const { latestRunId } = useAtlas();
+  if (view.runs.length === 0) return null;
+  const latest = view.runs.find((run) => run.id === latestRunId);
   return (
-    <Popover.Root>
-      <Popover.Trigger className={styles.runTrigger} data-stale={Boolean(current?.outOfDate)} disabled={!view}>
-        <span className={styles.runCaption}>{current ? (selected === LATEST ? 'Latest run' : 'Run') : 'Runs'}</span>
-        <span className={styles.runValue}>{label}</span>
-        {current?.outOfDate && <span className={styles.staleDot} aria-label="The spec has changed since this run" />}
-        <ChevronDownIcon size={13} className={styles.runChevron} />
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content className={styles.runPop} align="end" sideOffset={8} collisionPadding={12}>
-          {info ? (
-            <section className={styles.runDetails} aria-label="This run">
-              <dl>
-                {rows
-                  .filter(([, v]) => v)
-                  .map(([k, v]) => (
-                    <div key={k}>
-                      <dt>{k}</dt>
-                      <dd>{v}</dd>
-                    </div>
-                  ))}
-              </dl>
-              {current.outOfDate && <p className={styles.stale}>The spec has changed since this run, so some results may not match the map.</p>}
-              {current.reports.length > 0 && (
-                <div className={styles.reports}>
-                  {current.reports.map((r) => (
-                    <a key={r.label} href={r.url} target="_blank" rel="noreferrer">
-                      {r.label}
-                      <ExternalIcon size={12} />
-                    </a>
-                  ))}
-                </div>
-              )}
-            </section>
-          ) : (
-            <p className={styles.runEmpty}>
-              {view?.runs.length ? 'This report is starting. Screens and results appear as they arrive.' : 'Everything on the map comes from the spec. Run Atlas against the app to fill in screenshots and results.'}
-            </p>
-          )}
-          {view && view.runs.length > 0 && (
-            <div className={styles.runList} role="radiogroup" aria-label="Choose a run">
-              <button type="button" role="radio" aria-checked={selected === LATEST} onClick={() => choose(LATEST)}>
-                <span>
-                  Always show the latest
-                  {latest && <small>{formatRunTime(latest.startedAt)}</small>}
-                </span>
-                {selected === LATEST && <CheckIcon size={14} />}
-              </button>
-              {reports.map((r) => (
-                <button key={r.id} type="button" role="radio" aria-checked={selected === r.id} onClick={() => choose(r.id)}>
-                  <span>
-                    {formatRunTime(r.startedAt)}
-                    <small>{r.sourceLabel} · {r.progress === 'running' ? 'Still running' : r.mode === 'showcase' ? 'With videos' : 'Quick check'}</small>
-                  </span>
-                  {selected === r.id && <CheckIcon size={14} />}
-                </button>
-              ))}
-            </div>
-          )}
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+    <label className={styles.picker}>
+      <span className="sr-only">Run</span>
+      <select
+        className={styles.select}
+        value={search.run ?? LATEST}
+        onChange={(event) => void navigate({ to: '.', search: (prev) => ({ ...prev, run: event.target.value === LATEST ? undefined : event.target.value }) })}
+      >
+        <option value={LATEST}>Latest{latest ? ` · ${formatRunTime(latest.startedAt)}` : ''}</option>
+        {view.runs.map((run) => (
+          <option key={run.id} value={run.id} disabled={run.progress === 'running'}>
+            {formatRunTime(run.startedAt)} · {run.progress === 'running' ? 'still running' : run.mode === 'showcase' ? 'with videos' : 'quick check'}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
-function Breadcrumbs({ view, chartId }: { view: AtlasView | null; chartId: string | undefined }) {
-  const chart = chartId ? view?.charts.get(chartId) : undefined;
-  const context = chart ? view?.contexts.find((c) => c.id === chart.contextId) : undefined;
-  const parent = chart?.parent ? view?.charts.get(chart.parent.chartId) : undefined;
-  return (
-    <nav className={styles.crumbs} aria-label="Where you are">
-      <Link to="/" search={(prev) => ({ run: prev.run })} className={styles.home} aria-current={chart ? undefined : 'page'}>
-        <AtlasMark />
-        <span>{productName(view?.title)}</span>
-      </Link>
-      {context && (
-        <>
-          <ChevronIcon size={11} className={styles.sep} />
-          <span className={styles.crumb}>{context.name}</span>
-        </>
-      )}
-      {parent && (
-        <>
-          <ChevronIcon size={11} className={styles.sep} />
-          <Link to="/chart/$chartId" params={{ chartId: parent.id }} search={(prev) => ({ run: prev.run })} className={styles.crumbLink}>
-            {parent.name}
-          </Link>
-        </>
-      )}
-      {chart && (
-        <>
-          <ChevronIcon size={11} className={styles.sep} />
-          <span className={styles.crumbCurrent} aria-current="page">
-            {chart.name}
-          </span>
-        </>
-      )}
-    </nav>
-  );
+function runOnly(prev: { run?: unknown }) {
+  return typeof prev.run === 'string' ? { run: prev.run } : {};
 }
 
 /** Spec runs writing results right now. Their results are already in the lists below. */
@@ -201,46 +83,45 @@ function SourcesButton() {
 
 export function Header() {
   const { view } = useAtlas();
-  const params = useParams({ strict: false });
-  const chartId = params.chartId;
-  const chart = chartId ? view?.charts.get(chartId) : undefined;
-  const counts = chart
-    ? { screens: chart.screens, events: chart.events, journeys: summarize(view!, chart.journeyIds) }
-    : (view?.totals ?? { screens: emptyCounts(), events: emptyCounts(), journeys: emptyCounts() });
+  const evidence = useEvidence();
+  const { pathname } = useLocation();
+  const { query, setQuery } = useSearchQuery();
+  const kind = kindOfAddress(pathname);
+  const product = productName(view?.title);
+  useEffect(() => {
+    document.title = product;
+  }, [product]);
+  const tabs = useMemo(
+    () =>
+      SPEC_KINDS.map((entry) => {
+        const files = evidence.files.filter(entry.accepts);
+        return { kind: entry, files: files.length, failing: files.filter((file) => (evidence.view.specs.get(outlinePath(file))?.summary.counts.failed ?? 0) > 0).length };
+      }).filter((tab) => tab.files > 0 || tab.kind === kind),
+    [evidence.files, evidence.view, kind]
+  );
   return (
     <header className={styles.header}>
-      <Breadcrumbs view={view} chartId={chartId} />
-      <div className={styles.health} aria-label={chart ? `Health of ${chart.name}` : 'Health of the product'}>
-        {view ? (
-          <>
-            <SummaryBar variant="inline" noun="screen" nounPlural="screens" counts={counts.screens} verb="working" />
-            <SummaryBar variant="inline" noun="event" nounPlural="events" counts={counts.events} verb="exercised" />
-            <SummaryBar variant="inline" noun="journey" nounPlural="journeys" counts={counts.journeys} verb="passed" />
-          </>
-        ) : (
-          <>
-            <span className={styles.healthSkeleton} />
-            <span className={styles.healthSkeleton} />
-            <span className={styles.healthSkeleton} />
-          </>
-        )}
-      </div>
+      <Link to="/" search={(prev) => runOnly(prev)} className={styles.home}>
+        {product}
+      </Link>
+      <nav className={styles.tabs} aria-label="Spec type">
+        <Link to="/" search={(prev) => runOnly(prev)} aria-current={pathname.startsWith('/specs/') ? undefined : 'page'}>
+          Statecharts
+        </Link>
+        {tabs.map((tab) => (
+          <Link key={tab.kind.id} to="/specs/$kind" params={{ kind: tab.kind.id }} search={{}} aria-current={tab.kind === kind ? 'page' : undefined}>
+            {tab.kind.label}
+            {tab.failing > 0 && <span className={styles.failing} aria-label={`${plural(tab.failing, tab.kind.one, tab.kind.many)} failing`}>{tab.failing}</span>}
+          </Link>
+        ))}
+      </nav>
       <div className={styles.tools}>
         <LiveRuns />
-        <RunMenu view={view} />
-        {view && <DataIssues issues={view.issues} />}
+        {!kind && view && <RunPicker view={view} />}
+        {!kind && view && <DataIssues issues={view.issues} />}
         <SourcesButton />
+        <input className={styles.search} type="search" value={query} aria-label="Find" placeholder={kind ? `Find a ${kind.one}` : 'Find a place'} onChange={(event) => setQuery(event.target.value)} />
       </div>
     </header>
   );
-}
-
-function summarize(view: AtlasView, journeyIds: string[]) {
-  const counts = emptyCounts();
-  for (const j of view.journeys) {
-    if (!journeyIds.includes(j.id)) continue;
-    counts[j.status]++;
-    counts.total++;
-  }
-  return counts;
 }

@@ -22,22 +22,9 @@ function plural(n: number, one: string, many: string) {
 
 /**
  * A segmented bar: working, unreliable, broken, not reached, then whatever the run didn't cover.
- * With no run at all it shows the spec's count in the same shape. `inline` sets the count beside
- * a short bar, for the header.
+ * With no run at all it shows the spec's count in the same shape.
  */
-export function SummaryBar({
-  noun,
-  nounPlural,
-  counts,
-  verb,
-  variant = 'stacked'
-}: {
-  noun: string;
-  nounPlural: string;
-  counts: StatusCounts;
-  verb: string;
-  variant?: 'stacked' | 'inline';
-}) {
+export function SummaryBar({ noun, nounPlural, counts, verb }: { noun: string; nounPlural: string; counts: StatusCounts; verb: string }) {
   const unrun = counts['spec-only'] === counts.total;
   const pct = (n: number) => (counts.total ? (n / counts.total) * 100 : 0);
   const description = unrun
@@ -47,23 +34,16 @@ export function SummaryBar({
       (counts.flaky ? `, ${counts.flaky} unreliable` : '') +
       (counts['not-reached'] ? `, ${counts['not-reached']} not reached` : '') +
       (counts['not-yet-run'] ? `, ${counts['not-yet-run']} not in this run` : '');
-  const problem = counts.failed ? 'failed' : counts.flaky ? 'flaky' : null;
   return (
-    <div className={styles.summary} data-variant={variant} data-problem={problem ?? undefined} title={description}>
+    <div className={styles.summary}>
       <div className={styles.summaryLabel}>
         {unrun ? (
           <>
-            <strong>{counts.total}</strong> {counts.total === 1 ? noun : nounPlural}
-            {variant === 'stacked' && <span className={styles.summaryVerb}>, not yet run</span>}
+            <strong>{plural(counts.total, noun, nounPlural)}</strong> · not yet run
           </>
         ) : (
           <>
-            <strong>
-              {counts.passed + counts.flaky}
-              <span className={styles.of}>/{counts.total}</span>
-            </strong>{' '}
-            {nounPlural}
-            {variant === 'stacked' && <span className={styles.summaryVerb}> {verb}</span>}
+            <strong>{nounPlural[0]!.toUpperCase() + nounPlural.slice(1)}</strong> {counts.passed + counts.flaky}/{counts.total} {verb}
           </>
         )}
       </div>

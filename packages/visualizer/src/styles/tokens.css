@@ -1,126 +1,76 @@
-@font-face {
-  font-family: 'Barlow';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./fonts/barlow-400.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Barlow';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('./fonts/barlow-500.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Barlow';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('./fonts/barlow-600.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Barlow';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('./fonts/barlow-700.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Condensed';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('./fonts/barlow-condensed-500.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Condensed';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('./fonts/barlow-condensed-600.woff2') format('woff2');
-}
-
 :root {
-  /* The sheet the map is drawn on, and the instruments laid over it. */
-  --sheet: #eef1ef;
-  --sheet-2: #e4e9e6;
-  --graticule: rgba(56, 84, 72, 0.07);
-  --surface: #ffffff;
-  --surface-2: #f6f8f7;
+  /* Neutral surfaces and text. One blue marks what is chosen or can be followed. */
+  --ink: #0f1419;
+  --ink-2: #2f3336;
+  --ink-3: #536471;
+  --muted: #536471;
+  --faint: #8b98a5;
+  --line: #eff3f4;
+  --line-2: #cfd9de;
+  --bg: #ffffff;
+  --bg-2: #f7f9f9;
+  --card: #ffffff;
+  --place: #0b63ce;
+  --place-soft: #e8f1fd;
 
-  --ink: #18212b;
-  --ink-2: #3e4a55;
-  --muted: #69747e;
-  --faint: #9aa4ac;
-  --line: #dde3e0;
-  --line-2: #c5cdc9;
+  /* Who caused an event on the map. The person is the accent; everything else is gray. */
+  --user: #0b63ce;
+  --user-ink: #0a4fa6;
+  --user-soft: #e8f1fd;
+  --user-line: #b9d4f7;
+  --user-deep: #0a4fa6;
+  --user-ring: #d3e4fb;
 
-  /* The route: selection, focus and the journey being followed. Nothing else uses it. */
-  --route: #2449e8;
-  --route-ink: #1a35b0;
-  --route-soft: #e8edff;
-  --route-line: #9fb2fa;
+  --system: #536471;
+  --system-ink: #2f3336;
+  --system-soft: #f7f9f9;
+  --system-line: #cfd9de;
+  --system-wash: rgba(247, 249, 249, 0.97);
 
-  /* Who sends an event. User actions stay neutral so the exceptions stand out. */
-  --user: #3e4a55;
-  --user-ink: #18212b;
-  --user-soft: #ffffff;
-  --user-line: #b9c2c8;
+  --time: #536471;
+  --time-ink: #2f3336;
+  --time-soft: #eff3f4;
+  --time-line: #cfd9de;
 
-  --system: #9a6a00;
-  --system-ink: #6f4c00;
-  --system-soft: #fbf2dc;
-  --system-line: #e6c77a;
+  --handoff: #2f3336;
+  --handoff-ink: #0f1419;
+  --handoff-soft: #eff3f4;
+  --handoff-line: #cfd9de;
 
-  --time: #2f6f84;
-  --time-ink: #22566a;
-  --time-soft: #e2f0f4;
-  --time-line: #93c4d3;
+  --passed: #1a7f37;
+  --passed-ink: #116329;
+  --passed-soft: #e6f4ea;
+  --passed-line: #b4dcc0;
+  --failed: #cf222e;
+  --failed-ink: #a40e26;
+  --failed-soft: #ffebe9;
+  --failed-line: #f7b9b5;
+  --flaky: #9a6700;
+  --flaky-ink: #7d4e00;
+  --flaky-soft: #fff8c5;
+  --not-reached: #cfd9de;
+  --unrun: #eff3f4;
 
-  --handoff: #8a3b8f;
-  --handoff-ink: #6c2a70;
-  --handoff-soft: #f6e8f6;
-  --handoff-line: #d3a2d6;
-
-  --passed: #1e9e5a;
-  --passed-ink: #146c3d;
-  --passed-soft: #e3f4ea;
-  --passed-line: #8fd0ab;
-  --flaky: #d98200;
-  --flaky-ink: #8f5600;
-  --flaky-soft: #fdf0d9;
-  --flaky-line: #f0c072;
-  --failed: #d6352a;
-  --failed-ink: #9c231b;
-  --failed-soft: #fce6e4;
-  --failed-line: #f0a39d;
-  --not-reached: #c5cdc9;
-
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
+  --radius-sm: 0.5rem;
+  --radius: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
   --pill: 999px;
 
-  --shadow-float: 0 1px 2px rgba(24, 33, 43, 0.06), 0 6px 18px rgba(24, 33, 43, 0.07);
-  --shadow-pop: 0 2px 6px rgba(24, 33, 43, 0.08), 0 18px 44px rgba(24, 33, 43, 0.16);
-  --focus: var(--route);
+  --shadow-card: 0 1px 2px rgba(15, 20, 25, 0.06);
+  --shadow-raised: 0 2px 8px rgba(15, 20, 25, 0.06);
+  --shadow-sheet: 0 0 0 1px var(--line);
+  --shadow-pop: 0 8px 28px rgba(15, 20, 25, 0.14);
+  --focus: #0b63ce;
 
-  --font: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-map: 'Barlow Condensed', 'Barlow', ui-sans-serif, system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-md: 1rem;
-  --text-lg: 1.3125rem;
-  --text-xl: 1.75rem;
-  --text-2xl: 2.25rem;
-
-  --header-h: 3.5rem;
-  --panel-w: min(28rem, 38vw);
+  --header-h: 3.25rem;
+  --index-w: 20rem;
+  --panel-w: min(30rem, 40vw);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --fade: 200ms;
+  --fade: 160ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -10,20 +10,36 @@ body,
   height: 100%;
 }
 
+@media (max-width: 760px) {
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+  }
+}
+
 body {
   margin: 0;
   font-family: var(--font);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
   color: var(--ink);
-  background: var(--sheet);
+  background: var(--bg);
+  font-size: 0.9375rem;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 a {
-  color: var(--route-ink);
+  color: var(--place);
+}
+
+::selection {
+  background: var(--place-soft);
+}
+
+input,
+textarea {
+  caret-color: var(--place);
 }
 
 button,
@@ -33,43 +49,16 @@ select {
   color: inherit;
 }
 
-h1,
-h2,
-h3 {
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
+  border-radius: 0.375rem;
 }
 
 code,
-pre,
-kbd {
+pre {
   font-family: var(--mono);
-  font-size: 0.8em;
-}
-
-kbd {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.35rem;
-  height: 1.35rem;
-  padding: 0 0.3rem;
-  border-radius: 4px;
-  border: 1px solid var(--line-2);
-  border-bottom-width: 2px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 0.7rem;
-  line-height: 1;
-}
-
-::selection {
-  background: var(--route-soft);
+  font-size: 0.8rem;
 }
 
 .sr-only {
@@ -86,7 +75,7 @@ kbd {
 
 .react-flow__attribution {
   font-size: 9px;
-  opacity: 0.5;
+  opacity: 0.6;
   background: transparent;
 }
 
@@ -95,7 +84,7 @@ kbd {
 }
 
 .react-flow__node:focus-visible > * {
-  outline: 2px solid var(--focus);
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -103,14 +92,7 @@ kbd {
   border-radius: var(--radius);
   border: 1px solid var(--line);
   overflow: hidden;
-  box-shadow: var(--shadow-float);
-  background: var(--surface);
-}
-
-@keyframes shimmer {
-  to {
-    background-position: -150% 0;
-  }
+  box-shadow: var(--shadow-card);
 }
 
 @media (prefers-reduced-motion: reduce) {

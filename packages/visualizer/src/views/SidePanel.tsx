@@ -2,14 +2,13 @@ import * as Collapsible from '@radix-ui/react-collapsible';
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
-import { STATUS_DESCRIPTION, type AtlasView, type StateView, type TransitionView } from '../data/model';
-import { ChevronIcon, CloseIcon } from '../components/icons';
-import { KIND_LABEL, KindIcon } from '../components/labels';
-import { ScreenImage } from '../components/Screen';
+import { statusNote, type AtlasView, type StateView, type TransitionView } from '../data/model';
+import { ChevronIcon } from '../components/icons';
+import { KIND_LABEL } from '../components/labels';
+import { ScreenImage, placeholderReason } from '../components/Screen';
 import { StatusBadge, StatusDot } from '../components/Status';
+import { mapScope } from '../layout/graph';
 import type { MapSelection } from '../map/ChartMap';
-import { contractsForState } from '../data/model/contracts';
-import { RuleCards } from './RuleCards';
 import styles from './views.module.css';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -27,14 +26,12 @@ function EventLink({ t, view, direction }: { t: TransitionView; view: AtlasView;
   return (
     <Link
       to="/chart/$chartId"
-      params={{ chartId: view.states.get(direction === 'in' ? (t.target ?? t.source) : t.source)?.chartId ?? t.chartId }}
-      search={(prev) => ({ ...prev, screen: undefined, event: t.id })}
+      params={{ chartId: view.states.get(direction === 'in' ? t.target ?? t.source : t.source)?.chartId ?? t.chartId }}
+      search={(prev) => ({ run: prev.run, event: t.id, journey: prev.journey })}
       className={styles.eventRow}
+      data-status={t.status}
     >
-      <span className={styles.inlineChip} data-kind={t.kind} data-status={t.status}>
-        <KindIcon kind={t.kind} size={10} />
-        {t.event}
-      </span>
+      <span>{t.event}</span>
       {otherState && (
         <span className={styles.eventTarget}>
           {direction === 'in' ? 'from' : 'to'} {otherState.name}
@@ -88,31 +85,41 @@ function Questions({ view, ids }: { view: AtlasView; ids: string[] }) {
 }
 
 function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
-  const checks = state.result?.checks.length
-    ? state.result.checks
-    : state.specChecks.map((check) => ({ check, passed: null as boolean | null, expected: undefined, actual: undefined }));
+  const checks = state.result?.checks.length ? state.result.checks : state.specChecks.map((check) => ({ check, passed: null as boolean | null, expected: undefined, actual: undefined }));
+  const note = statusNote(state.status);
+  const picture = placeholderReason(state.status, state.result?.screenshot ?? null);
+  const showPictureCaption = picture !== 'not-run' && picture !== 'not-reached';
   const events = state.result?.businessEvents;
   const incoming = state.incoming.map((id) => view.transitions.get(id)).filter((t): t is TransitionView => Boolean(t) && !t!.carriedBy);
   const outgoing = state.outgoing.map((id) => view.transitions.get(id)).filter((t): t is TransitionView => Boolean(t));
   return (
     <>
-      <div className={styles.panelHead}>
-        <span className={styles.kind}>
-          {state.childChartId ? 'Child machine' : state.kind === 'parallel' ? 'Parallel states' : state.children.length ? 'State group' : 'Screen'}
-        </span>
+      <div className={styles.plateHead}>
+        <h2 className={styles.plateTitle}>{state.name}</h2>
         <StatusBadge status={state.status} />
         {state.confidence === 'assumed' && <span className={styles.assumedBadge}>Assumed, not confirmed</span>}
-        {state.result?.seeds.length ? <span className={styles.assumedBadge}>Seeded: {state.result.seeds.join(', ')}</span> : null}
-        <h2 className={styles.panelTitle}>{state.name}</h2>
       </div>
       {state.description && <p className={styles.lead}>{state.description}</p>}
-      <RuleCards {...contractsForState(view, state.name)} />
-      <p className={styles.statusNote}>{STATUS_DESCRIPTION[state.status]}</p>
-      {(state.kind === 'screen' || state.kind === 'final') && (
-        <div className={styles.bigShot}>
-          <ScreenImage key={state.name} state={state} size="full" />
+      {note && <p className={styles.statusNote}>{note}</p>}
+      <div className={styles.plateSplit}>
+        {(state.kind === 'screen' || state.kind === 'final') && (
+          <div className={styles.bigShot}>
+            <ScreenImage key={state.name} state={state} size="full" description={false} lines={state.hints.length > 0} caption={showPictureCaption} />
+          </div>
+        )}
+        <div>
+          <h3 className={styles.sectionTitle}>Where they go next</h3>
+          {outgoing.length > 0 ? (
+            <div className={styles.eventList}>
+              {outgoing.map((transition) => (
+                <EventLink key={transition.id} t={transition} view={view} direction="out" />
+              ))}
+            </div>
+          ) : (
+            <p className={styles.lead}>{state.deadEnd ? `This is where the journey stops: ${state.deadEnd}` : 'Nothing leaves this screen.'}</p>
+          )}
         </div>
-      )}
+      </div>
       {checks.length > 0 && (
         <Section title="What should be on the screen">
           <ul className={styles.checks}>
@@ -178,46 +185,14 @@ function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
           </div>
         </Section>
       )}
-      {outgoing.length > 0 && (
-        <Section title="Where they go next">
-          <div className={styles.eventList}>
-            {outgoing.map((t) => (
-              <EventLink key={t.id} t={t} view={view} direction="out" />
-            ))}
-          </div>
-        </Section>
-      )}
-      {state.deadEnd && <p className={styles.note}>This is where the journey stops: {state.deadEnd}</p>}
+
+      {state.deadEnd && outgoing.length > 0 && <p className={styles.note}>This is where the journey stops: {state.deadEnd}</p>}
       <Developer
         rows={[
           ['State ID', <code key="id">{state.name}</code>],
           ['Spec file', <code key="f">{state.file}</code>],
           ['Snapshot name', state.snapshot ? <code key="s">{state.snapshot}</code> : null],
-          [
-            'Sources',
-            state.sources.length ? (
-              <ul key="src">
-                {state.sources.map((s) => (
-                  <li key={s}>
-                    <code>{s}</code>
-                  </li>
-                ))}
-              </ul>
-            ) : null
-          ],
-          ['Quint', state.quint ? <code key="q">{state.quint}</code> : null],
-          [
-            'Gherkin',
-            state.gherkin.length ? (
-              <ul key="g">
-                {state.gherkin.map((s) => (
-                  <li key={s}>
-                    <code>{s}</code>
-                  </li>
-                ))}
-              </ul>
-            ) : null
-          ],
+          ['Sources', state.sources.length ? <ul key="src">{state.sources.map((s) => <li key={s}><code>{s}</code></li>)}</ul> : null],
           ['Owner', state.owner],
           ['Tier', state.tier],
           [
@@ -256,19 +231,18 @@ function Clip({ t }: { t: TransitionView }) {
 function EventDetails({ view, t }: { view: AtlasView; t: TransitionView }) {
   const from = view.states.get(t.source);
   const to = t.target ? view.states.get(t.target) : undefined;
+  const note = statusNote(t.status, t.result?.reason);
   return (
     <>
-      <div className={styles.panelHead}>
-        <span className={styles.kind} data-kind={t.kind}>
-          <KindIcon kind={t.kind} size={11} /> {KIND_LABEL[t.kind]}
-        </span>
+      <div className={styles.plateHead}>
+        <h2 className={styles.plateTitle}>{t.event}</h2>
         <StatusBadge status={t.status} />
-        <h2 className={styles.panelTitle}>{t.event}</h2>
       </div>
+      <p className={styles.lead}>{KIND_LABEL[t.kind]}</p>
       <p className={styles.lead}>
         From <strong>{from?.name ?? t.source}</strong> to <strong>{to?.name ?? 'a screen not in the spec'}</strong>.
       </p>
-      <p className={styles.statusNote}>{t.result?.reason ?? STATUS_DESCRIPTION[t.status]}</p>
+      {note && <p className={styles.statusNote}>{note}</p>}
       <Clip t={t} />
       <div className={styles.beforeAfter}>
         {from && (
@@ -301,10 +275,9 @@ function JourneyDetails({ view, journeyId, chartId }: { view: AtlasView; journey
   if (!j) return <p className={styles.lead}>This journey isn’t in the spec.</p>;
   return (
     <>
-      <div className={styles.panelHead}>
-        <span className={styles.kind}>Journey</span>
+      <div className={styles.plateHead}>
+        <h2 className={styles.plateTitle}>{j.name}</h2>
         <StatusBadge status={j.status} />
-        <h2 className={styles.panelTitle}>{j.name}</h2>
       </div>
       {j.description && <p className={styles.lead}>{j.description}</p>}
       {!j.replay.ok && <p className={styles.warn}>The chart can’t follow this journey past “{j.replay.failedAt ?? j.replay.missingEnds.join(', ')}”.</p>}
@@ -312,21 +285,12 @@ function JourneyDetails({ view, journeyId, chartId }: { view: AtlasView; journey
         {j.steps.map((step, i) => {
           const t = view.transitions.get(step.transitionIds[0] ?? '');
           if (!t) return null;
-          const here =
-            view.transitions.get(t.id)?.chartId === chartId || [...view.transitions.values()].some((x) => x.carriedBy === t.id && x.chartId === chartId);
+          const here = view.transitions.get(t.id)?.chartId === chartId || [...view.transitions.values()].some((x) => x.carriedBy === t.id && x.chartId === chartId);
           return (
             <li key={i} data-here={here}>
-              <Link
-                to="/chart/$chartId"
-                params={{ chartId: t.chartId }}
-                search={(prev) => ({ run: prev.run, journey: j.id, event: t.id })}
-                className={styles.step}
-              >
+              <Link to="/chart/$chartId" params={{ chartId: t.chartId }} search={(prev) => ({ run: prev.run, journey: j.id, event: t.id })} className={styles.step}>
                 <span className={styles.stepNo}>{i + 1}</span>
-                <span className={styles.inlineChip} data-kind={t.kind} data-status={t.status}>
-                  <KindIcon kind={t.kind} size={10} />
-                  {t.event}
-                </span>
+                <span className={styles.stepEvent} data-status={t.status}>{t.event}</span>
                 <StatusDot status={t.status} />
               </Link>
             </li>
@@ -355,18 +319,21 @@ export function SidePanel({ view, chartId, selection }: { view: AtlasView; chart
     body = <p className={styles.lead}>This item isn’t in the spec any more. It may have been renamed or removed.</p>;
     label = 'Not found';
   }
+  const scopeName = state?.name ?? transition?.source;
+  const scope = scopeName ? (mapScope(view, chartId, scopeName) ?? undefined) : undefined;
   return (
-    <aside className={styles.panel} aria-label={label}>
+    <article className={styles.plateScroll} aria-label={label}>
+      {body}
       <Link
         to="/chart/$chartId"
         params={{ chartId }}
-        search={(prev) => ({ ...prev, screen: undefined, event: undefined, journey: state || transition ? prev.journey : undefined })}
-        className={styles.close}
-        aria-label="Close panel"
+        search={(prev) => ({ run: prev.run, screen: undefined, event: undefined, journey: undefined, group: scope })}
+        activeOptions={{ includeSearch: true, explicitUndefined: true }}
+        aria-current={undefined}
+        className={styles.mapLink}
       >
-        <CloseIcon size={16} />
+        Show the map
       </Link>
-      <div className={styles.panelBody}>{body}</div>
-    </aside>
+    </article>
   );
 }

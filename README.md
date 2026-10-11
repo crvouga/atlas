@@ -629,8 +629,8 @@ Runs produce media and manifests that get shared, so Atlas refuses to leak real 
 overlays runs from the runs directory: screenshots on states, clips on transitions, statuses and
 history. See its README for how to point it at a project.
 
-It is a complete product browser with a screen catalog, journey library, live report history
-and source management. Connect multiple local directories, HTTP report stores and streaming
+Its open index lists every place, journey and spec beside one plate. Connect multiple local
+directories, HTTP report stores and streaming
 APIs using [report backends](docs/report-backends.md). The runner publishes reached screens
 and completed steps while paths are still running.
 

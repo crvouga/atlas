@@ -1,120 +1,113 @@
 import { describe, expect, it } from 'vitest';
 
+import { buildAtlasView } from '../data/model';
+import { parseSpec } from '../data/parse/spec';
 import { loadFixture } from '../data/testing/load-fixture';
-import { chartGraph, isolateJourney } from './graph';
+import { MAP_PLACE_CAP, chartGraph, mapScope } from './graph';
 
-const { view } = loadFixture('full');
-const top = 'Coffee order';
-const child = 'Checking out';
+function viewFrom(yaml: string) {
+  const spec = parseSpec({ ref: null, files: [{ path: 'wide.machine.yaml', text: yaml }] });
+  return buildAtlasView({ spec, specIssues: [], runs: [], run: null, runIssues: [], resolveMedia: () => '' });
+}
 
-describe('progressive disclosure', () => {
-  it('keeps a child machine collapsed by default and exposes its boundary hand-off', () => {
-    const graph = chartGraph(view, top)!;
-    expect(graph.nodes.find((n) => n.id === child)?.kind).toBe('chart-link');
-    expect(graph.nodes.some((n) => n.id === 'Choosing how to pay')).toBe(false);
-    expect(graph.edges.find((e) => e.transitionId === 'Checking out :: Payment goes through')?.source).toBe(child);
-    expect(graph.edges.some((e) => e.transitionId === 'Paid :: Payment goes through')).toBe(false);
+function places(count: number, id: string) {
+  const states = Array.from({ length: count }, (_, i) => `          P${i}: {}`).join('\n');
+  return `id: ${id}\ninitial: Root\nstates:\n  Root:\n    initial: P0\n    states:\n${states}\n`;
+}
+
+function wideMachine() {
+  const big = Array.from({ length: 30 }, (_, i) => (i === 0 ? `          B0:\n            on:\n              Goes:\n                target: '#B1'` : `          B${i}: {}`)).join('\n');
+  return `id: Wide
+initial: Root
+states:
+  Root:
+    initial: Big
+    states:
+      Big:
+        initial: B0
+        states:
+${big}
+      Small:
+        initial: S0
+        states:
+          S0:
+            on:
+              Leaves:
+                target: '#B0'
+              Leaves again:
+                target: '#B1'
+          S1: {}
+      Alone:
+        on:
+          Waves:
+            target: '#S0'
+`;
+}
+
+describe('chart map scope', () => {
+  const view = viewFrom(wideMachine());
+
+  it('draws one layer of a large chart instead of every nested screen', () => {
+    const graph = chartGraph(view, 'Wide');
+    expect(graph?.mode).toBe('level');
+    expect(graph?.focus).toBe('Root');
+    expect(graph?.scoped).toBe(true);
+    expect(graph?.nodes.map((node) => [node.id, node.kind, node.places])).toEqual([
+      ['Big', 'summary', 30],
+      ['Small', 'summary', 2],
+      ['Alone', 'screen', undefined]
+    ]);
+    expect(graph?.nodes.some((node) => node.id === 'B0')).toBe(false);
+    const bundle = graph?.edges.find((edge) => edge.bundle);
+    expect(bundle).toMatchObject({ source: 'Small', target: 'Big', bundle: { label: '2 events', count: 2, group: 'Big', screen: null } });
+    expect(graph?.edges.find((edge) => edge.transitionId)?.source).toBe('Alone');
   });
 
-  it('inlines the child and replaces the summary hand-off with the actual final-state hand-off', () => {
-    const graph = chartGraph(view, top, { expanded: [child], collapsed: [] })!;
-    expect(graph.nodes.find((n) => n.id === child)?.kind).toBe('group');
-    expect(graph.nodes.find((n) => n.id === 'Choosing how to pay')?.parent).toBe(child);
-    expect(graph.edges.some((e) => e.transitionId === 'Checking out :: Payment goes through')).toBe(false);
-    expect(graph.edges.find((e) => e.transitionId === 'Paid :: Payment goes through')).toMatchObject({ source: 'Paid', target: 'Order in progress' });
-    expect(graph.edges.some((e) => e.transitionId === 'Choosing how to pay :: Picks card')).toBe(true);
+  it('opens a large section as its own layer and a small section in full', () => {
+    const big = chartGraph(view, 'Wide', 'Big');
+    expect(big?.mode).toBe('level');
+    expect(big?.nodes).toHaveLength(30);
+    expect(big?.nodes.every((node) => node.kind === 'screen')).toBe(true);
+    expect(big?.nodes.map((node) => node.id)).toContain('B0');
+    expect(big?.edges.map((edge) => edge.transitionId).filter(Boolean)).toEqual([expect.stringContaining('Goes')]);
+
+    const small = chartGraph(view, 'Wide', 'Small');
+    expect(small?.mode).toBe('subtree');
+    expect(small?.nodes.map((node) => node.id)).toEqual(expect.arrayContaining(['Small', 'S0', 'S1', 'B0', 'B1']));
+    expect(small?.nodes.map((node) => node.id)).not.toContain('B29');
+    expect(small?.nodes.find((node) => node.id === 'B0')?.kind).toBe('context');
   });
 
-  it('removes group interiors and reroutes inbound and outbound events to the summary', () => {
-    const graph = chartGraph(view, top, { expanded: [], collapsed: ['Customizing the drink', 'Order in progress'] })!;
-    expect(graph.nodes.find((n) => n.id === 'Order in progress')?.kind).toBe('collapsed');
-    expect(graph.nodes.some((n) => n.id === 'Drink' || n.id === 'Updates on' || n.id === 'Choosing a size')).toBe(false);
-    expect(graph.edges.find((e) => e.transitionId === 'Ready to add the drink :: Adds the drink to the cart')).toMatchObject({
-      source: 'Customizing the drink',
-      target: 'Reviewing the cart'
-    });
-    expect(graph.edges.find((e) => e.transitionId === 'Drink ready for pickup :: Picks up the drink')).toMatchObject({
-      source: 'Order in progress',
-      target: 'Order complete'
-    });
-    expect(graph.edges.some((e) => e.source === e.target)).toBe(false);
+  it('sends a place to the section that can draw it', () => {
+    expect(mapScope(view, 'Wide', 'S0')).toBe('Small');
+    expect(mapScope(view, 'Wide', 'B0')).toBe('Big');
+    expect(mapScope(view, 'Wide', 'Small')).toBe('Small');
+    expect(mapScope(view, 'Wide', 'Big')).toBe('Big');
+    expect(chartGraph(view, 'Wide', 'missing')?.focus).toBe('Root');
   });
 
-  it('preserves boundaries between collapsed groups inside an expanded child machine', () => {
-    const { view: large } = loadFixture('large');
-    const graph = chartGraph(large, 'Order checkout', {
-      expanded: ['Going through the payment'],
-      collapsed: ['Handling the payment details', 'Handling the payment authorization', 'Handling the payment receipt']
-    })!;
-    expect(graph.edges.find((edge) => edge.transitionId === 'Told the payment details was approved :: Continues to the payment authorization')).toMatchObject({
-      source: 'Handling the payment details',
-      target: 'Handling the payment authorization'
-    });
-    expect(graph.edges.find((edge) => edge.transitionId === 'Told the payment authorization was approved :: Continues to the payment receipt')).toMatchObject({
-      source: 'Handling the payment authorization',
-      target: 'Handling the payment receipt'
-    });
-  });
-
-  it('keys geometry by detail level and child structure, independently of run results', () => {
-    const collapsed = chartGraph(view, top)!;
-    const expanded = chartGraph(view, top, { expanded: [child], collapsed: [] })!;
-    expect(expanded.key).not.toBe(collapsed.key);
-    expect(chartGraph(loadFixture('spec-only').view, top)!.key).toBe(collapsed.key);
-    const changed = { ...view, charts: new Map(view.charts) };
-    changed.charts.set('Checkout', { ...view.charts.get('Checkout')!, structureKey: 'changed-child' });
-    expect(chartGraph(changed, top)!.key).not.toBe(collapsed.key);
-  });
-
-  it('produces valid unique endpoints at all detail levels in the large atlas', () => {
-    const { view: large } = loadFixture('large');
-    for (const chart of large.charts.values()) {
-      const own = [...large.states.values()].filter((s) => s.contextId === chart.contextId);
-      for (const details of [
-        undefined,
-        { expanded: own.filter((s) => s.childChartId).map((s) => s.name), collapsed: [] },
-        { expanded: [], collapsed: own.filter((s) => s.children.length).map((s) => s.name) }
-      ]) {
-        const graph = chartGraph(large, chart.id, details)!;
-        const ids = new Set(graph.nodes.map((n) => n.id));
-        expect(ids.size).toBe(graph.nodes.length);
-        expect(new Set(graph.edges.map((e) => e.id)).size).toBe(graph.edges.length);
-        for (const node of graph.nodes) if (node.parent) expect(ids.has(node.parent)).toBe(true);
-        for (const edge of graph.edges) {
-          expect(ids.has(edge.source)).toBe(true);
-          expect(ids.has(edge.target)).toBe(true);
-        }
-      }
-    }
+  it('keeps a chart at the place cap fully expanded', () => {
+    const capped = viewFrom(places(MAP_PLACE_CAP, 'Cap'));
+    const graph = chartGraph(capped, 'Cap');
+    expect(graph?.mode).toBe('full');
+    expect(graph?.scoped).toBe(false);
+    expect(graph?.nodes.map((node) => node.id)).toContain('Root');
+    expect(graph?.nodes.map((node) => node.id)).toContain(`P${MAP_PLACE_CAP - 1}`);
+    expect(graph?.nodes.some((node) => node.kind === 'summary')).toBe(false);
   });
 });
 
-describe('path-only layouts', () => {
-  const journey = view.journeys.find((j) => j.name === 'Orders a drink and pays by card')!;
-  const graph = chartGraph(view, top, { expanded: [child], collapsed: [] })!;
-  it('removes unrelated branches and events while preserving nesting and the hand-off', () => {
-    const filtered = isolateJourney(view, graph, journey);
-    expect(filtered.nodes.some((node) => node.id === 'Updates on')).toBe(true);
-    expect(filtered.nodes.some((node) => node.id === 'Updates off')).toBe(false);
-    expect(filtered.nodes.some((node) => node.id === 'Confirming with the wallet')).toBe(false);
-    expect(filtered.edges.some((edge) => edge.transitionId === 'Paid :: Payment goes through')).toBe(true);
-    const ids = new Set(filtered.nodes.map((node) => node.id));
-    for (const node of filtered.nodes) if (node.parent) expect(ids.has(node.parent)).toBe(true);
-    for (const edge of filtered.edges) {
-      expect(ids.has(edge.source)).toBe(true);
-      expect(ids.has(edge.target)).toBe(true);
-    }
-  });
-  it('keeps an inspected off-path state or event visible with its ancestors', () => {
-    const filtered = isolateJourney(view, graph, journey, { screen: 'Updates off', event: 'Choosing how to pay :: Picks wallet' });
-    expect(filtered.nodes.some((node) => node.id === 'Updates off')).toBe(true);
-    expect(filtered.nodes.some((node) => node.id === 'Confirming with the wallet')).toBe(true);
-    expect(filtered.nodes.some((node) => node.id === child)).toBe(true);
-    expect(filtered.edges.some((edge) => edge.transitionId === 'Choosing how to pay :: Picks wallet')).toBe(true);
-  });
-  it('retains collapsed representatives of steps inside a hidden child machine', () => {
-    const filtered = isolateJourney(view, chartGraph(view, top)!, journey);
-    expect(filtered.nodes.find((node) => node.id === child)?.kind).toBe('chart-link');
-    expect(filtered.edges.find((edge) => edge.transitionId === 'Checking out :: Payment goes through')).toBeDefined();
+describe('coffee chart map', () => {
+  const { view } = loadFixture('spec-only');
+
+  it('still draws every state of a small chart', () => {
+    const graph = chartGraph(view, 'Coffee order');
+    const names = [...view.states.values()].filter((state) => state.chartId === 'Coffee order').map((state) => state.name);
+    expect(graph?.mode).toBe('full');
+    expect(graph?.scoped).toBe(false);
+    expect(graph?.nodes.some((node) => node.kind === 'summary')).toBe(false);
+    for (const name of names) expect(graph?.nodes.map((node) => node.id)).toContain(name);
+    expect(graph?.edges.every((edge) => edge.bundle === null)).toBe(true);
+    expect(mapScope(view, 'Coffee order', 'Browsing the menu')).toBeNull();
   });
 });
