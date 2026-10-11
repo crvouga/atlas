@@ -6,6 +6,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -13,11 +14,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
       - run: pnpm install --frozen-lockfile=false
       - run: pnpm type-check
       - run: pnpm test
   example:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: check
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +41,7 @@ jobs:
           path: examples/todo/atlas-runs
   bun:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: check
     steps:
       - uses: actions/checkout@v4
