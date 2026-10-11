@@ -26,6 +26,8 @@ and the implementation says how a driver makes each event happen and recognises 
 > are integrating Atlas—or are an agent working inside a consumer project's submodule—read the
 > [dogfooding and contribution workflow](docs/dogfooding.md) before making changes.
 
+Atlas also owns specification and test-evidence visualization: Gherkin, Quint, DMN, Alloy, OpenSLO and supporting documents appear in **Specs and evidence**, alongside commit-scoped checks, recordings and performance measurements. See [Atlas reports](packages/reports/README.md).
+
 ## Packages
 
 | Package | What it is |

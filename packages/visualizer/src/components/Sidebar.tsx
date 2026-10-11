@@ -1,11 +1,15 @@
 import { Link } from '@tanstack/react-router';
 
 import { useAtlas } from '../app/atlas-context';
+import { useEvidence } from '../evidence/evidence-context';
+import { outlinePath, SPEC_KINDS } from '../spec-kind';
+import { productName } from './Header';
 import { ClockIcon, MapIcon, RouteIcon, SearchIcon, SlidersIcon } from './icons';
 import styles from './Workspace.module.css';
 
 export function Sidebar() {
   const { view, reports, sources, live, setLive } = useAtlas();
+  const evidence = useEvidence();
   const running = reports.filter((report) => report.progress === 'running').length;
   const navigation = [
     { to: '/', label: 'Overview', icon: MapIcon, count: null },
@@ -26,7 +30,7 @@ export function Sidebar() {
       </Link>
       <div className={styles.productName}>
         <span>PRODUCT</span>
-        <strong>{view?.title ?? 'Your product'}</strong>
+        <strong>{view ? productName(view.title) : 'Your product'}</strong>
       </div>
       <nav aria-label="Atlas navigation" className={styles.navigation}>
         {navigation.map(({ to, label, icon: Icon, count }) => (
@@ -42,6 +46,18 @@ export function Sidebar() {
             {count !== null && count !== undefined && <small aria-hidden="true">{count}</small>}
           </Link>
         ))}
+      </nav>
+      <nav aria-label="Spec type" className={styles.navigation}>
+        {SPEC_KINDS.map((kind) => {
+          const failing = evidence.files.filter((file) => kind.accepts(file) && (evidence.view.specs.get(outlinePath(file))?.summary.counts.failed ?? 0) > 0).length;
+          return (
+            <Link key={kind.id} to="/specs/$kind" params={{ kind: kind.id }} search={(prev) => ({ run: prev.run })} activeOptions={{ exact: false }} activeProps={{ 'aria-current': 'page' }}>
+              <SearchIcon size={17} />
+              <span>{kind.label}</span>
+              {failing > 0 && <small aria-label={`${failing} failing`}>{failing}</small>}
+            </Link>
+          );
+        })}
       </nav>
       <div className={styles.sidebarFoot}>
         {running > 0 && (

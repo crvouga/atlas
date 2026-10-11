@@ -1,0 +1,808 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-10T11:45:07Z",
+  "title": "Design System: Atlas",
+  "extensions": {
+    "colorMeta": {
+      "place": {
+        "role": "primary",
+        "displayName": "Place Blue",
+        "canonical": "#1d4e89",
+        "tonalRamp": [
+          "oklch(15.0% 0.061 255.1)",
+          "oklch(26.4% 0.091 255.1)",
+          "oklch(37.8% 0.111 255.1)",
+          "oklch(49.2% 0.111 255.1)",
+          "oklch(60.6% 0.111 255.1)",
+          "oklch(72.0% 0.111 255.1)",
+          "oklch(83.4% 0.084 255.1)",
+          "oklch(95.0% 0.024 255.1)"
+        ]
+      },
+      "failed": {
+        "role": "secondary",
+        "displayName": "Failure",
+        "canonical": "#b42318",
+        "tonalRamp": [
+          "oklch(15.0% 0.069 29.5)",
+          "oklch(26.4% 0.111 29.5)",
+          "oklch(37.8% 0.156 29.5)",
+          "oklch(49.2% 0.182 29.5)",
+          "oklch(60.6% 0.182 29.5)",
+          "oklch(72.0% 0.175 29.5)",
+          "oklch(83.4% 0.092 29.5)",
+          "oklch(95.0% 0.025 29.5)"
+        ]
+      },
+      "failed-ink": {
+        "role": "secondary",
+        "displayName": "Failed Ink",
+        "canonical": "#8f1d14",
+        "tonalRamp": [
+          "oklch(15.0% 0.069 29.4)",
+          "oklch(26.4% 0.111 29.4)",
+          "oklch(37.8% 0.151 29.4)",
+          "oklch(49.2% 0.151 29.4)",
+          "oklch(60.6% 0.151 29.4)",
+          "oklch(72.0% 0.151 29.4)",
+          "oklch(83.4% 0.092 29.4)",
+          "oklch(95.0% 0.025 29.4)"
+        ]
+      },
+      "failed-soft": {
+        "role": "secondary",
+        "displayName": "Failed Soft",
+        "canonical": "#fde8e4",
+        "tonalRamp": [
+          "oklch(15.0% 0.024 30.5)",
+          "oklch(26.4% 0.024 30.5)",
+          "oklch(37.8% 0.024 30.5)",
+          "oklch(49.2% 0.024 30.5)",
+          "oklch(60.6% 0.024 30.5)",
+          "oklch(72.0% 0.024 30.5)",
+          "oklch(83.4% 0.024 30.5)",
+          "oklch(95.0% 0.024 30.5)"
+        ]
+      },
+      "failed-line": {
+        "role": "secondary",
+        "displayName": "Failed Line",
+        "canonical": "#f0b4ad",
+        "tonalRamp": [
+          "oklch(15.0% 0.068 26.3)",
+          "oklch(26.4% 0.071 26.3)",
+          "oklch(37.8% 0.071 26.3)",
+          "oklch(49.2% 0.071 26.3)",
+          "oklch(60.6% 0.071 26.3)",
+          "oklch(72.0% 0.071 26.3)",
+          "oklch(83.4% 0.071 26.3)",
+          "oklch(95.0% 0.025 26.3)"
+        ]
+      },
+      "unreliable": {
+        "role": "tertiary",
+        "displayName": "Unreliable",
+        "canonical": "#9a3412",
+        "tonalRamp": [
+          "oklch(15.0% 0.062 37.3)",
+          "oklch(26.4% 0.091 37.3)",
+          "oklch(37.8% 0.127 37.3)",
+          "oklch(49.2% 0.143 37.3)",
+          "oklch(60.6% 0.143 37.3)",
+          "oklch(72.0% 0.143 37.3)",
+          "oklch(83.4% 0.094 37.3)",
+          "oklch(95.0% 0.026 37.3)"
+        ]
+      },
+      "unreliable-mark": {
+        "role": "tertiary",
+        "displayName": "Unreliable Mark",
+        "canonical": "#9a3412",
+        "tonalRamp": [
+          "oklch(15.0% 0.057 41.1)",
+          "oklch(26.4% 0.084 41.1)",
+          "oklch(37.8% 0.118 41.1)",
+          "oklch(49.2% 0.152 41.1)",
+          "oklch(60.6% 0.187 41.1)",
+          "oklch(72.0% 0.181 41.1)",
+          "oklch(83.4% 0.096 41.1)",
+          "oklch(95.0% 0.026 41.1)"
+        ]
+      },
+      "unreliable-soft": {
+        "role": "tertiary",
+        "displayName": "Unreliable Soft",
+        "canonical": "#f6efe8",
+        "tonalRamp": [
+          "oklch(15.0% 0.037 75.2)",
+          "oklch(26.4% 0.037 75.2)",
+          "oklch(37.8% 0.037 75.2)",
+          "oklch(49.2% 0.037 75.2)",
+          "oklch(60.6% 0.037 75.2)",
+          "oklch(72.0% 0.037 75.2)",
+          "oklch(83.4% 0.037 75.2)",
+          "oklch(95.0% 0.037 75.2)"
+        ]
+      },
+      "working": {
+        "role": "tertiary",
+        "displayName": "Working",
+        "canonical": "#4f735c",
+        "tonalRamp": [
+          "oklch(15.0% 0.049 149.2)",
+          "oklch(26.4% 0.076 149.2)",
+          "oklch(37.8% 0.107 149.2)",
+          "oklch(49.2% 0.139 149.2)",
+          "oklch(60.6% 0.170 149.2)",
+          "oklch(72.0% 0.170 149.2)",
+          "oklch(83.4% 0.170 149.2)",
+          "oklch(95.0% 0.084 149.2)"
+        ]
+      },
+      "working-ink": {
+        "role": "tertiary",
+        "displayName": "Working Ink",
+        "canonical": "#2c4a38",
+        "tonalRamp": [
+          "oklch(15.0% 0.046 151.3)",
+          "oklch(26.4% 0.073 151.3)",
+          "oklch(37.8% 0.102 151.3)",
+          "oklch(49.2% 0.108 151.3)",
+          "oklch(60.6% 0.108 151.3)",
+          "oklch(72.0% 0.108 151.3)",
+          "oklch(83.4% 0.108 151.3)",
+          "oklch(95.0% 0.082 151.3)"
+        ]
+      },
+      "working-soft": {
+        "role": "tertiary",
+        "displayName": "Working Soft",
+        "canonical": "#e7efe9",
+        "tonalRamp": [
+          "oklch(15.0% 0.042 156.7)",
+          "oklch(26.4% 0.043 156.7)",
+          "oklch(37.8% 0.043 156.7)",
+          "oklch(49.2% 0.043 156.7)",
+          "oklch(60.6% 0.043 156.7)",
+          "oklch(72.0% 0.043 156.7)",
+          "oklch(83.4% 0.043 156.7)",
+          "oklch(95.0% 0.043 156.7)"
+        ]
+      },
+      "working-line": {
+        "role": "tertiary",
+        "displayName": "Working Line",
+        "canonical": "#c5d5cb",
+        "tonalRamp": [
+          "oklch(15.0% 0.043 154.4)",
+          "oklch(26.4% 0.068 154.4)",
+          "oklch(37.8% 0.095 154.4)",
+          "oklch(49.2% 0.124 154.4)",
+          "oklch(60.6% 0.136 154.4)",
+          "oklch(72.0% 0.136 154.4)",
+          "oklch(83.4% 0.136 154.4)",
+          "oklch(95.0% 0.080 154.4)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1c2430",
+        "tonalRamp": [
+          "oklch(15.0% 0.025 258.3)",
+          "oklch(26.4% 0.025 258.3)",
+          "oklch(37.8% 0.025 258.3)",
+          "oklch(49.2% 0.025 258.3)",
+          "oklch(60.6% 0.025 258.3)",
+          "oklch(72.0% 0.025 258.3)",
+          "oklch(83.4% 0.025 258.3)",
+          "oklch(95.0% 0.024 258.3)"
+        ]
+      },
+      "ink-strong": {
+        "role": "neutral",
+        "displayName": "Ink Strong",
+        "canonical": "#2c3848",
+        "tonalRamp": [
+          "oklch(15.0% 0.033 255.7)",
+          "oklch(26.4% 0.033 255.7)",
+          "oklch(37.8% 0.033 255.7)",
+          "oklch(49.2% 0.033 255.7)",
+          "oklch(60.6% 0.033 255.7)",
+          "oklch(72.0% 0.033 255.7)",
+          "oklch(83.4% 0.033 255.7)",
+          "oklch(95.0% 0.024 255.7)"
+        ]
+      },
+      "ink-quiet": {
+        "role": "neutral",
+        "displayName": "Ink Quiet",
+        "canonical": "#3d4d5c",
+        "tonalRamp": [
+          "oklch(15.0% 0.032 246.9)",
+          "oklch(26.4% 0.032 246.9)",
+          "oklch(37.8% 0.032 246.9)",
+          "oklch(49.2% 0.032 246.9)",
+          "oklch(60.6% 0.032 246.9)",
+          "oklch(72.0% 0.032 246.9)",
+          "oklch(83.4% 0.032 246.9)",
+          "oklch(95.0% 0.025 246.9)"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "canonical": "#5c6e7c",
+        "tonalRamp": [
+          "oklch(15.0% 0.031 241.6)",
+          "oklch(26.4% 0.031 241.6)",
+          "oklch(37.8% 0.031 241.6)",
+          "oklch(49.2% 0.031 241.6)",
+          "oklch(60.6% 0.031 241.6)",
+          "oklch(72.0% 0.031 241.6)",
+          "oklch(83.4% 0.031 241.6)",
+          "oklch(95.0% 0.026 241.6)"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Ground",
+        "canonical": "#e7eef2",
+        "tonalRamp": [
+          "oklch(15.0% 0.009 232.4)",
+          "oklch(26.4% 0.009 232.4)",
+          "oklch(37.8% 0.009 232.4)",
+          "oklch(49.2% 0.009 232.4)",
+          "oklch(60.6% 0.009 232.4)",
+          "oklch(72.0% 0.009 232.4)",
+          "oklch(83.4% 0.009 232.4)",
+          "oklch(95.0% 0.009 232.4)"
+        ]
+      },
+      "ground-raised": {
+        "role": "neutral",
+        "displayName": "Ground Raised",
+        "canonical": "#f4f8fa",
+        "tonalRamp": [
+          "oklch(15.0% 0.005 228.8)",
+          "oklch(26.4% 0.005 228.8)",
+          "oklch(37.8% 0.005 228.8)",
+          "oklch(49.2% 0.005 228.8)",
+          "oklch(60.6% 0.005 228.8)",
+          "oklch(72.0% 0.005 228.8)",
+          "oklch(83.4% 0.005 228.8)",
+          "oklch(95.0% 0.005 228.8)"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 89.9)",
+          "oklch(26.4% 0.000 89.9)",
+          "oklch(37.8% 0.000 89.9)",
+          "oklch(49.2% 0.000 89.9)",
+          "oklch(60.6% 0.000 89.9)",
+          "oklch(72.0% 0.000 89.9)",
+          "oklch(83.4% 0.000 89.9)",
+          "oklch(95.0% 0.000 89.9)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Line",
+        "canonical": "#d5e0e7",
+        "tonalRamp": [
+          "oklch(15.0% 0.015 235.4)",
+          "oklch(26.4% 0.015 235.4)",
+          "oklch(37.8% 0.015 235.4)",
+          "oklch(49.2% 0.015 235.4)",
+          "oklch(60.6% 0.015 235.4)",
+          "oklch(72.0% 0.015 235.4)",
+          "oklch(83.4% 0.015 235.4)",
+          "oklch(95.0% 0.015 235.4)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Line Strong",
+        "canonical": "#c5d3dc",
+        "tonalRamp": [
+          "oklch(15.0% 0.020 235.8)",
+          "oklch(26.4% 0.020 235.8)",
+          "oklch(37.8% 0.020 235.8)",
+          "oklch(49.2% 0.020 235.8)",
+          "oklch(60.6% 0.020 235.8)",
+          "oklch(72.0% 0.020 235.8)",
+          "oklch(83.4% 0.020 235.8)",
+          "oklch(95.0% 0.020 235.8)"
+        ]
+      },
+      "not-reached": {
+        "role": "neutral",
+        "displayName": "Not Reached",
+        "canonical": "#cbd5e1",
+        "tonalRamp": [
+          "oklch(15.0% 0.020 252.9)",
+          "oklch(26.4% 0.020 252.9)",
+          "oklch(37.8% 0.020 252.9)",
+          "oklch(49.2% 0.020 252.9)",
+          "oklch(60.6% 0.020 252.9)",
+          "oklch(72.0% 0.020 252.9)",
+          "oklch(83.4% 0.020 252.9)",
+          "oklch(95.0% 0.020 252.9)"
+        ]
+      },
+      "unrun": {
+        "role": "neutral",
+        "displayName": "Unrun",
+        "canonical": "#e2e8f0",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 255.5)",
+          "oklch(26.4% 0.013 255.5)",
+          "oklch(37.8% 0.013 255.5)",
+          "oklch(49.2% 0.013 255.5)",
+          "oklch(60.6% 0.013 255.5)",
+          "oklch(72.0% 0.013 255.5)",
+          "oklch(83.4% 0.013 255.5)",
+          "oklch(95.0% 0.013 255.5)"
+        ]
+      },
+      "badge-neutral": {
+        "role": "neutral",
+        "displayName": "Badge Neutral",
+        "canonical": "#eef2f7",
+        "tonalRamp": [
+          "oklch(15.0% 0.008 253.9)",
+          "oklch(26.4% 0.008 253.9)",
+          "oklch(37.8% 0.008 253.9)",
+          "oklch(49.2% 0.008 253.9)",
+          "oklch(60.6% 0.008 253.9)",
+          "oklch(72.0% 0.008 253.9)",
+          "oklch(83.4% 0.008 253.9)",
+          "oklch(95.0% 0.008 253.9)"
+        ]
+      },
+      "map-user": {
+        "role": "map",
+        "displayName": "Map User",
+        "canonical": "#6b5b86",
+        "tonalRamp": [
+          "oklch(15.0% 0.091 293.0)",
+          "oklch(26.4% 0.149 293.0)",
+          "oklch(37.8% 0.211 293.0)",
+          "oklch(49.2% 0.247 293.0)",
+          "oklch(60.6% 0.237 293.0)",
+          "oklch(72.0% 0.161 293.0)",
+          "oklch(83.4% 0.091 293.0)",
+          "oklch(95.0% 0.026 293.0)"
+        ]
+      },
+      "map-user-ink": {
+        "role": "map",
+        "displayName": "Map User Ink",
+        "canonical": "#3e3a4a",
+        "tonalRamp": [
+          "oklch(15.0% 0.091 292.8)",
+          "oklch(26.4% 0.149 292.8)",
+          "oklch(37.8% 0.211 292.8)",
+          "oklch(49.2% 0.211 292.8)",
+          "oklch(60.6% 0.211 292.8)",
+          "oklch(72.0% 0.160 292.8)",
+          "oklch(83.4% 0.091 292.8)",
+          "oklch(95.0% 0.026 292.8)"
+        ]
+      },
+      "map-user-soft": {
+        "role": "map",
+        "displayName": "Map User Soft",
+        "canonical": "#f2f0f4",
+        "tonalRamp": [
+          "oklch(15.0% 0.033 307.2)",
+          "oklch(26.4% 0.033 307.2)",
+          "oklch(37.8% 0.033 307.2)",
+          "oklch(49.2% 0.033 307.2)",
+          "oklch(60.6% 0.033 307.2)",
+          "oklch(72.0% 0.033 307.2)",
+          "oklch(83.4% 0.033 307.2)",
+          "oklch(95.0% 0.031 307.2)"
+        ]
+      },
+      "map-user-line": {
+        "role": "map",
+        "displayName": "Map User Line",
+        "canonical": "#d4cedd",
+        "tonalRamp": [
+          "oklch(15.0% 0.091 293.6)",
+          "oklch(26.4% 0.101 293.6)",
+          "oklch(37.8% 0.101 293.6)",
+          "oklch(49.2% 0.101 293.6)",
+          "oklch(60.6% 0.101 293.6)",
+          "oklch(72.0% 0.101 293.6)",
+          "oklch(83.4% 0.091 293.6)",
+          "oklch(95.0% 0.026 293.6)"
+        ]
+      },
+      "map-system": {
+        "role": "map",
+        "displayName": "Map System",
+        "canonical": "#8d6840",
+        "tonalRamp": [
+          "oklch(15.0% 0.050 49.0)",
+          "oklch(26.4% 0.074 49.0)",
+          "oklch(37.8% 0.103 49.0)",
+          "oklch(49.2% 0.133 49.0)",
+          "oklch(60.6% 0.146 49.0)",
+          "oklch(72.0% 0.146 49.0)",
+          "oklch(83.4% 0.101 49.0)",
+          "oklch(95.0% 0.028 49.0)"
+        ]
+      },
+      "map-system-ink": {
+        "role": "map",
+        "displayName": "Map System Ink",
+        "canonical": "#5c4630",
+        "tonalRamp": [
+          "oklch(15.0% 0.052 46.2)",
+          "oklch(26.4% 0.077 46.2)",
+          "oklch(37.8% 0.107 46.2)",
+          "oklch(49.2% 0.125 46.2)",
+          "oklch(60.6% 0.125 46.2)",
+          "oklch(72.0% 0.125 46.2)",
+          "oklch(83.4% 0.099 46.2)",
+          "oklch(95.0% 0.027 46.2)"
+        ]
+      },
+      "map-system-soft": {
+        "role": "map",
+        "displayName": "Map System Soft",
+        "canonical": "#f6f1ea",
+        "tonalRamp": [
+          "oklch(15.0% 0.038 95.6)",
+          "oklch(26.4% 0.056 95.6)",
+          "oklch(37.8% 0.058 95.6)",
+          "oklch(49.2% 0.058 95.6)",
+          "oklch(60.6% 0.058 95.6)",
+          "oklch(72.0% 0.058 95.6)",
+          "oklch(83.4% 0.058 95.6)",
+          "oklch(95.0% 0.058 95.6)"
+        ]
+      },
+      "map-system-line": {
+        "role": "map",
+        "displayName": "Map System Line",
+        "canonical": "#e0d0b8",
+        "tonalRamp": [
+          "oklch(15.0% 0.038 91.6)",
+          "oklch(26.4% 0.056 91.6)",
+          "oklch(37.8% 0.078 91.6)",
+          "oklch(49.2% 0.101 91.6)",
+          "oklch(60.6% 0.124 91.6)",
+          "oklch(72.0% 0.148 91.6)",
+          "oklch(83.4% 0.153 91.6)",
+          "oklch(95.0% 0.068 91.6)"
+        ]
+      },
+      "map-time": {
+        "role": "map",
+        "displayName": "Map Time",
+        "canonical": "#3e6d86",
+        "tonalRamp": [
+          "oklch(15.0% 0.043 242.7)",
+          "oklch(26.4% 0.066 242.7)",
+          "oklch(37.8% 0.092 242.7)",
+          "oklch(49.2% 0.119 242.7)",
+          "oklch(60.6% 0.119 242.7)",
+          "oklch(72.0% 0.119 242.7)",
+          "oklch(83.4% 0.090 242.7)",
+          "oklch(95.0% 0.026 242.7)"
+        ]
+      },
+      "map-time-ink": {
+        "role": "map",
+        "displayName": "Map Time Ink",
+        "canonical": "#2f5568",
+        "tonalRamp": [
+          "oklch(15.0% 0.041 240.8)",
+          "oklch(26.4% 0.063 240.8)",
+          "oklch(37.8% 0.089 240.8)",
+          "oklch(49.2% 0.100 240.8)",
+          "oklch(60.6% 0.100 240.8)",
+          "oklch(72.0% 0.100 240.8)",
+          "oklch(83.4% 0.092 240.8)",
+          "oklch(95.0% 0.027 240.8)"
+        ]
+      },
+      "map-time-soft": {
+        "role": "map",
+        "displayName": "Map Time Soft",
+        "canonical": "#eef3f6",
+        "tonalRamp": [
+          "oklch(15.0% 0.025 236.8)",
+          "oklch(26.4% 0.025 236.8)",
+          "oklch(37.8% 0.025 236.8)",
+          "oklch(49.2% 0.025 236.8)",
+          "oklch(60.6% 0.025 236.8)",
+          "oklch(72.0% 0.025 236.8)",
+          "oklch(83.4% 0.025 236.8)",
+          "oklch(95.0% 0.025 236.8)"
+        ]
+      },
+      "map-time-line": {
+        "role": "map",
+        "displayName": "Map Time Line",
+        "canonical": "#c5d4de",
+        "tonalRamp": [
+          "oklch(15.0% 0.035 230.3)",
+          "oklch(26.4% 0.054 230.3)",
+          "oklch(37.8% 0.076 230.3)",
+          "oklch(49.2% 0.099 230.3)",
+          "oklch(60.6% 0.101 230.3)",
+          "oklch(72.0% 0.101 230.3)",
+          "oklch(83.4% 0.101 230.3)",
+          "oklch(95.0% 0.030 230.3)"
+        ]
+      },
+      "map-handoff": {
+        "role": "map",
+        "displayName": "Map Hand-off",
+        "canonical": "#3e6e68",
+        "tonalRamp": [
+          "oklch(15.0% 0.030 186.4)",
+          "oklch(26.4% 0.048 186.4)",
+          "oklch(37.8% 0.067 186.4)",
+          "oklch(49.2% 0.086 186.4)",
+          "oklch(60.6% 0.086 186.4)",
+          "oklch(72.0% 0.086 186.4)",
+          "oklch(83.4% 0.086 186.4)",
+          "oklch(95.0% 0.073 186.4)"
+        ]
+      },
+      "map-handoff-ink": {
+        "role": "map",
+        "displayName": "Map Hand-off Ink",
+        "canonical": "#2f5550",
+        "tonalRamp": [
+          "oklch(15.0% 0.030 188.2)",
+          "oklch(26.4% 0.047 188.2)",
+          "oklch(37.8% 0.066 188.2)",
+          "oklch(49.2% 0.071 188.2)",
+          "oklch(60.6% 0.071 188.2)",
+          "oklch(72.0% 0.071 188.2)",
+          "oklch(83.4% 0.071 188.2)",
+          "oklch(95.0% 0.071 188.2)"
+        ]
+      },
+      "map-handoff-soft": {
+        "role": "map",
+        "displayName": "Map Hand-off Soft",
+        "canonical": "#eef3f2",
+        "tonalRamp": [
+          "oklch(15.0% 0.031 180.8)",
+          "oklch(26.4% 0.049 180.8)",
+          "oklch(37.8% 0.050 180.8)",
+          "oklch(49.2% 0.050 180.8)",
+          "oklch(60.6% 0.050 180.8)",
+          "oklch(72.0% 0.050 180.8)",
+          "oklch(83.4% 0.050 180.8)",
+          "oklch(95.0% 0.050 180.8)"
+        ]
+      },
+      "map-handoff-line": {
+        "role": "map",
+        "displayName": "Map Hand-off Line",
+        "canonical": "#c5d6d2",
+        "tonalRamp": [
+          "oklch(15.0% 0.031 181.1)",
+          "oklch(26.4% 0.049 181.1)",
+          "oklch(37.8% 0.069 181.1)",
+          "oklch(49.2% 0.089 181.1)",
+          "oklch(60.6% 0.109 181.1)",
+          "oklch(72.0% 0.125 181.1)",
+          "oklch(83.4% 0.125 181.1)",
+          "oklch(95.0% 0.072 181.1)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display"
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The product name in the bar. A map plate’s own name is 1.75rem, with the same tracking and line-height 1.1."
+      },
+      "moment": {
+        "displayName": "Moment"
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "A section on the plate, such as the events that leave the place. Index headings are 0.95rem. Index group names are 0.8rem in Ink Quiet."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Index names, events, and running text. A status aside, only when the badge does not already say it, is 0.85rem in Ink Quiet."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The status word and the spec extension. Broken and Unreliable are 700. Outcome badges are 0.75rem."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Code and file names, not titles."
+      }
+    },
+    "shadows": [
+      {
+        "name": "sheet",
+        "value": "0 1px 2px rgba(28, 36, 48, 0.04), 0 8px 18px rgba(28, 36, 48, 0.05)",
+        "purpose": "The place plate, the recorded-test plate, and the map plate."
+      },
+      {
+        "name": "raised",
+        "value": "0 4px 16px rgba(15, 23, 42, 0.05)",
+        "purpose": "The full screen frame inside a plate."
+      },
+      {
+        "name": "pop",
+        "value": "0 12px 30px rgba(15, 23, 42, 0.12)",
+        "purpose": "The issues drawer. Its scrim is rgba(15, 23, 42, 0.18)."
+      },
+      {
+        "name": "card",
+        "value": "0 2px 8px rgba(15, 23, 42, 0.06)",
+        "purpose": "Map screens, the map legend, and map zoom controls. Map only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+        "purpose": "Opacity and width transitions."
+      },
+      {
+        "name": "fade",
+        "value": "220ms",
+        "purpose": "Default transition duration. 0ms when reduced motion is requested."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow",
+        "value": "760px"
+      },
+      {
+        "name": "plate-stack",
+        "value": "900px"
+      },
+      {
+        "name": "moment-stack",
+        "value": "800px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Play, previous, and next on a recorded test.",
+      "html": "<button class=\"ds-btn\" type=\"button\">Play</button>",
+      "css": ".ds-btn { font-family: var(--font); font-size: 0.875rem; font-weight: 400; color: var(--ink); background: var(--card); border: 1px solid var(--line-2); border-radius: var(--radius-sm); padding: 0.55rem 0.75rem; min-height: 2.5rem; cursor: pointer; } .ds-btn:hover:not(:disabled) { background: var(--bg-2); } .ds-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-btn:disabled { opacity: 0.55; cursor: default; }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "search-field",
+      "description": "Find a place or a spec from the blue bar.",
+      "html": "<div class=\"ds-bar\"><input class=\"ds-search\" type=\"search\" placeholder=\"Find a place or a spec\" /></div>",
+      "css": ".ds-bar { background: var(--place); padding: 10px 24px; } .ds-search { width: min(280px, 36vw); height: 36px; border: 0; border-radius: 8px; padding: 0 12px; font-family: var(--font); font-size: 1rem; color: var(--ink); background: var(--card); caret-color: var(--place); } .ds-search:hover { background: #fff; } .ds-search:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Gazetteer Row",
+      "kind": "nav",
+      "refersTo": "gazetteer-row",
+      "description": "An index row: the place or spec on the left, the status word on the right.",
+      "html": "<nav class=\"ds-index\" aria-label=\"Gazetteer\"><a class=\"ds-row\" href=\"#checkout\"><span>Checkout</span><span class=\"ds-status\">Working</span></a><a class=\"ds-row ds-row-failed\" href=\"#payment\"><span>Payment</span><span class=\"ds-status\">Broken</span></a><a class=\"ds-row ds-row-unreliable\" href=\"#receipt\"><span>Receipt</span><span class=\"ds-status\">Unreliable</span></a><a class=\"ds-row ds-row-current\" href=\"#order\" aria-current=\"page\"><span>Order</span><span class=\"ds-status\">Working</span></a></nav>",
+      "css": ".ds-index { background: var(--bg-2); padding: 16px 12px; display: flex; flex-direction: column; gap: 2px; font-family: var(--font); color: var(--ink); line-height: 1.45; } .ds-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; font-weight: 400; } .ds-row:hover { background: #fff; } .ds-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; } .ds-status { flex: none; color: var(--ink-3); font-size: 0.8rem; font-weight: 400; text-align: right; white-space: nowrap; } .ds-row-failed .ds-status { color: var(--failed); font-weight: 700; } .ds-row-unreliable .ds-status { color: var(--flaky-ink); font-weight: 700; } .ds-row-current, .ds-row-current:hover { background: var(--place); color: #fff; } .ds-row-current .ds-status { color: #fff; font-weight: 400; }"
+    },
+    {
+      "name": "Plate",
+      "kind": "card",
+      "refersTo": "plate",
+      "description": "The one white sheet: the open place, and the events that leave it.",
+      "html": "<article class=\"ds-plate\"><h1 class=\"ds-plate-title\">Checkout</h1><p class=\"ds-lead\">The screen, and the events that leave it.</p><a class=\"ds-event\" href=\"#pay\"><span>Pay</span><span>to Receipt</span></a><a class=\"ds-event ds-event-failed\" href=\"#declined\"><span>Card declined</span><span>to Checkout</span></a></article>",
+      "css": ".ds-plate { background: var(--card); color: var(--ink); border-radius: 16px; box-shadow: 0 1px 2px rgba(28, 36, 48, 0.04), 0 8px 18px rgba(28, 36, 48, 0.05); padding: 28px 32px 48px; margin: 16px; font-family: var(--font); line-height: 1.45; } .ds-plate-title { margin: 0; font-size: clamp(1.75rem, 2.4vw, 2.25rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; } .ds-lead { margin: 0.6rem 0 0; color: var(--ink-2); } .ds-event { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 1rem; font-weight: 400; } .ds-event span:last-child { color: var(--muted); } .ds-event:hover { background: var(--bg); } .ds-event:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; } .ds-event-failed, .ds-event-failed span { color: var(--failed); font-weight: 700; }"
+    },
+    {
+      "name": "Moment Step",
+      "kind": "custom",
+      "refersTo": "moment-step",
+      "description": "A recorded test on the same plate: the moment large, the steps beside it.",
+      "html": "<article class=\"ds-moment\"><h1 class=\"ds-plate-title\">Moment 3 / 12: Pay</h1><div class=\"ds-moment-split\"><div><p class=\"ds-moment-mark\">1240 ms · passed</p></div><ol class=\"ds-steps\"><li><button class=\"ds-step\" type=\"button\">act · Open checkout · passed</button></li><li><button class=\"ds-step ds-step-current\" type=\"button\" aria-current=\"step\">act · Pay · passed</button></li><li><button class=\"ds-step ds-step-failed\" type=\"button\">assert · Receipt visible · failed</button></li></ol></div></article>",
+      "css": ".ds-moment { background: var(--card); color: var(--ink); border-radius: 16px; box-shadow: 0 1px 2px rgba(28, 36, 48, 0.04), 0 8px 18px rgba(28, 36, 48, 0.05); padding: 28px 32px 48px; margin: 16px; font-family: var(--font); line-height: 1.45; } .ds-plate-title { margin: 0; font-size: clamp(1.75rem, 2.4vw, 2.25rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; } .ds-moment-split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(14rem, 22rem); gap: 1.5rem; align-items: start; margin-top: 1rem; } .ds-moment-mark { margin: 0; font-size: clamp(1.35rem, 2.2vw, 1.75rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; } .ds-moment-mark[data-status=\"failed\"] { color: var(--failed); } .ds-steps { list-style: none; margin: 0; padding: 0; } .ds-step { width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; padding: 0.55rem 0.75rem; min-height: 2.5rem; cursor: pointer; } .ds-step:hover { background: var(--bg-2); } .ds-step:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-step-failed { color: var(--failed); font-weight: 700; } .ds-step-current, .ds-step-current:hover { background: var(--place); color: #fff; } .ds-step-failed.ds-step-current, .ds-step-failed.ds-step-current:hover { background: var(--failed); color: #fff; } @media (max-width: 800px) { .ds-moment-split { grid-template-columns: 1fr; } }"
+    },
+    {
+      "name": "Outcome Badge",
+      "kind": "chip",
+      "refersTo": "outcome-badge",
+      "description": "The outcome beside a plate title. Unreliable stays brown, not failure red.",
+      "html": "<p class=\"ds-badges\"><span class=\"ds-badge\" data-status=\"passed\"><span class=\"ds-dot\"></span>Working</span><span class=\"ds-badge\" data-status=\"failed\"><span class=\"ds-dot\"></span>Broken</span><span class=\"ds-badge\" data-status=\"flaky\"><span class=\"ds-dot\"></span>Unreliable</span><span class=\"ds-badge\" data-status=\"not-reached\"><span class=\"ds-dot\"></span>Not reached</span></p>",
+      "css": ".ds-badges { display: flex; flex-wrap: wrap; gap: 8px; font-family: var(--font); } .ds-badge { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 700; border-radius: var(--pill); padding: 0.15rem 0.6rem; background: #eef2f7; color: var(--muted); white-space: nowrap; } .ds-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--faint); display: inline-block; } .ds-badge[data-status=\"passed\"] { background: var(--passed-soft); color: var(--passed-ink); } .ds-badge[data-status=\"passed\"] .ds-dot { background: var(--passed); } .ds-badge[data-status=\"failed\"] { background: var(--failed-soft); color: var(--failed-ink); } .ds-badge[data-status=\"failed\"] .ds-dot { background: var(--failed); } .ds-badge[data-status=\"flaky\"] { background: var(--flaky-soft); color: var(--flaky-ink); } .ds-badge[data-status=\"flaky\"] .ds-dot { background: var(--flaky); } .ds-badge[data-status=\"not-reached\"] { background: var(--bg); color: var(--muted); border: 1px dashed var(--line-2); } .ds-badge[data-status=\"not-reached\"] .ds-dot { background: transparent; border: 1.5px dashed var(--faint); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Gazetteer",
+    "overview": "Atlas is a gazetteer of a recorded run. The index stays open, and one white plate shows the place you opened: its name in large type, its screen, and the events that leave it. Choosing a place, a spec, or a recorded moment replaces only that plate. The index does not move.\n\nA spec of any kind is another index row, the filename and its extension, not a second kind of page. A recorded test is the same plate: the moment large, the steps beside it. The ground is a cool gray-blue. The plate is a white sheet. Place blue is reserved for where you are: the bar, the current row, the current step, links, and the focus ring.\n\nInk is the reading color. Failure red marks only a failed place, event, or moment. Unreliable is a separate brown and is never redrawn as that red. Type is one self-hosted face, Atkinson Hyperlegible, at 400 and 700. The reading is quiet. The chosen row is the loudest thing on the page.",
+    "keyCharacteristics": [
+      "The index stays open beside one white plate",
+      "Place blue marks where you are",
+      "Status is a word on the right of the row",
+      "Failure and unreliable are different colors",
+      "At 760px the document scrolls, sheet first",
+      "One typeface, two weights"
+    ],
+    "rules": [
+      {
+        "name": "The Place Blue Rule",
+        "body": "Place blue is the header, the current index row, the current moment step, links, and the focus ring. It marks where you are. It is not a tint for decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Status Word Rule",
+        "body": "The index states the outcome in words on the right. Only Broken and Unreliable are colored, in Failure and Unreliable. Every other status word is Ink Quiet. The current row is Place Blue with white text, and the status word turns white with it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Map Kind Rule",
+        "body": "User, system, time, and hand-off colors are for the map legend and map edges. On the plate, an event is ink, and a failed event is Failure. The plate does not color an event by kind.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Face Rule",
+        "body": "Atkinson Hyperlegible, self-hosted, at 400 and 700, is the only text face. Monospace is for code and file names, not for titles.",
+        "section": "typography"
+      },
+      {
+        "name": "The Plate Title Rule",
+        "body": "The open place, spec, or moment is set at clamp(1.75rem, 2.4vw, 2.25rem), weight 700, letter-spacing -0.03em, line-height 1.05.",
+        "section": "typography"
+      },
+      {
+        "name": "The Open Index Rule",
+        "body": "The index stays open. Choosing a place, a spec, or a recorded moment replaces only the plate.",
+        "section": "layout"
+      },
+      {
+        "name": "The Narrow Document Rule",
+        "body": "At 760px the document scrolls. The sheet leads. The index follows.",
+        "section": "layout"
+      },
+      {
+        "name": "The One Sheet Rule",
+        "body": "Depth is one white plate lifted off the ground. Its shadow is 0 1px 2px rgba(28, 36, 48, 0.04), 0 8px 18px rgba(28, 36, 48, 0.05). Places are not a card grid.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Two Radii Rule",
+        "body": "The plate is a 16px sheet. Index rows, the search field, and the run picker are 8px. Pills are for outcome badges, not for the plate or the index.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do keep the index open. Choosing a place, a spec, or a recorded moment replaces only the plate.",
+      "Do set the plate title at clamp(1.75rem, 2.4vw, 2.25rem), weight 700, letter-spacing -0.03em, line-height 1.05.",
+      "Do put the status word on the right of the index row. Broken is Failure at weight 700. Unreliable is Unreliable at weight 700. Any other status word is Ink Quiet. The current row is Place Blue with white text, status word included.",
+      "Do draw the plate as a white sheet with a 16px radius and the shadow 0 1px 2px rgba(28, 36, 48, 0.04), 0 8px 18px rgba(28, 36, 48, 0.05).",
+      "Do at 760px, scroll the document. The sheet leads. The index follows.",
+      "Do show a spec as an index row, filename and extension, and a recorded test as the same plate: the moment large, the steps beside it."
+    ],
+    "donts": [
+      "Don't replace the index and the plate with a card grid.",
+      "Don't send a spec or a recorded test to a detached page.",
+      "Don't paint an unreliable result with Failure red.",
+      "Don't set titles in a second display face. Atkinson Hyperlegible at 400 and 700 is the text face. Monospace is for code and file names."
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@crvouga/atlas-reports",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "test": "bun test tests"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^22.20.3"
+  },
+  "dependencies": {
+    "hono": "^4.13.9",
+    "solid-js": "^1.9.15",
+    "@tanstack/solid-query": "^5.104.0",
+    "@tanstack/query-persist-client-core": "^5.104.0"
+  }
+}

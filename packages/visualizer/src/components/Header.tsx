@@ -4,12 +4,22 @@ import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useAtlas } from '../app/atlas-context';
 import { emptyCounts, type AtlasView } from '../data/model';
 import { LATEST } from '../data/queries';
+import { useEvidence } from '../evidence/evidence-context';
+import { plural } from '../evidence/format';
+import { excludedCount } from '../evidence/sources-panel';
+import { useUiStore } from '../state/ui-store';
 import { DataIssues } from './DataIssues';
 import styles from './Header.module.css';
 import { CheckIcon, ChevronDownIcon, ChevronIcon, ExternalIcon } from './icons';
 import { SummaryBar } from './Status';
 
 const dateTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+/** The product's own name, without the subtitle a spec title may carry. */
+export function productName(title: string | undefined) {
+  const name = title?.split(/\s+[—–|-]\s+|:\s+/)[0]?.trim();
+  return name || 'Atlas';
+}
 
 export function formatRunTime(iso: string) {
   const d = new Date(iso);
@@ -135,7 +145,7 @@ function Breadcrumbs({ view, chartId }: { view: AtlasView | null; chartId: strin
     <nav className={styles.crumbs} aria-label="Where you are">
       <Link to="/" search={(prev) => ({ run: prev.run })} className={styles.home} aria-current={chart ? undefined : 'page'}>
         <AtlasMark />
-        <span>{view?.title ?? 'Atlas'}</span>
+        <span>{productName(view?.title)}</span>
       </Link>
       {context && (
         <>
@@ -160,6 +170,32 @@ function Breadcrumbs({ view, chartId }: { view: AtlasView | null; chartId: strin
         </>
       )}
     </nav>
+  );
+}
+
+/** Spec runs writing results right now. Their results are already in the lists below. */
+function LiveRuns() {
+  const { active } = useEvidence();
+  if (!active.length) return null;
+  const results = active.reduce((sum, run) => sum + run.completed, 0);
+  return (
+    <span className={styles.live} role="status" title={active.map((run) => run.packageDir).join(', ')}>
+      <span className={styles.liveDot} aria-hidden="true" />
+      Running {active.length === 1 ? active[0]!.packageDir.split('/').at(-1) : plural(active.length, 'suite', 'suites')} · {plural(results, 'result', 'results')}
+    </span>
+  );
+}
+
+function SourcesButton() {
+  const { layers, ready, unavailable, excluded } = useEvidence();
+  const setOpen = useUiStore((s) => s.setSourcesOpen);
+  if (!ready && !unavailable) return null;
+  const off = excludedCount(excluded);
+  return (
+    <button type="button" className={styles.sources} data-filtered={off > 0 || undefined} onClick={() => setOpen(true)}>
+      Sources
+      <span>{unavailable ? 'unavailable' : off > 0 ? `${off} off` : plural(layers.length, 'run', 'runs')}</span>
+    </button>
   );
 }
 
@@ -190,8 +226,10 @@ export function Header() {
         )}
       </div>
       <div className={styles.tools}>
+        <LiveRuns />
         <RunMenu view={view} />
         {view && <DataIssues issues={view.issues} />}
+        <SourcesButton />
       </div>
     </header>
   );

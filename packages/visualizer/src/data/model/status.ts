@@ -40,4 +40,13 @@ export const STATUS_DESCRIPTION: Record<ItemStatus, string> = {
   'spec-only': 'No run has checked it yet.'
 };
 
+/** A sentence only when the status word does not already say it, or when the run gave its own reason. */
+export function statusNote(status: ItemStatus, reason?: string | null): string | null {
+  const specific = reason?.trim();
+  if (specific) return specific;
+  if (status === 'flaky') return 'It worked only on a retry.';
+  if (status === 'spec-only') return 'No run has checked it yet.';
+  return null;
+}
+
 export { ITEM_STATUSES };

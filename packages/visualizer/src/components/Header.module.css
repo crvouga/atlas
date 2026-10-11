@@ -107,6 +107,36 @@
   height: 1.75rem;
 }
 
+.live,
+.sources {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.75rem;
+  padding: 0 0.65rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.sources {
+  cursor: pointer;
+}
+
+.sources:hover,
+.sources[data-filtered] {
+  background: var(--surface-2);
+}
+
+.liveDot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: var(--pill);
+  background: var(--running, var(--route));
+}
+
 .runTrigger {
   display: inline-flex;
   align-items: baseline;

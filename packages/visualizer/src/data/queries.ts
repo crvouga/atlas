@@ -1,6 +1,6 @@
 import type { DataIssue } from '@crvouga/atlas-schema';
 import { useContext, useEffect, useMemo } from 'react';
-import { RunsIndexSchema, SpecIndexSchema } from '@crvouga/atlas-schema';
+import { isStatechartFile, RunsIndexSchema, SpecIndexSchema } from '@crvouga/atlas-schema';
 import { QueryClient, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { BackendEntry } from '../app/report-sources';
@@ -43,7 +43,7 @@ export const keys = {
   manifest: (source: string, runId: string) => ['reports', source, 'manifest', runId] as const
 };
 
-function specKey(adapter: AtlasAdapter) {
+export function specKey(adapter: AtlasAdapter) {
   return `${adapter.kind}:${adapter.label}`;
 }
 
@@ -173,8 +173,9 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
     const parsed = SpecIndexSchema.safeParse(specIndex.data);
     return parsed.success ? parsed.data : null;
   }, [specIndex.data]);
+  const chartPaths = useMemo(() => (index?.files ?? []).filter(isStatechartFile), [index]);
   const files = useQueries({
-    queries: (index?.files ?? []).map((path) => ({
+    queries: chartPaths.map((path) => ({
       queryKey: keys.specFile(source, path),
       queryFn: () => adapter.specFile(path),
       refetchInterval: live && adapter.kind !== 'dev' ? POLL_MS : false,
@@ -253,12 +254,12 @@ export function useAtlasData(runParam: string | undefined, live = true): AtlasDa
     const doc = parseSpec(
       {
         ref: index.ref ?? null,
-        files: index.files.map((path, i) => ({ path, text: files.texts[i] ?? null, error: files.errors[i] ?? undefined }))
+        files: chartPaths.map((path, i) => ({ path, text: files.texts[i] ?? null, error: files.errors[i] ?? undefined }))
       },
       sink
     );
     return { doc, issues: sink.issues };
-  }, [index, files]);
+  }, [index, chartPaths, files]);
   const runParsed = useMemo(() => {
     if (!selection || manifest.data === undefined) return null;
     const sink = createIssueSink();

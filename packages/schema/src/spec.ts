@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 
-import { ConfidenceSchema, EventKindSchema } from './common';
+import { ConfidenceSchema, EventKindSchema } from './common.js';
 
 export const SPEC_SCHEMA_VERSION = 1;
 

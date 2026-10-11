@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,600;7..72,700&family=Source+Sans+3:wght@400;600&display=swap" />
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1440px; height: 900px; overflow: hidden; background: #f3efe6; color: #1a1a1a; font-family: "Source Sans 3", sans-serif; }
+  .guides { height: 72px; border-bottom: 2px solid #1a1a1a; display: flex; align-items: center; justify-content: space-between; padding: 0 36px; font-family: Literata, serif; font-size: 28px; }
+  .body { display: grid; grid-template-columns: 420px 1fr; height: 828px; }
+  ol { list-style: none; padding: 18px 28px; }
+  li { padding: 8px 0; border-bottom: 1px solid #ddd6c8; color: #5c564c; }
+  li.full { color: #1a1a1a; padding: 14px 0 18px; }
+  li.full strong { font-family: Literata, serif; font-size: 26px; display: block; }
+  .plate { margin: 28px; border: 2px solid #1a1a1a; background: #fff; padding: 18px; }
+  .plate h2 { font-family: Literata, serif; font-size: 22px; margin-bottom: 12px; }
+  .screen { height: 560px; background: #1a1a1a; color: #fff; border-radius: 8px; padding: 28px; }
+  .screen b { display: block; margin-top: 180px; font-size: 36px; font-family: Literata, serif; }
+  .bad { color: #9a3412; font-weight: 700; }
+</style>
+</head>
+<body>
+  <header class="guides"><span>Checkout</span><span>Payment</span></header>
+  <div class="body">
+    <ol>
+      <li>Browsing the menu · passed</li>
+      <li>Choosing a size · passed</li>
+      <li>Choosing the milk · passed</li>
+      <li>Reviewing the cart · passed</li>
+      <li class="full"><strong>Checking out</strong><span class="bad">Payment fails. The card was declined and the total is still $6.40.</span></li>
+      <li>Order in progress · not reached</li>
+      <li>checkout.scxml</li>
+      <li>journeys.yaml</li>
+    </ol>
+    <figure class="plate">
+      <h2>Recorded moment</h2>
+      <div class="screen"><b>Card declined</b><span>Try another card</span></div>
+    </figure>
+  </div>
+</body>
+</html>

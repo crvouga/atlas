@@ -36,7 +36,7 @@ export function isChartFile(file: string) {
 
 /** Every file the visualizer reads from a specs directory: charts, journeys, notes, layouts. */
 export function isSpecFile(file: string) {
-  return isChartFile(file) || isStatechartFile(file);
+  return isChartFile(file) || isStatechartFile(file) || /\.(feature|qnt|dmn|als|md|ya?ml|json|xml|csv|txt)$/i.test(file);
 }
 
 export function fixtureRoots(name: string): AtlasRoots {
@@ -70,8 +70,8 @@ export function resolveRoots(env: NodeJS.ProcessEnv = process.env, cwd = process
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.cache']);
 
 /**
- * Spec files under the specs root, relative and with forward slashes. Journeys, notes and layouts
- * are listed only beside a chart, so unrelated files elsewhere stay out.
+ * Spec documents under the specs root, relative and with forward slashes.
+ * Documents remain discoverable even when no statechart exists beside them.
  */
 export function listSpecFiles(specsRoot: string): string[] {
   if (!existsSync(specsRoot)) return [];
@@ -85,10 +85,9 @@ export function listSpecFiles(specsRoot: string): string[] {
     }
     const files = entries.filter((name) => isSpecFile(name) && statSafe(path.join(dir, name))?.isFile());
     const rel = path.relative(specsRoot, dir).split(path.sep).join('/');
-    const hasChart = files.some(isChartFile);
     for (const name of files) {
       const file = rel ? `${rel}/${name}` : name;
-      if (hasChart || (!rel && /^atlas\.ya?ml$/.test(name))) out.push(file);
+      out.push(file);
     }
     for (const name of entries) {
       if (name.startsWith('.') || SKIP_DIRS.has(name)) continue;
