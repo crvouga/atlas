@@ -1,53 +1,55 @@
 :root {
-  --ink: #1c2430;
-  --ink-2: #2c3848;
-  --ink-3: #3d4d5c;
-  --muted: #3d4d5c;
-  --faint: #5c6e7c;
-  --line: #d5e0e7;
-  --line-2: #c5d3dc;
-  --bg: #e7eef2;
-  --bg-2: #f4f8fa;
+  /* Neutral surfaces and text. One blue marks what is chosen or can be followed. */
+  --ink: #0f1419;
+  --ink-2: #2f3336;
+  --ink-3: #536471;
+  --muted: #536471;
+  --faint: #8b98a5;
+  --line: #eff3f4;
+  --line-2: #cfd9de;
+  --bg: #ffffff;
+  --bg-2: #f7f9f9;
   --card: #ffffff;
-  --place: #1d4e89;
-  --place-soft: #e7eef2;
+  --place: #0b63ce;
+  --place-soft: #e8f1fd;
 
-  --user: #6b5b86;
-  --user-ink: #3e3a4a;
-  --user-soft: #f2f0f4;
-  --user-line: #d4cedd;
-  --user-deep: #3e3a4a;
-  --user-ring: #e6e2eb;
+  /* Who caused an event on the map. The person is the accent; everything else is gray. */
+  --user: #0b63ce;
+  --user-ink: #0a4fa6;
+  --user-soft: #e8f1fd;
+  --user-line: #b9d4f7;
+  --user-deep: #0a4fa6;
+  --user-ring: #d3e4fb;
 
-  --system: #8d6840;
-  --system-ink: #5c4630;
-  --system-soft: #f6f1ea;
-  --system-line: #e0d0b8;
-  --system-wash: rgba(246, 241, 234, 0.97);
+  --system: #536471;
+  --system-ink: #2f3336;
+  --system-soft: #f7f9f9;
+  --system-line: #cfd9de;
+  --system-wash: rgba(247, 249, 249, 0.97);
 
-  --time: #3e6d86;
-  --time-ink: #2f5568;
-  --time-soft: #eef3f6;
-  --time-line: #c5d4de;
+  --time: #536471;
+  --time-ink: #2f3336;
+  --time-soft: #eff3f4;
+  --time-line: #cfd9de;
 
-  --handoff: #3e6e68;
-  --handoff-ink: #2f5550;
-  --handoff-soft: #eef3f2;
-  --handoff-line: #c5d6d2;
+  --handoff: #2f3336;
+  --handoff-ink: #0f1419;
+  --handoff-soft: #eff3f4;
+  --handoff-line: #cfd9de;
 
-  --passed: #4f735c;
-  --passed-ink: #2c4a38;
-  --passed-soft: #e7efe9;
-  --passed-line: #c5d5cb;
-  --failed: #b42318;
-  --failed-ink: #8f1d14;
-  --failed-soft: #fde8e4;
-  --failed-line: #f0b4ad;
-  --flaky: #9a3412;
-  --flaky-ink: #9a3412;
-  --flaky-soft: #f6efe8;
-  --not-reached: #cbd5e1;
-  --unrun: #e2e8f0;
+  --passed: #1a7f37;
+  --passed-ink: #116329;
+  --passed-soft: #e6f4ea;
+  --passed-line: #b4dcc0;
+  --failed: #cf222e;
+  --failed-ink: #a40e26;
+  --failed-soft: #ffebe9;
+  --failed-line: #f7b9b5;
+  --flaky: #9a6700;
+  --flaky-ink: #7d4e00;
+  --flaky-soft: #fff8c5;
+  --not-reached: #cfd9de;
+  --unrun: #eff3f4;
 
   --radius-sm: 0.5rem;
   --radius: 0.75rem;
@@ -55,19 +57,20 @@
   --radius-xl: 1.25rem;
   --pill: 999px;
 
-  --shadow-card: 0 1px 2px rgba(28, 36, 48, 0.05);
-  --shadow-raised: 0 2px 8px rgba(28, 36, 48, 0.05);
-  --shadow-sheet: 0 1px 2px rgba(28, 36, 48, 0.04), 0 8px 18px rgba(28, 36, 48, 0.05);
-  --shadow-pop: 0 8px 22px rgba(28, 36, 48, 0.1);
-  --focus: #1d4e89;
+  --shadow-card: 0 1px 2px rgba(15, 20, 25, 0.06);
+  --shadow-raised: 0 2px 8px rgba(15, 20, 25, 0.06);
+  --shadow-sheet: 0 0 0 1px var(--line);
+  --shadow-pop: 0 8px 28px rgba(15, 20, 25, 0.14);
+  --focus: #0b63ce;
 
-  --font: "Atkinson Hyperlegible", ui-sans-serif, system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --header-h: 4rem;
+  --header-h: 3.25rem;
+  --index-w: 20rem;
   --panel-w: min(30rem, 40vw);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --fade: 220ms;
+  --fade: 160ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

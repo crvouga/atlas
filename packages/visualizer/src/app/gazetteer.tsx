@@ -1,22 +1,9 @@
 import { Link, useLocation, useParams, useSearch } from '@tanstack/react-router';
-import { createContext, useContext, useState, type ReactNode } from 'react';
 
 import { STATUS_LABEL, type AtlasView, type StateView } from '../data/model';
 import { useAtlas } from './atlas-context';
+import { useSearchQuery } from './search-query';
 import styles from './gazetteer.module.css';
-
-type QueryValue = { query: string; setQuery: (value: string) => void };
-const QueryContext = createContext<QueryValue>({ query: '', setQuery: () => {} });
-
-export function useGazetteerQuery() {
-  return useContext(QueryContext);
-}
-
-export function GazetteerQuery({ children }: { children: ReactNode }) {
-  const [query, setQuery] = useState('');
-  const value = { query, setQuery };
-  return <QueryContext.Provider value={value}>{children}</QueryContext.Provider>;
-}
 
 function hit(query: string, text: string) {
   const needle = query.trim().toLowerCase();
@@ -32,7 +19,7 @@ function screensOf(view: AtlasView, chartId: string) {
 }
 
 export function Gazetteer() {
-  const { query } = useGazetteerQuery();
+  const { query } = useSearchQuery();
   const { view } = useAtlas();
   const params = useParams({ strict: false });
   const search = useSearch({ strict: false });
@@ -42,7 +29,7 @@ export function Gazetteer() {
   const group = typeof search.group === 'string' ? search.group : undefined;
   const journeys = (view?.journeys ?? []).filter((journey) => journey.chartIds.length > 0 && hit(query, journey.name));
   return (
-    <nav className={styles.index} aria-label="Gazetteer">
+    <nav className={styles.index} aria-label="Places">
       <h2>Places</h2>
       {!view && <p className={styles.empty}>Loading the spec…</p>}
       {view?.contexts.map((context) => (

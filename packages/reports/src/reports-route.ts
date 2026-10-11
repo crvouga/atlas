@@ -1,5 +1,6 @@
+import type { LiveSource } from './evidence-live';
 import type { ReportOutline } from './layer-types';
-import { createLayersApp } from './layers-route';
+import { createLayersApp, type ReportBackend } from './layers-route';
 /**
  * The spec reports API: read-only views of the shared reports store (R2,
  * keyed by commit sha; Atlas owns the layout), streamed to
@@ -66,6 +67,10 @@ export const REPORTS_TAIL_MS = 5 * 60_000;
 
 export type ReportsAppDeps = ReportsExplorerDeps & {
   readonly outline?: () => Promise<ReportOutline & { readSpec: (path: string) => Promise<string | null> }>;
+  /** Further stores whose layers join the combined report beside `localStore` and `store`. */
+  readonly backends?: readonly ReportBackend[];
+  /** Results of spec runs that are still running on this machine. */
+  readonly live?: LiveSource;
   /** The shared reports store; null when this deployment has no credential. */
   readonly store: ObjectStore | null;
   readonly clock: Clock;

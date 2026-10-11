@@ -1,24 +1,25 @@
-import { Outlet, useSearch, useLocation } from '@tanstack/react-router';
+import { Outlet, useLocation, useSearch } from '@tanstack/react-router';
 
 import { Header } from '../components/Header';
-import { GherkinIndex } from '../gherkin/gherkin-page';
-import { QuintIndex } from '../quint/quint-page';
+import { EvidenceProvider } from '../evidence/evidence-context';
+import { SourcesPanel } from '../evidence/sources-panel';
+import { SpecIndex } from '../evidence/spec-index';
+import { kindOfAddress } from '../spec-kind';
 import styles from '../views/views.module.css';
 import { AtlasProvider, useAtlas } from './atlas-context';
-import { Gazetteer, GazetteerQuery } from './gazetteer';
+import { Gazetteer } from './gazetteer';
+import { SearchQueryProvider } from './search-query';
 
 function Index() {
   const { pathname } = useLocation();
-  if (pathname === '/gherkin') return <GherkinIndex />;
-  if (pathname === '/quint') return <QuintIndex />;
-  return <Gazetteer />;
+  const kind = kindOfAddress(pathname);
+  return kind ? <SpecIndex kind={kind} /> : pathname.startsWith('/specs/') ? <nav aria-label="Specs" /> : <Gazetteer />;
 }
 
 function Body() {
   const { view, spec } = useAtlas();
-  const location = useLocation();
-  if (location.pathname === '/specs' || location.pathname === '/gherkin' || location.pathname === '/quint') return <Outlet />;
-  if (!view && spec.error) {
+  const { pathname } = useLocation();
+  if (!pathname.startsWith('/specs/') && !view && spec.error) {
     return (
       <div className={styles.message} role="alert">
         <h1>The spec couldn’t be loaded</h1>
@@ -36,17 +37,20 @@ export function AppShell() {
   const { run } = useSearch({ strict: false });
   return (
     <AtlasProvider run={run}>
-      <GazetteerQuery>
-        <div className={styles.app}>
-          <Header />
-          <div className={styles.frame}>
-            <Index />
-            <main className={styles.main}>
-              <Body />
-            </main>
+      <EvidenceProvider>
+        <SearchQueryProvider>
+          <div className={styles.app}>
+            <Header />
+            <div className={styles.frame}>
+              <Index />
+              <main className={styles.main}>
+                <Body />
+              </main>
+            </div>
+            <SourcesPanel />
           </div>
-        </div>
-      </GazetteerQuery>
+        </SearchQueryProvider>
+      </EvidenceProvider>
     </AtlasProvider>
   );
 }

@@ -102,6 +102,7 @@ src/data/queries.ts        TanStack Query: per-file caching, live invalidation, 
 src/layout                 chart → ELK graph → positions in ELK's worker, cached by structure
 src/map                    React Flow map: phone-frame screens, regions, child-chart boxes, event chips
 src/components, src/views  header, legend, placeholders, panels, product map
+src/evidence               spec tabs: index, result pages, recordings, sources
 example/specs              the example spec every fixture is generated from
 ```
 
@@ -131,6 +132,12 @@ of about 500 states that mixes `invoke`, SCXML children and the legacy compositi
 
 MIT
 
-## Specifications and evidence
+## Specs and their results
 
-Use **Specs and evidence** to browse nested specification folders even when they contain no statecharts. Structured Gherkin and DMN views accompany source documents; recorded Quint traces show state transitions and changed variables. The evidence view consumes the Atlas reports API or a static `data/evidence` export. See [Atlas reports](../reports/README.md) for host configuration.
+Beside the statechart map, every other kind of spec has its own tab: Gherkin features, Quint models, DMN decision tables, Alloy structures and OpenSLO objectives. A tab appears when the specs folder has files of its kind. The index lists every spec with what was recorded for it, and filters to those with results, those failing, or those with none. A spec page shows each scenario, trace or check with its outcome; opening one shows the recorded steps, the error, the timings, every other run of the same check, and its recording.
+
+Results come from the Atlas reports API (`/api/reports` in dev, `VITE_ATLAS_REPORTS_URL` when hosted elsewhere) or from a static `data/evidence` export. They combine across backends, branches and runs; **Sources** in the header switches any of them off. While a spec suite is running, the header says so and each finished test appears within a couple of seconds. See [Atlas reports](../reports/README.md) for the API and host configuration.
+
+The header title is the product's name, taken from `atlas.yaml`'s `title` up to its first dash or colon, or "Atlas".
+
+`src/evidence/` holds this part of the viewer: `evidence-context.tsx` reads and combines the layers, `spec-index.tsx` is the index, `feature-page.tsx`, `model-page.tsx` and `document-page.tsx` are the three kinds of spec page, `check-detail.tsx` is one check's results, and `recording.tsx` is the recorded timeline. `tests/reports.test.tsx` drives the whole viewer against an in-memory reports API.

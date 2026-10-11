@@ -1,21 +1,22 @@
 .index {
-  background: var(--bg-2);
+  background: var(--bg);
   border-right: 1px solid var(--line);
   overflow: auto;
-  padding: 16px 12px 32px;
+  padding: 12px 8px 32px;
   min-height: 0;
 }
 
 .index h2 {
-  margin: 18px 8px 8px;
-  font-size: 0.95rem;
+  margin: 14px 10px 6px;
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 .index h3 {
-  margin: 14px 8px 4px;
-  font-size: 0.8rem;
-  font-weight: 400;
+  margin: 16px 10px 4px;
   color: var(--ink-3);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .index ul {
@@ -30,56 +31,52 @@
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-radius: 8px;
   color: inherit;
+  font-size: 0.9rem;
   text-decoration: none;
 }
 
 .chart {
-  font-weight: 400;
   color: var(--ink-2);
-}
-
-.row {
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .chart:hover,
 .row:hover {
-  background: #fff;
+  background: var(--bg-2);
 }
 
 .chart[aria-current='page'],
 .row[aria-current='page'] {
-  background: var(--place);
-  color: #fff;
+  background: var(--place-soft);
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .status {
   flex: none;
   color: var(--ink-3);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 400;
   text-align: right;
   white-space: nowrap;
 }
 
 .row[data-status='failed'] .status {
   color: var(--failed);
+  font-weight: 600;
 }
 
 .row[data-status='flaky'] .status {
   color: var(--flaky-ink);
 }
 
-.row[aria-current='page'] .status,
-.chart[aria-current='page'] .status {
-  color: #fff;
-}
-
 .excluded {
-  padding: 8px 10px;
+  padding: 6px 10px;
   color: var(--ink-3);
+  font-size: 0.9rem;
 }
 
 .empty {

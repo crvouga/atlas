@@ -1,13 +1,10 @@
-import { createHashHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import { createHashHistory, createRootRoute, createRoute, createRouter, type RouterHistory } from '@tanstack/react-router';
 import { z } from 'zod/v4';
 
-import { GherkinPage } from '../gherkin/gherkin-page';
-import { QuintPage } from '../quint/quint-page';
+import { SpecPage } from '../evidence/spec-page';
 import { ChartPage } from '../views/ChartPage';
-import { SpecsPage } from '../views/specs-page';
 import { ProductPage } from '../views/ProductPage';
 import { AppShell } from './AppShell';
-import { SpecsSearch } from './specs-search';
 
 const RootSearch = z.object({ run: z.string().min(1).optional().catch(undefined) });
 
@@ -21,36 +18,49 @@ const ChartSearch = RootSearch.extend({
 
 export type ChartSearch = z.infer<typeof ChartSearch>;
 
-const rootRoute = createRootRoute({
-  validateSearch: (search) => RootSearch.parse(search),
-  component: AppShell
+/** A spec document, the check opened in it, one layer's record of that check, and a recorded moment. */
+const SpecSearch = RootSearch.extend({
+  spec: z.string().min(1).optional().catch(undefined),
+  check: z.string().min(1).optional().catch(undefined),
+  layer: z.string().min(1).optional().catch(undefined),
+  view: z.enum(['recording']).optional().catch(undefined),
+  moment: z.coerce.number().int().positive().optional().catch(undefined)
 });
 
-const productRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  component: ProductPage
-});
+export type SpecSearch = z.infer<typeof SpecSearch>;
 
-export const chartRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/chart/$chartId',
-  validateSearch: (search) => ChartSearch.parse(search),
-  component: ChartPage
-});
+/** A fresh route tree per router, so a test can run its own viewer beside the page's. */
+function routeTree() {
+  const rootRoute = createRootRoute({
+    validateSearch: (search) => RootSearch.parse(search),
+    component: AppShell
+  });
+  const productRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/',
+    component: ProductPage
+  });
+  const chartRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/chart/$chartId',
+    validateSearch: (search) => ChartSearch.parse(search),
+    component: ChartPage
+  });
+  const specRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/specs/$kind',
+    validateSearch: (search) => SpecSearch.parse(search),
+    component: SpecPage
+  });
+  return rootRoute.addChildren([productRoute, chartRoute, specRoute]);
+}
 
-const specSearch = (search: Record<string, unknown>) => SpecsSearch.parse(search);
-const gherkinRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gherkin', validateSearch: specSearch, component: GherkinPage });
-const quintRoute = createRoute({ getParentRoute: () => rootRoute, path: '/quint', validateSearch: specSearch, component: QuintPage });
-const specsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/specs', validateSearch: specSearch, component: SpecsPage });
-const routeTree = rootRoute.addChildren([productRoute, chartRoute, gherkinRoute, quintRoute, specsRoute]);
+export function createAtlasRouter(history: RouterHistory) {
+  return createRouter({ routeTree: routeTree(), history, defaultPreload: false, scrollRestoration: true });
+}
 
-export const router = createRouter({
-  routeTree,
-  history: createHashHistory(),
-  defaultPreload: false,
-  scrollRestoration: true
-});
+/** Addresses use the hash, so a built site deep-links without server rewrites. */
+export const router = createAtlasRouter(createHashHistory());
 
 declare module '@tanstack/react-router' {
   interface Register {

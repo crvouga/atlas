@@ -8,7 +8,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: var(--index-w) minmax(0, 1fr);
 }
 
 .main {
@@ -54,9 +54,10 @@
 .button {
   display: inline-flex;
   font-size: 0.875rem;
-  border: 1px solid var(--line);
+  font-weight: 600;
+  border: 1px solid var(--line-2);
   background: var(--card);
-  color: var(--user);
+  color: var(--ink);
   border-radius: var(--pill);
   padding: 0.4rem 0.9rem;
   cursor: pointer;
@@ -296,26 +297,23 @@
 .plateScroll {
   height: 100%;
   overflow: auto;
-  margin: 16px;
-  padding: 28px 32px 48px;
+  padding: 28px 40px 64px;
   background: var(--card);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sheet);
 }
 
 .plateTitle {
   margin: 0;
-  font-size: clamp(1.75rem, 2.4vw, 2.25rem);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+  font-size: 1.375rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .homeTitle {
   margin: 0 0 8px;
-  font-size: 1.75rem;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
+  font-size: 1.375rem;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .plateHead {
@@ -350,7 +348,8 @@
 
 .placeGroup h2 {
   margin: 0 0 8px;
-  font-size: 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .plateList {
@@ -379,21 +378,20 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  margin: 16px;
   background: var(--card);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sheet);
   overflow: hidden;
 }
 
 .mapHeading {
-  padding: 16px 24px 8px;
+  padding: 20px 40px 12px;
+  border-bottom: 1px solid var(--line);
 }
 
 .mapHeading h1 {
   margin: 0;
-  font-size: 1.75rem;
-  letter-spacing: -0.03em;
+  font-size: 1.375rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .mapHeading p {
@@ -420,8 +418,7 @@
   }
 
   .plateScroll {
-    margin: 0;
-    border-radius: 0;
+    padding: 20px 16px 48px;
   }
 }
 
@@ -538,8 +535,6 @@
   .plateScroll,
   .mapPlate {
     height: auto;
-    margin: 0;
-    border-radius: 0;
     overflow: visible;
   }
 

@@ -1,5 +1,5 @@
 import type { BundleIndex } from './bundle';
-import type { EvidenceCheck, ReportPart, SpecEntry } from './explorer-types';
+import type { ReportPart, SpecEntry } from './explorer-types';
 import type { SourceRecord } from './protocol';
 
 export type LayerParameters = Readonly<Record<string, string>>;
@@ -18,18 +18,8 @@ export type LayerSummary = {
   readonly recording: { readonly type: 'layer' } | { readonly type: 'commit'; readonly sha: string; readonly source: string } | null;
 };
 export type ReportLayer = LayerSummary & { readonly bundle: BundleIndex };
-export type LayerPage = { readonly layers: readonly LayerSummary[]; readonly cursor: string | null; readonly notices: readonly string[] };
 export type ReportOutline = {
   readonly specs: readonly SpecEntry[];
   readonly sha: string | null;
   readonly changedFiles: readonly string[];
-};
-export type LayerResult = {
-  readonly key: string;
-  readonly layer: LayerSummary;
-  readonly check: EvidenceCheck;
-  readonly kind: string;
-  readonly parameters: LayerParameters;
-  readonly testId: string | null;
-  readonly warning: string | null;
 };
