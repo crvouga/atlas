@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Filing guide for coding agents
+    url: https://github.com/crvouga/atlas/blob/main/docs/reporting-issues.md
+    about: Kinds, title format, what to leave out, how to reduce a reproduction, and the gh command.
+  - name: Using Atlas from another project
+    url: https://github.com/crvouga/atlas/blob/main/docs/dogfooding.md
+    about: Install from npm, upgrade, and report what you find. Atlas is never changed from a consumer project.
