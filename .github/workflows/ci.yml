@@ -38,7 +38,7 @@ jobs:
   commitlint:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
@@ -68,7 +68,7 @@ jobs:
 
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -85,46 +85,29 @@ jobs:
       - name: Consumer smoke (pack, install, import, type-check, tree-shake and run the published package on Bun and Node)
         run: bun run release:smoke
 
+  # The todo example, run for real: once in a single browser and once across a phone, a desktop and
+  # a server. The two runs share nothing, so each gets its own job.
   example:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: check
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        script: [run, clients]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
-      - run: bun run example:run
-      - run: bun run example:clients
+      - run: bun run example:${{ matrix.script }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: atlas-runs
-          path: examples/todo/atlas-runs
-
-  # The same clients run, with the desktop in Bun's own WebView instead of a second Chromium.
-  bun-webview:
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: check
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: bun install --frozen-lockfile
-      - run: bunx playwright install --with-deps chromium
-      - run: bun run example:clients:bun
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: atlas-runs-bun-webview
+          name: atlas-runs-${{ matrix.script }}
           path: examples/todo/atlas-runs
 
   release:
@@ -132,7 +115,7 @@ jobs:
     needs: check
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     # One release at a time, and never cancelled halfway through a publish.
     concurrency:
       group: release
@@ -166,7 +149,6 @@ jobs:
         if: steps.plan.outputs.has_changes == 'true'
         run: bun run build
       - name: Publish, tag, and create GitHub Releases
-        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
