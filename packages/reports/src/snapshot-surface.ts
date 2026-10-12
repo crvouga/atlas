@@ -2,8 +2,8 @@ import {
   cleanSnapshotHtml,
   PHONE_H,
   PHONE_W,
-} from '@crvouga/atlas-reports/phone';
-import type { ReportStepHit } from '@crvouga/atlas-reports/report-types';
+} from './phone';
+import type { ReportStepHit } from './report-types';
 
 /**
  * One long-lived snapshot surface per client panel. Frames are painted by

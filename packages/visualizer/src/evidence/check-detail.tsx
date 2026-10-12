@@ -1,7 +1,7 @@
-import { recordingPaths } from '@crvouga/atlas-reports/evidence-types';
-import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas-reports/evidence-view';
-import { flattenFrames } from '@crvouga/atlas-reports/frames';
-import type { ReportStep, RunReport } from '@crvouga/atlas-reports/report-types';
+import { recordingPaths } from '@crvouga/atlas/reports/evidence-types';
+import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
+import { flattenFrames } from '@crvouga/atlas/reports/frames';
+import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
 

@@ -1,5 +1,5 @@
-import { flattenSteps } from '@crvouga/atlas-reports/frames';
-import type { ReportStep } from '@crvouga/atlas-reports/report-types';
+import { flattenSteps } from '@crvouga/atlas/reports/frames';
+import type { ReportStep } from '@crvouga/atlas/reports/report-types';
 
 export const QUINT_GROUPS: readonly { readonly kind: string; readonly label: string }[] = [
   { kind: 'var', label: 'State' },

@@ -12,7 +12,7 @@ import type {
   RunSummary,
   StateType,
   TimelineEntry
-} from '@crvouga/atlas-schema';
+} from '@crvouga/atlas/schema';
 import type { ChartSimulation } from './simulation';
 
 export const ITEM_STATUSES = ['passed', 'flaky', 'failed', 'not-reached', 'not-yet-run', 'spec-only'] as const;

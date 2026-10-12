@@ -1,5 +1,5 @@
-import type { BackendInfo, LayerHeader, StatusCounts } from '@crvouga/atlas-reports/evidence-types';
-import type { SpecStatus, SpecSummary } from '@crvouga/atlas-reports/evidence-view';
+import type { BackendInfo, LayerHeader, StatusCounts } from '@crvouga/atlas/reports/evidence-types';
+import type { SpecStatus, SpecSummary } from '@crvouga/atlas/reports/evidence-view';
 import { useState, type ReactNode } from 'react';
 
 import styles from './evidence.module.css';

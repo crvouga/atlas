@@ -1,7 +1,7 @@
-import type { RemoteReportSource } from '@crvouga/atlas-schema';
+import type { RemoteReportSource } from '@crvouga/atlas/schema';
 import type { ReactNode } from 'react';
 import { createContext, useContext, useMemo, useState } from 'react';
-import { RemoteReportSourceSchema } from '@crvouga/atlas-schema';
+import { RemoteReportSourceSchema } from '@crvouga/atlas/schema';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod/v4';
 

@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { CDPSession, Locator, Page } from 'playwright';
-import type { Timeline } from '@crvouga/atlas';
-import type { Signal } from '@crvouga/atlas/signals';
+import type { Timeline } from '../../core/src/index';
+import type { Signal } from '../../core/src/signals';
 
 import { locate } from './signals';
 

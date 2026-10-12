@@ -1,4 +1,4 @@
-import type { DataIssue, EventKind, Image, RunSummary } from '@crvouga/atlas-schema';
+import type { DataIssue, EventKind, Image, RunSummary } from '@crvouga/atlas/schema';
 
 import { createIssueSink } from '../parse/issues';
 import type { ParsedRun } from '../parse/manifest';

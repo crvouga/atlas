@@ -2,8 +2,8 @@ import { fileURLToPath } from 'node:url';
 
 import type { CloudEvent, EventMatcher, EventSource, Implementation, StateImplementation } from '@crvouga/atlas';
 import { defineConfig } from '@crvouga/atlas';
-import { describeAtlas, functionDriver } from '@crvouga/atlas-vitest';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describeAtlas, functionDriver } from '@crvouga/atlas/vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 
 import { TodoModel } from './model';
 import { DEFAULT_LIST_NAME, EVENT_TYPES, RETRY_AFTER_MS } from './server';

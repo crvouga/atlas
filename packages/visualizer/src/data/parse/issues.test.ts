@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { z } from 'zod/v4';
 
 import { createIssueSink, formatPath, parseFields, parseOne, plainZodMessage } from './issues';

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import { emptyCounts, worstOf } from './status';
 import { ITEM_STATUSES, type ItemStatus } from './types';

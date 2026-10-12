@@ -1,4 +1,4 @@
-import type { EventKind } from '@crvouga/atlas-schema';
+import type { EventKind } from '@crvouga/atlas/schema';
 
 import { BoltIcon, ClockIcon, HandOffIcon, PlayIcon } from './icons';
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import { buildAtlasView } from '../data/model';
 import { parseSpec } from '../data/parse/spec';

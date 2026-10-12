@@ -17,7 +17,7 @@ import type {
   StateRecord,
   TimelineEntry,
   TransitionRecord
-} from '@crvouga/atlas-schema';
+} from '@crvouga/atlas/schema';
 import YAML from 'yaml';
 
 import { resolveEventKind } from '../src/data/model/event-kind';

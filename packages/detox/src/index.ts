@@ -1,9 +1,9 @@
 import { copyFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-import type { CheckResult, Driver, RecognizerResult, StateImplementation, Timeline } from '@crvouga/atlas';
-import type { Signal, SignalContext } from '@crvouga/atlas/signals';
-import { describeSignal } from '@crvouga/atlas/signals';
+import type { CheckResult, Driver, RecognizerResult, StateImplementation, Timeline } from '../../core/src/index';
+import type { Signal, SignalContext } from '../../core/src/signals';
+import { describeSignal } from '../../core/src/signals';
 
 /**
  * The parts of Detox's global API the driver uses (`device`, `element`, `by`, `waitFor`), typed

@@ -1,4 +1,4 @@
-import type { SpecEvidence } from '@crvouga/atlas-reports/evidence-view';
+import type { SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
 import { useMemo } from 'react';
 
 import type { SpecKind } from '../spec-kind';

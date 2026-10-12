@@ -1,6 +1,6 @@
-import type { DataIssue } from '@crvouga/atlas-schema';
+import type { DataIssue } from '@crvouga/atlas/schema';
 import { useContext, useEffect, useMemo } from 'react';
-import { isStatechartFile, RunsIndexSchema, SpecIndexSchema } from '@crvouga/atlas-schema';
+import { isStatechartFile, RunsIndexSchema, SpecIndexSchema } from '@crvouga/atlas/schema';
 import { QueryClient, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { BackendEntry } from '../app/report-sources';

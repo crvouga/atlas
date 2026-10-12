@@ -1,6 +1,6 @@
-import { PHONE_H, PHONE_W } from '@crvouga/atlas-reports/phone';
-import type { ReportSnapshotBlob, ReportStepHit } from '@crvouga/atlas-reports/report-types';
-import { createSnapshotHost, paintSnapshotHost, type HitResult } from '@crvouga/atlas-reports/snapshot-surface';
+import { PHONE_H, PHONE_W } from '@crvouga/atlas/reports/phone';
+import type { ReportSnapshotBlob, ReportStepHit } from '@crvouga/atlas/reports/report-types';
+import { createSnapshotHost, paintSnapshotHost, type HitResult } from '@crvouga/atlas/reports/snapshot-surface';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 

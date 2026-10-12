@@ -1,9 +1,9 @@
-import type { CheckResult, RecognizerResult, StateImplementation } from '@crvouga/atlas';
-import type { Signal } from '@crvouga/atlas/signals';
+import type { CheckResult, RecognizerResult, StateImplementation } from '../../core/src/index';
+import type { Signal } from '../../core/src/signals';
 import type { Locator, Page } from 'playwright';
-import { describeSignal } from '@crvouga/atlas/signals';
+import { describeSignal } from '../../core/src/signals';
 
-export { css, describeSignal, label, role, testId, text, type Signal } from '@crvouga/atlas/signals';
+export { css, describeSignal, label, role, testId, text, type Signal } from '../../core/src/signals';
 
 type AriaRole = Parameters<Page['getByRole']>[0];
 

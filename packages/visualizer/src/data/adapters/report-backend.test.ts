@@ -1,11 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 
 import { selectReport } from '../queries';
 import { createHttpAdapter, LoadError } from './adapter';
 import { createReportBackend, reportKey, sourceRuns } from './report-backend';
 
-beforeEach(() => vi.stubGlobal('window', { location: { href: 'https://atlas.example.test/site/' } }));
-afterEach(() => vi.unstubAllGlobals());
+const replaced = new Map<string, PropertyDescriptor | undefined>();
+
+/** Replace a global for one test; `afterEach` puts back whatever was there. */
+function stubGlobal(name: string, value: unknown) {
+  if (!replaced.has(name)) replaced.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+  Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+}
+
+beforeEach(() => stubGlobal('window', { location: { href: 'https://atlas.example.test/site/' } }));
+afterEach(() => {
+  for (const [name, descriptor] of replaced) {
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    else Reflect.deleteProperty(globalThis, name);
+  }
+  replaced.clear();
+});
 
 describe('report backends', () => {
   it('keeps identical report ids from different backends separate and routes selection', () => {
@@ -32,7 +46,7 @@ describe('report backends', () => {
 
   it('reads the API contract and reports an API outage instead of treating it as an empty source', async () => {
     const fetch = vi.fn(async (_input: RequestInfo | URL) => new Response('{"runs":[]}'));
-    vi.stubGlobal('fetch', fetch);
+    stubGlobal('fetch', fetch);
     const adapter = createHttpAdapter('/api/', 'api');
     await adapter.runsIndex();
     expect(fetch.mock.calls[0]?.[0]).toBe('https://atlas.example.test/api/runs');
@@ -63,7 +77,7 @@ describe('report backends', () => {
         streams.push(this);
       }
     }
-    vi.stubGlobal('EventSource', Stream);
+    stubGlobal('EventSource', Stream);
     const adapter = createHttpAdapter('/api/', 'api', './events');
     const receive = vi.fn();
     const unsubscribe = adapter.subscribe!(receive);
@@ -77,6 +91,6 @@ describe('report backends', () => {
     stream.dispatchEvent(new MessageEvent('message', { data: '{"scope":"unknown"}' }));
     expect(receive).toHaveBeenCalledTimes(2);
     unsubscribe();
-    expect(stream.close).toHaveBeenCalledOnce();
+    expect(stream.close).toHaveBeenCalledTimes(1);
   });
 });

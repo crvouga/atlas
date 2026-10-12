@@ -1,5 +1,5 @@
-import { EventKindSchema, type EventKind } from '@crvouga/atlas-schema';
-import { describe, expect, it } from 'vitest';
+import { EventKindSchema, type EventKind } from '@crvouga/atlas/schema';
+import { describe, expect, it } from 'bun:test';
 
 import { guessUserOrSystem, looksLikeTimeEvent, resolveEventKind } from './event-kind';
 import type { EventKindSource } from './types';

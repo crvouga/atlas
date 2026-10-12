@@ -1,4 +1,4 @@
-import type { DataIssue } from '@crvouga/atlas-schema';
+import type { DataIssue } from '@crvouga/atlas/schema';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useMemo } from 'react';
 

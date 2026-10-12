@@ -1,4 +1,4 @@
-import type { RemoteReportSource, RunSummary } from '@crvouga/atlas-schema';
+import type { RemoteReportSource, RunSummary } from '@crvouga/atlas/schema';
 
 import type { AtlasAdapter } from './index';
 import { createDevAdapter, createHttpAdapter } from './index';

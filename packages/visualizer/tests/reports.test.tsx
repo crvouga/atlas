@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
-import { writeUtf8 } from '@crvouga/atlas-reports/object-io';
-import type { RunReport } from '@crvouga/atlas-reports/report-types';
+import { writeUtf8 } from '@crvouga/atlas/reports/object-io';
+import type { RunReport } from '@crvouga/atlas/reports/report-types';
 import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';

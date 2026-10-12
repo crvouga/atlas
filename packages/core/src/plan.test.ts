@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import type { Chart, Journey, MachineConfig } from './spec/types';
 import { lintBundle } from './lint';

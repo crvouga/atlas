@@ -1,6 +1,6 @@
-import { flattenSteps, neighborFailure, orderedUiBlobs, selectedFrame, testFrames } from '@crvouga/atlas-reports/frames';
-import { performanceFrameIndex, performanceRows, type PerformanceRow } from '@crvouga/atlas-reports/performance';
-import type { ReportStep, RunReport } from '@crvouga/atlas-reports/report-types';
+import { flattenSteps, neighborFailure, orderedUiBlobs, selectedFrame, testFrames } from '@crvouga/atlas/reports/frames';
+import { performanceFrameIndex, performanceRows, type PerformanceRow } from '@crvouga/atlas/reports/performance';
+import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { duration } from './format';

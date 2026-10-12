@@ -1,4 +1,4 @@
-import { ALL_SOURCES, type SourceSelection } from '@crvouga/atlas-reports/evidence-view';
+import { ALL_SOURCES, type SourceSelection } from '@crvouga/atlas/reports/evidence-view';
 import type { Viewport } from '@xyflow/react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';

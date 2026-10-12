@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { combineEvidence, distinctLayers, layerEvidence, textFingerprint } from '@crvouga/atlas-reports/layer-merge';
-import type { LayerSummary, ReportOutline } from '@crvouga/atlas-reports/layer-types';
+import { combineEvidence, distinctLayers, layerEvidence, textFingerprint } from '../src/layer-merge';
+import type { LayerSummary, ReportOutline } from '../src/layer-types';
 
 const spec = { path: 'specs/list.feature', title: 'List', domain: 'list', kind: 'feature', fingerprint: textFingerprint('Feature: List') };
 const outline: ReportOutline = { specs: [spec, { ...spec, path: 'specs/empty.feature' }], sha: 'b'.repeat(40), changedFiles: [] };

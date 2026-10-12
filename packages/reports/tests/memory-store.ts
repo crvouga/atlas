@@ -1,5 +1,5 @@
-import type { ObjectStore, StoredObject } from '@crvouga/atlas-reports/object-store';
-import { ObjectStoreWithPrefix } from '@crvouga/atlas-reports/store-prefix';
+import type { ObjectStore, StoredObject } from '../src/object-store';
+import { ObjectStoreWithPrefix } from '../src/store-prefix';
 
 /** An in-memory store for tests, with a switch that makes every read fail like an unreachable service. */
 export function memoryStore(): ObjectStore & { down: boolean; lists: number } {

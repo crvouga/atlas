@@ -1,4 +1,4 @@
-import type { LayoutFile } from '@crvouga/atlas-schema';
+import type { LayoutFile } from '@crvouga/atlas/schema';
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk-api';
 import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 

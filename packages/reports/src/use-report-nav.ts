@@ -1,10 +1,10 @@
 import type { Timers } from './clock';
-import type { FlatFrame } from '@crvouga/atlas-reports/frames';
-import { selectedFrame, testFrames } from '@crvouga/atlas-reports/frames';
-import type { Route } from '@crvouga/atlas-reports/hash';
-import { buildHash, parseHash } from '@crvouga/atlas-reports/hash';
-import { onReportKeyDown } from '@crvouga/atlas-reports/keyboard';
-import type { ReportData } from '@crvouga/atlas-reports/types';
+import type { FlatFrame } from './frames';
+import { selectedFrame, testFrames } from './frames';
+import type { Route } from './hash';
+import { buildHash, parseHash } from './hash';
+import { onReportKeyDown } from './keyboard';
+import type { ReportData } from './types';
 import type { Accessor } from 'solid-js';
 import { createEffect, createSignal, onCleanup } from 'solid-js';
 import type { ReportNavigation } from './navigation';

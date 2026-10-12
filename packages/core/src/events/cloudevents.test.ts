@@ -2,7 +2,7 @@ import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import type { CloudEvent } from './cloudevents';
 import { cloudEventsFromHttp, cloudEventsHttpSource, compareBusinessEvents, correlated, logFileSource } from './cloudevents';

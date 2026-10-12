@@ -1,17 +1,16 @@
-// @vitest-environment happy-dom
 import type { Root } from 'react-dom/client';
 import { act } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createRoot } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 
-import type { ReportSources } from '../app/report-sources';
-import type { AtlasAdapter, AtlasChange } from './adapters';
-import type { ReportBackend } from './adapters/report-backend';
-import type { AtlasData } from './queries';
-import { ReportSourcesContext } from '../app/report-sources';
-import { LoadError } from './adapters';
-import { AdapterContext, createQueryClient, useAtlasData, useLiveUpdates } from './queries';
+import type { ReportSources } from '../src/app/report-sources';
+import type { AtlasAdapter, AtlasChange } from '../src/data/adapters';
+import type { ReportBackend } from '../src/data/adapters/report-backend';
+import type { AtlasData } from '../src/data/queries';
+import { ReportSourcesContext } from '../src/app/report-sources';
+import { LoadError } from '../src/data/adapters';
+import { AdapterContext, createQueryClient, useAtlasData, useLiveUpdates } from '../src/data/queries';
 
 const machine = {
   id: 'Product',
@@ -106,6 +105,14 @@ async function render() {
     )
   );
 }
+/** Advance the fake clock in small steps, letting promises settle between them as a real clock would. */
+async function advance(ms: number, step = 50) {
+  for (let elapsed = 0; elapsed < ms; elapsed += step) {
+    vi.advanceTimersByTime(step);
+    for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+  }
+}
+
 async function waitFor(assertion: () => void) {
   let failure: unknown;
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -249,7 +256,8 @@ describe('live report queries', () => {
     await render();
     vi.useFakeTimers();
     try {
-      const calls = vi.mocked(second.source.manifest).mock.calls.length;
+      const manifest = second.source.manifest as ReturnType<typeof vi.fn>;
+      const calls = manifest.mock.calls.length;
       second.update(
         {
           schemaVersion: 1,
@@ -268,9 +276,9 @@ describe('live report queries', () => {
       live = true;
       await render();
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(2100);
+        await advance(2100);
       });
-      expect(vi.mocked(second.source.manifest).mock.calls.length).toBeGreaterThan(calls);
+      expect(manifest.mock.calls.length).toBeGreaterThan(calls);
       expect(current.view?.states.get('Done')?.status).toBe('passed');
       expect(current.view?.run?.progress).toBe('complete');
     } finally {

@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { ReportSource, RunSummary } from '@crvouga/atlas-schema';
+import type { ReportSource, RunSummary } from '@crvouga/atlas/schema';
 
 import { listSpecFiles, resolveReportSources, runsIndex, summarizeRun, type AtlasRoots } from './atlas-files';
 

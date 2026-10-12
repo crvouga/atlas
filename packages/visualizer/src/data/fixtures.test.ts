@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
-import type { DataIssue } from '@crvouga/atlas-schema';
-import { describe, expect, it } from 'vitest';
+import type { DataIssue } from '@crvouga/atlas/schema';
+import { describe, expect, it } from 'bun:test';
 
 import type { AtlasView, StateView, TransitionView } from './model/types';
 import { loadFixture, mediaFile } from './testing/load-fixture';

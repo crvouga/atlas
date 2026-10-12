@@ -4,9 +4,9 @@ import type { Driver, EventMatcher, EventSource, HttpClient } from '@crvouga/atl
 import type { SignalContext } from '@crvouga/atlas/signals';
 import { cloudEventsHttpSource, combineDrivers, combineImplementations, defineConfig, httpDriver } from '@crvouga/atlas';
 import { label, role, screen, text } from '@crvouga/atlas/signals';
-import { bunWebViewDriver } from '@crvouga/atlas-bun';
-import { PHONE, playwrightDriver } from '@crvouga/atlas-playwright';
-import { webdriverDriver } from '@crvouga/atlas-webdriver';
+import { bunWebViewDriver } from '@crvouga/atlas/bun';
+import { PHONE, playwrightDriver } from '@crvouga/atlas/playwright';
+import { webdriverDriver } from '@crvouga/atlas/webdriver';
 
 import type { TodoServer } from '../server';
 import { DEFAULT_LIST_NAME, EVENT_TYPES, startTodoServer } from '../server';
