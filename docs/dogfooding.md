@@ -1,169 +1,170 @@
 # Dogfooding Atlas from another project
 
-Atlas is currently developed by integrating it into real projects. Until its packages are stable
-and published to npm, the supported development setup is a Git submodule plus a pnpm workspace
-link. This gives the consumer an explicit, reproducible Atlas commit while still making it easy to
-send generally useful fixes back upstream.
+Atlas is developed by using it in real projects. Those projects install one released package from
+npm, `@crvouga/atlas`, and report what they find as GitHub issues. They never change Atlas. Every
+fix and feature is made in this repository and reaches a project as a new version.
 
-This repository is shared development infrastructure. Agents in several consumer projects may be
-working on it and pushing changes concurrently.
+This replaces the Git submodule workflow. Several projects pushing to one `main` through their
+submodules lost work and mixed unrelated changes together. If your project still has
+`vendor/atlas`, follow [Migrating from the submodule](#migrating-from-the-submodule).
 
-## Add Atlas to a consumer project
+This guide is written for people and coding agents working in a project that uses Atlas.
 
-The examples below use `vendor/atlas`. A project may choose another stable path, but it should use
-the same path everywhere in that project.
+## The rules
 
-```sh
-git submodule add https://github.com/crvouga/atlas.git vendor/atlas
-git submodule update --init --recursive
-```
+1. Install Atlas from npm. No submodule, no vendored copy, no `git` or `file:` dependency.
+2. Never change Atlas from your project: do not edit `node_modules`, do not keep a patch
+   (`bun patch`, `pnpm patch`, `patch-package`), do not clone this repository to push a fix.
+3. When Atlas is wrong or is missing something, [file an issue](reporting-issues.md). A workaround
+   in your own code is fine while you wait; say so in the issue.
+4. Upgrade Atlas in a commit of its own.
 
-Commit both `.gitmodules` and the `vendor/atlas` gitlink. Do not copy Atlas source files into the
-consumer repository.
+## Install
 
-Atlas currently requires Node 22.18 or later and pnpm 10. Add its packages to the consumer's
-`pnpm-workspace.yaml`:
-
-```yaml
-packages:
-  - packages/*                 # the consumer's existing workspace entries
-  - vendor/atlas/packages/*    # Atlas packages
-```
-
-Then declare only the packages the consuming app or package needs, using the workspace protocol:
-
-```json
-{
-  "devDependencies": {
-    "@crvouga/atlas": "workspace:*",
-    "@crvouga/atlas-playwright": "workspace:*"
-  }
-}
-```
-
-Other available packages are `@crvouga/atlas-bun`, `@crvouga/atlas-webdriver`,
-`@crvouga/atlas-vitest`, `@crvouga/atlas-detox`, `@crvouga/atlas-schema` and
-`@crvouga/atlas-visualizer`. Install the consumer workspace normally after changing its manifest:
+Atlas runs on Bun, and on Node 22.18 or later. It is one package:
 
 ```sh
-pnpm install
+bun add -d @crvouga/atlas
 ```
 
-Keep the product's `atlas.config.ts`, specs, implementation, fixtures, and generated `atlas-runs/`
-in the consumer project. The submodule contains the reusable Atlas implementation only.
+The commands in this guide use Bun. Any package manager installs it the same way
+(`pnpm add -D`, `npm install -D`); use the one your project already has.
 
-## Initialize an existing clone
+Everything is in it, each part behind its own import path. A bundler keeps only what you import,
+and nothing runs just because the package is installed.
 
-After cloning a consumer project, or after switching to a commit that changes the Atlas pointer:
+| Import | What it is |
+| --- | --- |
+| `@crvouga/atlas` | Specs, lint, planning, the runner, `httpDriver`, `functionDriver`, reports, `defineConfig`. |
+| `@crvouga/atlas/spec` | The browser-safe subset for loading and composing charts. |
+| `@crvouga/atlas/signals` | Driver-neutral signals (`role`, `text`, `label`, `screen`). |
+| `@crvouga/atlas/playwright` | The Playwright driver. Also install `playwright`. |
+| `@crvouga/atlas/bun` | The Bun WebView driver. |
+| `@crvouga/atlas/webdriver` | The WebDriver and Appium driver. |
+| `@crvouga/atlas/detox` | The Detox driver. Also install `detox`. |
+| `@crvouga/atlas/vitest` | Each planned path as a test in Vitest, `bun test` or any Jest-style runner. |
+| `@crvouga/atlas/schema` | Zod schemas for manifests, timelines and the runs index. |
+| `@crvouga/atlas/schemas/<name>.schema.json` | The same contract as JSON Schema files. |
+| `@crvouga/atlas/reports/<module>` | Publishing, storing and serving test evidence. |
+
+It also installs two commands: `atlas` (lint, plan, run, merge, export) and `atlas-visualizer`
+(browse specs and runs).
+
+`playwright` and `detox` are optional peers: install the one your driver uses, as above. The README
+of each part ships in the package, at `node_modules/@crvouga/atlas/packages/<part>/README.md`,
+matching the version you installed.
+
+Your `atlas.config.ts`, specs, implementation, fixtures and generated `atlas-runs/` stay in your
+project. Import only the paths in the table; files under the package's `dist` or `packages` are not
+part of its interface.
+
+## Upgrade
+
+Every releasable change that lands on Atlas's `main` is published within minutes; nobody cuts
+releases by hand ([releasing.md](releasing.md)). There is one package and one version, so an upgrade
+is one line:
 
 ```sh
-git submodule update --init --recursive
-pnpm install
+bun update @crvouga/atlas --latest
 ```
 
-The consumer repository pins one exact Atlas commit. Do not silently track whatever happens to be
-latest on `main`; update the pointer in a normal, reviewable consumer commit.
+Run your Atlas checks, then commit the manifests and lockfile on their own so an upgrade is easy to
+find and to revert.
 
-## Contribute an integration fix to Atlas
-
-First decide where the change belongs:
-
-- Product-specific behavior stays in the consumer repository.
-- Reusable library, driver, schema, documentation, or tooling behavior belongs in Atlas.
-
-From the consumer repository, prepare the submodule for an Atlas change. A freshly initialized
-submodule is usually on a detached HEAD, so attach it to `main` before editing and remain on
-`main` for the entire change:
+To see what changed:
 
 ```sh
-git -C vendor/atlas status --short --branch
-git -C vendor/atlas switch main
-git -C vendor/atlas pull --rebase origin main
+npm view @crvouga/atlas version                       # the newest release
+cat node_modules/@crvouga/atlas/CHANGELOG.md          # every release up to the version you have
 ```
 
-Do not create any branch. Other projects continuously publish to the same `main`, so expect upstream
-to move and expect conflicts while working. Make the change inside `vendor/atlas`, add or update
-Atlas tests, and validate it from the Atlas root:
+Each release is also a [GitHub Release](https://github.com/crvouga/atlas/releases) with the same
+notes. Versions follow semver; a breaking change is a major version, and its notes say what to
+change.
 
-```sh
-pnpm -C vendor/atlas install --frozen-lockfile
-pnpm -C vendor/atlas type-check
-pnpm -C vendor/atlas test
-pnpm -C vendor/atlas build
-```
+## When something is wrong or missing
 
-Installing inside the submodule links Atlas's packages to the submodule's own `node_modules`, which
-the consumer's workspace install then trusts as current. Afterwards, relink the consumer before using
-Atlas there (a visualizer that loads two copies of React is the usual symptom):
+File an issue: [reporting-issues.md](reporting-issues.md) has the kinds, the title format, what to
+leave out, and the `gh` command. One issue per bug or missing feature.
 
-```sh
-rm -rf vendor/atlas/node_modules vendor/atlas/packages/*/node_modules vendor/atlas/examples/*/node_modules
-pnpm install
-```
+When the fix is merged, the release that carries it comments on the issue with the version to
+upgrade to. Upgrade, remove your workaround, and you are done.
 
-Continuously pull and integrate concurrent work rather than waiting until the end. Pull before
-starting. During longer changes, make focused checkpoint commits on `main`, then immediately pull
-again. Also pull immediately before validation and pushing, and whenever upstream movement is
-detected. Never knowingly continue from a stale checkout:
+Do not wait silently and do not quietly work around Atlas in your project. The issue is how the
+problem gets fixed for every project that uses it.
 
-```sh
-git -C vendor/atlas pull --rebase origin main
-git -C vendor/atlas push origin main
-```
+## Migrating from the submodule
 
-Conflicts are a normal and expected part of this workflow, not a reason to stop or create a branch.
-Inspect both sides, preserve the intent of concurrent changes, resolve each conflict on `main`,
-stage the resolutions, continue the rebase, and rerun relevant checks. If a push is rejected because
-upstream moved again, immediately pull with rebase, resolve, revalidate, and retry until the change
-is integrated. Never force-push, destructively reset, or discard unfamiliar work just to make the
-integration pass.
+Do this once per project. Check first that the package is on npm:
+`npm view @crvouga/atlas version` prints a version.
 
-Only after the Atlas commit is pushed to `main` should the consumer move its submodule pointer to
-that commit:
+1. **Save anything that only exists in the submodule.** Nothing may be pushed from it any more.
 
-```sh
-git add vendor/atlas
-git commit -m "chore: update Atlas submodule"
-```
+   ```sh
+   git -C vendor/atlas status --short
+   git -C vendor/atlas log --oneline origin/main..HEAD
+   ```
 
-This ordering matters: another clone must be able to fetch the exact Atlas commit recorded by the
-consumer. The consumer change should describe the Atlas behavior it now relies on and link the
-corresponding Atlas change when possible.
+   If either prints something, save it as a patch and attach it to an issue that describes what it
+   is for, so it is redone in Atlas instead of being lost:
 
-## Update Atlas without changing it
+   ```sh
+   git -C vendor/atlas fetch origin main
+   git -C vendor/atlas diff origin/main > atlas-local-changes.patch
+   ```
 
-To deliberately advance a consumer to the current upstream `main`:
+2. **Remove the submodule.**
 
-```sh
-git -C vendor/atlas status --short
-git -C vendor/atlas switch main
-git -C vendor/atlas pull --rebase origin main
-pnpm install
-```
+   ```sh
+   git submodule deinit -f vendor/atlas
+   git rm -f vendor/atlas
+   rm -rf .git/modules/vendor/atlas
+   ```
 
-Review and test the consumer, then commit its updated `vendor/atlas` pointer. Stop if the first
-command shows local Atlas changes; preserve or publish that work before moving the submodule.
+   `git rm` also removes its entry from `.gitmodules`; delete the file if it is now empty.
 
-## Rules that keep concurrent dogfooding safe
+3. **Remove the workspace link.** Delete the `vendor/atlas/packages/*` entry from your workspace
+   list (`pnpm-workspace.yaml`, or `workspaces` in `package.json`).
 
-1. Work only on `main`; do not create branches for Atlas dogfooding changes.
-2. Never commit Atlas work on a detached HEAD.
-3. Pull with rebase continuously: before editing, after every focused checkpoint commit during
-   longer work, immediately before validation and pushing, and whenever upstream changes are
-   detected. Never knowingly work from stale `main`.
-4. Always expect conflicts from other projects. Resolve them deliberately on `main` and keep
-   integrating until the push succeeds.
-5. Keep each Atlas change reusable and focused; do not add a consumer project's private behavior.
-6. Push the Atlas commit before recording it in a consumer repository.
-7. Never use a force push or destructive reset to erase concurrent work.
-8. Re-run Atlas checks after rebasing, then test the consuming integration before updating its
-   pointer.
-9. Commit submodule pointer updates explicitly so every consumer upgrade is reproducible and
-   reviewable.
+4. **Depend on the one released package.** In every `package.json`, remove each
+   `"@crvouga/atlas-…": "workspace:*"` entry, and in each of those package directories add the
+   package with your project's package manager:
 
-## Later npm migration
+   ```sh
+   bun add -d @crvouga/atlas@latest     # or: pnpm add -D @crvouga/atlas@latest
+   ```
 
-The submodule and workspace link are intentionally temporary. Once the Atlas packages are
-published, consumers will replace `workspace:*` entries with released versions, remove the Atlas
-workspace glob and submodule, and commit the dependency lockfile. Until that release is documented,
-continue using the pinned submodule workflow above.
+5. **Rename the imports.** The separate packages are now paths of `@crvouga/atlas`:
+
+   | Before | After |
+   | --- | --- |
+   | `@crvouga/atlas-playwright` | `@crvouga/atlas/playwright` |
+   | `@crvouga/atlas-bun` | `@crvouga/atlas/bun` |
+   | `@crvouga/atlas-webdriver` | `@crvouga/atlas/webdriver` |
+   | `@crvouga/atlas-detox` | `@crvouga/atlas/detox` |
+   | `@crvouga/atlas-vitest` | `@crvouga/atlas/vitest` |
+   | `@crvouga/atlas-schema` | `@crvouga/atlas/schema` |
+   | `@crvouga/atlas-schema/schemas/<file>` | `@crvouga/atlas/schemas/<file>` |
+   | `@crvouga/atlas-reports/<module>` | `@crvouga/atlas/reports/<module>` |
+   | `@crvouga/atlas-visualizer` (the `atlas-visualizer` command) | installed with `@crvouga/atlas` |
+
+   `@crvouga/atlas`, `@crvouga/atlas/spec` and `@crvouga/atlas/signals` are unchanged. One pass
+   over a project's sources does the rest:
+
+   ```sh
+   git grep -lE "@crvouga/atlas-(playwright|bun|webdriver|detox|vitest|schema|reports)" -- '*.ts' '*.tsx' '*.mts' '*.mjs' \
+     | xargs perl -pi -e 's{\@crvouga/atlas-schema/schemas/}{\@crvouga/atlas/schemas/}g; s{\@crvouga/atlas-(playwright|bun|webdriver|detox|vitest|schema|reports)\b}{\@crvouga/atlas/$1}g'
+   ```
+
+6. **Install and check.**
+
+   ```sh
+   bun install     # or: pnpm install
+   ```
+
+   Run your type-check and your Atlas lint, run and visualizer commands. Anything that worked
+   through the submodule and does not work from npm is a bug: [file it](reporting-issues.md).
+
+7. **Commit** the removed submodule, the workspace file, the manifests, the renamed imports and the
+   lockfile together. Remove any instructions in your project's own agent guidance that describe
+   editing Atlas through `vendor/atlas`, and point them at this guide.

@@ -1,9 +1,9 @@
-# @crvouga/atlas-detox
+# @crvouga/atlas/detox
 
 A Detox driver for [Atlas](../../README.md): run statecharts against an iOS or Android app.
 
 ```sh
-pnpm add -D @crvouga/atlas @crvouga/atlas-detox detox
+bun add -d @crvouga/atlas detox
 ```
 
 Detox is an optional peer dependency: the driver types Detox's globals structurally, so the package
@@ -16,8 +16,8 @@ exist:
 
 ```ts
 import { defineConfig, runConfig } from '@crvouga/atlas';
-import type { DetoxContext } from '@crvouga/atlas-detox';
-import { detoxDriver, detoxScreen } from '@crvouga/atlas-detox';
+import type { DetoxContext } from '@crvouga/atlas/detox';
+import { detoxDriver, detoxScreen } from '@crvouga/atlas/detox';
 
 const config = defineConfig<DetoxContext>({
   specs: './specs',
@@ -62,7 +62,7 @@ it('follows the todo statechart', async () => {
   maps a signal to `by.id`, `by.label` or `by.text`.
 
 To combine a native app with other clients (a web dashboard, an API) from the `atlas` CLI rather
-than from inside a Detox test, use `@crvouga/atlas-webdriver` with Appium.
+than from inside a Detox test, use `@crvouga/atlas/webdriver` with Appium.
 - **`detoxScreen({ all, none, checks })`**: a state recogniser from Detox matchers.
 
 Detox records video per test through its artifacts plugin rather than per call, so this driver does

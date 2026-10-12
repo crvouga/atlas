@@ -36,8 +36,8 @@ atlas-visualizer dev --specs ./specs --runs ./atlas-runs
 | `--port <n>`, `--host <host>` | `dev`: where to listen (default `localhost:5180`, or the next free port).                   |
 
 Relative paths resolve against the directory the command was run from. Without flags the
-environment is read: `ATLAS_SPECS_ROOT`, `ATLAS_RUNS_ROOT` (relative to `INIT_CWD`, which pnpm sets
-to where you ran it, or the current directory) and `ATLAS_FIXTURE`. With nothing configured and no
+environment is read: `ATLAS_SPECS_ROOT`, `ATLAS_RUNS_ROOT` (relative to `INIT_CWD` when your package
+manager sets it to where you ran the command, or the current directory) and `ATLAS_FIXTURE`. With nothing configured and no
 `specs/` directory, the `full` example is shown.
 
 Editing a spec file or a run publishing a snapshot updates the open page in about a second, without a reload,
@@ -57,16 +57,16 @@ privacy check failed or is missing is never published. With `--no-data`, set
 `VITE_ATLAS_BASE_URL` at build time to where `publish-data` output is hosted; `VITE_ATLAS_POLL_MS`
 sets how often the site checks for new runs (default 60 s, plus when the tab regains focus).
 
-### Inside this workspace
+### Inside this repository
 
 ```sh
-pnpm --filter @crvouga/atlas-visualizer dev                       # ATLAS_SPECS_ROOT / ATLAS_RUNS_ROOT, or the example
-ATLAS_FIXTURE=partial pnpm --filter @crvouga/atlas-visualizer dev # one of the fixtures
-pnpm --filter @crvouga/atlas-visualizer test                      # parsing, composition, statuses, every fixture
-pnpm --filter @crvouga/atlas-visualizer fixtures                  # regenerate the fixtures (needs ImageMagick, cwebp, ffmpeg)
+bun run viz:dev                          # ATLAS_SPECS_ROOT / ATLAS_RUNS_ROOT, or the example
+ATLAS_FIXTURE=partial bun run viz:dev    # one of the fixtures
+bun test packages/visualizer/src packages/visualizer/vite   # parsing, composition, statuses, every fixture
+bun run viz:fixtures                     # regenerate the fixtures (needs ImageMagick, cwebp, ffmpeg)
 ```
 
-`publish-data` and `build` scripts do the same as the CLI, writing to `public/data` (or
+`bun run viz:publish-data` and `bun run viz:build` do the same as the CLI, writing to `public/data` (or
 `ATLAS_OUT`) and `dist`. `ATLAS_SOURCES_FILE` supplies additional sources, and
 `VITE_ATLAS_SOURCES_URL` can point a hosted viewer at a separate source descriptor file.
 
@@ -91,7 +91,7 @@ Open formats first, so specs are not tied to this tool:
 - **Notes** beside a chart: `open-questions.md`, `known-issues.md`; a `<chart>.layout.json` pins
   node positions; an optional `atlas.yaml` at the specs root declares contexts and hand-offs
   between them (without it, each top-level folder holding a chart is a context).
-- **Run manifests** (`<runs>/<run-id>/manifest.json`, the `@crvouga/atlas-schema` contract):
+- **Run manifests** (`<runs>/<run-id>/manifest.json`, the `@crvouga/atlas/schema` contract):
   screenshots, clips with WebVTT captions (shown as the video's caption track), timelines,
   business events with the CloudEvents a source observed, paths, coverage, and links to the
   JUnit, CTRF and Mermaid reports the run wrote. Unknown fields and newer formats are read as far

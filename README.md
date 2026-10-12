@@ -20,26 +20,35 @@ what a person sees, an event says what happens in business language ("Adds a tod
 and the implementation says how a driver makes each event happen and recognises each state.
 
 > [!IMPORTANT]
-> **Dogfooding phase:** Atlas is not published to npm yet. Projects currently consume this
-> repository as a pinned Git submodule and a pnpm workspace package, then contribute reusable fixes
-> back from those integrations. Multiple projects and agents may update Atlas concurrently. If you
-> are integrating Atlas—or are an agent working inside a consumer project's submodule—read the
-> [dogfooding and contribution workflow](docs/dogfooding.md) before making changes.
+> **Dogfooding phase:** Atlas is developed by using it in real projects. Those projects install the
+> published packages from npm and report bugs and missing features as GitHub issues; they do not
+> change this repository. If you are integrating Atlas, or are an agent working in a project that
+> uses it, read [using Atlas from another project](docs/dogfooding.md) and
+> [reporting issues](docs/reporting-issues.md). Releases are automatic: see
+> [releasing](docs/releasing.md).
 
 Atlas also owns specification and test-evidence visualization: Gherkin, Quint, DMN, Alloy, OpenSLO and supporting documents appear in **Specs and evidence**, alongside commit-scoped checks, recordings and performance measurements. See [Atlas reports](packages/reports/README.md).
 
-## Packages
+## One package
 
-| Package | What it is |
+Atlas is a single npm package. Each part is its own import path, so a bundler keeps only what you
+import. It runs on Bun and on Node 22.18 or later, with any package manager:
+
+```sh
+bun add -d @crvouga/atlas
+```
+
+| Import | What it is |
 | --- | --- |
 | [`@crvouga/atlas`](packages/core) | Spec loading (SCXML and XState), composition, lint, planning, the runner, multi-client runs (`combineDrivers`), `httpDriver` and `functionDriver`, reports, CloudEvents, privacy, config and the `atlas` CLI. `@crvouga/atlas/spec` is a browser-safe subset; `@crvouga/atlas/signals` holds the driver-neutral signals. |
-| [`@crvouga/atlas-playwright`](packages/playwright) | Playwright driver: signal-based screen recognisers, paced taps and typing with a touch overlay, device-resolution screenshots and H.264 clips. |
-| [`@crvouga/atlas-bun`](packages/bun) | Bun WebView driver: Bun's built-in headless browser (the system WebKit on macOS, Chrome elsewhere), nothing to download. |
-| [`@crvouga/atlas-webdriver`](packages/webdriver) | W3C WebDriver driver with no dependencies: Safari, Chrome, Firefox and Edge, and native iOS and Android apps through Appium. |
-| [`@crvouga/atlas-detox`](packages/detox) | Detox driver for iOS and Android apps, inside a Detox test run. |
-| [`@crvouga/atlas-vitest`](packages/vitest) | Run a config as a Vitest (or Jest-style) suite, one test per planned path. |
-| [`@crvouga/atlas-schema`](packages/schema) | The contract: Zod schemas and JSON Schemas for specs, journeys, manifests, timelines and the runs index. |
-| [`@crvouga/atlas-visualizer`](packages/visualizer) | Browse charts and runs: every state with its screenshots, every transition with its clip. |
+| [`@crvouga/atlas/playwright`](packages/playwright) | Playwright driver: signal-based screen recognisers, paced taps and typing with a touch overlay, device-resolution screenshots and H.264 clips. |
+| [`@crvouga/atlas/bun`](packages/bun) | Bun WebView driver: Bun's built-in headless browser (the system WebKit on macOS, Chrome elsewhere), nothing to download. |
+| [`@crvouga/atlas/webdriver`](packages/webdriver) | W3C WebDriver driver with no dependencies: Safari, Chrome, Firefox and Edge, and native iOS and Android apps through Appium. |
+| [`@crvouga/atlas/detox`](packages/detox) | Detox driver for iOS and Android apps, inside a Detox test run. |
+| [`@crvouga/atlas/vitest`](packages/vitest) | Run a config as a test suite in Vitest, `bun test` or any Jest-style runner, one test per planned path. |
+| [`@crvouga/atlas/schema`](packages/schema) | The contract: Zod schemas and JSON Schemas for specs, journeys, manifests, timelines and the runs index. |
+| [`@crvouga/atlas/reports/<module>`](packages/reports) | Publish, store, retain and serve test evidence, and combine it across backends, branches and commits. |
+| [`atlas-visualizer`](packages/visualizer) (command) | Browse charts and runs: every state with its screenshots, every transition with its clip. |
 
 ## Open standards
 
@@ -79,30 +88,29 @@ timer elapses", which jumps Playwright's clock 30 seconds) and **hand-off** even
 chart. The server reports business events as CloudEvents to an Atlas `cloudEventsHttpSource`, so
 the states' `meta.events` are checked on every run.
 
-Atlas needs Node 22.18 or later. Video clips and WebP thumbnails need FFmpeg on the `PATH`.
+This repository runs on [Bun](https://bun.sh). Video clips and WebP thumbnails need FFmpeg on the
+`PATH`. From the repository root:
 
 ```sh
-pnpm install
-pnpm --filter atlas-example-todo exec playwright install chromium
-cd examples/todo
+bun install
+bunx playwright install chromium
 
-pnpm atlas:lint   # pure, reachable, no undocumented dead ends, journeys replay, everything implemented
-pnpm atlas:plan   # 4 journeys + 1 generated path cover all 14 transitions
-pnpm atlas:fast   # run every path quickly
-pnpm atlas:run    # showcase mode: paced, with a touch overlay, screenshots and a clip per transition
-pnpm test         # the same spec against an in-memory model, through Vitest
+bun run example:lint   # pure, reachable, no undocumented dead ends, journeys replay, everything implemented
+bun run example:plan   # 4 journeys + 1 generated path cover all 14 transitions
+bun run example:fast   # run every path quickly
+bun run example:run    # showcase mode: paced, with a touch overlay, screenshots and a clip per transition
+bun test examples      # the same spec against an in-memory model, as a test suite
 
-pnpm atlas:clients      # clients/: one chart across a phone, a desktop and the sync server at once
-pnpm atlas:clients:bun  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
+bun run example:clients      # clients/: one chart across a phone, a desktop and the sync server at once
+bun run example:clients:bun  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
 ```
 
-For development, the repository root has shortcuts for producing a showcase run and keeping its
-specs and latest results open in the visualizer. Run these in separate terminals; the visualizer
-updates when a run finishes.
+To keep the example's specs and latest results open in the visualizer, run these in separate
+terminals; the visualizer updates when a run finishes.
 
 ```sh
-pnpm example:run
-pnpm example:viz
+bun run example:run
+bun run example:viz
 ```
 
 A showcase run ends with:
@@ -113,7 +121,7 @@ Transitions 14/14 passed, 0 failed, 0 not reached
 Manifest: examples/todo/atlas-runs/<run-id>/manifest.json
 ```
 
-`pnpm test` runs [`model.test.ts`](examples/todo/model.test.ts): the same charts and journeys
+`bun test examples` runs [`model.test.ts`](examples/todo/model.test.ts): the same charts and journeys
 against `TodoModel`, a plain class, through `functionDriver` and `describeAtlas`. Only the driver
 and the implementation differ, which is the point: the spec belongs to the product, not to one
 test tool.
@@ -229,7 +237,7 @@ Events are keyed by their exact name in the spec.
 
 ```ts
 import { defineConfig } from '@crvouga/atlas';
-import { playwrightDriver, role, screen, text } from '@crvouga/atlas-playwright';
+import { playwrightDriver, role, screen, text } from '@crvouga/atlas/playwright';
 
 export default defineConfig({
   specs: './specs',
@@ -364,10 +372,10 @@ each other's marks.
 | --- | --- | --- | --- | --- |
 | `functionDriver(create)` | `@crvouga/atlas` | A domain model, a CLI, anything reachable from code | Microseconds | No |
 | `httpDriver(baseUrl)` | `@crvouga/atlas` | An API client with a cookie jar: a partner system, an operator API, a back office job | Milliseconds | No |
-| `bunWebViewDriver()` | `@crvouga/atlas-bun` | A web app in Bun's built-in browser (WebKit on macOS, Chrome elsewhere) | A view in milliseconds, screenshots in about 10 ms | From screenshots |
-| `playwrightDriver()` | `@crvouga/atlas-playwright` | A web app (or React Native on the web) in Chromium, with a fake clock | About a second per context | Screencast with a touch overlay |
-| `webdriverDriver()` | `@crvouga/atlas-webdriver` | Safari, Chrome, Firefox, Edge; native iOS and Android apps through Appium | Depends on the server | From screenshots, or Appium's recorder |
-| `detoxDriver()` | `@crvouga/atlas-detox` | A React Native app, inside a Detox test run | Depends on the device | Detox artifacts |
+| `bunWebViewDriver()` | `@crvouga/atlas/bun` | A web app in Bun's built-in browser (WebKit on macOS, Chrome elsewhere) | A view in milliseconds, screenshots in about 10 ms | From screenshots |
+| `playwrightDriver()` | `@crvouga/atlas/playwright` | A web app (or React Native on the web) in Chromium, with a fake clock | About a second per context | Screencast with a touch overlay |
+| `webdriverDriver()` | `@crvouga/atlas/webdriver` | Safari, Chrome, Firefox, Edge; native iOS and Android apps through Appium | Depends on the server | From screenshots, or Appium's recorder |
+| `detoxDriver()` | `@crvouga/atlas/detox` | A React Native app, inside a Detox test run | Depends on the device | Detox artifacts |
 
 The Bun, Playwright, WebDriver and Detox contexts all provide a `SignalContext` (`goto`,
 `isVisible`, `user.tap`, `user.type`), and they resolve the same signals (`testId`, `role`, `label`,
@@ -389,8 +397,8 @@ clients of one run, and `combineImplementations` merges what each client does an
 ```ts
 import { combineDrivers, combineImplementations, defineConfig, httpDriver, type HttpClient } from '@crvouga/atlas';
 import { role, screen, text, type SignalContext } from '@crvouga/atlas/signals';
-import { playwrightDriver } from '@crvouga/atlas-playwright';
-import { accessibilityId, webdriverDriver } from '@crvouga/atlas-webdriver';
+import { playwrightDriver } from '@crvouga/atlas/playwright';
+import { accessibilityId, webdriverDriver } from '@crvouga/atlas/webdriver';
 
 type Clients = { member: SignalContext; operator: SignalContext; partner: HttpClient };
 
@@ -625,7 +633,7 @@ Runs produce media and manifests that get shared, so Atlas refuses to leak real 
 
 ## Visualizer
 
-[`@crvouga/atlas-visualizer`](packages/visualizer) renders the charts from the specs directory and
+The [`atlas-visualizer`](packages/visualizer) command renders the charts from the specs directory and
 overlays runs from the runs directory: screenshots on states, clips on transitions, statuses and
 history. See its README for how to point it at a project.
 
