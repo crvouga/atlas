@@ -6,13 +6,13 @@
  * the query document.
  */
 
-import type { ExplorerData } from '@crvouga/atlas-reports/explorer-types';
+import type { ExplorerData } from './explorer-types';
 import type {
   CommitPage,
   SourceRecord,
-} from '@crvouga/atlas-reports/protocol';
-import type { HtmlReportBlob } from '@crvouga/atlas-reports/recording-bundle';
-import type { RunReport } from '@crvouga/atlas-reports/report-types';
+} from './protocol';
+import type { HtmlReportBlob } from './recording-bundle';
+import type { RunReport } from './report-types';
 import type { HttpClient } from './http';
 import { QueryClient } from '@tanstack/solid-query';
 

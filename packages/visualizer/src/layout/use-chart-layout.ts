@@ -1,4 +1,4 @@
-import type { LayoutFile } from '@crvouga/atlas-schema';
+import type { LayoutFile } from '@crvouga/atlas/schema';
 import { useQuery } from '@tanstack/react-query';
 
 import type { LayoutInput } from './graph';

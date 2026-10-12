@@ -2,7 +2,7 @@ import type { Locator } from './protocol';
 
 export { webdriverDriver, screen, nativeLocator, type Mode, type Target, type WebDriverContext, type WebDriverDriverOptions, type WebDriverServer } from './driver';
 export { WebDriverSession, WebDriverError, waitForServer, ELEMENT_KEY, type Locator, type Rect } from './protocol';
-export { css, label, role, testId, text, describeSignal, type Signal } from '@crvouga/atlas/signals';
+export { css, label, role, testId, text, describeSignal, type Signal } from '../../core/src/signals';
 
 /** Appium: an accessibility identifier (iOS) or content description (Android); React Native's `testID`. */
 export const accessibilityId = (value: string): Locator => ({ using: 'accessibility id', value, name: `accessibility id "${value}"` });

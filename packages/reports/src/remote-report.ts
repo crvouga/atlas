@@ -9,22 +9,22 @@ import type { Timers } from './clock';
 import {
   splitViewerTestId,
   viewerTestId,
-} from '@crvouga/atlas-reports/keys';
+} from './keys';
 import type {
   CommitEvent,
   CommitRecord,
   SourceRecord,
-} from '@crvouga/atlas-reports/protocol';
-import { SseDecoder } from '@crvouga/atlas-reports/protocol';
-import type { ReportData } from '@crvouga/atlas-reports/types';
+} from './protocol';
+import { SseDecoder } from './protocol';
+import type { ReportData } from './types';
 import type {
   HtmlReportBlob,
   HtmlReportTest,
-} from '@crvouga/atlas-reports/recording-bundle';
+} from './recording-bundle';
 import type {
   ReportTestStatus,
   RunReportMeta,
-} from '@crvouga/atlas-reports/report-types';
+} from './report-types';
 import type { HttpClient } from './http';
 import { type Accessor, batch, createSignal } from 'solid-js';
 import { createStore, produce, type SetStoreFunction } from 'solid-js/store';

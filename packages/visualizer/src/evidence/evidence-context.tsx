@@ -1,9 +1,9 @@
-import type { ActiveRun, BackendInfo, EvidencePage, LayerEvidence, LayerHeader, LayerRows } from '@crvouga/atlas-reports/evidence-types';
-import { contributes, evidenceView, type EvidenceView, type SourceSelection } from '@crvouga/atlas-reports/evidence-view';
-import type { SpecEntry } from '@crvouga/atlas-reports/explorer-types';
-import { combineEvidence, distinctHeaders } from '@crvouga/atlas-reports/layer-merge';
-import type { ReportOutline } from '@crvouga/atlas-reports/layer-types';
-import { SpecIndexSchema } from '@crvouga/atlas-schema';
+import type { ActiveRun, BackendInfo, EvidencePage, LayerEvidence, LayerHeader, LayerRows } from '@crvouga/atlas/reports/evidence-types';
+import { contributes, evidenceView, type EvidenceView, type SourceSelection } from '@crvouga/atlas/reports/evidence-view';
+import type { SpecEntry } from '@crvouga/atlas/reports/explorer-types';
+import { combineEvidence, distinctHeaders } from '@crvouga/atlas/reports/layer-merge';
+import type { ReportOutline } from '@crvouga/atlas/reports/layer-types';
+import { SpecIndexSchema } from '@crvouga/atlas/schema';
 import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 

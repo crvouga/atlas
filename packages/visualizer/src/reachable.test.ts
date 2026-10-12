@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, it } from 'vitest';
+import { expect, it } from 'bun:test';
 
 const SRC = path.dirname(fileURLToPath(import.meta.url));
 const ENTRY = path.join(SRC, 'main.tsx');

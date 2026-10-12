@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
-import { evidenceFile } from '@crvouga/atlas-reports/export-evidence';
-import { selectedFrame, flattenFrames } from '@crvouga/atlas-reports/frames';
-import { latestParts, partStatus } from '@crvouga/atlas-reports/report-parts';
+import { evidenceFile } from '../src/export-evidence';
+import { selectedFrame, flattenFrames } from '../src/frames';
+import { latestParts, partStatus } from '../src/report-parts';
 
 test('static evidence paths preserve revision and encoded spec identity', () => {
   expect(evidenceFile('')).toBe('index.json');

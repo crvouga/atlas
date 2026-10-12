@@ -1,0 +1,4 @@
+[test]
+# The viewer's DOM tests need a browser-like global scope, so they run on their own:
+# `bun run test` runs this suite and then that one (packages/visualizer/tests, with its preload).
+pathIgnorePatterns = ["packages/visualizer/tests/**"]

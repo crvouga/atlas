@@ -1,10 +1,12 @@
-# @crvouga/atlas-vitest
+# @crvouga/atlas/vitest
 
-Run an [Atlas](../../README.md) config as a Vitest (or any Jest-style) suite: one test that the
-charts are executable, then one test per planned path.
+Run an [Atlas](../../README.md) config as a test suite in Vitest, `bun test` or any Jest-style
+runner: one test that the charts are executable, then one test per planned path. The runner's own
+`describe`, `it`, `beforeAll` and `expect` are passed in, so with Bun import them from `bun:test`
+instead of `vitest` and install nothing else.
 
 ```sh
-pnpm add -D @crvouga/atlas @crvouga/atlas-vitest vitest
+bun add -d @crvouga/atlas vitest
 ```
 
 ## Use
@@ -14,7 +16,7 @@ pnpm add -D @crvouga/atlas @crvouga/atlas-vitest vitest
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from '@crvouga/atlas';
-import { describeAtlas, functionDriver } from '@crvouga/atlas-vitest';
+import { describeAtlas, functionDriver } from '@crvouga/atlas/vitest';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { Door } from './door';

@@ -1,62 +1,157 @@
-name: ci
+# CI and release in one workflow. npm Trusted Publishing is pinned to this filename: keep it `ci.yml`.
+#
+# A commit on main is published only after `check` passed for that same commit, so it does not
+# matter how the commit got there (a merged pull request or a direct push). `check` ends with the
+# consumer smoke: the packed tarball installed into a clean project, the way a project using Atlas
+# from npm gets it.
+#
+# Everything runs on Bun, at the version `packageManager` names in package.json. Node is set up in
+# two places only: the consumer smoke, which proves the published package also runs on Node, and the
+# release, because npm Trusted Publishing needs the npm CLI.
+#
+# The schedule and manual dispatch exist to finish an interrupted release (an npm or GitHub outage).
+# Every release step is idempotent, so a run with nothing left to do publishes nothing.
+# See docs/releasing.md.
+name: CI
+
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 */6 * * *"
+
+# A pull request's runs replace each other. Runs on main never cancel: each has its own group.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: "0"
+
 jobs:
+  # Commit types decide the next version (docs/releasing.md), so they are checked.
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      # Merge commits land on main, so every commit of the pull request can drive a release.
+      - name: Validate PR commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git rev-list --first-parent --reverse "$BASE..$HEAD" |
+          while read -r commit; do
+            git show --no-patch --format=%B "$commit" | bunx --no -- commitlint --verbose
+          done
+      # A squash merge makes the title the commit.
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      # Only for the consumer smoke: the published package has to run on Node as well.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-      - uses: oven-sh/setup-bun@v2
-      - run: pnpm install --frozen-lockfile=false
-      - run: pnpm type-check
-      - run: pnpm test
+      - run: bun install --frozen-lockfile
+      - run: bun run type-check
+      - run: bun run test
+      - run: bun run build
+      - name: Consumer smoke (pack, install, import, type-check, tree-shake and run the published package on Bun and Node)
+        run: bun run release:smoke
+
+  # The todo example, run for real: once in a single browser and once across a phone, a desktop and
+  # a server. The two runs share nothing, so each gets its own job.
   example:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: check
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        script: [run, clients]
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: pnpm install --frozen-lockfile=false
-      - run: pnpm --filter atlas-example-todo exec playwright install --with-deps chromium
-      - run: pnpm example
-      - run: pnpm --filter atlas-example-todo run atlas:clients
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: atlas-runs
-          path: examples/todo/atlas-runs
-  bun:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: check
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
       - uses: oven-sh/setup-bun@v2
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: pnpm install --frozen-lockfile=false
-      - run: pnpm --filter atlas-example-todo exec playwright install --with-deps chromium
-      - run: pnpm --filter atlas-example-todo run atlas:clients:bun
+        with:
+          bun-version-file: package.json
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run example:${{ matrix.script }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: atlas-runs-bun
+          name: atlas-runs-${{ matrix.script }}
           path: examples/todo/atlas-runs
+
+  release:
+    name: Release
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # One release at a time, and never cancelled halfway through a publish.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      id-token: write
+      # Comments on the issues a release closes, with the version that carries the fix.
+      issues: write
+    steps:
+      # Tags are the versions, so the whole history and every tag is needed.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      # For the npm CLI only. Do not set registry-url: setup-node then writes legacy _authToken
+      # config, which prevents npm from starting the OIDC exchange when no token exists.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Trusted Publishing needs npm >= 11.5.1.
+      - name: Update npm
+        run: npm install -g npm@11
+      - run: bun install --frozen-lockfile
+      - name: Plan
+        id: plan
+        run: bun run release:plan --github-output
+      - name: Build
+        if: steps.plan.outputs.has_changes == 'true'
+        run: bun run build
+      - name: Publish, tag, and create GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          bun run release:publish

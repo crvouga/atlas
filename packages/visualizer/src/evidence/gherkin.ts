@@ -1,6 +1,6 @@
 import { AstBuilder, GherkinClassicTokenMatcher, Parser } from '@cucumber/gherkin';
 import { IdGenerator, type Step, type TableRow } from '@cucumber/messages';
-import type { CheckSlot } from '@crvouga/atlas-reports/evidence-view';
+import type { CheckSlot } from '@crvouga/atlas/reports/evidence-view';
 
 export function parseFeature(text: string) {
   return new Parser(new AstBuilder(IdGenerator.incrementing()), new GherkinClassicTokenMatcher()).parse(text);

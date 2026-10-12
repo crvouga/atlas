@@ -1,5 +1,5 @@
-import type { SpecEvidence } from '@crvouga/atlas-reports/evidence-view';
-import { NO_EVIDENCE } from '@crvouga/atlas-reports/evidence-view';
+import type { SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
+import { NO_EVIDENCE } from '@crvouga/atlas/reports/evidence-view';
 import type { ReactNode } from 'react';
 
 import type { SpecKind } from '../spec-kind';

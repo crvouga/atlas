@@ -1,4 +1,4 @@
-import { evidenceFile } from '@crvouga/atlas-reports/export-evidence';
+import { evidenceFile } from '@crvouga/atlas/reports/export-evidence';
 
 /** A built site without a reports API reads the evidence exported beside it. */
 export const staticEvidence = !import.meta.env.DEV && !import.meta.env.VITE_ATLAS_REPORTS_URL;

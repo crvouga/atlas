@@ -1,10 +1,10 @@
-import type { ObjectStore } from '@crvouga/atlas-reports/object-store';
-import { createReportsApp, type ReportsAppDeps } from '@crvouga/atlas-reports/reports-route';
-import { textFingerprint } from '@crvouga/atlas-reports/layer-merge';
-import { publishLayer } from '@crvouga/atlas-reports/layer-store';
-import type { LayerSummary } from '@crvouga/atlas-reports/layer-types';
-import type { RunReport } from '@crvouga/atlas-reports/report-types';
-import { ALL_SOURCES } from '@crvouga/atlas-reports/evidence-view';
+import type { ObjectStore } from '@crvouga/atlas/reports/object-store';
+import { createReportsApp, type ReportsAppDeps } from '@crvouga/atlas/reports/reports-route';
+import { textFingerprint } from '@crvouga/atlas/reports/layer-merge';
+import { publishLayer } from '@crvouga/atlas/reports/layer-store';
+import type { LayerSummary } from '@crvouga/atlas/reports/layer-types';
+import type { RunReport } from '@crvouga/atlas/reports/report-types';
+import { ALL_SOURCES } from '@crvouga/atlas/reports/evidence-view';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { expect } from 'bun:test';

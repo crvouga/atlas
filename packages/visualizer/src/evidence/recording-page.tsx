@@ -1,4 +1,4 @@
-import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas-reports/evidence-view';
+import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 

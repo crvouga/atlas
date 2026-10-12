@@ -1,4 +1,4 @@
-import type { SpecEvidence } from '@crvouga/atlas-reports/evidence-view';
+import type { SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
 
 import type { SpecKind } from '../spec-kind';
 import { CheckDetail, ResultRow, type CheckSelection, type SelectCheck } from './check-detail';

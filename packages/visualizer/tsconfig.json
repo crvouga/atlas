@@ -3,10 +3,10 @@
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable", "WebWorker"],
     "jsx": "react-jsx",
-    "types": ["node", "vite/client"],
+    "types": ["node", "vite/client", "bun"],
     "allowJs": false,
     "checkJs": false
   },
-  "include": ["src", "vite", "scripts", "vite.config.ts", "vitest.config.ts"],
+  "include": ["src", "vite", "scripts", "vite.config.ts"],
   "exclude": ["node_modules", "dist", "fixtures"]
 }

@@ -1,4 +1,4 @@
-import type { EventKind } from '@crvouga/atlas-schema';
+import type { EventKind } from '@crvouga/atlas/schema';
 
 import type { EventKindSource } from './types';
 

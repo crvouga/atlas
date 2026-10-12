@@ -177,5 +177,5 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   process.stdout.write(USAGE);
-  return command ? 2 : 0;
+  return command && command !== '--help' && command !== '-h' ? 2 : 0;
 }

@@ -1,23 +1,196 @@
 {
-  "name": "atlas-workspace",
-  "private": true,
+  "name": "@crvouga/atlas",
+  "version": "0.0.0-development",
   "description": "Atlas: executable statecharts. Spec a product's flows as statecharts, run them against the real app with any driver, and browse what happened.",
+  "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@10.28.0",
+  "sideEffects": [
+    "./packages/visualizer/**",
+    "**/*.css"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/atlas.git"
+  },
+  "homepage": "https://github.com/crvouga/atlas#readme",
+  "bugs": {
+    "url": "https://github.com/crvouga/atlas/issues"
+  },
+  "keywords": [
+    "statecharts",
+    "scxml",
+    "xstate",
+    "model-based-testing",
+    "e2e",
+    "playwright",
+    "webdriver",
+    "visualizer"
+  ],
+  "packageManager": "bun@1.4.2",
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.18.0",
+    "bun": ">=1.2.0"
   },
+  "bin": {
+    "atlas": "./packages/core/bin/atlas.mjs",
+    "atlas-visualizer": "./packages/visualizer/bin/atlas-visualizer.mjs"
+  },
+  "exports": {
+    ".": "./packages/core/src/index.ts",
+    "./spec": "./packages/core/src/spec/index.ts",
+    "./signals": "./packages/core/src/signals.ts",
+    "./cli": "./packages/core/src/cli.ts",
+    "./playwright": "./packages/playwright/src/index.ts",
+    "./bun": "./packages/bun/src/index.ts",
+    "./webdriver": "./packages/webdriver/src/index.ts",
+    "./detox": "./packages/detox/src/index.ts",
+    "./vitest": "./packages/vitest/src/index.ts",
+    "./schema": "./packages/schema/src/index.ts",
+    "./reports/*": "./packages/reports/src/*.ts",
+    "./schemas/*": "./packages/schema/schemas/*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/core/src/index.d.ts",
+        "default": "./dist/core/src/index.js"
+      },
+      "./spec": {
+        "types": "./dist/core/src/spec/index.d.ts",
+        "default": "./dist/core/src/spec/index.js"
+      },
+      "./signals": {
+        "types": "./dist/core/src/signals.d.ts",
+        "default": "./dist/core/src/signals.js"
+      },
+      "./cli": {
+        "types": "./dist/core/src/cli.d.ts",
+        "default": "./dist/core/src/cli.js"
+      },
+      "./playwright": {
+        "types": "./dist/playwright/src/index.d.ts",
+        "default": "./dist/playwright/src/index.js"
+      },
+      "./bun": {
+        "types": "./dist/bun/src/index.d.ts",
+        "default": "./dist/bun/src/index.js"
+      },
+      "./webdriver": {
+        "types": "./dist/webdriver/src/index.d.ts",
+        "default": "./dist/webdriver/src/index.js"
+      },
+      "./detox": {
+        "types": "./dist/detox/src/index.d.ts",
+        "default": "./dist/detox/src/index.js"
+      },
+      "./vitest": {
+        "types": "./dist/vitest/src/index.d.ts",
+        "default": "./dist/vitest/src/index.js"
+      },
+      "./schema": {
+        "types": "./dist/schema/src/index.d.ts",
+        "default": "./dist/schema/src/index.js"
+      },
+      "./reports/*": {
+        "types": "./dist/reports/src/*.d.ts",
+        "default": "./dist/reports/src/*.js"
+      },
+      "./schemas/*": "./packages/schema/schemas/*"
+    }
+  },
+  "files": [
+    "dist",
+    "packages/core/bin",
+    "packages/schema/schemas",
+    "packages/visualizer/bin",
+    "packages/visualizer/example",
+    "packages/visualizer/fixtures",
+    "packages/visualizer/index.html",
+    "packages/visualizer/scripts",
+    "packages/visualizer/src",
+    "packages/visualizer/vite",
+    "packages/visualizer/vite.config.ts",
+    "packages/*/README.md",
+    "packages/reports/STORAGE.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
-    "build": "pnpm -r --filter './packages/*' build",
-    "test": "pnpm -r test",
-    "type-check": "pnpm -r type-check",
-    "schemas": "pnpm --filter @crvouga/atlas-schema schemas",
-    "example": "pnpm --filter atlas-example-todo run atlas:run",
-    "example:run": "pnpm --filter atlas-example-todo run atlas:run",
-    "example:viz": "node packages/visualizer/bin/atlas-visualizer.mjs dev --specs examples/todo/specs --runs examples/todo/atlas-runs"
+    "build": "bun scripts/build-package.ts",
+    "test": "bun test && bun test --cwd packages/visualizer --preload ./tests/preload.ts tests",
+    "type-check": "for dir in packages/* scripts examples/todo; do tsc --noEmit -p \"$dir\" || exit 1; done",
+    "schemas": "bun packages/schema/scripts/emit-json-schemas.ts",
+    "viz:dev": "cd packages/visualizer && INIT_CWD=\"$OLDPWD\" bun --bun vite --configLoader runner",
+    "viz:build": "cd packages/visualizer && INIT_CWD=\"$OLDPWD\" bun --bun vite build --configLoader runner",
+    "viz:publish-data": "bun packages/visualizer/scripts/publish-data.ts",
+    "viz:fixtures": "bun packages/visualizer/scripts/make-fixtures.ts",
+    "example:start": "bun examples/todo/server.ts",
+    "example:lint": "bun --cwd examples/todo ../../packages/core/bin/atlas.mjs lint --require-implementations",
+    "example:plan": "bun --cwd examples/todo ../../packages/core/bin/atlas.mjs plan",
+    "example:fast": "bun --cwd examples/todo ../../packages/core/bin/atlas.mjs run --mode fast",
+    "example:run": "bun --cwd examples/todo ../../packages/core/bin/atlas.mjs run --mode showcase",
+    "example:clients": "bun --cwd examples/todo ../../packages/core/bin/atlas.mjs run --config clients/atlas.config.ts --mode showcase",
+    "example:clients:bun": "ATLAS_DESKTOP=bun bun --cwd examples/todo ../../packages/core/bin/atlas.mjs run --config clients/atlas.config.ts --mode showcase",
+    "example:viz": "bun packages/visualizer/bin/atlas-visualizer.mjs dev --specs examples/todo/specs --runs examples/todo/atlas-runs",
+    "release:plan": "bun scripts/release/plan.ts",
+    "release:publish": "bun scripts/release/publish.ts",
+    "release:smoke": "bun scripts/release/consumer-smoke.ts",
+    "release:seed": "bun scripts/release/seed.ts",
+    "health": "bun scripts/health/cli.ts",
+    "prepare": "husky"
   },
-  "workspaces": [
-    "packages/*",
-    "examples/*"
-  ]
+  "dependencies": {
+    "@cucumber/gherkin": "^42.0.1",
+    "@cucumber/messages": "^34.2.1",
+    "@radix-ui/react-collapsible": "^1.1.21",
+    "@radix-ui/react-dialog": "^1.2.0",
+    "@radix-ui/react-dropdown-menu": "^2.1.25",
+    "@radix-ui/react-popover": "^1.2.0",
+    "@radix-ui/react-tabs": "^1.1.22",
+    "@radix-ui/react-tooltip": "^1.3.0",
+    "@tanstack/query-persist-client-core": "^5.104.0",
+    "@tanstack/react-query": "^5.101.4",
+    "@tanstack/react-router": "^1.170.41",
+    "@tanstack/solid-query": "^5.104.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "@xyflow/react": "^12.11.5",
+    "cmdk": "^1.1.1",
+    "elkjs": "0.12.0",
+    "fast-xml-parser": "5.11.0",
+    "hono": "^4.13.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "solid-js": "^1.9.15",
+    "tsx": "4.23.13",
+    "vite": "7.3.6",
+    "xstate": "5.33.2",
+    "yaml": "^2.9.0",
+    "zod": "^3.25.76",
+    "zustand": "^5.0.15"
+  },
+  "peerDependencies": {
+    "detox": ">=20",
+    "playwright": ">=1.45"
+  },
+  "peerDependenciesMeta": {
+    "detox": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.8.1",
+    "@types/bun": "1.4.3",
+    "@types/node": "^22.20.3",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "happy-dom": "20.11.1",
+    "husky": "^9.1.7",
+    "playwright": "1.60.0",
+    "typescript": "^5.9.3"
+  }
 }

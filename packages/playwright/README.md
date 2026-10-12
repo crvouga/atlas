@@ -1,11 +1,11 @@
-# @crvouga/atlas-playwright
+# @crvouga/atlas/playwright
 
 A Playwright driver for [Atlas](../../README.md): run statecharts against a web app (or a React
 Native app on the web), recognise screens from UI signals, and record showcase media.
 
 ```sh
-pnpm add -D @crvouga/atlas @crvouga/atlas-playwright playwright
-pnpm exec playwright install chromium
+bun add -d @crvouga/atlas playwright
+bunx playwright install chromium
 ```
 
 FFmpeg on the `PATH` is needed for clips and WebP thumbnails.
@@ -14,8 +14,8 @@ FFmpeg on the `PATH` is needed for clips and WebP thumbnails.
 
 ```ts
 import { defineConfig } from '@crvouga/atlas';
-import type { PlaywrightContext } from '@crvouga/atlas-playwright';
-import { css, playwrightDriver, role, screen, testId, text } from '@crvouga/atlas-playwright';
+import type { PlaywrightContext } from '@crvouga/atlas/playwright';
+import { css, playwrightDriver, role, screen, testId, text } from '@crvouga/atlas/playwright';
 
 export default defineConfig<PlaywrightContext>({
   specs: './specs',

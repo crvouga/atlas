@@ -1,5 +1,5 @@
-import type { LayerHeader } from '@crvouga/atlas-reports/evidence-types';
-import { branchOf, contributes, sourceFacets, type SourceSelection } from '@crvouga/atlas-reports/evidence-view';
+import type { LayerHeader } from '@crvouga/atlas/reports/evidence-types';
+import { branchOf, contributes, sourceFacets, type SourceSelection } from '@crvouga/atlas/reports/evidence-view';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useMemo } from 'react';
 

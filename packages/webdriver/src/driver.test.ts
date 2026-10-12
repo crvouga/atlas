@@ -3,9 +3,9 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { Timeline } from '@crvouga/atlas';
-import { role, testId, text } from '@crvouga/atlas/signals';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Timeline } from '../../core/src/index';
+import { role, testId, text } from '../../core/src/signals';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 
 import { webdriverDriver } from './driver';
 import { ELEMENT_KEY } from './protocol';

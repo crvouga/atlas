@@ -1,6 +1,6 @@
-import { AtlasChangeSchema, type AtlasChange } from '@crvouga/atlas-schema';
+import { AtlasChangeSchema, type AtlasChange } from '@crvouga/atlas/schema';
 
-export type { AtlasChange } from '@crvouga/atlas-schema';
+export type { AtlasChange } from '@crvouga/atlas/schema';
 
 export type AtlasAdapter = {
   kind: 'static' | 'dev' | 'api';

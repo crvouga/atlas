@@ -1,4 +1,4 @@
-# @crvouga/atlas-schema
+# @crvouga/atlas/schema
 
 The Atlas contract, as Zod schemas and as JSON Schema (draft 2020-12) documents in `schemas/`:
 
@@ -16,7 +16,7 @@ The Atlas contract, as Zod schemas and as JSON Schema (draft 2020-12) documents 
 Regenerate the JSON Schemas after changing a Zod schema:
 
 ```sh
-pnpm --filter @crvouga/atlas-schema schemas
+bun run schemas
 ```
 
 Readers validate each record on its own and keep the ones that parse, so a newer or partly broken

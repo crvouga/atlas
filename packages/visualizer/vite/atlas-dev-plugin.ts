@@ -4,14 +4,14 @@ import path from 'node:path';
 
 import type { Plugin, ViteDevServer } from 'vite';
 
-import type { AtlasChange, ReportSource } from '@crvouga/atlas-schema';
+import type { AtlasChange, ReportSource } from '@crvouga/atlas/schema';
 
 import { isSpecFile, publicReportSources, resolveReportSources, resolveRoots, runsIndex, safeJoin, specIndex, type AtlasRoots } from './atlas-files';
 
 export const ATLAS_DEV_PREFIX = '/__atlas';
 export const ATLAS_CHANGE_EVENT = 'atlas:change';
 
-export type { AtlasChange } from '@crvouga/atlas-schema';
+export type { AtlasChange } from '@crvouga/atlas/schema';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.json': 'application/json; charset=utf-8',

@@ -9,7 +9,7 @@ import {
   type StateMeta,
   type StateType,
   transitionId
-} from '@crvouga/atlas-schema';
+} from '@crvouga/atlas/schema';
 import { parseChart } from '@crvouga/atlas/spec';
 import { z } from 'zod/v4';
 

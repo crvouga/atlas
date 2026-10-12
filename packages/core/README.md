@@ -5,10 +5,10 @@ lint them, plan paths that cover every transition, run those paths against a rea
 any driver, and write a manifest with JUnit, CTRF, Mermaid and WebVTT alongside.
 
 ```sh
-pnpm add -D @crvouga/atlas
+bun add -d @crvouga/atlas
 ```
 
-Needs Node 22.18 or later.
+Runs on Bun, or on Node 22.18 or later.
 
 ## Use
 

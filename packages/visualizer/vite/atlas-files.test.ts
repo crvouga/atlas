@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'bun:test';
 
 import { DEFAULT_FIXTURE, FIXTURES_ROOT, isSpecFile, listSpecFiles, publicReportSources, resolveReportSources, resolveRoots, safeJoin, summarizeRun } from './atlas-files';
 

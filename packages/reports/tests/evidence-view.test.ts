@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
-import { ALL_SOURCES, checkHistory, checkSlots, contributes, evidenceView, sourceFacets } from '@crvouga/atlas-reports/evidence-view';
-import { combineEvidence, layerEvidence, textFingerprint } from '@crvouga/atlas-reports/layer-merge';
-import type { LayerSummary, ReportOutline } from '@crvouga/atlas-reports/layer-types';
+import { ALL_SOURCES, checkHistory, checkSlots, contributes, evidenceView, sourceFacets } from '../src/evidence-view';
+import { combineEvidence, layerEvidence, textFingerprint } from '../src/layer-merge';
+import type { LayerSummary, ReportOutline } from '../src/layer-types';
 
 const spec = { path: 'specs/list.feature', title: 'List', domain: 'list', kind: 'feature', fingerprint: textFingerprint('Feature: List') };
 const empty = { ...spec, path: 'specs/empty.feature', title: 'Empty' };

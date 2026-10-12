@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import { createIssueSink } from '../parse/issues';
 import { parseSpec, type SpecFile } from '../parse/spec';

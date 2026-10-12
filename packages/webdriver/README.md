@@ -1,4 +1,4 @@
-# @crvouga/atlas-webdriver
+# @crvouga/atlas/webdriver
 
 A [W3C WebDriver](https://www.w3.org/TR/webdriver2/) driver for [Atlas](../../README.md), with no
 dependencies: it speaks the protocol over `fetch`. One driver covers every browser and, through
@@ -13,7 +13,7 @@ dependencies: it speaks the protocol over `fetch`. One driver covers every brows
 | Android app | `appium` with the UiAutomator2 driver | `{ platformName: 'Android', 'appium:automationName': 'UiAutomator2', 'appium:app': './app.apk' }` |
 
 ```sh
-pnpm add -D @crvouga/atlas @crvouga/atlas-webdriver
+bun add -d @crvouga/atlas
 ```
 
 FFmpeg on the `PATH` is needed for clips encoded from screenshots.
@@ -22,8 +22,8 @@ FFmpeg on the `PATH` is needed for clips encoded from screenshots.
 
 ```ts
 import { defineConfig } from '@crvouga/atlas';
-import type { WebDriverContext } from '@crvouga/atlas-webdriver';
-import { accessibilityId, role, screen, testId, text, webdriverDriver } from '@crvouga/atlas-webdriver';
+import type { WebDriverContext } from '@crvouga/atlas/webdriver';
+import { accessibilityId, role, screen, testId, text, webdriverDriver } from '@crvouga/atlas/webdriver';
 
 export default defineConfig<WebDriverContext>({
   specs: './specs',

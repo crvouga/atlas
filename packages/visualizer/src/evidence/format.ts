@@ -1,5 +1,5 @@
-import type { EvidenceStatus } from '@crvouga/atlas-reports/explorer-types';
-import type { SpecStatus } from '@crvouga/atlas-reports/evidence-view';
+import type { EvidenceStatus } from '@crvouga/atlas/reports/explorer-types';
+import type { SpecStatus } from '@crvouga/atlas/reports/evidence-view';
 import { useEffect, useState } from 'react';
 
 export const STATUS_WORD: Record<SpecStatus, string> = {

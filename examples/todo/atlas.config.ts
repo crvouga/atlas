@@ -2,8 +2,8 @@ import { fileURLToPath } from 'node:url';
 
 import type { EventMatcher, EventSource, Implementation } from '@crvouga/atlas';
 import { cloudEventsHttpSource, defineConfig } from '@crvouga/atlas';
-import type { PlaywrightContext } from '@crvouga/atlas-playwright';
-import { css, playwrightDriver, role, screen, text } from '@crvouga/atlas-playwright';
+import type { PlaywrightContext } from '@crvouga/atlas/playwright';
+import { css, playwrightDriver, role, screen, text } from '@crvouga/atlas/playwright';
 
 import type { TodoServer } from './server';
 import { DEFAULT_LIST_NAME, EVENT_TYPES, RETRY_AFTER_MS, startTodoServer } from './server';

@@ -1,0 +1,10 @@
+/** @type {import('@commitlint/types').UserConfig} */
+export default {
+  extends: ['@commitlint/config-conventional'],
+  helpUrl:
+    'https://www.conventionalcommits.org/en/v1.0.0/#summary. Releasable: feat (minor); fix/perf/revert/refactor/build/docs (patch); BREAKING CHANGE / type! (major). See docs/releasing.md',
+  rules: {
+    'body-max-line-length': [1, 'always', 200],
+    'header-max-length': [2, 'always', 120]
+  }
+};

@@ -1,5 +1,5 @@
-import type { Driver } from '@crvouga/atlas';
-import type { SignalContext } from '@crvouga/atlas/signals';
+import type { Driver } from '../../core/src/index';
+import type { SignalContext } from '../../core/src/signals';
 import type { Browser, BrowserContext, BrowserContextOptions, LaunchOptions, Page } from 'playwright';
 import { chromium } from 'playwright';
 

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "agent-reported",
+    "color": "5319e7",
+    "description": "Filed from a project using Atlas, through docs/reporting-issues.md"
+  },
+  {
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Atlas crashes, gives a wrong result, contradicts its docs, or does not install or build"
+  },
+  {
+    "name": "feature",
+    "color": "0e8a16",
+    "description": "Atlas lacks an API, option, driver capability, CLI flag or view a project needs"
+  },
+  {
+    "name": "needs-info",
+    "color": "fbca04",
+    "description": "Waiting on the reporter for a version, reproduction or behavior"
+  }
+]

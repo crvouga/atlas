@@ -1,4 +1,4 @@
-import { addSummaries, NO_EVIDENCE, type SpecSummary } from '@crvouga/atlas-reports/evidence-view';
+import { addSummaries, NO_EVIDENCE, type SpecSummary } from '@crvouga/atlas/reports/evidence-view';
 import { Link } from '@tanstack/react-router';
 import { useMemo } from 'react';
 

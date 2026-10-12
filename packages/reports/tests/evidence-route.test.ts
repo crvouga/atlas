@@ -1,13 +1,13 @@
 import { expect, test } from 'bun:test';
-import type { EvidencePage, LayerRows } from '@crvouga/atlas-reports/evidence-types';
-import { recordingPaths } from '@crvouga/atlas-reports/evidence-types';
-import { evidenceFile, exportEvidence } from '@crvouga/atlas-reports/export-evidence';
-import { publishLayerBundle } from '@crvouga/atlas-reports/layer-store';
-import type { LayerSummary } from '@crvouga/atlas-reports/layer-types';
-import { readUtf8, writeUtf8 } from '@crvouga/atlas-reports/object-io';
-import type { ObjectStore } from '@crvouga/atlas-reports/object-store';
-import { createReportsApp } from '@crvouga/atlas-reports/reports-route';
-import type { RunReport } from '@crvouga/atlas-reports/report-types';
+import type { EvidencePage, LayerRows } from '../src/evidence-types';
+import { recordingPaths } from '../src/evidence-types';
+import { evidenceFile, exportEvidence } from '../src/export-evidence';
+import { publishLayerBundle } from '../src/layer-store';
+import type { LayerSummary } from '../src/layer-types';
+import { readUtf8, writeUtf8 } from '../src/object-io';
+import type { ObjectStore } from '../src/object-store';
+import { createReportsApp } from '../src/reports-route';
+import type { RunReport } from '../src/report-types';
 import { memoryStore, testClock } from './memory-store';
 
 const SHA = 'a'.repeat(40);

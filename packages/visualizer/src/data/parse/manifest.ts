@@ -24,7 +24,7 @@ import {
   type StateRecord,
   type TimelineEntry,
   type TransitionRecord
-} from '@crvouga/atlas-schema';
+} from '@crvouga/atlas/schema';
 import type { z } from 'zod/v4';
 
 import { createIssueSink, isRecord, parseFields, parseOne, type IssueSink } from './issues';

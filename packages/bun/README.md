@@ -1,4 +1,4 @@
-# @crvouga/atlas-bun
+# @crvouga/atlas/bun
 
 A [Bun WebView](https://bun.com/docs/runtime/webview) driver for [Atlas](../../README.md): run
 statecharts against a web app in Bun's built-in headless browser. On macOS it is the system WebKit
@@ -7,7 +7,7 @@ Edge or Brave over the DevTools Protocol. A view starts in milliseconds and a sc
 about ten, which makes it the quickest way to run a chart against a real page.
 
 ```sh
-pnpm add -D @crvouga/atlas @crvouga/atlas-bun
+bun add -d @crvouga/atlas
 bun --bun atlas run --config atlas.config.ts
 ```
 
@@ -18,8 +18,8 @@ under Bun as it is. FFmpeg on the `PATH` is needed for clips.
 
 ```ts
 import { defineConfig } from '@crvouga/atlas';
-import type { WebViewContext } from '@crvouga/atlas-bun';
-import { bunWebViewDriver, label, role, screen, text } from '@crvouga/atlas-bun';
+import type { WebViewContext } from '@crvouga/atlas/bun';
+import { bunWebViewDriver, label, role, screen, text } from '@crvouga/atlas/bun';
 
 export default defineConfig<WebViewContext>({
   specs: './specs',

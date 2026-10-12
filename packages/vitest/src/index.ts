@@ -1,5 +1,5 @@
-import type { AtlasConfig, RunCommandOptions } from '@crvouga/atlas';
-import { prepare, runConfig } from '@crvouga/atlas';
+import type { AtlasConfig, RunCommandOptions } from '../../core/src/index';
+import { prepare, runConfig } from '../../core/src/index';
 
 type Suite = {
   describe: (name: string, fn: () => void) => void;
@@ -13,7 +13,7 @@ type Suite = {
  * runner reports each journey and generated path on its own. The whole plan runs once in
  * `beforeAll` (paths share one manifest); each test then reads its path's outcome.
  *
- *   import { describe, it, beforeAll, expect } from 'vitest';
+ *   import { describe, it, beforeAll, expect } from 'bun:test';
  *   describeAtlas(config, { describe, it, beforeAll, expect });
  */
 export function describeAtlas<C>(config: AtlasConfig<C>, suite: Suite, options: RunCommandOptions & { baseDirectory?: string; timeoutMs?: number } = {}) {
@@ -39,4 +39,4 @@ export function describeAtlas<C>(config: AtlasConfig<C>, suite: Suite, options: 
   });
 }
 
-export { functionDriver } from '@crvouga/atlas';
+export { functionDriver } from '../../core/src/index';

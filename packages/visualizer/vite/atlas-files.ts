@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { isStatechartFile, ReportSourcesSchema, RunInfoSchema, type Count, type RemoteReportSource, type ReportSource, type RunSummary, type SpecIndex } from '@crvouga/atlas-schema';
+import { isStatechartFile, ReportSourcesSchema, RunInfoSchema, type Count, type RemoteReportSource, type ReportSource, type RunSummary, type SpecIndex } from '@crvouga/atlas/schema';
 
 export const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const FIXTURES_ROOT = path.join(APP_ROOT, 'fixtures');

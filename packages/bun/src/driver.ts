@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { Driver, Timeline } from '@crvouga/atlas';
-import type { DomProbeResult, Signal, SignalContext } from '@crvouga/atlas/signals';
-import { recordFrames } from '@crvouga/atlas';
-import { DOM_PROBE, describeSignal, signatureScreen, toWire } from '@crvouga/atlas/signals';
+import type { Driver, Timeline } from '../../core/src/index';
+import type { DomProbeResult, Signal, SignalContext } from '../../core/src/signals';
+import { recordFrames } from '../../core/src/index';
+import { DOM_PROBE, describeSignal, signatureScreen, toWire } from '../../core/src/signals';
 
 /** The parts of `Bun.WebView` the driver uses, typed structurally so it builds without Bun's types. */
 export type BunWebView = {

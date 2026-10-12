@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import type { MachineConfig } from '../spec/types';
 import { toCtrf, toJUnit, toMermaid, toWebVtt } from './formats';
