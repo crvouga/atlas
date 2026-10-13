@@ -412,9 +412,8 @@ async function publishExampleLayer(store: ObjectStore, producer: string, layer: 
       ...(timings.length ? [{ sha: layer.sha, id: `${producer}-timing`, kind: 'performance', title: 'Timings', recordedAtMs: layer.at, checks: timings.map((check) => evidence(producer, check)) }] : [])
     ]
   };
-  const files = behavior.flatMap((check) => check.files ?? []);
   async function* entries() {
-    if (files.length) yield { key: 'frame.css', bytes: new TextEncoder().encode(CSS), contentType: 'text/css; charset=utf-8' };
+    if (reports.some((check) => check.steps?.some((step) => step.frames.length > 0))) yield { key: 'frame.css', bytes: new TextEncoder().encode(CSS), contentType: 'text/css; charset=utf-8' };
     for (const check of reports) {
       yield { key: `tests/${check.id}/report.json`, bytes: new TextEncoder().encode(JSON.stringify(recorded(producer, check))), contentType: 'application/json' };
       for (const file of check.files ?? []) yield { key: `tests/${check.id}/files/${file.path}`, bytes: new TextEncoder().encode(file.body), contentType: 'text/html; charset=utf-8' };
