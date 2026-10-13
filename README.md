@@ -105,13 +105,16 @@ bun run example:clients      # clients/: one chart across a phone, a desktop and
 bun run example:clients:bun  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
 ```
 
-To keep the example's specs and latest results open in the visualizer, run these in separate
-terminals; the visualizer updates when a run finishes.
+To run every chart of the example and browse the results, run these in separate terminals; the
+visualizer updates when a run finishes.
 
 ```sh
-bun run example:run
-bun run example:viz
+bun run atlas:run   # example:clients, then example:run: every chart of the example, in showcase mode
+bun run atlas:viz   # the example's specs and those runs, in the visualizer
 ```
+
+Each config writes its own run and the visualizer shows one run at a time: the latest is the
+single-browser run, and the run across clients is the one before it in the run picker.
 
 A showcase run ends with:
 
@@ -448,9 +451,9 @@ export default defineConfig<Clients>({
 - If one client cannot open (no simulator booted), the others are closed and the attempt fails
   naming that client.
 
-[`examples/todo/clients`](examples/todo/clients) runs a chart across a phone, a desktop and the
-sync server; pick each device's driver with `ATLAS_PHONE` and `ATLAS_DESKTOP`
-(`playwright`, `bun` or `webdriver`).
+[`examples/todo/clients`](examples/todo/clients) runs a chart (`specs/clients/shared-list.scxml`)
+across a phone, a desktop and the sync server; pick each device's driver with `ATLAS_PHONE` and
+`ATLAS_DESKTOP` (`playwright`, `bun` or `webdriver`).
 
 ## Writing a driver
 

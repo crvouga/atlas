@@ -155,7 +155,7 @@ const phone = kindOf('ATLAS_PHONE');
 const desktop = kindOf('ATLAS_DESKTOP');
 
 export default defineConfig<Clients>({
-  specs: fileURLToPath(new URL('./specs', import.meta.url)),
+  specs: fileURLToPath(new URL('../specs/clients', import.meta.url)),
   driver: async () => {
     const { server } = await start();
     const driver = combineDrivers<Clients>(
