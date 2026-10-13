@@ -34,8 +34,7 @@ test('the coffee example shows each environment, and a focused layer leaves the 
   const deps = await exampleReports(specs);
   expect(deps).not.toBeNull();
   atlas = await openAtlas({ at: '/specs/gherkin', deps: deps!, specs });
-  await atlas.sees('Order a drink');
-  expect(atlas.find('nav[aria-label="Gherkin features"] a', 'Order a drink')!.getAttribute('data-result')).toBe('failed');
+  await atlas.until(() => atlas!.find('nav[aria-label="Gherkin features"] a', 'Order a drink')?.getAttribute('data-result') === 'failed', 'recorded results for Order a drink');
   expect(atlas.find('nav[aria-label="Gherkin features"] a', 'Loyalty stamps')!.getAttribute('data-result')).toBe('none');
   expect(atlas.find('button', 'Sources')!.textContent).toContain('5 layers');
 
@@ -108,9 +107,9 @@ test('the todo example shows the same list on each environment, filled by separa
   const deps = await exampleReports(specs);
   expect(deps).not.toBeNull();
   atlas = await openAtlas({ at: '/specs/gherkin?spec=share-a-list.feature', deps: deps!, specs });
-  await atlas.sees('A weekend list');
   const weekend = () => scenario('Plans a weekend');
-  expect(weekend()?.getAttribute('data-status')).toBe('failed');
+  await atlas.until(() => weekend()?.getAttribute('data-status') === 'failed', 'recorded results for Plans a weekend');
+  await atlas.sees('A weekend list');
   expect(weekend()?.textContent).toContain('Desktop web');
   expect(weekend()?.textContent).toContain('Mobile web');
   expect(weekend()?.textContent).toContain('iOS');
