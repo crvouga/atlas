@@ -1,5 +1,6 @@
 import type { BackendInfo, LayerHeader, StatusCounts } from '@crvouga/atlas/reports/evidence-types';
 import type { SpecStatus, SpecSummary } from '@crvouga/atlas/reports/evidence-view';
+import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { useState, type ReactNode } from 'react';
 
 import styles from './evidence.module.css';
@@ -89,6 +90,7 @@ export function Origin({ layer, backends, now }: { layer: LayerHeader; backends:
       {layer.live && <span className={styles.liveTag}>Running now</span>}
       <span>{backendLabel(backends, layer.backend)}</span>
       {layer.branch && <span>{layer.branch}</span>}
+      {layer.environment && <span>{environmentLabel(layer.environment)}</span>}
       {sha && <code>{sha}</code>}
       {layer.freshness === 'modified' && <span>with local changes</span>}
       {layer.freshness === 'unknown' && <span>origin not captured</span>}

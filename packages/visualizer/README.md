@@ -149,7 +149,9 @@ MIT
 
 Beside the statechart map, every other kind of spec has its own tab: Gherkin features, Quint models, DMN decision tables, Alloy structures and OpenSLO objectives. A tab appears when the specs folder has files of its kind. The index lists every spec with what was recorded for it, and filters to those with results, those failing, or those with none. A spec page shows each scenario, trace or check with its outcome; opening one shows the recorded steps, the error, the timings, every other run of the same check, and its recording.
 
-Results come from the Atlas reports API (`/api/reports` in dev, `VITE_ATLAS_REPORTS_URL` when hosted elsewhere) or from a static `data/evidence` export. They combine across backends, branches and runs; **Sources** in the header switches any of them off. While a spec suite is running, the header says so and each finished test appears within a couple of seconds. See [Atlas reports](../reports/README.md) for the API and host configuration.
+Results come from the Atlas reports API (`/api/reports` in dev, `VITE_ATLAS_REPORTS_URL` when hosted elsewhere) or from a static `data/evidence` export. They combine across backends, branches, versions, environments and layers; **Sources** in the header switches any of them off. While a spec suite is running, the header says so and each finished test appears within a couple of seconds. See [Atlas reports](../reports/README.md) for the API and host configuration.
+
+The coffee example and the todo example ship those documents and a layered report, served in dev when `ATLAS_REPORTS_MODULE` is unset. The coffee example is `ATLAS_FIXTURE=full` (and the fallback when the working directory has no `specs/`). The todo example is `atlas:viz`. Each report is five layers: an older desktop web run, a mobile web branch, Android from a device lab, a focused iOS run, and a newer desktop web run that repeated one scenario. The same check stays visible on each environment. A feature with no layer stays empty.
 
 The header title is the product's name, taken from `atlas.yaml`'s `title` up to its first dash or colon, or "Atlas".
 

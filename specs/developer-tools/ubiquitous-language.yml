@@ -92,5 +92,11 @@ terms:
     definition: A recorded choice for a test run, such as the device or example used.
     forms: [report parameters]
 
+  - term: report environment
+    definition: >-
+      The client a test run checked, such as desktop web, mobile web, iOS or
+      Android. The same check on different environments contributes side by side.
+    forms: [report environments, report environment's]
+
   - term: potentially outdated
     definition: Evidence that remains available although the app or a related spec may have changed since it was recorded.

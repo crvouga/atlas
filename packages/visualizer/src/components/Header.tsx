@@ -77,7 +77,7 @@ function SourcesButton() {
   return (
     <button type="button" className={styles.sources} data-filtered={off > 0 || undefined} onClick={() => setOpen(true)}>
       Sources
-      <span>{unavailable ? 'unavailable' : off > 0 ? `${off} off` : plural(layers.length, 'run', 'runs')}</span>
+      <span>{unavailable ? 'unavailable' : off > 0 ? `${off} off` : plural(layers.length, 'layer', 'layers')}</span>
     </button>
   );
 }

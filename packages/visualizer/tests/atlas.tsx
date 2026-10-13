@@ -65,16 +65,17 @@ export function recorded(check: Check): RunReport {
 }
 
 /** Publish one run of a package as a layer, each check with its recorded timeline. */
-export async function publishRun(store: ObjectStore, args: { producer?: string; at: number; branch?: string; checks: readonly Check[]; fingerprint?: boolean }) {
+export async function publishRun(store: ObjectStore, args: { producer?: string; at: number; branch?: string; sha?: string; environment?: string; parameters?: Record<string, string>; checks: readonly Check[]; fingerprint?: boolean }) {
   const producer = args.producer ?? 'lists';
   const reports = args.checks.map(recorded);
   const summary: Omit<LayerSummary, 'id'> = {
     producer,
     recordedAtMs: args.at,
-    sha: SHA,
+    sha: args.sha ?? SHA,
     branch: args.branch ?? 'main',
+    ...(args.environment ? { environment: args.environment } : {}),
     runUrl: null,
-    parameters: {},
+    parameters: args.parameters ?? {},
     specs: args.fingerprint === false ? [] : Object.entries(SPECS).map(([file, text]) => ({ path: `specs/${file}`, domain: 'lists', kind: 'feature', title: file, fingerprint: textFingerprint(text) })),
     recording: { type: 'layer' },
     source: { source: producer, packageDir: `libs/${producer}`, bucket: 'all', status: 'passed', updatedAtMs: args.at, tests: reports.map((report) => report.meta) },

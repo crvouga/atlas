@@ -27,6 +27,8 @@ export type LayerHeader = {
   readonly recordedAtMs: number;
   readonly sha: string | null;
   readonly branch: string | null;
+  /** The client this layer checked. Null when the layer did not say. */
+  readonly environment: string | null;
   readonly runUrl: string | null;
   readonly parameters: LayerParameters;
   readonly freshness?: 'unknown' | 'modified';

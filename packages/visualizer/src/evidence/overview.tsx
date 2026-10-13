@@ -67,7 +67,7 @@ export function Overview({ kind }: { kind: SpecKind }) {
         </p>
       ))}
       {!evidence.ready && !evidence.unavailable && <p className={styles.aside} role="status">Loading recorded results…</p>}
-      {evidence.ready && evidence.pending > 0 && <p className={styles.aside} role="status">Reading {plural(evidence.pending, 'more run', 'more runs')}…</p>}
+      {evidence.ready && evidence.pending > 0 && <p className={styles.aside} role="status">Reading {plural(evidence.pending, 'more layer', 'more layers')}…</p>}
 
       {evidence.active.length > 0 && (
         <section className={styles.block}>
@@ -111,13 +111,13 @@ export function Overview({ kind }: { kind: SpecKind }) {
         <p className={styles.aside}>
           {evidence.layers.length === 0
             ? `Nothing has been recorded yet. Results appear here as a spec run finishes each test.`
-            : `None of the ${plural(evidence.layers.length, 'run', 'runs')} in the combined report checked a ${kind.one}.`}
+            : `None of the ${plural(evidence.layers.length, 'layer', 'layers')} in the combined report checked a ${kind.one}.`}
         </p>
       )}
 
       {evidence.ready && (
         <p className={styles.footLine}>
-          {plural(evidence.layers.length, 'run', 'runs')} from {evidence.backends.filter((backend) => backend.available).map((backend) => backendLabel(evidence.backends, backend.id)).join(' and ') || 'no report store'}.{' '}
+          {plural(evidence.layers.length, 'layer', 'layers')} from {evidence.backends.filter((backend) => backend.available).map((backend) => backendLabel(evidence.backends, backend.id)).join(' and ') || 'no report store'}.{' '}
           <button type="button" className={styles.link} onClick={() => setSourcesOpen(true)}>Choose sources</button>
           {empty > 0 && (
             <>

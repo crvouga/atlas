@@ -10,11 +10,11 @@ The Atlas visualizer shows each kind of spec in its own tab, with every spec's r
 
 ## Combining evidence
 
-Current specs define the outline. `combineEvidence` fills it with the newest completed result for each producer, check and parameter set, across backends, branches and commits. Equal-time conflicts favor failure. Unfinished runs do not erase completed outcomes. Missing specs stay visible and removed specs retain their evidence outside the outline. `evidenceView` groups those results by check: the outcomes, the recorded timings that qualify them, and a summary per spec. A timing over its allowance never fails a check. `checkHistory` returns every layer's own record of one check, so a superseded result stays readable. Leaving a backend, a branch or one layer out (`contributes`) is how earlier outcomes are inspected.
+Current specs define the outline. A layer is one focused recording: the checks it actually ran, on one environment, from one version and branch, in one store. `combineEvidence` fills the outline from every layer. The newest completed result wins only its own producer, check, environment and parameter set. Desktop web, mobile web, iOS and Android of the same check all stay visible, and any other recorded environment does too. A layer that ran one scenario leaves every other scenario as the newest layer that did run it, so the report fills without one suite that runs everything. Equal-time conflicts favor failure. Unfinished runs do not erase completed outcomes. Missing specs stay visible and removed specs retain their evidence outside the outline. `evidenceView` groups those results by check: the outcomes, the recorded timings that qualify them, and a summary per spec. A timing over its allowance never fails a check. `checkHistory` returns every layer's own record of one check, so a superseded result stays readable. Leaving a backend, an environment, a branch, a version or one layer out (`contributes`) is how earlier outcomes are inspected.
 
 ## Backends
 
-`createReportsApp` combines layers from several stores. `localStore` is the backend `local` ("This machine"), `store` is `shared` ("Shared reports"), and `backends` adds any number of further named stores, such as another team's bucket or a device lab. Every layer says which backend it came from. An unavailable backend is named in the page's notices and leaves the others usable; `GET /evidence?retry=1` asks it again without waiting.
+`createReportsApp` combines layers from several stores. `localStore` is the backend `local` ("This machine"), `store` is `shared` ("Shared reports"), and `backends` adds any number of further named stores. A backend is any `ObjectStore`: the local disk, a shared bucket, S3, or a device lab. Every layer says which backend, version, branch and environment it came from. An unavailable backend is named in the page's notices and leaves the others usable; `GET /evidence?retry=1` asks it again without waiting.
 
 | Route | Returns |
 | --- | --- |
@@ -39,6 +39,8 @@ Freshness warnings preserve the recorded outcome. Changed spec fingerprints or r
 ## Standalone development
 
 Configure `ATLAS_REPORTS_MODULE` with a host composition module exporting `reportsDevFetch(request, repoRoot)`. Atlas's Vite middleware serves it at `/api/reports`, alongside specs and chart runs. `INIT_CWD` identifies the consuming repository. Credentials stay in that server module.
+
+When that module is unset and the open specs are the coffee example or the todo example, the visualizer dev server serves an in-memory layered report for those documents instead. Any other spec set is left alone.
 
 For a separately hosted reports API, set `VITE_ATLAS_REPORTS_URL` when building the visualizer. Otherwise a built site reads `data/evidence/`, populated with `exportEvidence`. Atlas still browses specs if evidence is absent.
 

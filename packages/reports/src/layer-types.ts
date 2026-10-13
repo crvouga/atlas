@@ -10,6 +10,8 @@ export type LayerSummary = {
   readonly producer: string;
   readonly sha: string | null;
   readonly branch: string | null;
+  /** The client this layer checked, when it said. Normalized when the layer is read. */
+  readonly environment?: string | null;
   readonly runUrl: string | null;
   readonly parameters: LayerParameters;
   readonly specs: readonly SpecEntry[];

@@ -1,0 +1,10 @@
+# Checkout latency
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: checkout-latency
+spec:
+  description: Checkout answers within a second.
+  objectives:
+    - displayName: Checkout latency
+      target: 0.99

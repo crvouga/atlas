@@ -25,6 +25,21 @@ Feature: Combine test reports in layers
       When the team opens the report
       Then both recorded outcomes contribute with their report parameters
 
+    Scenario: The same check on different environments contributes together
+      Given one report layer checked a scenario on desktop web
+      And another report layer checked that scenario on iOS
+      When the team opens the report
+      Then both recorded outcomes contribute
+      And the team can see that scenario on each environment
+
+    Scenario: A focused layer fills only the checks it ran
+      Given one report layer checked joining and leaving on desktop web
+      And a later report layer repeats only joining on iOS
+      When the team opens the report
+      Then the desktop web results for joining and leaving contribute
+      And the iOS result for joining contributes
+      And no iOS result is invented for leaving
+
     Scenario: A newer result replaces only the matching result
       Given an earlier report layer contains checks for joining and leaving
       And a later report layer repeats only the joining check with the same report parameters

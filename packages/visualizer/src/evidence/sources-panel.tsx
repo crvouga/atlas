@@ -1,5 +1,6 @@
 import type { LayerHeader } from '@crvouga/atlas/reports/evidence-types';
-import { branchOf, contributes, sourceFacets, type SourceSelection } from '@crvouga/atlas/reports/evidence-view';
+import { ALL_SOURCES, branchOf, contributes, sourceFacets, sourceSelection, type SourceFacet, type SourceSelection } from '@crvouga/atlas/reports/evidence-view';
+import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useMemo } from 'react';
 
@@ -20,16 +21,23 @@ function counts(layer: LayerHeader) {
 }
 
 /** How many sources are switched off, for the button that opens the panel. */
-export function excludedCount(excluded: SourceSelection) {
-  return excluded.backends.length + excluded.branches.length + excluded.layers.length;
+export function excludedCount(excluded: Partial<SourceSelection>) {
+  const selection = sourceSelection(excluded);
+  return selection.backends.length + selection.branches.length + selection.versions.length + selection.environments.length + selection.layers.length;
+}
+
+function versionLabel(id: string) {
+  return id === 'unknown' ? 'Unknown version' : id.slice(0, 7);
 }
 
 /**
- * Where the combined report comes from. Every backend, branch and run contributes unless it is
- * switched off here, which is also how an earlier result is brought back into view.
+ * Where the combined report comes from. Every backend, environment, branch, version and layer
+ * contributes unless it is switched off here, which is also how an earlier result is brought back.
  */
 export function SourcesPanel() {
-  const { layers, backends, excluded, setExcluded, notices, retry } = useEvidence();
+  const evidence = useEvidence();
+  const { layers, backends, setExcluded, notices, retry } = evidence;
+  const excluded = sourceSelection(evidence.excluded);
   const open = useUiStore((s) => s.sourcesOpen);
   const setOpen = useUiStore((s) => s.setSourcesOpen);
   const now = useNow();
@@ -48,10 +56,10 @@ export function SourcesPanel() {
             </Dialog.Close>
           </div>
           <p className={styles.lead}>
-            {contributing} of {plural(layers.length, 'run', 'runs')} contribute. For each check the newest completed result is shown. Switch a source off to see what earlier runs recorded.
+            {contributing} of {plural(layers.length, 'layer', 'layers')} contribute. For each check and environment, the newest completed result is shown. A layer fills only the checks it ran, so the rest of the report stays in place. Switch a source off to see an earlier result.
           </p>
           {excludedCount(excluded) > 0 && (
-            <button type="button" className={styles.reset} onClick={() => setExcluded({ backends: [], branches: [], layers: [] })}>
+            <button type="button" className={styles.reset} onClick={() => setExcluded(ALL_SOURCES)}>
               Use every source
             </button>
           )}
@@ -71,42 +79,52 @@ export function SourcesPanel() {
                   <label className={styles.option}>
                     <input type="checkbox" checked={!excluded.backends.includes(backend.id)} onChange={() => setExcluded({ ...excluded, backends: toggled(excluded.backends, backend.id) })} />
                     <span className={styles.optionName}>{backend.label}</span>
-                    <span className={styles.optionMeta}>{backend.available ? plural(layerCount(backend.id), 'run', 'runs') : 'Unavailable'}</span>
+                    <span className={styles.optionMeta}>{backend.available ? plural(layerCount(backend.id), 'layer', 'layers') : 'Unavailable'}</span>
                   </label>
                 </li>
               ))}
             </ul>
           </section>
 
-          <section className={styles.group}>
-            <h3>Branches</h3>
-            {facets.branches.length === 0 && <p className={styles.empty}>No runs yet.</p>}
-            <ul>
-              {facets.branches.map((branch) => (
-                <li key={branch.id}>
-                  <label className={styles.option}>
-                    <input type="checkbox" checked={!excluded.branches.includes(branch.id)} onChange={() => setExcluded({ ...excluded, branches: toggled(excluded.branches, branch.id) })} />
-                    <span className={styles.optionName}>{branch.id}</span>
-                    <span className={styles.optionMeta}>
-                      {plural(branch.layers, 'run', 'runs')} · {ago(branch.latestAtMs, now)}
-                    </span>
-                  </label>
-                  {facets.branches.length > 1 && (
-                    <button type="button" className={styles.only} onClick={() => setExcluded({ ...excluded, branches: facets.branches.map((facet) => facet.id).filter((id) => id !== branch.id) })}>
-                      Only
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
+          <FacetGroup
+            title="Environments"
+            facets={facets.environments.filter((facet) => facets.environments.length > 1 || facet.id !== 'unspecified')}
+            excluded={excluded.environments}
+            label={(id) => environmentLabel(id === 'unspecified' ? null : id)}
+            empty={null}
+            now={now}
+            onToggle={(id) => setExcluded({ ...excluded, environments: toggled(excluded.environments, id) })}
+            onOnly={(id) => setExcluded({ ...excluded, environments: facets.environments.map((facet) => facet.id).filter((facet) => facet !== id) })}
+          />
+
+          <FacetGroup
+            title="Branches"
+            facets={facets.branches}
+            excluded={excluded.branches}
+            label={(id) => id}
+            empty="No layers yet."
+            now={now}
+            onToggle={(id) => setExcluded({ ...excluded, branches: toggled(excluded.branches, id) })}
+            onOnly={(id) => setExcluded({ ...excluded, branches: facets.branches.map((facet) => facet.id).filter((facet) => facet !== id) })}
+          />
+
+          <FacetGroup
+            title="Versions"
+            facets={facets.versions}
+            excluded={excluded.versions}
+            label={versionLabel}
+            empty={null}
+            now={now}
+            onToggle={(id) => setExcluded({ ...excluded, versions: toggled(excluded.versions, id) })}
+            onOnly={(id) => setExcluded({ ...excluded, versions: facets.versions.map((facet) => facet.id).filter((facet) => facet !== id) })}
+          />
 
           <section className={styles.group}>
-            <h3>Runs</h3>
+            <h3>Layers</h3>
             <ul>
-              <Bounded items={layers} size={40} more="Earlier runs">
+              <Bounded items={layers} size={40} more="Earlier layers">
                 {(layer) => {
-                  const off = excluded.backends.includes(layer.backend) || excluded.branches.includes(branchOf(layer));
+                  const off = !contributes(layer, { ...excluded, layers: [] });
                   return (
                     <li key={`${layer.backend}|${layer.id}`}>
                       <label className={styles.option} data-off={off || undefined}>
@@ -115,6 +133,7 @@ export function SourcesPanel() {
                           {layer.packageDir ?? layer.producer}
                           <span className={styles.run}>
                             {layer.live ? 'Running now' : <time title={exactTime(layer.recordedAtMs)}>{ago(layer.recordedAtMs, now)}</time>} · {branchOf(layer)}
+                            {layer.environment && <> · {environmentLabel(layer.environment)}</>}
                             {shortSha(layer.sha) && <> · <code>{shortSha(layer.sha)}</code></>}
                             {layer.freshness === 'modified' && ' · local changes'}
                           </span>
@@ -130,5 +149,40 @@ export function SourcesPanel() {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function FacetGroup({ title, facets, excluded, label, empty, now, onToggle, onOnly }: {
+  title: string;
+  facets: readonly SourceFacet[];
+  excluded: readonly string[];
+  label: (id: string) => string;
+  empty: string | null;
+  now: number;
+  onToggle: (id: string) => void;
+  onOnly: (id: string) => void;
+}) {
+  if (!facets.length && empty === null) return null;
+  return (
+    <section className={styles.group}>
+      <h3>{title}</h3>
+      {facets.length === 0 && <p className={styles.empty}>{empty}</p>}
+      <ul>
+        {facets.map((facet) => (
+          <li key={facet.id}>
+            <label className={styles.option}>
+              <input type="checkbox" checked={!excluded.includes(facet.id)} onChange={() => onToggle(facet.id)} />
+              <span className={styles.optionName} title={facet.id}>{label(facet.id)}</span>
+              <span className={styles.optionMeta}>
+                {plural(facet.layers, 'layer', 'layers')} · {ago(facet.latestAtMs, now)}
+              </span>
+            </label>
+            {facets.length > 1 && (
+              <button type="button" className={styles.only} onClick={() => onOnly(facet.id)}>Only</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

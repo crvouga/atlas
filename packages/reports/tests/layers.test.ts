@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { normalizeEnvironment } from '../src/layer-axes';
 import { combineEvidence, distinctLayers, layerEvidence, textFingerprint } from '../src/layer-merge';
 import type { LayerSummary, ReportOutline } from '../src/layer-types';
 
@@ -48,6 +49,31 @@ test('archived parameterized execution suppresses its historical address without
   const another = layer('b'.repeat(64), 1, [{ id: 'join', status: 'passed' }], 'tablet');
   expect(distinctLayers([historical, archived, another])).toEqual([archived, another]);
   expect(combine(outline, [historical, archived, another]).specs[0]!.results).toHaveLength(2);
+});
+
+test('environment names the known clients and keeps any other recorded name', () => {
+  expect(normalizeEnvironment('Desktop Web')).toBe('desktop-web');
+  expect(normalizeEnvironment('iOS')).toBe('ios');
+  expect(normalizeEnvironment('Android')).toBe('android');
+  expect(normalizeEnvironment('mobile browser')).toBe('mobile-web');
+  expect(normalizeEnvironment('  ')).toBeNull();
+  expect(normalizeEnvironment('tv')).toBe('tv');
+});
+
+test('a focused layer fills one environment and leaves every other check in place', () => {
+  const desktop = { ...layer('desktop', 1, [{ id: 'join', status: 'passed' }, { id: 'leave', status: 'passed' }]), environment: 'desktop web', parameters: {} };
+  const again = { ...layer('desktop-again', 3, [{ id: 'join', status: 'failed' }]), environment: 'desktop-web', parameters: {}, sha: 'c'.repeat(40) };
+  const ios = { ...layer('ios', 2, [{ id: 'join', status: 'passed' }]), environment: 'iOS', parameters: {}, sha: 'd'.repeat(40) };
+  const named = { ...layer('phone', 4, [{ id: 'join', status: 'passed' }]), parameters: { environment: 'Android', device: 'phone' } };
+  const result = combine(outline, [desktop, ios, again, named]);
+  const shown = result.specs[0]!.results.map(item => [item.row.id, item.layer.environment, item.parameters.device ?? '', item.row.status]);
+  expect(shown.sort()).toEqual([
+    ['join', 'android', 'phone', 'passed'],
+    ['join', 'desktop-web', '', 'failed'],
+    ['join', 'ios', '', 'passed'],
+    ['leave', 'desktop-web', '', 'passed'],
+  ]);
+  expect(result.specs[0]!.results.find(item => item.layer.environment === 'desktop-web' && item.row.id === 'join')!.layer.sha).toBe('c'.repeat(40));
 });
 
 test('modified and unknown origins contribute outcomes without claiming freshness', () => {

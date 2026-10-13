@@ -120,6 +120,16 @@ bun run atlas:viz   # the example's specs, chart runs, Gherkin features, and Qui
 Each config writes its own run and the visualizer shows one run at a time: the latest is the
 single-browser run, and the run across clients is the one before it in the run picker.
 
+The same visualizer opens the example's layered reports, without waiting for `atlas:run`. Gherkin,
+Quint, DMN, Alloy and OpenSLO documents sit beside the charts. The same scenarios are filled by
+separate layers across desktop web, mobile web, iOS and Android, and across versions, branches and
+backends (this machine, shared reports, and a device lab). A layer that repeated one scenario leaves
+the others as the last layer that ran them. One feature is left with no results. **Sources** in the
+header switches any of those off. The chart runs stay on the statechart map.
+
+`ATLAS_FIXTURE=full bun run viz:dev` opens the coffee example the same way. `ATLAS_REPORTS_MODULE`
+still replaces this example API with a host's own reports.
+
 A showcase run ends with:
 
 ```

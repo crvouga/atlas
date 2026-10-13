@@ -1,5 +1,7 @@
 import { recordingPaths } from '@crvouga/atlas/reports/evidence-types';
 import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
+import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
+import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 import { flattenFrames } from '@crvouga/atlas/reports/frames';
 import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
 import { useQuery } from '@tanstack/react-query';
@@ -34,15 +36,45 @@ export function useRecordedReport(entry: HistoryEntry | null, enabled = true) {
 }
 
 /** One check in a list: its outcome at a glance, and everything recorded for it when opened. */
+const ENV_RANK = { passed: 0, 'not-run': 1, running: 2, failed: 3 } as const;
+
+/** One mark per client when the same check was recorded on more than one. */
+function environmentMarks(slot: CheckSlot) {
+  const seen = new Map<string, CheckSlot['status']>();
+  for (const outcome of slot.outcomes) {
+    const id = outcome.layer.environment ?? '';
+    const prior = seen.get(id);
+    if (prior === undefined || ENV_RANK[outcome.row.status] > ENV_RANK[prior]) seen.set(id, outcome.row.status);
+  }
+  if (seen.size < 2) return [];
+  return [...seen].map(([id, status]) => ({ id, status }));
+}
+
+function outcomeName(outcome: EvidenceResult) {
+  const environment = outcome.layer.environment ? environmentLabel(outcome.layer.environment) : '';
+  const parameters = Object.entries(outcome.parameters).map(([name, value]) => `${name}: ${value}`).join(', ');
+  return [environment, parameters].filter(Boolean).join(' · ') || outcome.layer.producer;
+}
+
 export function ResultRow({ label, slot, open, onToggle, children }: { label: string; slot: CheckSlot | null; open: boolean; onToggle: () => void; children: ReactNode }) {
   const now = useNow();
   const newest = slot?.outcomes[0];
+  const marks = slot ? environmentMarks(slot) : [];
   const failure = slot?.status === 'failed' ? slot.outcomes.find((outcome) => outcome.row.status === 'failed')?.row.detail.split('\n')[0] : '';
   return (
     <li className={styles.result} data-status={slot?.status ?? 'none'} data-open={open || undefined}>
       <button type="button" className={styles.resultHead} aria-expanded={open} onClick={onToggle}>
         <StatusMark status={slot?.status ?? 'none'} />
-        <span className={styles.resultName}>{label}</span>
+        <span className={styles.resultName}>
+          {label}
+          {marks.length > 0 && (
+            <span className={styles.envMarks}>
+              {marks.map((mark) => (
+                <span key={mark.id || 'unspecified'} data-status={mark.status}>{environmentLabel(mark.id || null)}</span>
+              ))}
+            </span>
+          )}
+        </span>
         {slot?.live && <span className={styles.liveTag}>Running now</span>}
         <span className={styles.resultAside}>
           {newest ? [duration(newest.row.durationMs), slot.live ? '' : ago(slot.latestAtMs, now)].filter(Boolean).join(' · ') : 'No result'}
@@ -185,11 +217,11 @@ export function CheckDetail({ slot, layerId, select, reads, written }: Props) {
   return (
     <div className={styles.detail}>
       {slot.outcomes.length > 1 && !earlier && (
-        <div className={styles.variants} role="group" aria-label="Parameter sets">
+        <div className={styles.variants} role="group" aria-label="Environments">
           {slot.outcomes.map((outcome, index) => (
             <button key={outcome.key} type="button" aria-pressed={index === variant} onClick={() => setVariant(index)}>
               <StatusMark status={outcome.row.status} size={12} />
-              {Object.entries(outcome.layer.parameters).map(([name, value]) => `${name}: ${value}`).join(', ') || outcome.layer.producer}
+              {outcomeName(outcome)}
             </button>
           ))}
         </div>

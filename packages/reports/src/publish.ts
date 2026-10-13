@@ -1,4 +1,5 @@
 import { archiveSourceLayer } from './layer-source';
+import { normalizeEnvironment } from './layer-axes';
 import type { LayerParameters } from './layer-types';
 import { performancePart } from './performance-part';
 /**
@@ -152,6 +153,8 @@ export type PublishSourceArgs = {
   /** Execution completion time, separate from a virtual timeline clock. */
   readonly recordedAtMs?: number;
   readonly freshness?: 'unknown' | 'modified';
+  /** The client this run checked: desktop web, mobile web, iOS, Android, or another recorded name. */
+  readonly environment?: string;
   readonly parameters?: LayerParameters;
   readonly sha: string;
   readonly packageDir: string;
@@ -225,6 +228,7 @@ export async function publishSource(
       );
     });
   }
+  const environment = normalizeEnvironment(args.environment ?? args.parameters?.environment);
   const record: SourceRecord = {
     source,
     packageDir: args.packageDir,
@@ -234,6 +238,8 @@ export async function publishSource(
       (latest, meta) => Math.max(latest, meta.endedAtMs),
       0
     ),
+    ...(environment ? { environment } : {}),
+    ...(args.parameters && Object.keys(args.parameters).length > 0 ? { parameters: args.parameters } : {}),
     tests: metas,
     ...(await sourceEvidence(args.local, args.sha, source, tests)),
   };

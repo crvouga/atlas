@@ -455,9 +455,29 @@
 }
 
 .resultName {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
   font-weight: 500;
+}
+
+.envMarks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.envMarks span[data-status='passed'] {
+  color: var(--passed-ink);
+}
+
+.envMarks span[data-status='failed'] {
+  color: var(--failed-ink);
 }
 
 .result[data-status='none'] .resultName {

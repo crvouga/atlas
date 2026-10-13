@@ -1,5 +1,6 @@
 import type { HtmlReportTest } from './recording-bundle';
 import { writeBundle, type BundleIndex, type BundleEntry } from './bundle';
+import { normalizeEnvironment } from './layer-axes';
 import type { ObjectStore } from './object-store';
 import type { SourceRecord } from './protocol';
 import type { PublishSourceArgs } from './publish';
@@ -26,8 +27,10 @@ export async function archiveSourceLayer(store: ObjectStore, args: PublishSource
   }
   const index = await writeBundle(store, entries(), 'layers/blobs/');
   for (const [key, value] of Object.entries(bundle ?? {})) index[layerPath(key)] = value;
+  const environment = normalizeEnvironment(args.environment ?? args.parameters?.environment);
   return publishLayerBundle(store, {
     ...(args.freshness ? { freshness: args.freshness } : {}), producer: source.source, recordedAtMs, sha: args.sha, branch: commit?.branch ?? null, runUrl: commit?.runUrl ?? null,
+    ...(environment ? { environment } : {}),
     parameters: args.parameters ?? {}, specs: inventory?.entries ?? [], parts: sourceParts(args.sha, source), source, recording: { type: 'layer' },
   }, index);
 }

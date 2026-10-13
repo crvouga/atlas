@@ -99,6 +99,19 @@ test('a running suite shows each finished test at once, and stays until its laye
   expect((await page(app)).layers.map(layer => layer.id)).toEqual([collected.id]);
 });
 
+test('a running suite on one environment stays beside a collected layer of another', async () => {
+  const localStore = memoryStore(), bucket = memoryStore();
+  const time = testClock();
+  await writeUtf8(localStore, 'active/ios.json', JSON.stringify({ packageDir: 'libs/list-harness', bucket: 'all', startedAtMs: time.clock.at, environment: 'iOS' }), 'application/json');
+  const app = createReportsApp({ store: null, localStore, live: { bucket: () => bucket, origin: async () => ({ sha: SHA, branch: 'main' }) }, ...time });
+  await finish(bucket, 'join', 'failed');
+  time.clock.at += 1_000;
+  await publishLayerBundle(localStore, { ...summary('libs-list-harness--all', time.clock.at, 'passed'), environment: 'desktop-web' }, {});
+  time.clock.at += 2_000;
+  const shown = await page(app);
+  expect(shown.layers.map(layer => [layer.environment, layer.live]).sort()).toEqual([['desktop-web', false], ['ios', true]]);
+});
+
 test('a suite nothing collects stops being shown as live', async () => {
   const localStore = memoryStore(), bucket = memoryStore();
   const time = testClock();

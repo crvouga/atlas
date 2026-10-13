@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/">
+  <decision id="drink-price" name="Drink price">
+    <decisionTable id="Drink price" hitPolicy="UNIQUE">
+      <input label="Size">
+        <inputExpression typeRef="string"><text>size</text></inputExpression>
+      </input>
+      <input label="Milk">
+        <inputExpression typeRef="string"><text>milk</text></inputExpression>
+      </input>
+      <output label="Price" name="price" />
+      <rule>
+        <inputEntry><text>"Small"</text></inputEntry>
+        <inputEntry><text>"None"</text></inputEntry>
+        <outputEntry><text>3</text></outputEntry>
+      </rule>
+      <rule>
+        <inputEntry><text>"Large"</text></inputEntry>
+        <inputEntry><text>"Oat"</text></inputEntry>
+        <outputEntry><text>5</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

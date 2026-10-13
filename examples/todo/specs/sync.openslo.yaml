@@ -1,0 +1,10 @@
+# Sync latency
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: sync-latency
+spec:
+  description: A list sync finishes within a second.
+  objectives:
+    - displayName: Sync latency
+      target: 0.99

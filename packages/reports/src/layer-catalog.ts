@@ -32,7 +32,7 @@ export async function catalogLayers(store: ObjectStore, entry: string): Promise<
     const sourceId = key.split('/').at(-1)!.replace(/\.json$/, '');
     const stored = await readStoredSource(store, sha, sourceId);
     if (!stored) return;
-    layers.push({ id: `source-${sha}-${sourceId}`, producer: sourceId, recordedAtMs: Math.max(commit?.startedAtMs ?? 0, stored.record.updatedAtMs), sha, branch: commit?.branch ?? null, runUrl: commit?.runUrl ?? null, parameters: {}, specs, parts: sourceParts(sha, stored.record), source: stored.record, recording: { type: 'commit', sha, source: sourceId } });
+    layers.push({ ...(stored.record.environment ? { environment: stored.record.environment } : {}), id: `source-${sha}-${sourceId}`, producer: sourceId, recordedAtMs: Math.max(commit?.startedAtMs ?? 0, stored.record.updatedAtMs), sha, branch: commit?.branch ?? null, runUrl: commit?.runUrl ?? null, parameters: stored.record.parameters ?? {}, specs, parts: sourceParts(sha, stored.record), source: stored.record, recording: { type: 'commit', sha, source: sourceId } });
   });
   const signature = (part: (typeof parts)[number]) => JSON.stringify([part.id, part.kind, part.checks]);
   const sourceEvidence = new Set(layers.filter(layer => layer.source).flatMap(layer => layer.parts.map(signature)));
