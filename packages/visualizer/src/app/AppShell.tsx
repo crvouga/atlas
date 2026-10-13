@@ -6,9 +6,9 @@ import { SourcesPanel } from '../evidence/sources-panel';
 import { SpecIndex } from '../evidence/spec-index';
 import { kindOfAddress } from '../spec-kind';
 import styles from '../views/views.module.css';
+import { Finder } from '../find/Finder';
 import { AtlasProvider, useAtlas } from './atlas-context';
 import { Gazetteer } from './gazetteer';
-import { SearchQueryProvider } from './search-query';
 
 function Index() {
   const { pathname } = useLocation();
@@ -38,18 +38,17 @@ export function AppShell() {
   return (
     <AtlasProvider run={run}>
       <EvidenceProvider>
-        <SearchQueryProvider>
-          <div className={styles.app}>
-            <Header />
-            <div className={styles.frame}>
-              <Index />
-              <main className={styles.main}>
-                <Body />
-              </main>
-            </div>
-            <SourcesPanel />
+        <div className={styles.app}>
+          <Header />
+          <div className={styles.frame}>
+            <Index />
+            <main className={styles.main}>
+              <Body />
+            </main>
           </div>
-        </SearchQueryProvider>
+          <SourcesPanel />
+          <Finder />
+        </div>
       </EvidenceProvider>
     </AtlasProvider>
   );

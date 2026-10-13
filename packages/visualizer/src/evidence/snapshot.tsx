@@ -4,7 +4,7 @@ import { createSnapshotHost, paintSnapshotHost, type HitResult } from '@crvouga/
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { reportResponse } from './api';
+import { reportAssetUrl, reportResponse } from './api';
 import styles from './recording.module.css';
 import { traceStates } from './quint';
 import { ModelTrace } from './model-trace';
@@ -45,9 +45,9 @@ export function SnapshotPicture({ file, html, css, hit, who }: { file: string; h
 
 /** One captured picture or value, exactly as recorded. */
 export function Snapshot({ url, blob, css, hit, earlier = false }: { url: string; blob: ReportSnapshotBlob; css: string; hit: ReportStepHit | null; earlier?: boolean }) {
-  const content = useQuery({ queryKey: ['evidence-blob', url], queryFn: ({ signal }) => readBlob(url, blob, signal), retry: false });
+  const content = useQuery({ queryKey: ['evidence-blob', url], queryFn: ({ signal }) => readBlob(url, blob, signal), enabled: blob.media !== 'video', retry: false });
   const who = blob.nodeId ?? blob.name;
-  const picture = blob.media === 'html' || blob.media === 'png';
+  const picture = blob.media === 'html' || blob.media === 'png' || blob.media === 'video';
   return (
     <figure className={styles.snapshot} data-picture={picture || undefined}>
       <figcaption>
@@ -55,7 +55,8 @@ export function Snapshot({ url, blob, css, hit, earlier = false }: { url: string
         {blob.nodeId && blob.name !== blob.nodeId && <span>{blob.name}</span>}
         {earlier && <span className={styles.earlier}>Earlier picture</span>}
       </figcaption>
-      {content.isPending && <p className={styles.quietLine} role="status">Loading…</p>}
+      {blob.media === 'video' && <video className={styles.image} src={reportAssetUrl(url)} controls playsInline aria-label={`Recorded ${who}`} />}
+      {blob.media !== 'video' && content.isPending && <p className={styles.quietLine} role="status">Loading…</p>}
       {content.isError && (
         <p role="alert" className={styles.quietLine}>
           {content.error.message}{' '}

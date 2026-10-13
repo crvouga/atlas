@@ -1,4 +1,5 @@
 import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
+import type { RunReport } from '@crvouga/atlas/reports/report-types';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -21,6 +22,21 @@ type Props = {
   onClose: () => void;
 };
 
+/** HTML snapshots are the only pictures that paint with the run's stylesheet. */
+function needsStylesheet(report: RunReport | undefined): boolean {
+  if (!report) return false;
+  const visit = (steps: RunReport['steps']): boolean => {
+    for (const step of steps) {
+      for (const frame of step.frames) {
+        if (frame.snapshots.some((blob) => blob.media === 'html')) return true;
+      }
+      if (visit(step.steps)) return true;
+    }
+    return false;
+  };
+  return visit(report.steps) || (report.artifacts ?? []).some((artifact) => artifact.media === 'html');
+}
+
 /** One recorded test, opened in place of its spec. */
 export function RecordingPage({ slot, layerId, label, back, moment, onMoment, onClose }: Props) {
   const { evidence, backends, pending, ready, unavailable } = useEvidence();
@@ -29,7 +45,8 @@ export function RecordingPage({ slot, layerId, label, back, moment, onMoment, on
   const winner = slot?.outcomes[0];
   const chosen: HistoryEntry | null = (layerId ? history.find((entry) => entry.layer.id === layerId) : undefined) ?? (winner ? { layer: winner.layer, row: winner.row } : null);
   const { paths, report } = useRecordedReport(chosen);
-  const css = useQuery({ queryKey: ['evidence-css', paths?.css ?? ''], queryFn: ({ signal }) => reportText(paths!.css, signal), enabled: paths !== null, staleTime: Number.POSITIVE_INFINITY, retry: false });
+  const wantsCss = needsStylesheet(report.data);
+  const css = useQuery({ queryKey: ['evidence-css', paths?.css ?? ''], queryFn: ({ signal }) => reportText(paths!.css, signal), enabled: paths !== null && wantsCss, staleTime: Number.POSITIVE_INFINITY, retry: false });
   const waiting = !chosen && !unavailable && (!ready || pending > 0);
   return (
     <article className={styles.page} data-wide="true" aria-label="Recorded test">
@@ -57,7 +74,7 @@ export function RecordingPage({ slot, layerId, label, back, moment, onMoment, on
           <button type="button" className={styles.link} onClick={() => void report.refetch()}>Try again</button>
         </p>
       )}
-      {css.isError && (
+      {wantsCss && css.isError && (
         <p className={styles.notice} role="alert">
           The recorded stylesheet could not be read, so pictures appear unstyled.{' '}
           <button type="button" className={styles.link} onClick={() => void css.refetch()}>Try again</button>

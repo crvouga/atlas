@@ -2,7 +2,8 @@ import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-route
 import { useEffect, useMemo } from 'react';
 
 import { useAtlas } from '../app/atlas-context';
-import { useSearchQuery } from '../app/search-query';
+import { commandKey } from '../find/Finder';
+import { setFinderOpen } from '../find/open';
 import type { AtlasView } from '../data/model';
 import { LATEST } from '../data/queries';
 import { useEvidence } from '../evidence/evidence-context';
@@ -85,7 +86,6 @@ export function Header() {
   const { view } = useAtlas();
   const evidence = useEvidence();
   const { pathname } = useLocation();
-  const { query, setQuery } = useSearchQuery();
   const kind = kindOfAddress(pathname);
   const product = productName(view?.title);
   useEffect(() => {
@@ -120,7 +120,10 @@ export function Header() {
         {!kind && view && <RunPicker view={view} />}
         {!kind && view && <DataIssues issues={view.issues} />}
         <SourcesButton />
-        <input className={styles.search} type="search" value={query} aria-label="Find" placeholder={kind ? `Find a ${kind.one}` : 'Find a place'} onChange={(event) => setQuery(event.target.value)} />
+        <button type="button" className={styles.search} aria-keyshortcuts="Meta+K Control+K" onClick={() => setFinderOpen(true)}>
+          Find a flow
+          <kbd>{commandKey()}</kbd>
+        </button>
       </div>
     </header>
   );

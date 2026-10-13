@@ -50,7 +50,7 @@ export const SPECS: Record<string, string> = {
   'lists/list.qnt': 'module list {\n  var size: int\n  action add = size\' = size + 1\n}\n'
 };
 
-export type Check = { test: string; title: string; status: 'passed' | 'failed'; spec?: string; steps?: RunReport['steps']; error?: string };
+export type Check = { test: string; title: string; status: 'passed' | 'failed'; spec?: string; steps?: RunReport['steps']; artifacts?: RunReport['artifacts']; error?: string };
 
 export function step(index: number, title: string, status: 'passed' | 'failed' = 'passed', extra: Partial<RunReport['steps'][number]> = {}): RunReport['steps'][number] {
   return { index, title, kind: 'when', status, startedAtMs: index, endedAtMs: index + 1, durationMs: 1, frames: [], steps: [], ...extra };
@@ -59,7 +59,8 @@ export function step(index: number, title: string, status: 'passed' | 'failed' =
 export function recorded(check: Check): RunReport {
   return {
     meta: { testId: check.test, runId: 'latest', title: check.title, system: 'list', runtime: 'gherkin', seed: check.test, status: check.status, actorIds: [], startedAtMs: 0, endedAtMs: 3, durationMs: 3, sourceFile: check.spec ?? 'specs/lists/add.feature', ...(check.error ? { error: check.error } : {}) },
-    steps: check.steps ?? []
+    steps: check.steps ?? [],
+    ...(check.artifacts?.length ? { artifacts: check.artifacts } : {})
   };
 }
 

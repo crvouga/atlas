@@ -2,7 +2,6 @@ import { addSummaries, NO_EVIDENCE, type SpecSummary } from '@crvouga/atlas/repo
 import { Link, useSearch } from '@tanstack/react-router';
 import { useMemo } from 'react';
 
-import { useSearchQuery } from '../app/search-query';
 import { folderOf, outlinePath, specFile, type SpecKind } from '../spec-kind';
 import { useUiStore, type ResultFilter } from '../state/ui-store';
 import { useEvidence } from './evidence-context';
@@ -16,15 +15,9 @@ const FILTERS: readonly { readonly id: ResultFilter; readonly label: string; rea
   { id: 'none', label: 'None', keeps: (summary) => summary.status === 'none' }
 ];
 
-function hit(query: string, text: string) {
-  const needle = query.trim().toLowerCase();
-  return needle.length === 0 || text.toLowerCase().includes(needle);
-}
-
 /** Every spec of one kind, grouped by folder, each with what the combined report holds for it. */
 export function SpecIndex({ kind }: { kind: SpecKind }) {
   const evidence = useEvidence();
-  const { query } = useSearchQuery();
   const search = useSearch({ strict: false });
   const filter = useUiStore((s) => s.resultFilter);
   const setFilter = useUiStore((s) => s.setResultFilter);
@@ -34,9 +27,8 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
     // `titleOf` reads the outline the view was built from.
     [evidence.files, evidence.view, kind]
   );
-  const searched = rows.filter((row) => hit(query, `${row.title} ${row.file}`));
   const keeps = FILTERS.find((entry) => entry.id === filter)!.keeps;
-  const visible = searched.filter((row) => keeps(row.summary));
+  const visible = rows.filter((row) => keeps(row.summary));
   const groups = useMemo(() => {
     const byFolder = new Map<string, typeof visible>();
     for (const row of visible) byFolder.set(folderOf(row.file), [...(byFolder.get(folderOf(row.file)) ?? []), row]);
@@ -47,7 +39,7 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
       <div className={styles.filters} role="group" aria-label="Show">
         {FILTERS.map((entry) => (
           <button key={entry.id} type="button" aria-pressed={filter === entry.id} onClick={() => setFilter(entry.id)}>
-            {entry.label} <span>{searched.filter((row) => entry.keeps(row.summary)).length}</span>
+            {entry.label} <span>{rows.filter((row) => entry.keeps(row.summary)).length}</span>
           </button>
         ))}
       </div>
@@ -55,7 +47,7 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
       {evidence.filesError && <p className={styles.indexNote}>The file list could not be loaded.</p>}
       {!evidence.filesPending && !evidence.filesError && visible.length === 0 && (
         <p className={styles.indexNote}>
-          {rows.length === 0 ? `No ${kind.many} in this spec set.` : query.trim() ? 'Nothing matches.' : filter === 'failed' ? `No failing ${kind.many}.` : filter === 'results' ? `No ${kind.many} with results yet.` : `Every ${kind.one} has results.`}
+          {rows.length === 0 ? `No ${kind.many} in this spec set.` : filter === 'failed' ? `No failing ${kind.many}.` : filter === 'results' ? `No ${kind.many} with results yet.` : `Every ${kind.one} has results.`}
         </p>
       )}
       {groups.map(([folder, entries]) => (

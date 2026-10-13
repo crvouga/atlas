@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { publishLayer } from '@crvouga/atlas/reports/layer-store';
 import type { LayerSummary } from '@crvouga/atlas/reports/layer-types';
-import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
+import type { ReportArtifact, ReportFrame, ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
 import { chromium, type Browser, type Page } from 'playwright';
 
 import { emptyDirectory, directoryStore } from './report-store';
@@ -31,11 +31,15 @@ type Recorded = {
   startedAtMs: number;
   endedAtMs: number;
   steps: ReportStep[];
+  files?: CapturedFile[];
+  artifacts?: ReportArtifact[];
 };
+
+type CapturedFile = { file: string; bytes: Uint8Array; contentType: string };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function step(index: number, title: string, status: 'passed' | 'failed', startedAtMs: number, endedAtMs: number, extra: { kind?: string; detail?: string; error?: string } = {}): ReportStep {
+function step(index: number, title: string, status: 'passed' | 'failed', startedAtMs: number, endedAtMs: number, extra: { kind?: string; detail?: string; error?: string; frames?: ReportFrame[] } = {}): ReportStep {
   return {
     index,
     kind: extra.kind ?? 'when',
@@ -44,11 +48,22 @@ function step(index: number, title: string, status: 'passed' | 'failed', started
     startedAtMs,
     endedAtMs,
     durationMs: Math.max(0, endedAtMs - startedAtMs),
-    frames: [],
+    frames: extra.frames ?? [],
     steps: [],
     ...(extra.detail ? { detail: extra.detail } : {}),
     ...(extra.error ? { error: extra.error } : {})
   };
+}
+
+async function snap(page: Page, index: number, at: number, files: CapturedFile[]): Promise<ReportFrame[]> {
+  try {
+    const bytes = new Uint8Array(await page.screenshot({ type: 'png' }));
+    const file = `frames/${String(index).padStart(2, '0')}.png`;
+    files.push({ file, bytes, contentType: 'image/png' });
+    return [{ index: 0, capturedAtMs: at, snapshots: [{ name: 'screen', media: 'png', file }] }];
+  } catch {
+    return [];
+  }
 }
 
 function quote(text: string): string {
@@ -154,7 +169,12 @@ async function perform(page: Page, url: string, action: ScenarioStep): Promise<v
 async function runScenario(browser: Browser, server: TodoServer, scenario: RunnableScenario): Promise<Recorded> {
   const startedAtMs = Date.now();
   const steps: ReportStep[] = [];
-  const context = await browser.newContext();
+  const files: CapturedFile[] = [];
+  const videoDir = await mkdtemp(path.join(os.tmpdir(), 'atlas-gherkin-'));
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+    recordVideo: { dir: videoDir, size: { width: 1280, height: 720 } }
+  });
   const page = await context.newPage();
   page.setDefaultTimeout(5_000);
   let error: string | undefined;
@@ -164,12 +184,16 @@ async function runScenario(browser: Browser, server: TodoServer, scenario: Runna
     await page.goto(server.url, { waitUntil: 'load' });
     for (const [index, action] of scenario.steps.entries()) {
       const at = Date.now();
+      const title = `${action.keyword} ${action.text}`;
+      const kind = action.keyword.toLowerCase();
       try {
         await perform(page, server.url, action);
-        steps.push(step(index + 1, `${action.keyword} ${action.text}`, 'passed', at, Date.now(), { kind: action.keyword.toLowerCase() }));
+        const frames = await snap(page, index + 1, at, files);
+        steps.push(step(index + 1, title, 'passed', at, Date.now(), { kind, frames }));
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        steps.push(step(index + 1, `${action.keyword} ${action.text}`, 'failed', at, Date.now(), { kind: action.keyword.toLowerCase(), error: message }));
+        const frames = await snap(page, index + 1, at, files);
+        steps.push(step(index + 1, title, 'failed', at, Date.now(), { kind, error: message, frames }));
         throw cause;
       }
     }
@@ -186,10 +210,23 @@ async function runScenario(browser: Browser, server: TodoServer, scenario: Runna
     error = cause instanceof Error ? cause.message : String(cause);
   } finally {
     if (timer) clearTimeout(timer);
-    await context.close();
+    const video = page.video();
+    try {
+      await context.close();
+      if (video) {
+        const bytes = new Uint8Array(await readFile(await video.path()));
+        files.push({ file: 'recording.webm', bytes, contentType: 'video/webm' });
+      }
+    } catch {
+      // The steps and screenshots still stand when the runner could not keep a video.
+    }
+    await rm(videoDir, { recursive: true, force: true });
   }
   const endedAtMs = Date.now();
-  return { id: scenario.id, title: scenario.title, specPath: scenario.specPath, runtime: 'gherkin', status: error ? 'failed' : 'passed', ...(error ? { error } : {}), startedAtMs, endedAtMs, steps };
+  const artifacts: ReportArtifact[] = files.some((file) => file.file === 'recording.webm')
+    ? [{ name: 'Recording', media: 'video', file: 'recording.webm' }]
+    : [];
+  return { id: scenario.id, title: scenario.title, specPath: scenario.specPath, runtime: 'gherkin', status: error ? 'failed' : 'passed', ...(error ? { error } : {}), startedAtMs, endedAtMs, steps, files, ...(artifacts.length ? { artifacts } : {}) };
 }
 
 async function runGherkin(scenarios: readonly RunnableScenario[]): Promise<Recorded[]> {
@@ -348,7 +385,8 @@ function reportOf(check: Recorded): RunReport {
       sourceFile: check.specPath,
       ...(check.error ? { error: check.error } : {})
     },
-    steps: check.steps
+    steps: check.steps,
+    ...(check.artifacts?.length ? { artifacts: check.artifacts } : {})
   };
 }
 
@@ -382,7 +420,11 @@ async function publish(checks: readonly Recorded[]): Promise<void> {
   };
   await emptyDirectory(reportsDir);
   async function* entries() {
-    for (const report of reports) yield { key: `tests/${report.meta.testId}/report.json`, bytes: new TextEncoder().encode(JSON.stringify(report)), contentType: 'application/json' };
+    for (const check of checks) {
+      const report = reportOf(check);
+      yield { key: `tests/${report.meta.testId}/report.json`, bytes: new TextEncoder().encode(JSON.stringify(report)), contentType: 'application/json' };
+      for (const file of check.files ?? []) yield { key: `tests/${report.meta.testId}/files/${file.file}`, bytes: file.bytes, contentType: file.contentType };
+    }
   }
   await publishLayer(directoryStore(reportsDir), summary, entries());
 }

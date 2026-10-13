@@ -108,12 +108,24 @@ export function buildAtlasView(input: BuildInput): AtlasView {
 
   const processing = input.runProgress === 'running' || run?.info.finishedAt === null;
   const itemStatus = (status: ItemStatus | undefined) => processing && status === 'not-reached' ? 'not-yet-run' : status ?? unrun;
+  const shotOf = (img: { png: string; webp?: string | undefined; client?: string | undefined }) => {
+    const full = input.resolveMedia(run!.id, img.png) || null;
+    const thumb = img.webp ? input.resolveMedia(run!.id, img.webp) || full : full;
+    if (!full && !thumb) return null;
+    return { client: img.client ?? null, thumb, full };
+  };
   const image = (img: Image | null | undefined, marked: string | undefined): ImageMedia => {
-    if (!run || !img) return { state: marked === 'processing' || processing ? 'processing' : 'missing', thumb: null, full: null };
-    if (marked === 'processing') return { state: 'processing', thumb: null, full: null };
-    const full = input.resolveMedia(run.id, img.png) || null;
-    const thumb = img.webp ? input.resolveMedia(run.id, img.webp) || full : full;
-    return { state: full || thumb ? 'available' : 'missing', thumb, full };
+    const empty = (state: ImageMedia['state']): ImageMedia => ({ state, thumb: null, full: null, client: img?.client ?? null, also: [] });
+    if (!run || !img) return empty(marked === 'processing' || processing ? 'processing' : 'missing');
+    if (marked === 'processing') return empty('processing');
+    const main = shotOf(img);
+    const also = (img.also ?? []).flatMap((extra) => {
+      if (!extra.png) return [];
+      const shot = shotOf({ png: extra.png, webp: extra.webp, client: extra.client });
+      return shot ? [shot] : [];
+    });
+    if (!main) return { state: 'missing', thumb: null, full: null, client: img.client ?? null, also };
+    return { state: 'available', thumb: main.thumb, full: main.full, client: main.client, also };
   };
   const pathRef = (id: string): PathRef => ({ id, name: run?.paths.find((p) => p.id === id)?.name ?? id });
 

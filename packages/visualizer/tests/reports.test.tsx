@@ -138,6 +138,29 @@ test('a recording opens at its first failure and its address names the moment', 
   await atlas.sees('Owners add items');
 });
 
+test('a recording plays an attached video and keeps a log the runner could not turn into frames', async () => {
+  const localStore = memoryStore();
+  const shot = (index: number, file: string) => ({ frames: [{ index, capturedAtMs: index, snapshots: [{ name: 'screen', media: 'png' as const, file }] }] });
+  await publishRun(localStore, {
+    at: 20,
+    checks: [{
+      ...ADD,
+      steps: [step(1, 'Given a list', 'passed', shot(1, 'frames/1.png')), step(2, 'When adding tea', 'passed', shot(2, 'frames/2.png'))],
+      artifacts: [
+        { name: 'Recording', media: 'video', file: 'recording.webm' },
+        { name: 'Browser log', media: 'text', file: 'log.txt' }
+      ]
+    }]
+  });
+  atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature&check=lists/add&view=recording', deps: { localStore } });
+  await atlas.sees('Moment 2 of 2');
+  await atlas.sees('Pictures');
+  expect(atlas.text()).not.toContain('unstyled');
+  await atlas.click('button', 'Video');
+  expect(atlas.host.querySelector('video')?.getAttribute('src')).toContain('recording.webm');
+  await atlas.sees('Browser log');
+});
+
 test('a running suite shows each finished test before its package is collected', async () => {
   const localStore = memoryStore(), bucket = memoryStore();
   await publishRun(localStore, { at: 20, checks: [ADD] });
@@ -298,7 +321,7 @@ test('a passing recording opens at its final moment and has no failure to move t
 test('a recording without moments keeps its steps and says no moment was recorded', async () => {
   const report = { ...recorded({ test: 'list', title: 'Adds tea', status: 'passed' }), steps: [step(1, 'Given a list')] };
   const host = await mount(<Recording report={report} />);
-  expect(host.textContent).toContain('This test recorded no moments.');
+  expect(host.textContent).toContain('This test recorded no picture, video, or timeline.');
   expect(host.textContent).toContain('Given a list');
   expect(host.querySelector<HTMLButtonElement>('ol[aria-label="Recorded steps"] button')!.disabled).toBe(true);
 });

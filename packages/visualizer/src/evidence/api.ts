@@ -19,8 +19,13 @@ function explain(status: number) {
   return `Evidence could not be read (${status}).`;
 }
 
+/** A captured file's address in the browser. Pictures and video use it directly; fetches use the same address. */
+export function reportAssetUrl(path: string): string {
+  return staticEvidence ? `${reportsBase}/${evidenceFile(path).split('/').map(encodeURIComponent).join('/')}` : `${reportsBase}${path}`;
+}
+
 export async function reportResponse(path: string, signal?: AbortSignal) {
-  const url = staticEvidence ? `${reportsBase}/${evidenceFile(path).split('/').map(encodeURIComponent).join('/')}` : `${reportsBase}${path}`;
+  const url = reportAssetUrl(path);
   let response: Response;
   try {
     response = await fetch(url, { signal });
