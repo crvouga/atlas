@@ -5,8 +5,10 @@ import type { ReactNode } from 'react';
 import { statusNote, type AtlasView, type StateView, type TransitionView } from '../data/model';
 import { ChevronIcon } from '../components/icons';
 import { KIND_LABEL } from '../components/labels';
-import { ScreenImage, placeholderReason } from '../components/Screen';
+import { ScreenImage } from '../components/Screen';
 import { StatusBadge, StatusDot } from '../components/Status';
+import { eventLooks, journeyLooks, stateLooks } from '../looks/collect';
+import { Stage } from '../looks/Stage';
 import { mapScope } from '../layout/graph';
 import type { MapSelection } from '../map/ChartMap';
 import styles from './views.module.css';
@@ -87,9 +89,8 @@ function Questions({ view, ids }: { view: AtlasView; ids: string[] }) {
 function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
   const checks = state.result?.checks.length ? state.result.checks : state.specChecks.map((check) => ({ check, passed: null as boolean | null, expected: undefined, actual: undefined }));
   const note = statusNote(state.status);
-  const picture = placeholderReason(state.status, state.result?.screenshot ?? null);
-  const showPictureCaption = picture !== 'not-run' && picture !== 'not-reached';
   const events = state.result?.businessEvents;
+  const screen = state.kind === 'screen' || state.kind === 'final';
   const incoming = state.incoming.map((id) => view.transitions.get(id)).filter((t): t is TransitionView => Boolean(t) && !t!.carriedBy);
   const outgoing = state.outgoing.map((id) => view.transitions.get(id)).filter((t): t is TransitionView => Boolean(t));
   return (
@@ -101,24 +102,30 @@ function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
       </div>
       {state.description && <p className={styles.lead}>{state.description}</p>}
       {note && <p className={styles.statusNote}>{note}</p>}
-      <div className={styles.plateSplit}>
-        {(state.kind === 'screen' || state.kind === 'final') && (
-          <div className={styles.bigShot}>
-            <ScreenImage key={state.name} state={state} size="full" description={false} lines={state.hints.length > 0} caption={showPictureCaption} />
-          </div>
-        )}
-        <div>
-          <h3 className={styles.sectionTitle}>Where they go next</h3>
-          {outgoing.length > 0 ? (
-            <div className={styles.eventList}>
-              {outgoing.map((transition) => (
-                <EventLink key={transition.id} t={transition} view={view} direction="out" />
-              ))}
+      <Stage
+        looks={stateLooks(state)}
+        prefer="pictures"
+        empty={
+          screen ? (
+            <div className={styles.bigShot}>
+              <ScreenImage key={state.name} state={state} size="full" description={false} lines={state.hints.length > 0} />
             </div>
           ) : (
-            <p className={styles.lead}>{state.deadEnd ? `This is where the journey stops: ${state.deadEnd}` : 'Nothing leaves this screen.'}</p>
-          )}
-        </div>
+            <p className={styles.lead}>This part of the chart has no screen of its own.</p>
+          )
+        }
+      />
+      <div>
+        <h3 className={styles.sectionTitle}>Where they go next</h3>
+        {outgoing.length > 0 ? (
+          <div className={styles.eventList}>
+            {outgoing.map((transition) => (
+              <EventLink key={transition.id} t={transition} view={view} direction="out" />
+            ))}
+          </div>
+        ) : (
+          <p className={styles.lead}>{state.deadEnd ? `This is where the journey stops: ${state.deadEnd}` : 'Nothing leaves this screen.'}</p>
+        )}
       </div>
       {checks.length > 0 && (
         <Section title="What should be on the screen">
@@ -213,21 +220,6 @@ function ScreenDetails({ view, state }: { view: AtlasView; state: StateView }) {
   );
 }
 
-/** The run's recording of the event, with the steps it took as captions when the run wrote them. */
-function Clip({ t }: { t: TransitionView }) {
-  const clip = t.result?.clip;
-  if (!clip || clip.state === 'missing') return null;
-  if (clip.state === 'processing' || !clip.src) return <p className={styles.clipPending}>The video of this event is still processing.</p>;
-  return (
-    <figure className={styles.clip}>
-      <video key={clip.src} className={styles.video} src={clip.src} poster={clip.poster ?? undefined} controls preload="metadata" playsInline>
-        {clip.captions && <track kind="captions" src={clip.captions} srcLang="en" label="Steps" default />}
-      </video>
-      <figcaption>What the run did{clip.captions ? ', step by step in the captions' : ''}.</figcaption>
-    </figure>
-  );
-}
-
 function EventDetails({ view, t }: { view: AtlasView; t: TransitionView }) {
   const from = view.states.get(t.source);
   const to = t.target ? view.states.get(t.target) : undefined;
@@ -243,21 +235,12 @@ function EventDetails({ view, t }: { view: AtlasView; t: TransitionView }) {
         From <strong>{from?.name ?? t.source}</strong> to <strong>{to?.name ?? 'a screen not in the spec'}</strong>.
       </p>
       {note && <p className={styles.statusNote}>{note}</p>}
-      <Clip t={t} />
-      <div className={styles.beforeAfter}>
-        {from && (
-          <figure>
-            <ScreenImage state={from} size="full" />
-            <figcaption>Before: {from.name}</figcaption>
-          </figure>
-        )}
-        {to && (
-          <figure>
-            <ScreenImage state={to} size="full" />
-            <figcaption>After: {to.name}</figcaption>
-          </figure>
-        )}
-      </div>
+      <Stage
+        looks={eventLooks(view, t)}
+        prefer="film"
+        notice={t.result?.clip.state === 'processing' ? 'The video of this event is still processing.' : null}
+        empty={<p className={styles.lead}>This event has no picture, video, or timeline in this run.</p>}
+      />
       <Questions view={view} ids={t.questionIds} />
       <Developer
         rows={[
@@ -268,6 +251,12 @@ function EventDetails({ view, t }: { view: AtlasView; t: TransitionView }) {
       />
     </>
   );
+}
+
+function JourneyLooks({ view, journeyId }: { view: AtlasView; journeyId: string }) {
+  const looks = journeyLooks(view, journeyId);
+  if (looks.pictures.length === 0 && looks.films.length === 0 && !looks.moments.some((moment) => moment.thumb)) return null;
+  return <Stage looks={looks} prefer="timeline" />;
 }
 
 function JourneyDetails({ view, journeyId, chartId }: { view: AtlasView; journeyId: string; chartId: string }) {
@@ -281,6 +270,7 @@ function JourneyDetails({ view, journeyId, chartId }: { view: AtlasView; journey
       </div>
       {j.description && <p className={styles.lead}>{j.description}</p>}
       {!j.replay.ok && <p className={styles.warn}>The chart can’t follow this journey past “{j.replay.failedAt ?? j.replay.missingEnds.join(', ')}”.</p>}
+      <JourneyLooks view={view} journeyId={j.id} />
       <ol className={styles.steps}>
         {j.steps.map((step, i) => {
           const t = view.transitions.get(step.transitionIds[0] ?? '');

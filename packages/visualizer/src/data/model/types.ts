@@ -25,7 +25,16 @@ export type SpecChange = 'same' | 'added' | 'removed' | 'changed';
 
 export type MediaState = 'available' | 'missing' | 'processing';
 
-export type ImageMedia = { state: MediaState; thumb: string | null; full: string | null };
+/** One client's still of a screen. `also` on ImageMedia holds the other clients at the same moment. */
+export type ImageShot = { client: string | null; thumb: string | null; full: string | null };
+
+export type ImageMedia = {
+  state: MediaState;
+  thumb: string | null;
+  full: string | null;
+  client: string | null;
+  also: ImageShot[];
+};
 
 export type VideoMedia = {
   state: MediaState;

@@ -81,6 +81,10 @@ served by a small Node server) specified as two charts:
 - `specs/getting-started.machine.yaml`, the child chart in XState YAML. Its two final states hand
   back to the parent through `meta.doneEvent`.
 - `specs/journeys.yaml`, four curated journeys.
+- `specs/getting-started.feature` and `specs/working-the-list.feature`, the same stories in Gherkin.
+- `specs/todo.qnt`, the list, its sync, and its actions as a Quint model.
+
+The visualizer lists the features under Gherkin and the model under Quint.
 
 It has every kind of event: user events (taps and typing), a **system** event ("Sync fails", which
 the test triggers through a real HTTP endpoint on the example server), a **time** event ("Retry
@@ -98,7 +102,7 @@ bunx playwright install chromium
 bun run example:lint   # pure, reachable, no undocumented dead ends, journeys replay, everything implemented
 bun run example:plan   # 4 journeys + 1 generated path cover all 14 transitions
 bun run example:fast   # run every path quickly
-bun run example:run    # showcase mode: paced, with a touch overlay, screenshots and a clip per transition
+bun run example:run    # statechart showcase, then the Gherkin features and the Quint model
 bun test examples      # the same spec against an in-memory model, as a test suite
 
 bun run example:clients      # clients/: one chart across a phone, a desktop and the sync server at once
@@ -110,7 +114,7 @@ visualizer updates when a run finishes.
 
 ```sh
 bun run atlas:run   # example:clients, then example:run: every chart of the example, in showcase mode
-bun run atlas:viz   # the example's specs and those runs, in the visualizer
+bun run atlas:viz   # the example's specs, chart runs, Gherkin features, and Quint model
 ```
 
 Each config writes its own run and the visualizer shows one run at a time: the latest is the
@@ -123,6 +127,8 @@ States 14/14 passed, 0 failed, 0 not reached
 Transitions 14/14 passed, 0 failed, 0 not reached
 Manifest: examples/todo/atlas-runs/<run-id>/manifest.json
 ```
+
+`example:run` then runs the Gherkin features in a browser and the Quint model. `atlas:viz` shows those results on the scenario and trace rows.
 
 `bun test examples` runs [`model.test.ts`](examples/todo/model.test.ts): the same charts and journeys
 against `TodoModel`, a plain class, through `functionDriver` and `describeAtlas`. Only the driver

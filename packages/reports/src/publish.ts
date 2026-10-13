@@ -20,10 +20,10 @@ import {
 } from './recording-keys';
 import { suiteStatus } from './status';
 import type {
-  ReportStep,
   ReportTestStatus,
   RunReport,
 } from './report-types';
+import { capturedFiles } from './frames';
 import { readUtf8, writeUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
 
@@ -148,15 +148,6 @@ async function readTests(
   ];
 }
 
-function frameFiles(steps: readonly ReportStep[], out: Set<string>): void {
-  for (const step of steps) {
-    for (const frame of step.frames) {
-      for (const blob of frame.snapshots) out.add(blob.file);
-    }
-    frameFiles(step.steps, out);
-  }
-}
-
 export type PublishSourceArgs = {
   /** Execution completion time, separate from a virtual timeline clock. */
   readonly recordedAtMs?: number;
@@ -181,8 +172,7 @@ async function publishSnapshots(
 ): Promise<void> {
   const runId = args.runId ?? SPEC_RUN_ID;
   await eachLimited(tests, 8, async ({ report }) => {
-    const files = new Set<string>();
-    frameFiles(report.steps, files);
+    const files = new Set(capturedFiles(report));
     await publishSnapshotBundle({
       local: args.local,
       remote: store,

@@ -137,23 +137,39 @@
 }
 
 .search {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   width: min(15rem, 28vw);
   height: 2.125rem;
-  padding: 0 14px;
+  padding: 0 8px 0 14px;
   border: 1px solid transparent;
   border-radius: var(--pill);
   background: var(--bg-2);
-  font-size: 0.875rem;
-}
-
-.search::placeholder {
   color: var(--ink-3);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
 }
 
-.search:focus {
+.search kbd {
+  margin-left: auto;
+  padding: 0 0.35rem;
+  border: 1px solid var(--line-2);
+  border-radius: 0.35rem;
+  color: var(--ink-3);
+  font-family: var(--font);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35rem;
+}
+
+.search:hover,
+.search:focus-visible {
   border-color: var(--place);
   background: var(--bg);
-  outline: none;
+  color: var(--ink);
 }
 
 @media (max-width: 760px) {

@@ -39,6 +39,8 @@ export function mediaExtension(media: string): string {
       return 'txt';
     case 'bytes':
       return 'bin';
+    case 'video':
+      return 'mp4';
     default:
       return 'bin';
   }
@@ -56,6 +58,8 @@ export function contentTypeForMedia(media: string): string {
       return 'text/plain; charset=utf-8';
     case 'bytes':
       return 'application/octet-stream';
+    case 'video':
+      return 'video/mp4';
     default:
       return 'application/octet-stream';
   }

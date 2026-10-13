@@ -2,6 +2,7 @@ node_modules/
 dist/
 .cache/
 atlas-runs/
+atlas-reports/
 test-results/
 *.tsbuildinfo
 .DS_Store

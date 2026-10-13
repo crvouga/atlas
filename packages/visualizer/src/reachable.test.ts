@@ -5,7 +5,7 @@ import { expect, it } from 'bun:test';
 
 const SRC = path.dirname(fileURLToPath(import.meta.url));
 const ENTRY = path.join(SRC, 'main.tsx');
-const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|@import\s+(?:url\(\s*)?|\burl\(\s*)['"]([^'"]+)['"]/g;
+const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|@import\s+(?:url\(\s*)?|\burl\(\s*|new URL\(\s*)['"]([^'"]+)['"]/g;
 const SUFFIXES = ['', '.ts', '.tsx', '.css', '/index.ts', '/index.tsx'];
 
 function filesUnder(dir: string): string[] {

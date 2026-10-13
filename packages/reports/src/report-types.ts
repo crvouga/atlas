@@ -22,8 +22,12 @@ export type ReportPerformanceOptions = {
   readonly slowStepMs: number;
 };
 
-/** How a captured value is encoded on disk and rendered in the report. */
-export type SnapshotMedia = 'json' | 'html' | 'png' | 'text' | 'bytes';
+/**
+ * How a captured value is encoded on disk and rendered in the report.
+ * `png` is a still, `html` is a page snapshot, and `video` is an mp4 of the moment or the whole test.
+ * A runner may record any mix. The viewer treats a still, a video, and a timeline of frames as the same kind of evidence.
+ */
+export type SnapshotMedia = 'json' | 'html' | 'png' | 'text' | 'bytes' | 'video';
 
 export type ReportStepStatus = 'passed' | 'failed';
 
@@ -114,10 +118,24 @@ export type RunReportMeta = {
   readonly errorStack?: string;
 };
 
+/**
+ * A file attached to the whole test. A runner that can capture each step puts stills and page
+ * snapshots on `steps[].frames` instead, and the viewer builds a timeline from those. This list
+ * is for what the runner can attach when it cannot: a video of the test, a few screenshots, a log.
+ */
+export type ReportArtifact = {
+  readonly name: string;
+  readonly media: SnapshotMedia;
+  readonly file: string;
+  readonly poster?: string;
+  readonly captions?: string;
+};
+
 /** In-memory / persisted timeline for one test run. */
 export type RunReport = {
   readonly meta: RunReportMeta;
   readonly steps: readonly ReportStep[];
+  readonly artifacts?: readonly ReportArtifact[];
 };
 
 export type SuiteTestSummary = {

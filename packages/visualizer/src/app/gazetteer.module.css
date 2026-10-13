@@ -29,13 +29,23 @@
 .row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   padding: 6px 10px;
   border-radius: 8px;
   color: inherit;
   font-size: 0.9rem;
   text-decoration: none;
+}
+
+.thumb {
+  flex: none;
+  width: 28px;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
 }
 
 .chart {

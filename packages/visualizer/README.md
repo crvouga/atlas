@@ -11,7 +11,9 @@ reads two independent sources and works with whatever exists:
 
 The explorer is one header, an open index and one plate. The index lists every place and journey of
 the product; each kind of spec (Gherkin, Quint, DMN, Alloy, OpenSLO) has its own tab, with the
-recorded result of every spec in its index. Local directories, published HTTP files and HTTP APIs
+recorded result of every spec in its index. The header finds a flow in ordinary language across
+charts, specs and recorded runs. ⌘K (Ctrl+K on other keyboards) opens it, and `/` does the same
+when you are not already typing. Local directories, published HTTP files and HTTP APIs
 can supply reports simultaneously. Reports update through file watching, polling or server events.
 Latest includes running reports; one unavailable backend leaves the others usable.
 

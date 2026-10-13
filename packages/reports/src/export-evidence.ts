@@ -4,7 +4,8 @@ import { distinctHeaders } from './layer-merge';
 import type { ReportOutline } from './layer-types';
 import { writeUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
-import type { RunReport, ReportStep } from './report-types';
+import { capturedFiles } from './frames';
+import type { RunReport } from './report-types';
 
 export function evidenceFile(path: string): string {
   const url = new URL(path || '/', 'http://atlas');
@@ -67,17 +68,11 @@ export async function exportEvidence(args: { fetch: (path: string) => Promise<Re
         await copy(paths.css);
         const raw = await copy(paths.report);
         if (!raw) continue;
-        await eachLimited([...frameFiles((JSON.parse(raw) as RunReport).steps)], 4, file => copy(paths.file(file)).then(() => {}));
+        await eachLimited(capturedFiles(JSON.parse(raw) as RunReport), 4, file => copy(paths.file(file)).then(() => {}));
       }
     });
     await writeUtf8(args.target, evidenceFile(path), JSON.stringify(exported), 'application/json');
   }
   return { revisions: revisions.size, layers, missing };
 }
-function frameFiles(steps: readonly ReportStep[], files = new Set<string>()): Set<string> {
-  for (const step of steps) {
-    for (const frame of step.frames) for (const blob of frame.snapshots) files.add(blob.file);
-    frameFiles(step.steps, files);
-  }
-  return files;
-}
+

@@ -3,6 +3,7 @@ import type {
   ReportFrame,
   ReportSnapshotBlob,
   ReportStep,
+  RunReport,
 } from './report-types';
 
 import type { Route } from './hash';
@@ -198,6 +199,24 @@ export function selectedFrame(
     if (f.step.status === 'failed') return f;
   }
   return frames[frames.length - 1] ?? null;
+}
+
+/** Every file a report names: step snapshots, and files attached to the test as a whole. */
+export function capturedFiles(report: Pick<RunReport, 'steps' | 'artifacts'>): string[] {
+  const files = new Set<string>();
+  const visit = (steps: readonly ReportStep[]) => {
+    for (const step of steps) {
+      for (const frame of step.frames) for (const blob of frame.snapshots) files.add(blob.file);
+      visit(step.steps);
+    }
+  };
+  visit(report.steps);
+  for (const artifact of report.artifacts ?? []) {
+    files.add(artifact.file);
+    if (artifact.poster) files.add(artifact.poster);
+    if (artifact.captions) files.add(artifact.captions);
+  }
+  return [...files];
 }
 
 export function isUi(b: ReportSnapshotBlob): boolean {

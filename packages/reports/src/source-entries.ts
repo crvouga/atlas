@@ -1,20 +1,11 @@
 import type { HtmlReportTest } from './recording-bundle';
 import { testFrameKey } from './recording-keys';
-import type { ReportStep } from './report-types';
+import { capturedFiles } from './frames';
 import type { BundleEntry } from './bundle';
 import { remoteTestFileKey, remoteTestReportKey } from './keys';
 import type { PublishSourceArgs } from './publish';
 
 const JSON_TYPE = 'application/json; charset=utf-8';
-
-function frameFiles(steps: readonly ReportStep[], out: Set<string>): void {
-  for (const step of steps) {
-    for (const frame of step.frames) {
-      for (const blob of frame.snapshots) out.add(blob.file);
-    }
-    frameFiles(step.steps, out);
-  }
-}
 
 export async function* sourceEntries(
   args: PublishSourceArgs,
@@ -31,9 +22,7 @@ export async function* sourceEntries(
       bytes: new TextEncoder().encode(JSON.stringify(report)),
       contentType: JSON_TYPE,
     };
-    const files = new Set<string>();
-    frameFiles(report.steps, files);
-    for (const file of [...files].sort()) {
+    for (const file of capturedFiles(report).sort()) {
       const obj = await args.local.get(testFrameKey(runId, testId, file));
       if (obj === null) throw new Error(`Missing report snapshot: ${file}`);
       yield {
