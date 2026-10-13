@@ -58,16 +58,19 @@ test('the coffee example shows each environment, and a focused layer leaves the 
 
   await atlas.click('button', 'Pays by card');
   await atlas.sees('The card form never appeared');
+  expect([...atlas.host.querySelectorAll('[aria-label="Environments"] button')].map((button) => button.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Desktop web'), expect.stringContaining('iOS'), expect.stringContaining('Mobile web'), expect.stringContaining('device: phone')]));
   await atlas.click('[aria-label="Environments"] button', 'Desktop web');
-  await atlas.until(() => !atlas!.text().includes('The card form never appeared'), 'the desktop web pass');
-  await atlas.sees('Open recording');
-  await atlas.click('button', 'Open recording');
-  await atlas.sees('Moment 3 of 3');
-  await atlas.sees('Customer');
-  await atlas.click('button', 'Order a drink');
-  await atlas.sees('Paying for the order');
+  await atlas.until(() => atlas!.find('[aria-label="Environments"] button', 'Desktop web')?.getAttribute('aria-pressed') === 'true', 'the desktop web result');
+  await atlas.sees('Then the barista can start the drink');
 
   await atlas.click('button', 'Card declined, then a wallet works');
+  await atlas.sees('The wallet never confirmed the payment');
+  await atlas.sees('Open recording');
+  await atlas.click('button', 'Open recording');
+  await atlas.sees('Moment 2 of 3');
+  await atlas.sees('Customer');
+  expect(atlas.text()).not.toContain('unstyled');
+  await atlas.click('button', 'Order a drink');
   await atlas.sees('Recorded in 3 runs');
   await atlas.click('section[aria-label="Other runs of this check"] li button', 'Shared reports');
   await atlas.sees('An earlier result. A newer run replaced it in the combined report.');
@@ -95,7 +98,9 @@ test('the coffee example shows each environment, and a focused layer leaves the 
   await atlas.go('/specs/quint?spec=coffee/ordering/cart.qnt');
   await atlas.sees('trace 1');
   await atlas.click('button', 'trace 1');
-  await atlas.sees('items = 1');
+  await atlas.sees('add(0)');
+  const items = [...atlas.host.querySelectorAll('tbody tr')].find((row) => row.querySelector('th')?.textContent?.includes('items'));
+  expect(items?.querySelector('td:last-child')?.textContent?.trim()).toBe('1');
   await atlas.go('/specs/dmn?spec=coffee/ordering/drink-price.dmn');
   await atlas.sees('large oat latte');
   await atlas.sees('Oat');
