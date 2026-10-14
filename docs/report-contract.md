@@ -85,12 +85,47 @@ Zod schema as `LayerDocumentSchema` from `@crvouga/atlas/schema`.
 | `specs` | The specs the layer was recorded against, with a `fingerprint` of their text, so a reader can warn when a spec changed since. Optional. |
 | `parts[].kind` | An open category (`behavior`, `performance`, `accessibility`, …). A new kind needs no change to any reader. Part of the slot. |
 | `parts[].checks[]` | `id` (required, stable), `title`, `status`, `detail`, `specPath`, `measurements`, `durationMs`. |
+| `tags`, `labels`, `links`, `attachments`, `annotations`, `extensions` | Evidence, on the layer, a part or a check: what a result carries beyond its outcome. All optional and open. See [evidence](#evidence) and [the guide](extending.md). |
+| `checks[].steps`, `checks[].attempts` | A check's timeline, and every try when it was retried. Optional. |
 | `checks[].specPath` | The spec the check belongs to, as `specs/<path inside the specs directory>`. Anything before the first `specs/` is dropped, so `packages/app/specs/join.feature` and `specs/join.feature` are the same spec. |
 | `measurements[]` | `{ name, value, unit, limit? }`, finite numbers. A measurement over its `limit` is shown, and never fails the check by itself. |
 | `source`, `recording`, `bundle` | Optional timelines and captured files (screenshots, frames) a suite recorded. `null` and `{}` for a layer of plain checks. |
 
 **Unknown fields are allowed and preserved.** Every object in the schema is loose. A later minor
 version may add fields; an older reader ignores them and a copy carries them along.
+
+### Evidence
+
+A check, a part and a layer may carry evidence beyond their outcome. It is the part of the format meant to grow:
+every field is optional, every object is open, every vocabulary is an open string, and none of it ever decides
+a result. [Evidence: attachments, timelines, snapshots and everything else](extending.md) is the guide; the rules
+are these.
+
+| Field | Contents |
+| --- | --- |
+| `attachments[]` | `{ name, role?, contentType?, bundleKey? \| uri? \| text?, bytes?, sha256?, width?, height?, durationMs?, description?, at?, poster?, captions?, id?, extensions? }`. A screenshot, a video, a trace, a log, a DOM snapshot, a HAR, anything. `bundleKey` is a key in the layer's `bundle` (`attachments/<sha256>`); `uri` is elsewhere; `text` is a short inline value. |
+| `steps[]` | `{ id?, parentId?, name, kind?, status?, offsetMs?, durationMs?, detail?, attachments?, annotations?, extensions? }`. A flat, ordered timeline, nested by `parentId`. |
+| `annotations[]` | `{ type, message, level?, at?, source?, links?, extensions? }`. |
+| `attempts[]` | `{ index, status, durationMs?, startedAtMs?, detail?, steps?, attachments?, annotations?, extensions? }`. |
+| `tags[]`, `labels{}`, `links[]` | Facts to filter by. `labels` are facts about the result; unlike `parameters` they never make it a different slot. |
+| `extensions{}` | Structured data under a name the producer owns (`com.example.coverage`). |
+
+The rules, which hold for every version of the format:
+
+1. A new field is **optional**. No field is ever made required, renamed, removed or given a new meaning.
+2. **Every object is open.** Unknown fields are kept at every level, and a copy carries them.
+3. **Vocabularies are open.** `role`, `kind`, `type`, `level` and a step's `status` are strings with conventional
+   values; an unknown one is shown generically, never rejected.
+4. **Only `status`, `freshness` and `schemaVersion` are closed.** They are the whole of what decides a result.
+5. **Evidence never decides a result.** A reader that cannot read a piece of evidence drops that piece and keeps
+   the check, its status and its place in the report.
+6. A file is stored once, in the layer, by content: `attachments/<sha256>` in `layers/blobs/`. Identical files
+   attached anywhere in a layer share it, and the layer's id still depends only on what was recorded.
+7. A path inside a report is data from a test run. A publisher reads the files it names only from the report's own
+   folder and from folders the person chose, never a hidden file or a link out.
+8. Attachment bytes are untrusted. They are served with the type the producer gave (when it is a well-formed media
+   type), never sniffed, under a sandboxing content-security policy, with `cross-origin-resource-policy:
+   same-origin`, and a `uri` is followed only if it is `http` or `https`.
 
 ### Choosing a check id
 
@@ -146,6 +181,20 @@ Consequences you can rely on:
 
 Leaving a layer, backend, environment, branch or version out of the input is how earlier outcomes are
 inspected.
+
+### What takes part
+
+By default **every layer takes part**, wherever it was recorded: that is what a unified report is. The
+publisher records where it came from, and the reader chooses what to include:
+
+- `freshness` is set by the publisher from git: `modified` when the worktree has uncommitted edits to
+  tracked files, `unknown` outside git, and absent for a CI checkout or a clean worktree at its commit.
+  Untracked files do not count. A modified layer takes part with a warning and is never mistaken for the
+  commit's own result.
+- `atlas report status` and `atlas serve` take `--branch <name>` (repeatable) and `--ignore-modified`
+  (`ATLAS_ONLY_BRANCH`, `ATLAS_IGNORE_MODIFIED`). They only choose which layers are read; the rules above are
+  unchanged. A pull request's gate is `--branch "$PR_BRANCH" --branch main --ignore-modified`: the branch
+  laid over `main`, so what it did not re-run is inherited.
 
 ## Guarantees
 
@@ -220,8 +269,19 @@ async methods over keys and bytes:
 It needs nothing else: no transactions, no rename, no locks, no conditional writes. That is what
 lets a plain bucket, a directory and a device lab compose.
 
-Atlas ships `directoryStore(dir)` (`@crvouga/atlas/reports/directory-store`), with atomic writes. For
-anything else, write an adapter and prove it:
+Atlas ships two backends, both named by one URL (`openStore`, `--store`, `ATLAS_STORE`):
+
+- `directoryStore(dir)` (`@crvouga/atlas/reports/directory-store`): atomic writes, for a CI workspace, a
+  mount or a laptop.
+- `s3Store({ bucket, prefix, region, endpoint })` (`@crvouga/atlas/reports/s3-store`): AWS S3 and every store
+  that speaks its protocol, such as R2 and MinIO, written without an SDK. `s3://bucket/folder?region=…&endpoint=…`.
+  Requests are signed with Signature Version 4, retried with backoff on throttling and server errors,
+  capped in flight, and follow a bucket's region. Credentials are never in a URL: they come from the
+  environment the way an AWS SDK finds them. It is tested against AWS's published signing vectors and a
+  live S3 server in CI. On S3 a missing object answers 403 instead of 404 for an account that cannot list
+  the bucket, so publishers need `s3:ListBucket` too (`atlas report policy` prints the permissions).
+
+For anything else, write an adapter and prove it:
 
 ```ts
 import { verifyObjectStore } from '@crvouga/atlas/reports/object-store-conformance';
@@ -239,6 +299,22 @@ retries it.
 All keys are relative to the backend. Layers are written **bottom up**, so a reader never meets an
 entry whose content has not arrived:
 
+A layer's checks are the contract. Next to them the store holds the two other things a whole project
+needs, written the same way (content first, catalog entry last, nothing overwritten):
+
+- **Spec sets** (`layers/specs/…`): the specs of one commit, so a viewer needs no checkout. A spec set is
+  `{ schemaVersion, id, branch, sha, recordedAtMs, freshness?, files: [{ path, digest, fingerprint, kind,
+  title, domain, bytes }] }` ([`spec-set.schema.json`](../packages/schema/schemas/spec-set.schema.json)). Its
+  id is the digest of the branch, commit and file digests, so one commit's specs are one set however many
+  nodes publish them. Bodies are `layers/specs/blobs/<sha256>.txt`, shared by every set that holds them.
+  The outline a report is laid over is the **newest set from `main`** (then `master`, then the newest);
+  a set from a modified checkout is used only if no committed set exists.
+- **Run bundles** (`layers/runs/<run>/…` and `layers/runs/index/…`): a finished statechart run with its
+  screenshots and clips, for the viewer. Uploaded only when the run's privacy scan passed; the manifest is
+  written last, then the catalog entry.
+
+The keys of a layer, bottom up:
+
 1. `layers/blobs/<sha256>.gz`: recorded files (screenshots, frames), content-addressed and shared
    between layers. Skipped entirely for a layer of plain checks.
 2. `layers/manifests/<id>.json`: the layer document, written once.
@@ -247,6 +323,9 @@ entry whose content has not arrived:
 
 Two producers never write different bytes to one key: every key is derived from content. A crash
 between steps leaves unreferenced blobs, never a catalog entry without its layer.
+
+Everything under `layers/` is immutable and addressed by content, so `copyStore` and `atlas report merge`
+carry spec sets and runs along with layers.
 
 Stores written before layers existed (`commits/<sha>/…`, `versions/…`, `index/…`) are read in place
 and composed with layers; Atlas never rewrites them. `copyStore` and `atlas report merge` copy
@@ -265,6 +344,10 @@ and composed with layers; Atlas never rewrites them. `copyStore` and `atlas repo
 - A breaking change to the document, to the [slot](#how-layers-compose) or to the
   [winner rules](#how-layers-compose) is a major version of the contract **and** a major release of
   `@crvouga/atlas` (a `!` commit). It also ships a migration note.
+- Adding evidence (a new optional field, a new open vocabulary value, a new extension namespace) is a minor
+  change and needs no new `schemaVersion`. `packages/reports/tests/fixtures/layer-v1-extended.json` carries every
+  kind of evidence, and `layer-extensibility.test.ts` proves unknown fields survive at every level and that a
+  reader of the first version of the format still reads it.
 - The contract is guarded by `packages/reports/tests/fixtures/layer-v1.json`, a layer that must keep
   parsing, and by the emitted JSON Schemas, which a test keeps equal to the Zod schemas. **Never edit
   the fixture to make a test pass.**
@@ -287,7 +370,13 @@ and composed with layers; Atlas never rewrites them. `copyStore` and `atlas repo
 
 - Publishing a layer of plain checks is one `head` and two small writes.
 - A report is one linear pass over the checks of every layer. Reading dominates it: each layer is
-  one catalog read and one manifest read, a few at a time (16 by default).
+  one catalog read and one manifest read, a few at a time (16 by default, 64 for a node on S3).
+- A long-lived reader does not redo that pass. `ReportIndex` reads each immutable layer once, folds it into
+  the winning result of every slot it fills, and drops it unless it still holds a winner, so memory follows
+  the number of checks (plus a few bytes for each layer ever read), not the age of the project, and a refresh
+  with nothing new is one request for the newest page of the catalog. Folding is exact in any order because the winner
+  rule is a total order; a test proves the incremental report equals combining every layer from scratch.
+  The node sends the viewer only that: one request, only winning rows, with an ETag.
 - Measured on a laptop with a directory backend: 300 layers of 50 checks in about 0.2 s; 1,000 layers
   of 100 checks, each recorded against 1,000 specs (100,000 results), in about 0.9 s. Composing two
   thousand layers of 100 checks (200,000 results) already in memory takes about 0.3 s.
@@ -303,6 +392,7 @@ and composed with layers; Atlas never rewrites them. `copyStore` and `atlas repo
 | Layer | `layer.schema.json` | What a producer publishes. This page. |
 | Publish checks | `publish-checks.schema.json` | The input of `publishChecks` and `atlas report publish --checks`: a layer without the parts the publisher fills in. |
 | Report status | `report-status.schema.json` | The output of `atlas report status --format json`. |
+| Spec set | `spec-set.schema.json` | The specs of one commit, as published beside the layers. |
 | Run manifest | `manifest.schema.json` | What `atlas run` writes for a statechart run. Publish it as a layer with `--manifest`. |
 | Runs index, sources, change notices | `runs-index`, `report-sources`, `atlas-change` | How the viewer finds runs. See [report backends](report-backends.md). |
 | CloudEvents | `cloud-event.schema.json` | Business events a run observed. |

@@ -481,7 +481,7 @@ atlas run    [--config atlas.config.ts] [--mode fast|showcase] [--workers n] [--
              [--no-retry] [--output <dir>]
 atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
 atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
-atlas report publish|status|merge …      layered evidence for any kind of spec (below)
+atlas report publish|stream|status|merge|doctor|policy …   layered evidence for any kind of spec (below)
 ```
 
 - `lint` with `--specs` checks charts and journeys alone; with a config it also lists missing
@@ -507,31 +507,18 @@ directory. Relative paths in it resolve against the config file's directory.
 
 ### `atlas report`
 
-Evidence for specs of any kind, not only statecharts. Details in
-[integrating Atlas](integrating.md); the rules in [the report contract](report-contract.md).
+Evidence for specs of any kind, not only statecharts: `publish`, `status`, `merge`, `doctor`, `policy`
+and `stream`. Run `atlas report --help` for every flag. [Integrating Atlas](integrating.md) is the guide,
+[running Atlas for a project](deploying.md) covers S3 and the node, and
+[the report contract](report-contract.md) holds the rules. For a statechart run:
 
-```
-atlas report publish --store <dir> --producer <name>
-                     ( --ctrf <file> | --junit <file> | --manifest <file> | --checks <file.json> )
-                     [--environment <name>] [--branch <b>] [--sha <s>] [--run-url <u>]
-                     [--spec <path> | --specs <dir>]
-                     [--param key=value]... [--kind <k>] [--title <t>] [--recorded-at <iso|ms>]
-atlas report status  ( --store <dir> | --store <id>=<dir> | --backends <module> )...
-                     [--format text|json|markdown] [--require-environments a,b]
-atlas report merge   ( --store <dir> | --backends <module> )... --into <dir>
+```sh
+atlas report publish --producer statecharts --environment desktop-web \
+  --manifest atlas-runs/<run>/manifest.json --specs ./specs --upload-run
 ```
 
-- `publish` writes one immutable layer. `--sha`, `--branch` and `--run-url` come from the CI's
-  variables and then from git. The time the checks ran comes from the report, or the report file's
-  modification time, so publishing again writes the same layer.
-- `--spec <path>` says every check in the report belongs to that spec; `--specs <dir>` links each
-  check to a spec file in `<dir>` by path, or by the suite, class or file name the report gives.
-- `status` combines every layer of every store and exits 1 unless the report passes: checks exist,
-  none failed, none is running, every backend and layer could be read, and each required environment
-  has results. `--format json` is the stable output.
-- `merge` copies the layers of several stores into one, copying only what is missing.
-- `--backends` loads a module whose default export is `[{ id, label?, store }]` (or a function
-  returning it), for stores that are not directories.
+`--upload-run` also sends the run's screenshots and clips to the store so the node can show them
+(only when the run's privacy scan passed).
 
 ## Config reference
 

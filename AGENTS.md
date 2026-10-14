@@ -53,6 +53,23 @@ contract](docs/report-contract.md#versioning-and-stability) allows.
 - After changing a Zod schema in `packages/schema/src`, run `bun run schemas` and commit the JSON
   Schemas: a test fails when they differ.
 - A reader must treat what it cannot read as unknown, never as passed.
+- Evidence (attachments, steps, annotations, attempts, tags, labels, links, `extensions`) is where the format
+  grows, and it grows only as [docs/extending.md](docs/extending.md) allows: optional fields, open objects, open
+  vocabularies, nothing that decides a result. To add a kind of evidence, add it to
+  `layer-v1-extended.json` and keep `layer-extensibility.test.ts` passing. Never close a vocabulary, never make
+  an evidence field required, never let evidence change a status, a slot or a winner.
+- Attachment bytes are untrusted. Serve them only through `attachment-response.ts`.
+
+## The S3 store is tested against a real server
+
+`packages/reports/tests/s3-store.integration.test.ts` and `s3-flow.integration.test.ts` run only when
+`ATLAS_TEST_S3_ENDPOINT` names an S3-protocol server (CI starts SeaweedFS in the `s3` job). To run them
+locally: start one (`docker run -p 18333:8333 -v $PWD/examples/deploy/s3.json:/etc/s3.json
+chrislusf/seaweedfs server -s3 -s3.config=/etc/s3.json -dir=/data`), create a bucket, and set
+`ATLAS_TEST_S3_ENDPOINT=http://localhost:18333`, `ATLAS_TEST_S3_BUCKET`, `ATLAS_TEST_S3_KEY` and
+`ATLAS_TEST_S3_SECRET` (the demo credentials in `examples/deploy/s3.json` are `atlaskey` / `atlassecret`).
+Change `s3-store.ts` or `sigv4.ts` only with those passing: a unit test with a fake `fetch` cannot tell you
+that S3 accepts your signature.
 
 ## Releases are automatic
 

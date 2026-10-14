@@ -12,9 +12,11 @@ The Atlas contract, as Zod schemas and as JSON Schema (draft 2020-12) documents 
 | `timeline-entry.schema.json` | One step of a clip's timeline (taps, typing, system events) |
 | `cloud-event.schema.json` | A CloudEvents 1.0 business event a run observed |
 | `runs-index.schema.json` | `runs/index.json`: the runs a host serves |
-| `layer.schema.json` | A layer: the checks one producer ran on one environment. The unit of evidence for specs of any kind |
+| `layer.schema.json` | A layer: the checks one producer ran on one environment, and any evidence they carry (attachments, steps, annotations, attempts, tags, labels, links, extensions). The unit of evidence for specs of any kind |
 | `publish-checks.schema.json` | The input of `publishChecks` and `atlas report publish --checks` |
 | `report-status.schema.json` | The output of `atlas report status --format json` |
+| `server-config.schema.json` | The configuration of `atlas serve` and `atlas dev` |
+| `spec-set.schema.json` | The specs of one commit as published, which the report is laid over |
 
 Regenerate the JSON Schemas after changing a Zod schema:
 

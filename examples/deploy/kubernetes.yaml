@@ -1,0 +1,47 @@
+# The node on Kubernetes (EKS). It holds no state: run as many as you like behind the service.
+# The service account's role needs the `reader` policy (`atlas report policy --store <url> --role reader`).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlas
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/atlas-reader   # replace
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: atlas }
+  template:
+    metadata:
+      labels: { app: atlas }
+    spec:
+      serviceAccountName: atlas
+      containers:
+        - name: atlas
+          image: ghcr.io/your-org/atlas-node:latest   # build examples/deploy/Dockerfile and push it
+          ports:
+            - containerPort: 8080
+          env:
+            - { name: ATLAS_STORE, value: "s3://my-bucket/atlas/my-project" }
+            - { name: AWS_REGION, value: us-east-1 }
+            # Create this secret with a random token of at least 12 characters.
+            - { name: ATLAS_READ_TOKEN, valueFrom: { secretKeyRef: { name: atlas, key: token } } }
+            - { name: ATLAS_DATA, value: /tmp/atlas-data }
+          readinessProbe: { httpGet: { path: /readyz, port: 8080 }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: 8080 }, periodSeconds: 15 }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas
+spec:
+  selector: { app: atlas }
+  ports:
+    - { port: 80, targetPort: 8080 }

@@ -10,8 +10,15 @@ backends, and tells you in one command whether the product still does what it wa
 - **Layered, never partitioned.** A report is computed from layers, not stored as "the run". Partial
   runs on separate nodes, branches and devices are how a report is built, and they compose without
   coordinating: the same layers give the same report in any order, split any way.
+- **Open evidence.** A result carries whatever your framework produces: screenshots, videos, traces, logs, DOM
+  snapshots, timelines, retries, annotations, your own structured data. Any media type, nothing registered, and
+  new kinds never break older readers ([extending](docs/extending.md)). Specs stay opinionated (statecharts,
+  Gherkin, Quint, DMN, Alloy, OpenSLO); evidence stays open.
 - **Open standards, stable schemas.** JUnit XML and CTRF in, JSON Schema 2020-12 contracts, a
   versioned layer format with a golden fixture, and an `ObjectStore` interface any bucket fits.
+- **One node, one bucket.** Developers' worktrees and every CI job publish to S3 (or R2, MinIO, a
+  folder). One `atlas serve` shows the whole project to developers and the business, from the
+  bucket, with no checkout and no state of its own ([deploying](docs/deploying.md)).
 - **Fast and fail-closed.** Publishing is two small writes. A thousand layers of a hundred checks
   combine in about a second. An unreadable layer, a downed backend or a check still running is never
   counted as a pass.
@@ -52,7 +59,9 @@ bunx atlas report status --store all --specs ./specs --require-environments desk
 | Read | When |
 | --- | --- |
 | **[Integrating Atlas](docs/integrating.md)** | Start here. Step by step, with the command and expected output for each step, a CI workflow for sharded nodes, and troubleshooting. |
+| **[Running Atlas for a project](docs/deploying.md)** | Production: an S3 bucket and its policies, publishing from CI and from laptops, the node (Docker, Kubernetes, auth), filters, operating it and performance. |
 | [The report contract](docs/report-contract.md) | The exact rules: the layer document, how layers compose, guarantees, backends, versioning, failure behaviour. |
+| **[Evidence: attachments, timelines and everything else](docs/extending.md)** | What a result can carry, the rules that keep the format compatible forever, and how to attach anything from any framework. |
 | [Report backends and live snapshots](docs/report-backends.md) | Connecting directories, HTTP files and APIs, streaming, and writing another transport. |
 | [`@crvouga/atlas/reports`](packages/reports/README.md) | The programmatic API: `publishChecks`, `combineBackends`, `reportStatus`, `directoryStore`, `reportsHost`. |
 | [`@crvouga/atlas/schema`](packages/schema/README.md) | The JSON Schemas and Zod schemas of every document. |
@@ -68,7 +77,7 @@ bun add -d @crvouga/atlas
 
 | Import | What it is |
 | --- | --- |
-| [`@crvouga/atlas/reports/<module>`](packages/reports) | Evidence for any spec: publish layers (`publish-checks`, `ingest`), store them (`directory-store`, any `object-store`), combine and gate them (`compose`, `report-status`), copy them (`copy-store`), serve them to the viewer (`host`). |
+| [`@crvouga/atlas/reports/<module>`](packages/reports) | Evidence for any spec: publish layers (`publish-checks`, `ingest`), store them (`s3-store`, `directory-store`, any `object-store`), combine and gate them (`compose`, `report-status`), copy them (`copy-store`), serve them (`@crvouga/atlas/server`, `host`). |
 | [`@crvouga/atlas/schema`](packages/schema) | The contract: Zod schemas and JSON Schemas for layers, check files, report status, specs, journeys, manifests, timelines and the runs index. |
 | [`@crvouga/atlas`](packages/core) | Spec loading (SCXML and XState), composition, lint, planning, the runner, multi-client runs (`combineDrivers`), `httpDriver` and `functionDriver`, CloudEvents, privacy, config and the `atlas` CLI. `@crvouga/atlas/spec` is a browser-safe subset; `@crvouga/atlas/signals` holds the driver-neutral signals. |
 | [`@crvouga/atlas/playwright`](packages/playwright) | Playwright driver: signal-based screen recognisers, paced taps and typing with a touch overlay, device-resolution screenshots and H.264 clips. |
@@ -108,8 +117,8 @@ partial runs, and it is why you can shard a suite across ten machines, re-run on
 locally, and publish a device lab's layers from elsewhere, with nothing to coordinate.
 
 **Backends** hold layers. A backend is any implementation of the seven-method `ObjectStore`
-interface. Atlas ships a directory store with atomic writes; a bucket maps one to one, and
-`verifyObjectStore` proves an adapter before you trust it. Several backends are one report, and one
+interface. Atlas ships an S3 store (AWS S3, R2, MinIO and anything that speaks its protocol, with no SDK)
+and a directory store with atomic writes, and `verifyObjectStore` proves an adapter before you trust it. Several backends are one report, and one
 that is down is named and skipped.
 
 **The gate** is `atlas report status`. It exits 0 only if some check completed, none failed, none is
@@ -117,6 +126,18 @@ still running, every layer and backend could be read, and every `--require-envir
 has results. `--format json` is a [stable schema](packages/schema/schemas/report-status.schema.json). Exit code 1
 means the report does not pass; 2 means the command itself was wrong (a missing store directory, a bad
 flag).
+
+**The node** is `atlas serve`: one process that serves the viewer and the report from the store.
+Point `ATLAS_STORE` at a bucket and every developer's laptop and every CI job publishes into it with the
+same command; everyone then looks at one report. Uploads default to its local data folder; choose a shared write backend when running several copies. See
+[running Atlas for a project](docs/deploying.md).
+
+```sh
+export ATLAS_STORE=s3://my-bucket/atlas/my-project   # AWS_* or `aws sso login` for credentials
+atlas report doctor                                  # is the bucket usable, and what is missing?
+atlas report publish --producer unit --junit out.xml --specs ./specs   # from CI or a laptop
+atlas serve                                   # the whole project, at :8080
+```
 
 **The viewer** shows each spec (Gherkin, Quint, DMN, Alloy, OpenSLO, and the rest by file type) with
 its combined result per environment and the layer behind it. See

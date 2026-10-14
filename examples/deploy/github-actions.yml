@@ -1,0 +1,51 @@
+# Every CI node publishes its own layers straight to the bucket: no artifacts to merge, nothing to
+# coordinate. Copy to .github/workflows/specs.yml. The AWS roles come from `atlas report policy`:
+# `atlas-publisher` may write layers, `atlas-reader` may read them (for the gate).
+name: specs
+on: [push, pull_request]
+
+permissions:
+  id-token: write   # to sign in to AWS with GitHub's OIDC token, so no AWS key is stored anywhere
+  contents: read
+
+env:
+  ATLAS_STORE: s3://my-bucket/atlas/my-project
+  AWS_REGION: us-east-1
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { producer: unit, environment: desktop-web, run: bun test --reporter=junit --reporter-outfile=out.xml }
+          - { producer: e2e,  environment: ios,         run: ./scripts/e2e-ios --junit out.xml }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: ${{ matrix.run }}
+        continue-on-error: true      # a failing suite must still publish: a failure is evidence
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: always()
+        with: { role-to-assume: "arn:aws:iam::123456789012:role/atlas-publisher", aws-region: us-east-1 }
+      - run: bunx atlas report publish --producer ${{ matrix.producer }} --junit out.xml --specs ./specs --environment ${{ matrix.environment }}
+        if: always()
+
+  gate:
+    needs: suite
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: "arn:aws:iam::123456789012:role/atlas-reader", aws-region: us-east-1 }
+      # This branch laid over main: what this run did not re-run is inherited from main's latest results,
+      # and a laptop's work in progress or another branch's results cannot turn this red. The specs are this
+      # checkout's own, so a spec the PR adds must have results too.
+      - run: bunx atlas report status --branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" --branch main --ignore-modified --specs ./specs --require-all-specs --require-environments desktop-web,ios --format markdown >> "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true
+      - run: bunx atlas report status --branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" --branch main --ignore-modified --specs ./specs --require-all-specs --require-environments desktop-web,ios

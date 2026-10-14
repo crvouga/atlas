@@ -56,8 +56,8 @@ It also installs two commands: `atlas` (report, lint, plan, run, merge, export) 
 `playwright` and `detox` are optional peers: install the one your driver uses, as above. The
 documentation ships in the package, matching the version you installed: the README of each part at
 `node_modules/@crvouga/atlas/packages/<part>/README.md`, and these guides at
-`node_modules/@crvouga/atlas/docs/` (`integrating.md`, `report-contract.md`, `report-backends.md`,
-`dogfooding.md`, `reporting-issues.md`).
+`node_modules/@crvouga/atlas/docs/` (`integrating.md`, `deploying.md`, `extending.md`, `report-contract.md`,
+`report-backends.md`, `statecharts.md`, `dogfooding.md`, `reporting-issues.md`).
 
 Your `atlas.config.ts`, specs, implementation, fixtures and generated `atlas-runs/` stay in your
 project. Import only the paths in the table; files under the package's `dist` or `packages` are not

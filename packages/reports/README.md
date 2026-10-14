@@ -15,6 +15,14 @@ Every module is its own import path: `@crvouga/atlas/reports/<module>`. Nothing 
 | `compose` | `combineBackends(backends, options?)`, `summarize` | Read every layer of every backend and lay them over the specs. A down backend or unreadable layer becomes a notice. |
 | `report-status` | `reportStatus(report, { requireEnvironments? })`, `formatStatusText`, `formatStatusMarkdown` | The gate: `ok`, `reasons`, `failing`, counts per environment. Fails closed. |
 | `directory-store` | `directoryStore(dir)` | A backend on a directory, with atomic writes. |
+| `s3-store` | `s3Store({ bucket, prefix, region, endpoint })`, `S3Error` | A backend on AWS S3, R2, MinIO and anything with the S3 protocol. No SDK: SigV4 over `fetch`, retries, region redirects, a request cap. |
+| `aws-credentials` | `credentialChain()` | Credentials the way an AWS SDK finds them: environment, IRSA, ECS, shared file, the AWS CLI (SSO), EC2. Refreshed before they expire. |
+| `store-url` | `openStore(url)`, `parseStoreLocation`, `storeSpecs` | `s3://bucket/prefix?…`, a folder, or `ATLAS_STORE`, as a store. |
+| `spec-set` | `publishSpecSet`, `latestSpecSet`, `collectSpecFiles` | Publish the specs of a commit, and pick the newest committed set of `main` as the outline. |
+| `run-bundle` | `publishRunBundle`, `listRunSummaries` | Upload a finished statechart run with its media (privacy-gated). |
+| `report-index` | `ReportIndex` | The report, maintained incrementally: each layer read once, only winners kept. |
+| `@crvouga/atlas/server` | `createAtlasServer({ backends, write, site, tokens, include })`, `listen` | The live report server as a `fetch` handler, served over HTTP on Bun and Node. |
+| `doctor` | `inspectStore`, `iamPolicy` | Check a store end to end; the least-privilege IAM policy. |
 | `object-store` | `ObjectStore` | The backend interface: seven methods, no transactions. |
 | `object-store-conformance` | `verifyObjectStore(store)` | Prove a backend you wrote meets the interface. Runs under any test runner. |
 | `copy-store` | `copyStore(from, to)` | Copy the layers a store is missing. Idempotent and commutative: how partial reports meet. |

@@ -10,7 +10,8 @@ itself. Anything that ends in "this check passed or failed" can publish a **laye
 layers over your specs, whatever produced them, whichever machine or branch they came from.
 
 Read [the report contract](report-contract.md) once if you want the exact rules. You do not need it to
-integrate. This guide ships with the package, matching your version, at
+integrate. To run it for a whole team, with a bucket and one node everyone looks at, see
+[running Atlas for a project](deploying.md). This guide ships with the package, matching your version, at
 `node_modules/@crvouga/atlas/docs/integrating.md`.
 
 > [!IMPORTANT]
@@ -107,9 +108,10 @@ A check that matches nothing stays unlinked, never linked to a wrong spec. With 
 also records the spec and a fingerprint of its text, so a later reader can warn "spec changed since
 this ran". A check file or code names the spec per check with `specPath`.
 
-Specs that nothing has run yet are only known if Atlas is told where the specs are, so give `status`
-the same directory: `atlas report status --store all --specs ./specs` lists them in
-`specsWithoutEvidence`, and `--require-all-specs` fails the gate until every spec has a result.
+Specs that nothing has run yet are known from where Atlas is told the specs are: `--specs ./specs` on
+`status`, or else the spec set that `publish --specs` put in the store (the newest from `main`), so a gate
+needs no checkout. `atlas report status --store all` lists them in `specsWithoutEvidence`, and
+`--require-all-specs` fails the gate until every spec has a result.
 
 ```sh
 bunx atlas report publish --store atlas-reports --producer bdd --junit cucumber.xml --specs ./specs --environment ios
@@ -190,6 +192,23 @@ await publishChecks(directoryStore('atlas-reports'), {
 
 `publishChecks` validates its input and throws, naming each problem, before anything is written. It
 returns the layer.
+
+### Screenshots, videos, traces, logs and the rest
+
+A result may carry any evidence your framework produces: attachments of any media type, a timeline of steps,
+annotations, retries, tags and labels. Most of it arrives by itself (files a report names are read from its own
+folder and from each `--attach-root`, never from elsewhere): a CTRF report's attachments, screenshots,
+logs, steps and retries, and a JUnit report's output and properties, are published with the results. For the
+rest, name files in a checks file (`"attachments": [{ "name": "failure.png", "path": "evidence/failure.png" }]`),
+or attach files to the whole run:
+
+```sh
+bunx atlas report publish --producer e2e --junit out.xml --attach ci.log --attach trace=traces.zip --label build=4821
+```
+
+Files are stored in the layer by content, shown by what they are (pictures, videos, page snapshots, text) and
+offered for download otherwise. [Evidence](extending.md) is the full model, and why a new kind of evidence never
+breaks anything.
 
 ### Statecharts
 
@@ -306,37 +325,46 @@ Why this is safe to do in any shape:
 
 ### Across runs and branches
 
-Layers from another branch or an earlier run fill the same slots by recency. To let a pull request
-inherit the unchanged results of `main`, put layers somewhere that outlives the workflow, which is a
-shared **backend**, and add it to the gate:
+Layers from another branch or an earlier run fill the same slots by recency. To let a pull request inherit
+the unchanged results of `main`, put layers somewhere that outlives the workflow: **a bucket**. Every node
+then publishes straight to it, with no artifacts to merge:
 
 ```sh
-bunx atlas report status --store all --backends ./atlas.backends.ts
+export ATLAS_STORE=s3://my-bucket/atlas/my-project     # AWS credentials from a role, SSO or the environment
+bunx atlas report publish --producer unit --junit out.xml --specs ./specs --environment desktop-web
+bunx atlas report status --branch "$BRANCH" --branch main --ignore-modified --require-all-specs
 ```
 
-```ts
-// atlas.backends.ts: a list of { id, label?, store }, or a function returning one
-import { myBucketStore } from './my-bucket-store';
+Developers publish from their laptops the same way, and `atlas serve` shows everyone the whole
+project. [Running Atlas for a project](deploying.md) is the full guide: the bucket and its IAM policies,
+CI with OIDC, the node, auth and filters.
 
-export default [{ id: 'shared', label: 'Shared reports', store: myBucketStore() }];
-```
-
-After each run on `main`, whether it passed or not, copy the node layers up: `copyStore(directoryStore('all'),
-myBucketStore())` from `@crvouga/atlas/reports/copy-store`. It copies what is missing and is safe to
-repeat. Nothing is ever overwritten, so nothing is lost if two workflows copy at once.
+To fold a directory of layers (an artifact, a laptop's `atlas-reports/`) into the bucket after the fact:
+`atlas report merge --store ./all --into s3://my-bucket/atlas/my-project`. It copies what is missing and is
+safe to repeat; nothing is ever overwritten, so nothing is lost if two workflows copy at once.
 
 ## 5. Backends
 
-A backend is any `ObjectStore`. Atlas ships a directory store; a bucket (S3, R2, GCS, Azure Blob) maps
-one to one: `get`→GetObject, `put`→PutObject, `head`→HeadObject, `delete`/`deleteMany`→DeleteObjects,
-`listKeys`→ListObjectsV2 (paginate and sort by code unit), `getUri`→`null` or a presigned URL,
-`withPrefix`→`ObjectStoreWithPrefix` from `@crvouga/atlas/reports/store-prefix`. The interface and its
-rules are in [the report contract](report-contract.md#backends). Prove an adapter before trusting it:
+A backend is any `ObjectStore`. Atlas ships two: a directory, and S3 (AWS S3, Cloudflare R2, MinIO and
+anything else that speaks the S3 protocol, with no SDK). Name one with a URL, anywhere a `--store` goes:
+
+| Store | URL |
+| --- | --- |
+| A folder | `./atlas-reports`, `/srv/atlas` |
+| S3 | `s3://bucket/folder`, `s3://bucket/folder?region=eu-west-1` |
+| R2, MinIO, others | `s3://bucket/folder?endpoint=https://…&region=auto` |
+
+Keys never go in the URL: they come from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, `aws sso login`, or
+a role. `atlas report doctor --store <url>` checks a store end to end and says what is missing. From code:
+`s3Store({ bucket, prefix, region, endpoint })` from `@crvouga/atlas/reports/s3-store`.
+
+For any other store, implement `ObjectStore` (see [the report contract](report-contract.md#backends)) and
+prove the adapter before trusting it:
 
 ```ts
 import { verifyObjectStore } from '@crvouga/atlas/reports/object-store-conformance';
 
-const { ok, failures } = await verifyObjectStore(myBucketStore());
+const { ok, failures } = await verifyObjectStore(myStore);
 if (!ok) throw new Error(failures.join('\n'));
 ```
 
@@ -345,9 +373,10 @@ Combine any number of backends from code:
 ```ts
 import { combineBackends } from '@crvouga/atlas/reports/compose';
 import { reportStatus } from '@crvouga/atlas/reports/report-status';
+import { s3Store } from '@crvouga/atlas/reports/s3-store';
 
 const report = await combineBackends([
-  { id: 'ci', label: 'CI', store: directoryStore('all') },
+  { id: 'ci', label: 'CI', store: s3Store({ bucket: 'my-bucket', prefix: 'atlas/my-project' }) },
   { id: 'lab', label: 'Device lab', store: deviceLabStore() }
 ]);
 const status = reportStatus(report, { requireEnvironments: ['ios'] });   // status.ok, status.failing, …
