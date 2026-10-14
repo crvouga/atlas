@@ -236,6 +236,12 @@ describe('what the gate refuses to call a pass', () => {
     const missing = await run(['status', '--store', 'node1', '--store', 'node2', '--require-environments', 'Desktop Web']);
     expect(missing.output).toContain('No checks on required environment "Desktop Web"');
   });
+
+  test('merge says what it left behind', async () => {
+    await file('mixed/versions/' + 'a'.repeat(40) + '.json', '{}');
+    await run(['publish', '--store', 'mixed', '--producer', 'unit', '--ctrf', 'n1.json']);
+    expect((await run(['merge', '--store', 'mixed', '--into', 'mixed-all'])).output).toContain('1 objects outside layers/ were not copied');
+  });
 });
 
 describe('a broken command is not a failed gate', () => {

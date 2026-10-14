@@ -15,8 +15,9 @@ const INDEX = 'layers/index/';
  * A layer's catalog entry is copied last, so a reader of `to` never sees an entry for a layer
  * whose content has not arrived.
  */
-export async function copyStore(from: ObjectStore, to: ObjectStore, options: { readonly concurrency?: number } = {}): Promise<{ readonly copied: number; readonly skipped: number }> {
-  const keys = await from.listKeys('layers/');
+export async function copyStore(from: ObjectStore, to: ObjectStore, options: { readonly concurrency?: number } = {}): Promise<{ readonly copied: number; readonly skipped: number; readonly ignored: number }> {
+  const everything = await from.listKeys();
+  const keys = everything.filter(key => key.startsWith('layers/'));
   const width = options.concurrency ?? 16;
   let copied = 0, skipped = 0;
   const copy = async (key: string) => {
@@ -28,5 +29,6 @@ export async function copyStore(from: ObjectStore, to: ObjectStore, options: { r
   };
   await eachLimited(keys.filter(key => !key.startsWith(INDEX)), width, copy);
   await eachLimited(keys.filter(key => key.startsWith(INDEX)), width, copy);
-  return { copied, skipped };
+  // Said, not silent: whatever is not a layer was left where it is.
+  return { copied, skipped, ignored: everything.length - keys.length };
 }

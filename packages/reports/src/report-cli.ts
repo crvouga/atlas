@@ -194,13 +194,14 @@ export async function reportMain(argv: readonly string[], io: { readonly out: (t
     const target = path.resolve(base, into);
     mkdirSync(target, { recursive: true });
     const destination = directoryStore(target);
-    let copied = 0, skipped = 0;
+    let copied = 0, skipped = 0, ignored = 0;
     for (const backend of await backendsOf(rest, base)) {
       const result = await copyStore(backend.store, destination);
       copied += result.copied;
       skipped += result.skipped;
+      ignored += result.ignored;
     }
-    io.out(`Merged into ${into}: ${copied} objects copied, ${skipped} already there\n`);
+    io.out(`Merged into ${into}: ${copied} objects copied, ${skipped} already there${ignored ? `; ${ignored} objects outside layers/ were not copied (only layers are merged)` : ''}\n`);
     return 0;
   }
 

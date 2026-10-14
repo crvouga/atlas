@@ -120,7 +120,7 @@ describe('layers compose the same way however they arrive', () => {
       expect(essence(await combineBackends([{ id: 'merged', store: merged }]))).toEqual(expected);
     }
     await copyStore(parts[0]!, parts[1]!);
-    expect(await copyStore(parts[0]!, parts[1]!)).toEqual({ copied: 0, skipped: (await parts[0]!.listKeys('layers/')).length });
+    expect(await copyStore(parts[0]!, parts[1]!)).toEqual({ copied: 0, skipped: (await parts[0]!.listKeys('layers/')).length, ignored: 0 });
   });
 
   test.each(SEEDS)('seed %i: each slot is filled by the newest completed result; running never erases a completed one; ties fail', async seed => {
