@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { ALL_SOURCES, checkHistory, checkSlots, contributes, evidenceView, sourceFacets } from '../src/evidence-view';
+import { ALL_SOURCES, checkHistory, checkSlots, contributes, evidenceView, sourceFacets, sourceSelection } from '../src/evidence-view';
 import { combineEvidence, layerEvidence, textFingerprint } from '../src/layer-merge';
 import type { LayerSummary, ReportOutline } from '../src/layer-types';
 
@@ -61,6 +61,21 @@ test('leaving a branch, a backend or one layer out is how earlier evidence is re
   expect(status({ ...ALL_SOURCES, backends: ['local'] })).toBe('passed');
   expect(status({ ...ALL_SOURCES, layers: ['new'] })).toBe('passed');
   expect(status({ ...ALL_SOURCES, layers: ['new', 'old'] })).toBeUndefined();
+});
+
+test('leaving an environment or a version out keeps the layers on the other ones', () => {
+  const desktop = layerEvidence({ ...layer('desktop', 2, [{ id: 'join', status: 'failed' }]), environment: 'desktop-web' }, 'local');
+  const ios = layerEvidence({ ...layer('ios', 1, [{ id: 'join', status: 'passed' }]), environment: 'ios', sha: 'b'.repeat(40) }, 's3');
+  const layers = [desktop, ios];
+  const headers = layers.map(entry => entry.layer);
+  expect(sourceFacets(headers).environments.map(facet => facet.id)).toEqual(['desktop-web', 'ios']);
+  expect(sourceFacets(headers).versions.map(facet => facet.id)).toEqual(['a'.repeat(40), 'b'.repeat(40)]);
+  expect(combineEvidence(outline, layers).specs[0]!.results).toHaveLength(2);
+  const status = (excluded: typeof ALL_SOURCES) => checkSlots(combineEvidence(outline, layers.filter(entry => contributes(entry.layer, excluded))).specs[0]!.results)[0]?.status;
+  expect(status(ALL_SOURCES)).toBe('failed');
+  expect(status({ ...ALL_SOURCES, environments: ['desktop-web'] })).toBe('passed');
+  expect(status({ ...ALL_SOURCES, versions: ['a'.repeat(40)] })).toBe('passed');
+  expect(contributes(desktop.layer, sourceSelection({ backends: [], branches: [], layers: [] }))).toBe(true);
 });
 
 test('a superseded result remains readable in its own layer', () => {

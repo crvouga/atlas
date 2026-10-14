@@ -1,5 +1,6 @@
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
+import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
 
 /** Advisory identity, never a cryptographic integrity check. */
@@ -34,6 +35,7 @@ export function outcomeCounts(rows: readonly LayerRow[]): StatusCounts {
 
 /** A layer as the explorer reads it: its origin, and each check as one row. */
 export function layerEvidence(summary: LayerSummary, backend: string): LayerEvidence {
+  const place = layerPlace(summary);
   const source = summary.source;
   const tests = new Map(source?.tests.map(test => [`${source.source}/${test.testId}`, test]) ?? []);
   const rows: LayerRow[] = summary.parts.flatMap(part => part.checks.map(check => {
@@ -62,8 +64,9 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     recordedAtMs: summary.recordedAtMs,
     sha: summary.sha,
     branch: summary.branch,
+    environment: place.environment,
     runUrl: summary.runUrl,
-    parameters: summary.parameters,
+    parameters: place.parameters,
     recording: recording === null ? null : recording.type === 'layer' ? { type: 'layer', layer: summary.id } : recording,
     live: false,
     counts: outcomeCounts(rows),
@@ -118,7 +121,7 @@ export type CombinedEvidence = {
   readonly unassigned: EvidenceResult[];
 };
 
-/** One linear pass. Latest completed result wins only its own check/parameter slot. */
+/** One linear pass. The newest completed result wins only its own check, environment and parameter slot. */
 export function combineEvidence(outline: ReportOutline, layers: readonly LayerEvidence[]): CombinedEvidence {
   const specs = new Map(outline.specs.map(spec => [specPath(spec.path), { spec, results: [] as EvidenceResult[] }]));
   const changed = new Set(outline.changedFiles.map(specPath));
@@ -127,9 +130,11 @@ export function combineEvidence(outline: ReportOutline, layers: readonly LayerEv
     const scope = layer.packageDir;
     const related = outline.changedFiles.some(file => scope ? file.startsWith(`${scope}/`) : !specPath(file).startsWith('specs/'));
     for (const row of rows) {
-      const parameters = { ...layer.parameters, ...row.variant };
+      // Environment and the layer's other choices split the slot. A harness
+      // seed does not: a focused rerun replaces the check it repeated.
+      const parameters = layer.parameters;
       const path = row.specPath ?? '';
-      const key = JSON.stringify([layer.producer, row.kind, path, row.id, parameterKey(parameters)]);
+      const key = JSON.stringify([layer.producer, row.kind, path, row.id, layer.environment ?? '', parameterKey(parameters)]);
       const result: EvidenceResult = { key, slot: slotKey(path, row.id), layer, row, parameters, warning: warning(layer, path, specs.get(path)?.spec, outline, fingerprints[path], related || changed.has(path)) };
       const prior = winners.get(key);
       if (!prior || replaces(result, prior)) winners.set(key, result);

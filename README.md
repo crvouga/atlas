@@ -114,11 +114,24 @@ visualizer updates when a run finishes.
 
 ```sh
 bun run atlas:run   # example:clients, then example:run: every chart of the example, in showcase mode
-bun run atlas:viz   # the example's specs, chart runs, Gherkin features, and Quint model
+bun run atlas:viz   # the example's specs, chart runs, and layered reports
 ```
 
 Each config writes its own run and the visualizer shows one run at a time: the latest is the
 single-browser run, and the run across clients is the one before it in the run picker.
+
+`bun run viz:dev` opens the full coffee example with a layered report, without waiting
+for a run. Gherkin, Quint, DMN, Alloy and OpenSLO documents sit beside the charts. The same scenarios
+are filled by separate layers across desktop web, mobile web, iOS and Android, and across versions,
+branches and backends (this machine, shared reports, and a device lab). A layer that repeated one
+scenario leaves the others as the last layer that ran them. One feature is left with no results.
+**Sources** in the header switches any of those off. The chart runs stay on the statechart map.
+
+`bun run atlas:viz` opens the todo example the same way. The Gherkin, Quint, DMN, Alloy and OpenSLO
+tabs already show five layers, so each environment is visible before a run. `example:run` adds one
+desktop web layer for the scenarios and traces it actually ran. That layer replaces only those
+desktop web results. The other environments stay. `ATLAS_REPORTS_MODULE` replaces this example API
+with a host's reports.
 
 A showcase run ends with:
 
@@ -128,7 +141,7 @@ Transitions 14/14 passed, 0 failed, 0 not reached
 Manifest: examples/todo/atlas-runs/<run-id>/manifest.json
 ```
 
-`example:run` then runs the Gherkin features in a browser and the Quint model. `atlas:viz` shows those results on the scenario and trace rows.
+`example:run` then runs the Gherkin features in a browser and the Quint model, and publishes that desktop web layer beside the ones already in the report.
 
 `bun test examples` runs [`model.test.ts`](examples/todo/model.test.ts): the same charts and journeys
 against `TodoModel`, a plain class, through `functionDriver` and `describeAtlas`. Only the driver

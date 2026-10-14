@@ -38,6 +38,10 @@ export type SourceRecord = {
   readonly bucket: string;
   readonly status: ReportTestStatus;
   readonly updatedAtMs: number;
+  /** The client this source checked, when the run said. */
+  readonly environment?: string;
+  /** Recorded choices other than the client, such as an example or a device size. */
+  readonly parameters?: Readonly<Record<string, string>>;
   /** Each test's meta, test-runner outcomes already applied. */
   readonly tests: readonly RunReportMeta[];
 };

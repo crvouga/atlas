@@ -209,8 +209,8 @@ describe('live report queries', () => {
     });
     await render();
     await waitFor(() => expect(current.sources.find((source) => source.id === 'first')?.error).toBe('Source offline'));
+    await waitFor(() => expect(current.view?.charts.size).toBe(1));
     expect(current.reports).toHaveLength(1);
-    expect(current.view?.charts.size).toBe(1);
     expect(current.view?.run?.id).toBe('second~same');
   });
 

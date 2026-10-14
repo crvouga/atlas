@@ -117,21 +117,52 @@ export function evidenceView(combined: CombinedEvidence): EvidenceView {
   return { specs, unassigned: checkSlots(combined.unassigned), total: addSummaries([...specs.values()].map(entry => entry.summary)) };
 }
 
-/** Sources left out of the combined report. Everything else, including layers that arrive later, contributes. */
+/**
+ * Sources left out of the combined report. An empty list means every layer
+ * on that axis contributes, including layers that arrive later.
+ */
 export type SourceSelection = {
   readonly backends: readonly string[];
   readonly branches: readonly string[];
+  readonly versions: readonly string[];
+  readonly environments: readonly string[];
   readonly layers: readonly string[];
 };
 
-export const ALL_SOURCES: SourceSelection = { backends: [], branches: [], layers: [] };
+export const ALL_SOURCES: SourceSelection = { backends: [], branches: [], versions: [], environments: [], layers: [] };
+
+/** A saved selection from before versions and environments were axes still means "exclude nothing new". */
+export function sourceSelection(excluded: Partial<SourceSelection> | null | undefined): SourceSelection {
+  return {
+    backends: excluded?.backends ?? [],
+    branches: excluded?.branches ?? [],
+    versions: excluded?.versions ?? [],
+    environments: excluded?.environments ?? [],
+    layers: excluded?.layers ?? [],
+  };
+}
 
 export function branchOf(layer: LayerHeader): string {
   return layer.branch ?? 'Unknown branch';
 }
 
-export function contributes(layer: LayerHeader, excluded: SourceSelection): boolean {
-  return !excluded.backends.includes(layer.backend) && !excluded.branches.includes(branchOf(layer)) && !excluded.layers.includes(layer.id);
+/** The commit a layer checked, or `unknown` when the layer did not record one. */
+export function versionOf(layer: Pick<LayerHeader, 'sha'>): string {
+  return layer.sha ?? 'unknown';
+}
+
+/** The client a layer checked, or `unspecified` when it did not say. */
+export function environmentOf(layer: Pick<LayerHeader, 'environment'>): string {
+  return layer.environment || 'unspecified';
+}
+
+export function contributes(layer: LayerHeader, excluded: Partial<SourceSelection>): boolean {
+  const selection = sourceSelection(excluded);
+  return !selection.backends.includes(layer.backend)
+    && !selection.branches.includes(branchOf(layer))
+    && !selection.versions.includes(versionOf(layer))
+    && !selection.environments.includes(environmentOf(layer))
+    && !selection.layers.includes(layer.id);
 }
 
 export type SourceFacet = { readonly id: string; readonly layers: number; readonly latestAtMs: number };
@@ -148,7 +179,12 @@ function facets(layers: readonly LayerHeader[], id: (layer: LayerHeader) => stri
 }
 
 export function sourceFacets(layers: readonly LayerHeader[]) {
-  return { backends: facets(layers, layer => layer.backend), branches: facets(layers, branchOf) };
+  return {
+    backends: facets(layers, layer => layer.backend),
+    branches: facets(layers, branchOf),
+    versions: facets(layers, versionOf),
+    environments: facets(layers, environmentOf),
+  };
 }
 
 export type HistoryEntry = { readonly layer: LayerHeader; readonly row: LayerRow };

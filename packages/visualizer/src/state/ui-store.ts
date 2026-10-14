@@ -11,7 +11,7 @@ type UiState = {
   issuesOpen: boolean;
   sourcesOpen: boolean;
   resultFilter: ResultFilter;
-  /** Backends, branches and layers left out of the combined report. */
+  /** Backends, branches, versions, environments and layers left out of the combined report. */
   excluded: SourceSelection;
   saveViewport: (chartId: string, viewport: Viewport) => void;
   setIssuesOpen: (open: boolean) => void;
@@ -38,7 +38,11 @@ export const useUiStore = create<UiState>()(
     {
       name: 'atlas-ui',
       storage: createJSONStorage(() => sessionStorage),
-      partialize: (s) => ({ viewports: s.viewports, excluded: s.excluded, resultFilter: s.resultFilter })
+      partialize: (s) => ({ viewports: s.viewports, excluded: s.excluded, resultFilter: s.resultFilter }),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<UiState>;
+        return { ...current, ...saved, excluded: { ...ALL_SOURCES, ...saved.excluded } };
+      }
     }
   )
 );

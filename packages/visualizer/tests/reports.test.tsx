@@ -98,19 +98,44 @@ test('results from different backends and branches combine, and switching a newe
   await atlas.sees('Then the list includes tea');
 
   await atlas.click('button', 'Sources');
-  await atlas.sees('2 of 2 runs contribute');
-  expect(atlas.text()).toContain('This machine1 run');
-  expect(atlas.text()).toContain('Shared reports1 run');
+  await atlas.sees('2 of 2 layers contribute');
+  expect(atlas.text()).toContain('This machine1 layer');
+  expect(atlas.text()).toContain('Shared reports1 layer');
   const branch = atlas.find('label', 'feat/lists')!.querySelector('input')!;
   await atlas.click('label', 'feat/lists');
   expect(branch.checked).toBe(false);
-  await atlas.sees('1 of 2 runs contribute');
+  await atlas.sees('1 of 2 layers contribute');
   const row = () => atlas!.find('nav[aria-label="Gherkin features"] a', 'Share a list')!;
   await atlas.until(() => row().getAttribute('data-result') === 'passed', 'the earlier pass');
   expect(atlas.host.querySelector('li[data-open]')!.getAttribute('data-status')).toBe('passed');
   expect(atlas.find('button', 'Sources')!.textContent).toContain('1 off');
   await atlas.click('button', 'Use every source');
   await atlas.until(() => row().getAttribute('data-result') === 'failed', 'the newer failure again');
+});
+
+test('the same scenario stays visible on each environment, and a focused layer leaves the other checks in place', async () => {
+  const localStore = memoryStore(), store = memoryStore();
+  await publishRun(store, { at: 10, environment: 'desktop-web', checks: [ADD, TEA] });
+  await publishRun(localStore, { at: 20, environment: 'iOS', checks: [ADD_FAILED] });
+  atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: { localStore, store } });
+  await atlas.sees('1 failed');
+  const item = () => [...atlas!.host.querySelectorAll('li[data-status]')].find((row) => row.textContent?.includes('Add an item'));
+  expect(item()?.textContent).toContain('Desktop web');
+  expect(item()?.textContent).toContain('iOS');
+  expect(item()?.getAttribute('data-status')).toBe('failed');
+  const tea = [...atlas.host.querySelectorAll('li[data-status]')].find((row) => row.textContent?.includes('Tea'));
+  expect(tea?.getAttribute('data-status')).toBe('passed');
+  expect(tea?.textContent).not.toContain('iOS');
+
+  await atlas.click('button', 'Add an item');
+  const variants = [...atlas.host.querySelectorAll('[aria-label="Environments"] button')].map((button) => button.textContent);
+  expect(variants.some((label) => label?.includes('iOS'))).toBe(true);
+  expect(variants.some((label) => label?.includes('Desktop web'))).toBe(true);
+
+  await atlas.click('button', 'Sources');
+  await atlas.click('label', 'iOS');
+  await atlas.until(() => item()?.getAttribute('data-status') === 'passed', 'the desktop web result');
+  expect(item()?.textContent).not.toContain('iOS');
 });
 
 test('a recording opens at its first failure and its address names the moment', async () => {

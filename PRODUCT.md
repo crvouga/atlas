@@ -27,7 +27,7 @@ Assumption from the Atlas docs: people browse specifications, compare accumulate
 - The report explorer combines evidence from multiple report layers and retains each result's origin and parameters.
 - A recorded test can include steps, captured moments, screenshots, observations, actions, performance data, and model traces.
 - A freshness qualification must preserve the recorded outcome and must not imply that a test was rerun.
-- User direction for this work: keep specs partitioned by kind, make it obvious which specs have results, show results as they stream in from running suites, combine results across backends, branches and runs, keep colors neutral with one blue accent, and avoid labeling evidence as partially outdated too readily.
+- User direction for this work: keep specs partitioned by kind, make it obvious which specs have results, show results as they stream in from running suites, combine results across versions, branches, backends and environments (desktop web, mobile web, iOS, Android), keep colors neutral with one blue accent, and avoid labeling evidence as partially outdated too readily. A full report is the composition of small focused layers.
 - Assumption from the repository: the interface should remain usable with partial or missing report data and on narrow screens.
 
 ## Evidence on Hand

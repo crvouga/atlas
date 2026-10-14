@@ -1,9 +1,11 @@
 import type { Clock } from './clock';
 import { eachLimited } from './completion-order';
 import type { ActiveRun, LayerEvidence, LayerHeader } from './evidence-types';
+import { environmentOf } from './evidence-view';
 import { sourceId } from './keys';
+import { normalizeEnvironment } from './layer-axes';
 import { layerEvidence } from './layer-merge';
-import type { LayerSummary } from './layer-types';
+import type { LayerParameters, LayerSummary } from './layer-types';
 import { readUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
 import type { SourceRecord } from './protocol';
@@ -19,7 +21,34 @@ export type LiveRunRecord = {
   readonly bucket: string;
   readonly startedAtMs: number;
   readonly plannedChecks?: number;
+  /** The client this suite is checking. A different client does not replace it. */
+  readonly environment?: string;
+  readonly parameters?: LayerParameters;
 };
+
+function readParameters(value: unknown): LayerParameters {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const parameters: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) if (typeof item === 'string' && item) parameters[key] = item;
+  return parameters;
+}
+
+/** A run announcement with the fields the live layer can trust. Null when it cannot be a run. */
+export function liveRunRecord(value: unknown): LiveRunRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const run = value as Partial<LiveRunRecord>;
+  if (!run.packageDir || !run.bucket || typeof run.startedAtMs !== 'number') return null;
+  const parameters = readParameters(run.parameters);
+  const environment = typeof run.environment === 'string' ? normalizeEnvironment(run.environment) : null;
+  return {
+    packageDir: run.packageDir,
+    bucket: run.bucket,
+    startedAtMs: run.startedAtMs,
+    ...(typeof run.plannedChecks === 'number' ? { plannedChecks: run.plannedChecks } : {}),
+    ...(environment ? { environment } : {}),
+    ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
+  };
+}
 
 /** How the host reaches the results a spec run has written so far. */
 export type LiveSource = {
@@ -82,8 +111,9 @@ export function createLiveEvidence(args: { readonly live: LiveSource | undefined
       }
     });
     const tests = [...state.metas.values()].sort((a, b) => (a.testId < b.testId ? -1 : a.testId > b.testId ? 1 : 0));
-    const record: SourceRecord = { source, packageDir: state.run.packageDir, bucket: state.run.bucket, status: suiteStatus(tests), updatedAtMs: args.clock.now(), tests };
-    const summary: LayerSummary = { id: liveLayerId(source), producer: source, recordedAtMs: record.updatedAtMs, sha: origin.sha, branch: origin.branch, runUrl: null, parameters: {}, specs: [], parts: [sourcePart(origin.sha ?? '', record)], source: record, recording: null };
+    const environment = normalizeEnvironment(state.run.environment ?? state.run.parameters?.environment);
+    const record: SourceRecord = { source, packageDir: state.run.packageDir, bucket: state.run.bucket, status: suiteStatus(tests), updatedAtMs: args.clock.now(), ...(environment ? { environment } : {}), ...(state.run.parameters ? { parameters: state.run.parameters } : {}), tests };
+    const summary: LayerSummary = { id: liveLayerId(source), producer: source, recordedAtMs: record.updatedAtMs, sha: origin.sha, branch: origin.branch, runUrl: null, ...(environment ? { environment } : {}), parameters: state.run.parameters ?? {}, specs: [], parts: [sourcePart(origin.sha ?? '', record)], source: record, recording: null };
     const evidence = layerEvidence(summary, args.backend);
     const layer: LayerHeader = { ...evidence.layer, live: true, recording: { type: 'live', source }, execution: `live:${state.run.startedAtMs}:${tests.length}` };
     state.evidence = { ...evidence, layer };
@@ -129,7 +159,9 @@ export function createLiveEvidence(args: { readonly live: LiveSource | undefined
             /* keep what was read while it ran */
           }
         }
-        const archived = collected.some(layer => layer.producer === source && !layer.live && layer.recordedAtMs >= state.run.startedAtMs);
+        const declared = normalizeEnvironment(state.run.environment ?? state.run.parameters?.environment) ?? 'unspecified';
+        // A collected layer of another client is a different result, so this suite stays up.
+        const archived = collected.some(layer => layer.producer === source && !layer.live && layer.recordedAtMs >= state.run.startedAtMs && environmentOf(layer) === declared);
         if (archived || now - state.goneAt > LINGER_MS) tracked.delete(source);
       }
       const layers = [...tracked.values()].flatMap(state => (state.evidence?.rows.length ? [state.evidence] : []));

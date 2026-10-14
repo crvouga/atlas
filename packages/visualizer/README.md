@@ -38,8 +38,8 @@ atlas-visualizer dev --specs ./specs --runs ./atlas-runs
 | `--port <n>`, `--host <host>` | `dev`: where to listen (default `localhost:5180`, or the next free port).                   |
 
 Relative paths resolve against the directory the command was run from. Without flags the
-environment is read: `ATLAS_SPECS_ROOT`, `ATLAS_RUNS_ROOT` (relative to `INIT_CWD` when your package
-manager sets it to where you ran the command, or the current directory) and `ATLAS_FIXTURE`. With nothing configured and no
+environment is read: `ATLAS_SPECS_ROOT` and `ATLAS_RUNS_ROOT` (relative to `INIT_CWD` when your package
+manager sets it to where you ran the command, or the current directory). With nothing configured and no
 `specs/` directory, the `full` example is shown.
 
 Editing a spec file or a run publishing a snapshot updates the open page in about a second, without a reload,
@@ -62,8 +62,7 @@ sets how often the site checks for new runs (default 60 s, plus when the tab reg
 ### Inside this repository
 
 ```sh
-bun run viz:dev                          # ATLAS_SPECS_ROOT / ATLAS_RUNS_ROOT, or the example
-ATLAS_FIXTURE=partial bun run viz:dev    # one of the fixtures
+bun run viz:dev                          # the full coffee example, charts and layered report
 bun test packages/visualizer/src packages/visualizer/vite   # parsing, composition, statuses, every fixture
 bun run viz:fixtures                     # regenerate the fixtures (needs ImageMagick, cwebp, ffmpeg)
 ```
@@ -149,7 +148,9 @@ MIT
 
 Beside the statechart map, every other kind of spec has its own tab: Gherkin features, Quint models, DMN decision tables, Alloy structures and OpenSLO objectives. A tab appears when the specs folder has files of its kind. The index lists every spec with what was recorded for it, and filters to those with results, those failing, or those with none. A spec page shows each scenario, trace or check with its outcome; opening one shows the recorded steps, the error, the timings, every other run of the same check, and its recording.
 
-Results come from the Atlas reports API (`/api/reports` in dev, `VITE_ATLAS_REPORTS_URL` when hosted elsewhere) or from a static `data/evidence` export. They combine across backends, branches and runs; **Sources** in the header switches any of them off. While a spec suite is running, the header says so and each finished test appears within a couple of seconds. See [Atlas reports](../reports/README.md) for the API and host configuration.
+Results come from the Atlas reports API (`/api/reports` in dev, `VITE_ATLAS_REPORTS_URL` when hosted elsewhere) or from a static `data/evidence` export. They combine across backends, branches, versions, environments and layers; **Sources** in the header switches any of them off. While a spec suite is running, the header says so and each finished test appears within a couple of seconds. See [Atlas reports](../reports/README.md) for the API and host configuration.
+
+The coffee example ships those documents and a layered report. `bun run viz:dev` opens that full example, and the same report is the fallback when a working directory has no `specs/` and `ATLAS_REPORTS_MODULE` is unset. `atlas:viz` serves the same kind of report for the todo example, and adds the desktop web layer `example:run` writes. Each built-in report is five layers: an older desktop web run, a mobile web branch, Android from a device lab, a focused iOS run, and a newer desktop web run that repeated one scenario. The same check stays visible on each environment. A feature with no layer stays empty.
 
 The header title is the product's name, taken from `atlas.yaml`'s `title` up to its first dash or colon, or "Atlas".
 

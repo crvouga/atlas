@@ -30,6 +30,8 @@ import { APP_ROOT, FIXTURES_ROOT, listSpecFiles } from '../vite/atlas-files';
  * Regenerates every fixture from the example spec in `example/specs` (a coffee-ordering app: an
  * XState root chart with a parallel region that invokes an SCXML checkout chart) and a generated
  * large atlas. All media is synthetic: ImageMagick draws the screens and ffmpeg the clips.
+ * Gherkin, Quint, DMN, Alloy and OpenSLO documents in that spec are copied with the charts.
+ * The visualizer dev server serves the layered report for them; this script does not rebuild it.
  */
 
 const EXAMPLE_SPECS = path.join(APP_ROOT, 'example/specs');

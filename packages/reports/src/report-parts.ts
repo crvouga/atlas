@@ -1,3 +1,4 @@
+import { normalizeEnvironment } from './layer-axes';
 import { publishLayer } from './layer-store';
 import { readCommit } from './read';
 import { readInventory } from './spec-inventory';
@@ -86,8 +87,10 @@ export async function publishPart(
   );
   await recordExplorerVersion(store, part.sha);
   const commit = await readCommit(store, part.sha);
+  const environment = normalizeEnvironment(part.parameters?.environment);
   await publishLayer(store, {
     ...(part.freshness ? { freshness: part.freshness } : {}), producer: part.id, recordedAtMs: part.recordedAtMs, sha: part.sha, branch: commit?.branch ?? null, runUrl: commit?.runUrl ?? null,
+    ...(environment ? { environment } : {}),
     parameters: part.parameters ?? {}, specs: (await readInventory(store, part.sha))?.entries ?? [], parts: [part], source: null, recording: null,
   }, (async function* () {})());
 }

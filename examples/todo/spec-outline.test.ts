@@ -52,4 +52,21 @@ describe('example spec outline', () => {
     expect(actionsIn(runs[1]?.body ?? '').find((action) => action.name === 'create_list')?.disabled).toBe(true);
     expect(slug('Name a list')).toBe('name-a-list');
   });
+
+  test('features tagged @unrecorded stay in the outline but are not run', async () => {
+    const shared = expandFeature('specs/share-a-list.feature', await readFile(path.join(specs, 'share-a-list.feature'), 'utf8'));
+    const started = expandFeature('specs/getting-started.feature', await readFile(path.join(specs, 'getting-started.feature'), 'utf8'));
+    expect(shared.every((scenario) => !scenario.runnable)).toBe(true);
+    expect(started.every((scenario) => scenario.runnable)).toBe(true);
+  });
+
+  test('share-a-list ids are the ones the layered example fills', async () => {
+    const shared = expandFeature('specs/share-a-list.feature', await readFile(path.join(specs, 'share-a-list.feature'), 'utf8'));
+    expect(shared.map((scenario) => scenario.id)).toEqual([
+      'gherkin.share-a-list.plans-a-weekend',
+      'gherkin.share-a-list.keeps-working-through-a-sync-outage',
+      'gherkin.share-a-list.starts-over',
+      'gherkin.share-a-list.starts-over-while-offline'
+    ]);
+  });
 });

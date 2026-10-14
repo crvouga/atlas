@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/">
+  <decision id="retry-delay" name="Retry delay">
+    <decisionTable id="Retry delay" hitPolicy="UNIQUE">
+      <input label="Attempt">
+        <inputExpression typeRef="number"><text>attempt</text></inputExpression>
+      </input>
+      <output label="Wait" name="wait" />
+      <rule>
+        <inputEntry><text>1</text></inputEntry>
+        <outputEntry><text>30</text></outputEntry>
+      </rule>
+      <rule>
+        <inputEntry><text>2</text></inputEntry>
+        <outputEntry><text>60</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

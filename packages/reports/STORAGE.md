@@ -7,7 +7,7 @@ storage and time ports from its caller.
 
 `layers/index/<inverted-time>-<digest>.json` discovers immutable manifests at `layers/manifests/<digest>.json`. Each records producer, origin, parameters, checks, spec fingerprints and a recording bundle. The manifest is written after its blobs and the index last. Distinct results at the same timestamp retain separate identities. Compressed blobs under `layers/blobs/` are addressed by content and reused across runs; ordinary source publication shares its bundle directly with its layer without recompressing snapshots.
 
-Git commits are provenance and exact historical recording addresses, never a report partition. `combineEvidence` chooses completed results per check and parameters, retaining gaps from older layers. `publishSource` accepts `parameters`, and standalone parts may include them too. Inventory must be published before results for fingerprint comparison to be available.
+Git commits are provenance and exact historical recording addresses, never a report partition. `combineEvidence` chooses the newest completed result per check, environment and parameters, and keeps every other cell. An environment is the client that was checked (`desktop-web`, `mobile-web`, `ios`, `android`, or any other recorded name). The same check on two environments contributes twice. A layer that checks one scenario fills only that scenario. `publishSource` accepts `environment` and `parameters`, and a part may name its environment in `parameters.environment`. Inventory must be published before results for fingerprint comparison to be available.
 
 ## Commit inventory
 

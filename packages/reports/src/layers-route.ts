@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { createBundleReader } from './bundle';
 import { eachLimited } from './completion-order';
-import { createLiveEvidence, type LiveRunRecord } from './evidence-live';
+import { createLiveEvidence, liveRunRecord, type LiveRunRecord } from './evidence-live';
 import type { ActiveRun, BackendInfo, EvidencePage, LayerEvidence, LayerHeader, LayerRows } from './evidence-types';
 import { isFramePath, isKeySegment } from './keys';
 import { catalogEntries, catalogLayers } from './layer-catalog';
@@ -139,9 +139,7 @@ export function createLayersApp(deps: ReportsAppDeps) {
       try {
         const raw = await readUtf8(local, key);
         if (raw === null) return null;
-        const run = JSON.parse(raw) as Partial<LiveRunRecord>;
-        if (!run.packageDir || !run.bucket || typeof run.startedAtMs !== 'number') return null;
-        return { packageDir: run.packageDir, bucket: run.bucket, startedAtMs: run.startedAtMs, ...(typeof run.plannedChecks === 'number' ? { plannedChecks: run.plannedChecks } : {}) };
+        return liveRunRecord(JSON.parse(raw) as Partial<LiveRunRecord>);
       } catch {
         return null;
       }
