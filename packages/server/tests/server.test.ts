@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 
+import { gzipSync } from 'node:zlib';
+
+import { sha256Hex } from '../../reports/src/sigv4';
 import { combineBackends } from '../../reports/src/compose';
 import { copyStore } from '../../reports/src/copy-store';
 import { httpStore } from '../../reports/src/http-store';
@@ -154,12 +157,44 @@ describe('what the server refuses', () => {
 
   test('layers are immutable: the same bytes again are fine, other bytes under the same key are not', async () => {
     const { url } = await start();
-    const key = `layers/blobs/${'b'.repeat(64)}.gz`;
+    const key = 'layers/runs/2026-10-09T12-00-00-000Z-fast/screens/a.png';
     expect((await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: new Uint8Array([1, 2, 3]) })).status).toBe(201);
     expect((await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: new Uint8Array([1, 2, 3]) })).status).toBe(200);
     const other = await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: new Uint8Array([9]) });
     expect(other.status).toBe(409);
     expect(((await other.json()) as { error: string }).error).toContain('immutable');
+  });
+
+  test('a blob is named by what is in it: junk under the name of a real file is refused, and the real file may still follow', async () => {
+    const { url } = await start();
+    const raw = new TextEncoder().encode('a screenshot');
+    const key = `layers/blobs/${await sha256Hex(raw)}.gz`;
+    const junk = await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: new Uint8Array([1, 2, 3]) });
+    expect(junk.status).toBe(422);
+    const other = await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: gzipSync(new TextEncoder().encode('something else')) });
+    expect(other.status).toBe(422);
+    expect(((await other.json()) as { error: string }).error).toContain('does not match the digest');
+    expect((await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: gzipSync(raw) })).status).toBe(201);
+    // Compressed another way it is the same file: nothing to refuse.
+    expect((await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: gzipSync(raw, { level: 1 }) })).status).toBe(200);
+  });
+
+  test('what is stored is served as what it is: never run or sniffed, whatever its uploader called it', async () => {
+    const { url } = await start();
+    const key = 'layers/runs/2026-10-09T12-00-00-000Z-fast/page.html';
+    await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: '<script>alert(1)</script>', headers: { 'content-type': 'text/html' } });
+    const got = await fetch(`${url}/api/store/${key}`);
+    expect(got.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(got.headers.get('content-security-policy')).toContain('sandbox');
+    expect(got.headers.get('cross-origin-resource-policy')).toBe('same-origin');
+  });
+
+  test('a catalog entry that is not an object is refused, not a crash', async () => {
+    const { url } = await start();
+    for (const body of ['null', '7', '[]', '"x"']) {
+      const response = await fetch(`${url}/api/store/layers/index/0000000000000001-${'a'.repeat(64)}.json`, { method: 'PUT', body });
+      expect(response.status).toBe(422);
+    }
   });
 
   test('only what Atlas writes is accepted, and keys cannot leave layers/', async () => {
@@ -188,8 +223,9 @@ describe('what the server refuses', () => {
 
   test('nothing a report is made of can be deleted through the API; only the scratch objects `doctor` writes', async () => {
     const { url } = await start();
-    const key = `layers/blobs/${'d'.repeat(64)}.gz`;
-    await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: 'x' });
+    const raw = new TextEncoder().encode('d');
+    const key = `layers/blobs/${await sha256Hex(raw)}.gz`;
+    expect((await fetch(`${url}/api/store/${key}`, { method: 'PUT', body: gzipSync(raw) })).status).toBe(201);
     expect((await fetch(`${url}/api/store/${key}`, { method: 'DELETE' })).status).toBe(403);
     expect((await fetch(`${url}/api/store/${key}`, { method: 'HEAD' })).status).toBe(200);
   });

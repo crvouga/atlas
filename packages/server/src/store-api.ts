@@ -1,11 +1,24 @@
+/**
+ * @module Store protocol routes
+ *
+ * The `ObjectStore` interface over HTTP at `/api/store`: list keys under `layers/`, read and probe an object, upload one
+ * (checked by `validateUpload`, immutable once stored) and remove a scratch object. This is what `httpStore` talks to. An
+ * upload is told to the report only after it is stored, and a layer's manifest, parsed while it was checked, is handed on so
+ * it is not read again. Everything read is served as untrusted bytes (never sniffed, never run).
+ *
+ * @see docs/server.md#the-store-protocol
+ */
+
 import { Hono, type Context } from 'hono';
 
 import { isPaged, type ObjectStore } from '../../reports/src/object-store';
 import { readBytes } from '../../reports/src/object-io';
+import { UNTRUSTED_HEADERS } from '../../reports/src/attachment-response';
 import type { ReportLayer } from '../../reports/src/layer-types';
 import type { Auth } from './auth';
 import { classify, isCatalog, Refusal, sameBytes, validateUpload, validKey } from './validate';
 
+/** What the store routes need: the `store` they read and write, the `auth` that decides who may, the largest object accepted, and `onStored`, told after each upload with its key, its kind and (for a layer catalog entry) the layer already parsed. */
 export type StoreApiOptions = {
   readonly store: ObjectStore;
   readonly auth: Auth;
@@ -53,6 +66,7 @@ const decode = (c: Context, prefix: string): string | null => {
 /** A plain relative path: no traversal, no backslash, no control characters. */
 const safePath = (value: string) => value.length > 0 && value.length <= 1024 && !value.startsWith('/') && !value.includes('\\') && !/[\u0000-\u001f]/.test(value) && value.split('/').every(part => part !== '' && part !== '.' && part !== '..');
 
+/** The Hono app of the store protocol, to be mounted at `/api/store`. Reads need role `read`; writes need `publish` through a Bearer token. */
 export function storeApi(options: StoreApiOptions) {
   const app = new Hono();
   const { store, auth } = options;
@@ -91,7 +105,9 @@ export function storeApi(options: StoreApiOptions) {
     const stored = await store.get(name);
     if (!stored) return new Response(c.req.method === 'HEAD' ? null : JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
     // Everything under layers/ is immutable, so it may be kept for good.
-    const headers = { 'content-type': stored.contentType, 'cache-control': 'public, max-age=31536000, immutable', ...(stored.size ? { 'content-length': String(stored.size) } : {}) };
+    // What is stored came from a test run: it is never run, sniffed or embedded, whatever type its uploader gave it.
+    const type = /^[\w.+-]+\/[\w.+-]+(?:\s*;\s*[\w.-]+=[\w.\-"]+)*$/.test(stored.contentType) ? stored.contentType : 'application/octet-stream';
+    const headers = { 'content-type': type, ...UNTRUSTED_HEADERS, 'cache-control': 'public, max-age=31536000, immutable', ...(stored.size ? { 'content-length': String(stored.size) } : {}) };
     if (c.req.method === 'HEAD') { await stored.body.cancel(); return new Response(null, { headers }); }
     return new Response(stored.body, { headers });
   });
@@ -104,7 +120,8 @@ export function storeApi(options: StoreApiOptions) {
     try {
       const bytes = await readLimited(c.req.raw, options.maxObjectBytes);
       const kind = await validateUpload(name, bytes, store, layer => { recent.set(layer.id, layer); if (recent.size > 8) recent.delete(recent.keys().next().value!); });
-      const present = await sameBytes(store, name, bytes);
+      // A blob's name is the digest of what is in it, which was just checked: one that is there is this one, however it was compressed.
+      const present = kind === 'blob' && (await store.head(name)) ? 'same' : await sameBytes(store, name, bytes);
       // Scratch objects may be overwritten (an object store's contract says writing a key twice is fine); layers may not.
       if (present === 'different' && kind !== 'scratch') throw new Refusal(409, `${name} already exists with other content. Layers are immutable: publish a new one.`);
       if (present !== 'same') await store.put(name, bytes, c.req.header('content-type') ?? 'application/octet-stream');

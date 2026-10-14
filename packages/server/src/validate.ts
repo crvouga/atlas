@@ -1,3 +1,18 @@
+/**
+ * @module Upload validation
+ *
+ * What the server checks before it stores an object, so one bad upload cannot corrupt the report for everyone: the key is
+ * one Atlas writes (`classify`), a layer's content hashes to its id, blobs and spec files are what their names say, a
+ * document's files and a catalog entry's document are already there (so nothing half-uploaded is visible), and a run
+ * passed its privacy scan. Refusals are `Refusal`s carrying the HTTP status to answer. Layers are immutable: the same
+ * bytes again are fine, other bytes under the same key are not.
+ *
+ * @see docs/server.md#what-the-server-refuses
+ */
+
+import { promisify } from 'node:util';
+import { gunzip } from 'node:zlib';
+
 import { parseLayerDocument, SpecSetSchema } from '../../schema/src/layer';
 import { readUtf8 } from '../../reports/src/object-io';
 import type { ObjectStore } from '../../reports/src/object-store';
@@ -19,7 +34,7 @@ const KEY_LENGTH = 1024;
 const KINDS = [
   { kind: 'layer', pattern: new RegExp(`^layers/manifests/(${HEX})\\.json$`) },
   { kind: 'layer-catalog', pattern: new RegExp(`^layers/index/\\d{16}-(${HEX})\\.json$`) },
-  { kind: 'blob', pattern: new RegExp(`^layers/blobs/${HEX}\\.gz$`) },
+  { kind: 'blob', pattern: new RegExp(`^layers/blobs/(${HEX})\\.gz$`) },
   { kind: 'spec-body', pattern: new RegExp(`^layers/specs/blobs/(${HEX})\\.txt$`) },
   { kind: 'spec-set', pattern: new RegExp(`^layers/specs/sets/(${HEX})\\.json$`) },
   { kind: 'spec-catalog', pattern: new RegExp(`^layers/specs/index/\\d{16}-.+-[cmu]-(${HEX})\\.json$`) },
@@ -29,6 +44,7 @@ const KINDS = [
   { kind: 'scratch', pattern: /^layers\/doctor-[\w-]+\/.+$/ }
 ] as const;
 
+/** What a key names: `layer`, `layer-catalog`, `blob`, `spec-body`, `spec-set`, `spec-catalog`, `run-manifest`, `run-catalog`, `run-file` or `scratch` (what `doctor` writes to try the store). */
 export type UploadKind = (typeof KINDS)[number]['kind'];
 
 /** Is this a key a client may name? No traversal, no odd characters, and under `layers/`. */
@@ -37,6 +53,7 @@ export function validKey(key: string): boolean {
   return key.split('/').every(part => part !== '' && part !== '.' && part !== '..');
 }
 
+/** What kind of object a key names and the id inside it (the layer id, the digest…), or null when it is not a key Atlas writes. */
 export function classify(key: string): { kind: UploadKind; id: string | null } | null {
   for (const { kind, pattern } of KINDS) {
     const match = pattern.exec(key);
@@ -47,6 +64,16 @@ export function classify(key: string): { kind: UploadKind; id: string | null } |
 
 /** Catalog entries are what makes something visible, so they are the last thing a client writes. */
 export const isCatalog = (kind: UploadKind) => kind === 'layer-catalog' || kind === 'spec-catalog' || kind === 'run-catalog';
+
+const gunzipAsync = promisify(gunzip);
+/** The most a blob may expand to: what a layer may carry in total. A small file that expands to more is refused, not inflated. */
+const MAX_BLOB_BYTES = 2 * 1024 * 1024 * 1024;
+
+/** Parsed JSON that is not an object (a `null`, a number) names nothing: a refusal, not a crash. */
+function objectOf(value: unknown): { id?: unknown } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Refusal(422, 'A catalog entry is a JSON object with the id of what it makes visible');
+  return value as { id?: unknown };
+}
 
 async function exists(store: ObjectStore, key: string): Promise<boolean> {
   return store.head(key);
@@ -94,7 +121,7 @@ export async function validateUpload(key: string, bytes: Uint8Array, store: Obje
       break;
     }
     case 'layer-catalog': {
-      const entry = json() as { id?: unknown };
+      const entry = objectOf(json());
       if (entry.id !== known.id) throw new Refusal(422, 'The catalog entry names another layer than its key does');
       if (!(await exists(store, `layers/manifests/${known.id}.json`))) throw new Refusal(409, 'That layer has not been uploaded yet. Upload its manifest before its catalog entry.');
       break;
@@ -112,7 +139,7 @@ export async function validateUpload(key: string, bytes: Uint8Array, store: Obje
       break;
     }
     case 'spec-catalog': {
-      const entry = json() as { id?: unknown };
+      const entry = objectOf(json());
       if (entry.id !== known.id) throw new Refusal(422, 'The catalog entry names another spec set than its key does');
       if (!(await exists(store, `layers/specs/sets/${known.id}.json`))) throw new Refusal(409, 'That spec set has not been uploaded yet');
       break;
@@ -128,7 +155,13 @@ export async function validateUpload(key: string, bytes: Uint8Array, store: Obje
       json();
       break;
     }
-    case 'blob':
+    case 'blob': {
+      // The key is the digest of the uncompressed bytes. Checked the way a layer is, so a blob cannot be named for something it is not.
+      let raw: Uint8Array;
+      try { raw = new Uint8Array(await gunzipAsync(bytes, { maxOutputLength: MAX_BLOB_BYTES })); } catch { throw new Refusal(422, 'A blob is gzip; this one could not be read as such'); }
+      if ((await sha256Hex(raw)) !== known.id) throw new Refusal(422, 'The blob\'s content does not match the digest in its key');
+      break;
+    }
     case 'run-file':
     case 'scratch':
       break;
