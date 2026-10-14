@@ -38,6 +38,18 @@ test('a directory of specs is the outline: each file named specs/<path>, with it
   expect(await outline.readSpec('specs/missing')).toBeNull();
 });
 
+test('a folder-derived store id never collides with an id the caller chose', async () => {
+  const fetchReports = reportsHost({ specs: './specs', stores: [{ id: 'reports', label: 'Bucket', store: memoryStore() }, './reports'] });
+  const page = await (await fetchReports(new Request('http://viewer/api/reports/evidence'), root)).json() as EvidencePage;
+  expect(page.backends.map(backend => backend.id)).toEqual(['reports', 'reports-2']);
+});
+
+test('a wrong path comes back as a JSON error that names it', async () => {
+  const response = await reportsHost({ specs: './no-such-specs', stores: ['./reports'] })(new Request('http://viewer/api/reports/outline'), root);
+  expect(response.status).toBe(500);
+  expect(((await response.json()) as { error: string }).error).toContain('no-such-specs');
+});
+
 test('the viewer asks the host, which lays the stores over the specs', async () => {
   const fetchReports = reportsHost({ specs: './specs', stores: ['./reports', { id: 'lab', label: 'Device lab', store: memoryStore() }] });
   const outline = await (await fetchReports(new Request('http://viewer/api/reports/outline'), root)).json() as { specs: { path: string }[] };

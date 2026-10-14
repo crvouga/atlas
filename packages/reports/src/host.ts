@@ -34,7 +34,8 @@ export function reportsHost(options: ReportsHostOptions): (request: Request, rep
   return async (request, repoRoot) => {
     if (!app || root !== repoRoot) {
       root = repoRoot;
-      const used = new Set<string>();
+      // Ids given by the caller are kept; the ones derived from folders step around them.
+      const used = new Set(options.stores.flatMap((store) => (typeof store === 'string' ? [] : [store.id])));
       const backends = options.stores.map((store, index): BackendInput => {
         if (typeof store !== 'string') return store;
         const directory = path.resolve(repoRoot, store);
