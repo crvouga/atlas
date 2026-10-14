@@ -1,3 +1,4 @@
+@unrecorded
 Feature: Share a list
   People keep one list and work through it together.
 

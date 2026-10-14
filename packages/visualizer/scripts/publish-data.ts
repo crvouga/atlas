@@ -5,8 +5,7 @@ import { publishData } from '../vite/publish';
 
 /**
  * `pnpm publish-data`: the spec and the newest runs into `public/data` (or `ATLAS_OUT`), where
- * `pnpm build` picks them up. Roots come from `ATLAS_SPECS_ROOT` / `ATLAS_RUNS_ROOT` or
- * `ATLAS_FIXTURE`, as for the dev server.
+ * `pnpm build` picks them up. Roots come from `ATLAS_SPECS_ROOT` / `ATLAS_RUNS_ROOT`, as for the dev server.
  */
 try {
   const roots = resolveRoots();

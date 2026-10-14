@@ -402,11 +402,13 @@ async function publish(checks: readonly Recorded[]): Promise<void> {
     recordedAtMs: now,
     sha: origin.sha,
     branch: origin.branch,
+    // The browser scenarios run on desktop web. This fills that slot and leaves the other environments.
+    environment: 'desktop-web',
     runUrl: null,
     parameters: {},
     specs: outline.specs,
     recording: { type: 'layer' },
-    source: { source: 'todo', packageDir: 'examples/todo', bucket: 'all', status: failed ? 'failed' : 'passed', updatedAtMs: now, tests: reports.map((report) => report.meta) },
+    source: { source: 'todo', packageDir: 'examples/todo', bucket: 'all', status: failed ? 'failed' : 'passed', updatedAtMs: now, environment: 'desktop-web', tests: reports.map((report) => report.meta) },
     parts: [
       {
         sha: origin.sha ?? '',
@@ -437,7 +439,7 @@ function summary(label: string, checks: readonly Recorded[]): void {
 
 export async function runDocuments(): Promise<number> {
   const files = await specFiles(specsDir);
-  const scenarios = files.filter((file) => file.kind === 'gherkin').flatMap((file) => expandFeature(file.path, file.text));
+  const scenarios = files.filter((file) => file.kind === 'gherkin').flatMap((file) => expandFeature(file.path, file.text)).filter((scenario) => scenario.runnable);
   const model = files.find((file) => file.path === 'specs/todo.qnt');
   if (!model) throw new Error('examples/todo/specs/todo.qnt is missing');
   const quint = quintRuns(model.text);

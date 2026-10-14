@@ -250,6 +250,7 @@ function coffeeLayers(): readonly LayerSpec[] {
 function todoLayers(): readonly LayerSpec[] {
   const feature = 'Share a list';
   const spec = TODO_FEATURE;
+  // These match the ids `examples/todo/documents.ts` records, so a desktop web run replaces that slot.
   const quint = 'list.qnt';
   const dmn = 'retry-delay.dmn';
   const slo = 'sync.openslo.yaml';
@@ -280,11 +281,11 @@ function todoLayers(): readonly LayerSpec[] {
       backend: 'shared',
       packageDir: dir,
       checks: [
-        scenario('plans-a-weekend', 'Plans a weekend', 'passed', { steps: weekend.steps, files: weekend.files }),
-        scenario('sync-outage', 'Keeps working through a sync outage', 'passed'),
-        scenario('starts-over', 'Starts over', 'passed'),
-        scenario('starts-over-offline', 'Starts over while offline', 'passed'),
-        { id: 'starts-over-offline', title: named(feature, 'Starts over while offline'), spec, status: 'passed', kind: 'performance', measurements: [{ name: 'Sync', value: 2.4, unit: 's', limit: 1 }] },
+        scenario('gherkin.share-a-list.plans-a-weekend', 'Plans a weekend', 'passed', { steps: weekend.steps, files: weekend.files }),
+        scenario('gherkin.share-a-list.keeps-working-through-a-sync-outage', 'Keeps working through a sync outage', 'passed'),
+        scenario('gherkin.share-a-list.starts-over', 'Starts over', 'passed'),
+        scenario('gherkin.share-a-list.starts-over-while-offline', 'Starts over while offline', 'passed'),
+        { id: 'gherkin.share-a-list.starts-over-while-offline', title: named(feature, 'Starts over while offline'), spec, status: 'passed', kind: 'performance', measurements: [{ name: 'Sync', value: 2.4, unit: 's', limit: 1 }] },
         { id: 'trace-1', title: 'list · trace 1', spec: quint, status: 'passed', runtime: 'quint', steps: quintSteps([{ title: 'add(0)', detail: 'items = 1' }, { title: 'sync', detail: 'synced = true' }]) },
         { id: 'retry-second', title: 'Retry delay: second attempt', spec: dmn, status: 'passed', runtime: 'dmn' },
         { id: 'sync-latency', title: 'Sync finishes within a second', spec: slo, status: 'passed', runtime: 'openslo' },
@@ -299,8 +300,8 @@ function todoLayers(): readonly LayerSpec[] {
       backend: 'device-lab',
       packageDir: dir,
       checks: [
-        scenario('plans-a-weekend', 'Plans a weekend', 'passed'),
-        scenario('starts-over', 'Starts over', 'passed'),
+        scenario('gherkin.share-a-list.plans-a-weekend', 'Plans a weekend', 'passed'),
+        scenario('gherkin.share-a-list.starts-over', 'Starts over', 'passed'),
         { id: 'sync-latency', title: 'Sync finishes within a second', spec: slo, status: 'failed', runtime: 'openslo', detail: 'Sync took 1.8 seconds' }
       ]
     },
@@ -312,9 +313,9 @@ function todoLayers(): readonly LayerSpec[] {
       backend: 'local',
       packageDir: dir,
       checks: [
-        scenario('plans-a-weekend', 'Plans a weekend', 'passed'),
-        scenario('sync-outage', 'Keeps working through a sync outage', 'passed'),
-        scenario('starts-over', 'Starts over', 'failed', { detail: 'The list was still there' }),
+        scenario('gherkin.share-a-list.plans-a-weekend', 'Plans a weekend', 'passed'),
+        scenario('gherkin.share-a-list.keeps-working-through-a-sync-outage', 'Keeps working through a sync outage', 'passed'),
+        scenario('gherkin.share-a-list.starts-over', 'Starts over', 'failed', { detail: 'The list was still there' }),
         { id: 'retry-second', title: 'Retry delay: second attempt', spec: dmn, status: 'failed', runtime: 'dmn', detail: 'The second retry waited 10 seconds' }
       ]
     },
@@ -325,7 +326,7 @@ function todoLayers(): readonly LayerSpec[] {
       environment: 'ios',
       backend: 'device-lab',
       packageDir: dir,
-      checks: [scenario('plans-a-weekend', 'Plans a weekend', 'failed', { detail: 'The list name field never appeared', steps: iosWeekend.steps, files: iosWeekend.files })]
+      checks: [scenario('gherkin.share-a-list.plans-a-weekend', 'Plans a weekend', 'failed', { detail: 'The list name field never appeared', steps: iosWeekend.steps, files: iosWeekend.files })]
     },
     {
       at: at('2026-10-12T16:00:00.000Z'),
@@ -334,7 +335,7 @@ function todoLayers(): readonly LayerSpec[] {
       environment: 'desktop-web',
       backend: 'local',
       packageDir: dir,
-      checks: [scenario('sync-outage', 'Keeps working through a sync outage', 'failed', { detail: 'The retry never caught up', steps: outage.steps, files: outage.files })]
+      checks: [scenario('gherkin.share-a-list.keeps-working-through-a-sync-outage', 'Keeps working through a sync outage', 'failed', { detail: 'The retry never caught up', steps: outage.steps, files: outage.files })]
     }
   ];
 }
@@ -429,7 +430,7 @@ async function publishExampleLayer(store: ObjectStore, producer: string, layer: 
 export async function exampleReports(specs: Readonly<Record<string, string>>): Promise<ReportsAppDeps | null> {
   const layers = layersFor(specs);
   if (!layers) return null;
-  const producer = COFFEE_FEATURE in specs ? 'ordering' : 'lists';
+  const producer = COFFEE_FEATURE in specs ? 'ordering' : 'todo';
   const localStore = memoryStore();
   const store = memoryStore();
   const lab = memoryStore();
@@ -455,7 +456,7 @@ export async function exampleReports(specs: Readonly<Record<string, string>>): P
   };
 }
 
-let exampleApp: Promise<{ request: (path: string) => Promise<Response> } | null> | undefined;
+let exampleApp: ReturnType<typeof appForProcess> | undefined;
 
 async function appForProcess() {
   const specs = readExampleSpecs(resolveRoots().specs);

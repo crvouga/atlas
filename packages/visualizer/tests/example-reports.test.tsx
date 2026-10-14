@@ -105,6 +105,12 @@ test('the coffee example shows each environment, and a focused layer leaves the 
   await atlas.sees('large oat latte');
   await atlas.sees('Oat');
   expect(scenario('large oat latte')?.textContent).toContain('Mobile web');
+  await atlas.go('/specs/openslo?spec=coffee/ordering/checkout.openslo.yaml');
+  await atlas.sees('Checkout took 1.8 seconds');
+  expect(scenario('Checkout answers within a second')?.textContent).toContain('Android');
+  await atlas.go('/specs/alloy?spec=coffee/ordering/payment.als');
+  await atlas.sees('An order has one payment');
+  expect(scenario('An order has one payment')?.getAttribute('data-status')).toBe('passed');
 });
 
 test('the todo example shows the same list on each environment, filled by separate layers', async () => {
@@ -129,6 +135,24 @@ test('the todo example shows the same list on each environment, filled by separa
   await atlas.sees('The retry never caught up');
   expect(atlas.find('nav[aria-label="Gherkin features"] a', 'Rename a list')!.getAttribute('data-result')).toBe('none');
 
+  await atlas.go('/specs/quint?spec=list.qnt');
+  await atlas.sees('trace 1');
+  await atlas.click('button', 'trace 1');
+  await atlas.sees('add(0)');
+  const items = [...atlas.host.querySelectorAll('tbody tr')].find((row) => row.querySelector('th')?.textContent?.includes('items'));
+  expect(items?.querySelector('td:last-child')?.textContent?.trim()).toBe('1');
+  await atlas.go('/specs/dmn?spec=retry-delay.dmn');
+  await atlas.sees('second attempt');
+  expect(scenario('second attempt')?.textContent).toContain('Mobile web');
+  await atlas.go('/specs/openslo?spec=sync.openslo.yaml');
+  await atlas.sees('Sync took 1.8 seconds');
+  expect(scenario('Sync finishes within a second')?.textContent).toContain('Android');
+  await atlas.go('/specs/alloy?spec=list.als');
+  await atlas.sees('A list has its todos');
+  expect(scenario('A list has its todos')?.getAttribute('data-status')).toBe('passed');
+
+  await atlas.go('/specs/gherkin?spec=share-a-list.feature');
+  await atlas.until(() => weekend()?.getAttribute('data-status') === 'failed', 'recorded results for Plans a weekend');
   await atlas.click('button', 'Sources');
   await atlas.sees('5 of 5 layers contribute');
   expect(atlas.text()).toContain('feat/offline');

@@ -40,7 +40,7 @@ Freshness warnings preserve the recorded outcome. Changed spec fingerprints or r
 
 Configure `ATLAS_REPORTS_MODULE` with a host composition module exporting `reportsDevFetch(request, repoRoot)`. Atlas's Vite middleware serves it at `/api/reports`, alongside specs and chart runs. `INIT_CWD` identifies the consuming repository. Credentials stay in that server module.
 
-When that module is unset and the open specs are the coffee example or the todo example, the visualizer dev server serves an in-memory layered report for those documents instead. Any other spec set is left alone.
+When that module is unset and the open specs are the coffee example or the todo example, the visualizer dev server serves an in-memory layered report for those documents instead. Any other spec set is left alone. The todo example's own module serves that same layered report and adds the desktop web layer `example:run` writes.
 
 For a separately hosted reports API, set `VITE_ATLAS_REPORTS_URL` when building the visualizer. Otherwise a built site reads `data/evidence/`, populated with `exportEvidence`. Atlas still browses specs if evidence is absent.
 

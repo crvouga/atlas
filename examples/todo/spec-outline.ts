@@ -22,6 +22,8 @@ export type RunnableScenario = {
   readonly id: string;
   readonly specPath: string;
   readonly steps: readonly ScenarioStep[];
+  /** False for a feature tagged `@unrecorded`: it is in the outline, but nothing here has steps to run it. */
+  readonly runnable: boolean;
 };
 
 export type QuintRun = {
@@ -109,7 +111,8 @@ export function expandFeature(specPath: string, text: string): RunnableScenario[
           title: `${feature.name}: ${name}`,
           id: unique(`gherkin.${slug(feature.name)}.${slug(name)}`, used),
           specPath,
-          steps
+          steps,
+          runnable: !feature.tags.some((tag) => tag.name === '@unrecorded')
         });
       }
     }

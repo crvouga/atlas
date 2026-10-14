@@ -1,31 +1,31 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { ObjectStore } from '@crvouga/atlas/reports/object-store';
 import { createReportsApp } from '@crvouga/atlas/reports/reports-route';
+import { exampleReports, readExampleSpecs } from '../../packages/visualizer/vite/example-reports';
 
 import { directoryStore } from './report-store';
-import { loadOutline } from './spec-outline';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const store = directoryStore(path.join(here, 'atlas-reports'));
-const clock = { now: () => Date.now() };
-const timers = {
-  setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
-  clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
-  setInterval: (fn: () => void, ms: number) => setInterval(fn, ms),
-  clearInterval: (handle: unknown) => clearInterval(handle as ReturnType<typeof setInterval>)
-};
 
-let app: ReturnType<typeof createReportsApp> | undefined;
+/**
+ * The built-in layers (several environments, versions, branches and backends) plus whatever
+ * `example:run` has written into the directory store. An empty directory leaves the built-in report.
+ */
+export async function exampleReportsApp(runStore: ObjectStore = directoryStore(path.join(here, 'atlas-reports'))) {
+  const seeded = await exampleReports(readExampleSpecs(path.join(here, 'specs')));
+  if (!seeded) throw new Error('The todo example specs were not loaded');
+  return createReportsApp({
+    ...seeded,
+    backends: [...(seeded.backends ?? []), { id: 'example-run', label: 'Example run', store: runStore }]
+  });
+}
+
+let app: ReturnType<typeof exampleReportsApp> | undefined;
 
 async function reportsApp() {
-  app ??= createReportsApp({
-    store: null,
-    localStore: store,
-    clock,
-    timers,
-    outline: () => loadOutline(path.join(here, 'specs'), path.resolve(here, '../..'))
-  });
+  app ??= exampleReportsApp();
   return app;
 }
 

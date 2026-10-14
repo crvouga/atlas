@@ -121,7 +121,7 @@
     "test": "bun test && bun test --cwd packages/visualizer --preload ./tests/preload.ts tests",
     "type-check": "for dir in packages/* scripts examples/todo; do tsc --noEmit -p \"$dir\" || exit 1; done",
     "schemas": "bun packages/schema/scripts/emit-json-schemas.ts",
-    "viz:dev": "cd packages/visualizer && INIT_CWD=\"$OLDPWD\" bun --bun vite --configLoader runner",
+    "viz:dev": "bun packages/visualizer/bin/atlas-visualizer.mjs dev --specs \"$(pwd)/packages/visualizer/fixtures/full/specs\" --runs \"$(pwd)/packages/visualizer/fixtures/full/runs\"",
     "viz:build": "cd packages/visualizer && INIT_CWD=\"$OLDPWD\" bun --bun vite build --configLoader runner",
     "viz:publish-data": "bun packages/visualizer/scripts/publish-data.ts",
     "viz:fixtures": "bun packages/visualizer/scripts/make-fixtures.ts",

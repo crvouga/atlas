@@ -1,3 +1,4 @@
+@unrecorded
 Feature: Rename a list
   The name of a list can change after it is created. No layer has recorded this yet.
 
