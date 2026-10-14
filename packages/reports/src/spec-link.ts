@@ -56,9 +56,11 @@ export async function linkChecksToSpecs(ingested: IngestedChecks, links: SpecLin
   for (const used_ of used) {
     const entry = known.get(used_);
     if (entry) { specs.push(entry); continue; }
-    // An explicit spec outside a specs directory: read it where it is, if it is there.
-    const text = await readFile(path.resolve(links.base, links.spec ?? used_), 'utf8').catch(() => null);
-    if (text !== null && used_ === explicit) specs.push({ path: used_, domain: path.basename(links.base) || 'product', kind: specKindOf(used_), title: path.posix.basename(used_), fingerprint: textFingerprint(text) });
+    // An explicit spec outside a specs directory: read it where it is, if it is there. Nothing else
+    // a report names is read: a report is data, and does not choose which files Atlas opens.
+    if (used_ !== explicit || !links.spec) continue;
+    const text = await readFile(path.resolve(links.base, links.spec), 'utf8').catch(() => null);
+    if (text !== null) specs.push({ path: used_, domain: path.basename(links.base) || 'product', kind: specKindOf(used_), title: path.posix.basename(used_), fingerprint: textFingerprint(text) });
   }
   return { checks, specs };
 }

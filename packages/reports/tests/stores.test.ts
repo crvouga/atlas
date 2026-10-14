@@ -32,7 +32,7 @@ test('a verification fails a backend that breaks the contract', async () => {
 test('directory store keys cannot leave the directory or collide with its bookkeeping', async () => {
   const store = directoryStore(await scratch());
   for (const key of ['../x', 'a/../../x', '/abs', 'a//b', 'a/.', 'a\\b', 'x.content-type', 'a/.tmp-1']) await expect(store.put(key, new Uint8Array(), 'text/plain')).rejects.toThrow('Invalid object store key');
-  await expect(store.listKeys('../')).rejects.toThrow('Invalid object store prefix');
+  for (const prefix of ['../', '/etc', 'a/../..', 'a\\b']) await expect(store.listKeys(prefix)).rejects.toThrow('Invalid object store prefix');
 });
 
 test('concurrent writers of one key never leave a partial object or a stray temporary file', async () => {

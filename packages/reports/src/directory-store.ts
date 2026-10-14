@@ -119,7 +119,7 @@ export function directoryStore(root: string): ObjectStore {
       };
       // Only the directory a prefix names can hold its keys.
       const slash = prefix.lastIndexOf('/');
-      if (prefix.split('/').some((part) => part === '..')) throw new Error(`Invalid object store prefix: ${prefix}`);
+      if (prefix.startsWith('/') || prefix.includes('\\') || prefix.split('/').some((part) => part === '..')) throw new Error(`Invalid object store prefix: ${prefix}`);
       await walk(slash < 0 ? rootPath : path.resolve(rootPath, prefix.slice(0, slash)));
       return found.sort();
     },
