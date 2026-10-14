@@ -133,3 +133,21 @@ describe('JUnit as real tools write it', () => {
     expect(at('2024-01-01T02:00:00+02:00')).toBe(Date.UTC(2024, 0, 1));
   });
 });
+
+describe('linking checks by a dotted file name', () => {
+  test('user.profile.feature is user.profile, not user: a different spec is never taken for it', async () => {
+    const { linkChecksToSpecs } = await import('../src/spec-link');
+    const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const root = await mkdtemp(path.join(tmpdir(), 'atlas-stem-'));
+    try {
+      await mkdir(path.join(root, 'specs'));
+      await writeFile(path.join(root, 'specs', 'user.feature'), 'Feature: Account\n');
+      await writeFile(path.join(root, 'specs', 'user.profile.feature'), 'Feature: Profile page\n');
+      const linked = await linkChecksToSpecs({ checks: [{ id: 'a', title: 'a', status: 'passed', detail: '', measurements: [] }], hints: [['user.profile.feature']], recordedAtMs: null, tool: null }, { base: root, specsDirectory: 'specs' });
+      expect(linked.checks[0]!.specPath).toBe('specs/user.profile.feature');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

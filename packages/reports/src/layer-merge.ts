@@ -1,5 +1,6 @@
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
+import { summarizeEvidence } from './evidence-detail';
 import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
 
@@ -39,23 +40,35 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
   const place = layerPlace(summary);
   const source = summary.source;
   const tests = new Map(source?.tests.map(test => [`${source.source}/${test.testId}`, test]) ?? []);
-  const rows: LayerRow[] = summary.parts.flatMap(part => part.checks.map(check => {
-    const test = tests.get(check.id);
-    const variant: LayerParameters = test ? { system: test.system, runtime: test.runtime, seed: test.seed } : {};
-    return {
-      kind: part.kind,
-      id: check.id,
-      title: check.title,
-      status: check.status,
-      specPath: check.specPath ? specPath(check.specPath) : null,
-      detail: check.detail,
-      measurements: check.measurements,
-      testId: test?.testId ?? null,
-      variant,
-      durationMs: test?.durationMs ?? check.durationMs ?? null,
-    };
-  }));
+  // A layer's checks repeat a handful of spec paths; each is normalized once.
+  const normalized = new Map<string, string>();
+  const specOf = (path: string) => {
+    let found = normalized.get(path);
+    if (found === undefined) normalized.set(path, found = specPath(path));
+    return found;
+  };
+  const rows: LayerRow[] = [];
+  for (const part of summary.parts) {
+    for (const check of part.checks) {
+      const test = tests.get(check.id);
+      const evidence = summarizeEvidence(check);
+      rows.push({
+        kind: part.kind,
+        id: check.id,
+        title: check.title,
+        status: check.status,
+        specPath: check.specPath ? specOf(check.specPath) : null,
+        detail: check.detail,
+        measurements: check.measurements,
+        testId: test?.testId ?? null,
+        variant: test ? { system: test.system, runtime: test.runtime, seed: test.seed } : {},
+        durationMs: test?.durationMs ?? check.durationMs ?? null,
+        ...(evidence ? { evidence } : {}),
+      });
+    }
+  }
   const recording = summary.recording;
+  const layerSummaryEvidence = summarizeEvidence(summary, ...summary.parts);
   const layer: LayerHeader = {
     ...(summary.freshness ? { freshness: summary.freshness } : {}),
     id: summary.id,
@@ -72,6 +85,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     live: false,
     counts: outcomeCounts(rows),
     execution: textFingerprint(layerExecutionKey(summary)),
+    ...(layerSummaryEvidence ? { evidence: layerSummaryEvidence } : {}),
   };
   const fingerprints: Record<string, string> = {};
   for (const spec of summary.specs) if (spec.fingerprint) fingerprints[specPath(spec.path)] = spec.fingerprint;
@@ -108,7 +122,7 @@ function completed(status: EvidenceStatus): boolean {
 }
 
 /** A newer completed result takes its slot. An unfinished one never replaces a completed one, and a tie fails. */
-function replaces(next: EvidenceResult, prior: EvidenceResult): boolean {
+export function replaces(next: EvidenceResult, prior: EvidenceResult): boolean {
   const done = completed(next.row.status);
   const priorDone = completed(prior.row.status);
   if (done !== priorDone) return done;
@@ -135,12 +149,13 @@ export function combineEvidence(outline: ReportOutline, layers: readonly LayerEv
   for (const { layer, rows, fingerprints } of distinctEvidence(layers)) {
     const scope = layer.packageDir;
     const related = outline.changedFiles.some(file => scope ? file.startsWith(`${scope}/`) : !specPath(file).startsWith('specs/'));
+    const keyOf = layerResultKeys(layer);
     for (const row of rows) {
       // Environment and the layer's other choices split the slot. A harness
       // seed does not: a focused rerun replaces the check it repeated.
       const parameters = layer.parameters;
       const path = row.specPath ?? '';
-      const key = JSON.stringify([layer.producer, row.kind, path, row.id, layer.environment ?? '', parameterKey(parameters)]);
+      const key = keyOf(row);
       const result: EvidenceResult = { key, slot: slotKey(path, row.id), layer, row, parameters, warning: warning(layer, path, specs.get(path)?.spec, outline, fingerprints[path], related || changed.has(path)) };
       const prior = winners.get(key);
       if (!prior || replaces(result, prior)) winners.set(key, result);
@@ -149,6 +164,22 @@ export function combineEvidence(outline: ReportOutline, layers: readonly LayerEv
   const unassigned: EvidenceResult[] = [];
   for (const result of winners.values()) (specs.get(result.row.specPath ?? '')?.results ?? unassigned).push(result);
   return { specs: [...specs.values()], unassigned };
+}
+
+/** The slot a row fills: one producer's check of one kind, in one environment, under one parameter set. */
+export function resultKey(layer: Pick<LayerHeader, 'producer' | 'environment' | 'parameters'>, row: Pick<LayerRow, 'kind' | 'specPath' | 'id'>): string {
+  return JSON.stringify([layer.producer, row.kind, row.specPath ?? '', row.id, layer.environment ?? '', parameterKey(layer.parameters)]);
+}
+
+/**
+ * `resultKey` for every row of one layer, which share all but three parts of it. The strings are exactly
+ * those `resultKey` makes (they are keys that persist in no store, but two ways of making one must agree),
+ * without sorting and writing the layer's parameters once per check.
+ */
+export function layerResultKeys(layer: Pick<LayerHeader, 'producer' | 'environment' | 'parameters'>): (row: Pick<LayerRow, 'kind' | 'specPath' | 'id'>) => string {
+  const producer = JSON.stringify(layer.producer);
+  const tail = `,${JSON.stringify(layer.environment ?? '')},${JSON.stringify(parameterKey(layer.parameters))}]`;
+  return row => `[${producer},${JSON.stringify(row.kind)},${JSON.stringify(row.specPath ?? '')},${JSON.stringify(row.id)}${tail}`;
 }
 
 export function slotKey(path: string, id: string): string {

@@ -21,7 +21,10 @@ export type EvidenceMeasurement = {
   readonly limit?: number;
 };
 
-export type EvidenceCheck = {
+/** What a check may carry beyond its outcome. All optional and open: see docs/extending.md. */
+export type EvidenceExtras = Partial<Pick<import('../../schema/src/layer').Check, 'tags' | 'labels' | 'links' | 'steps' | 'attachments' | 'annotations' | 'attempts' | 'extensions'>>;
+
+export type EvidenceCheck = EvidenceExtras & {
   readonly id: string;
   readonly title: string;
   readonly status: EvidenceStatus;
@@ -33,7 +36,7 @@ export type EvidenceCheck = {
 };
 
 /** `kind` is an open producer key; new parts need no protocol change. */
-export type ReportPart = {
+export type ReportPart = EvidenceExtras & {
   readonly freshness?: 'unknown' | 'modified';
   readonly parameters?: Readonly<Record<string, string>>;
   readonly sha: string;

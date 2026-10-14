@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+  "producer": "playwright",
+  "recordedAtMs": 1760000000000,
+  "sha": "0123456789abcdef0123456789abcdef01234567",
+  "branch": "main",
+  "runUrl": "https://ci.example.com/runs/42",
+  "environment": "desktop-web",
+  "parameters": { "browser": "chromium" },
+  "labels": { "build": "4821", "os": "linux" },
+  "tags": ["nightly"],
+  "links": [{ "url": "https://ci.example.com/runs/42", "name": "CI run", "rel": "run" }],
+  "attachments": [
+    { "name": "ci.log", "role": "log", "contentType": "text/plain", "bundleKey": "attachments/aaaa", "bytes": 120, "sha256": "aaaa" }
+  ],
+  "annotations": [{ "type": "note", "level": "info", "message": "Ran on a shared runner" }],
+  "extensions": { "com.example.cost": { "cents": 12 } },
+  "specs": [{ "path": "specs/checkout.feature", "domain": "shop", "kind": "gherkin", "title": "Checkout", "fingerprint": "1:2:3" }],
+  "parts": [
+    {
+      "sha": "0123456789abcdef0123456789abcdef01234567",
+      "id": "playwright",
+      "kind": "behavior",
+      "title": "Playwright",
+      "recordedAtMs": 1760000000000,
+      "labels": { "project": "chromium" },
+      "checks": [
+        {
+          "id": "specs/checkout.feature > Pays by card",
+          "title": "Pays by card",
+          "status": "failed",
+          "detail": "expected a receipt",
+          "specPath": "specs/checkout.feature",
+          "measurements": [{ "name": "LCP", "value": 2100, "unit": "ms", "limit": 2500, "extensions": { "com.example.p": 75 } }],
+          "durationMs": 4200,
+          "tags": ["smoke", "payments"],
+          "labels": { "owner": "payments-team", "severity": "high" },
+          "links": [{ "url": "https://issues.example.com/PAY-12", "name": "PAY-12", "rel": "issue" }],
+          "steps": [
+            { "id": "s1", "name": "Open the cart", "kind": "action", "status": "passed", "offsetMs": 0, "durationMs": 800 },
+            { "id": "s2", "parentId": "s1", "name": "GET /cart", "kind": "request", "status": "passed", "offsetMs": 20, "durationMs": 120, "extensions": { "com.example.http": { "status": 200 } } },
+            { "id": "s3", "name": "Pay", "kind": "action", "status": "failed", "offsetMs": 900, "durationMs": 3000, "detail": "timeout", "attachments": [{ "name": "failure.png", "role": "screenshot", "contentType": "image/png", "bundleKey": "attachments/bbbb", "width": 1280, "height": 720 }] }
+          ],
+          "attachments": [
+            { "id": "v", "name": "run.webm", "role": "video", "contentType": "video/webm", "bundleKey": "attachments/cccc", "durationMs": 4200, "poster": "p", "captions": ["c"] },
+            { "id": "p", "name": "poster.png", "role": "screenshot", "contentType": "image/png", "bundleKey": "attachments/dddd" },
+            { "id": "c", "name": "captions.vtt", "role": "captions", "contentType": "text/vtt", "text": "WEBVTT\n" },
+            { "name": "dom.html", "role": "snapshot", "contentType": "text/html", "bundleKey": "attachments/eeee", "at": { "step": "s3", "offsetMs": 3900 } },
+            { "name": "trace.zip", "role": "trace", "contentType": "application/zip", "uri": "https://artifacts.example.com/trace.zip" },
+            { "name": "a thing from the future", "role": "hologram", "contentType": "application/x-hologram", "bundleKey": "attachments/ffff" }
+          ],
+          "annotations": [
+            { "type": "accessibility", "level": "warning", "message": "Low contrast on Pay", "source": { "file": "src/pay.tsx", "line": 12 }, "at": { "step": "s3" } },
+            { "type": "com.example.novel", "message": "A kind of note nobody has heard of" }
+          ],
+          "attempts": [
+            { "index": 0, "status": "failed", "durationMs": 4100, "detail": "timeout" },
+            { "index": 1, "status": "failed", "durationMs": 4200, "steps": [{ "name": "Pay", "status": "failed" }] }
+          ],
+          "extensions": { "com.example.coverage": { "lines": 0.82 }, "io.playwright": { "retries": 1 } }
+        },
+        { "id": "specs/checkout.feature > Applies a coupon", "title": "Applies a coupon", "status": "passed", "detail": "", "measurements": [] }
+      ]
+    }
+  ],
+  "source": null,
+  "recording": null,
+  "bundle": {}
+}

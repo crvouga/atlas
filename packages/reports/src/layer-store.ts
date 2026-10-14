@@ -13,6 +13,10 @@ export async function publishLayer(store: ObjectStore, summary: Omit<LayerSummar
   const bundle = await writeBundle(store, entries, 'layers/blobs/');
   return publishLayerBundle(store, summary, bundle);
 }
+/** The catalog entry that makes a layer visible. It is written last, after the layer and its files. */
+export function layerCatalogKey(recordedAtMs: number, id: string): string {
+  return `${LAYER_INDEX}${String(Number.MAX_SAFE_INTEGER - Math.max(0, Math.floor(recordedAtMs))).padStart(16, '0')}-${id}.json`;
+}
 export async function publishLayerBundle(store: ObjectStore, summary: Omit<LayerSummary, 'id'>, bundle: BundleIndex): Promise<ReportLayer> {
   // The id is the digest of exactly this document without it, so every producer that records the same thing writes the same layer.
   const body = JSON.stringify({ schemaVersion: LAYER_SCHEMA_VERSION, ...summary, bundle });
@@ -21,8 +25,7 @@ export async function publishLayerBundle(store: ObjectStore, summary: Omit<Layer
   const layer: ReportLayer = { ...summary, id, bundle };
   // Immutable manifest first, independent catalog entry last: concurrent producers never overwrite one another.
   if (!(await store.head(layerKey(id)))) await writeUtf8(store, layerKey(id), JSON.stringify({ schemaVersion: LAYER_SCHEMA_VERSION, ...layer }), 'application/json');
-  const inverse = String(Number.MAX_SAFE_INTEGER - Math.max(0, Math.floor(summary.recordedAtMs))).padStart(16, '0');
-  await writeUtf8(store, `${LAYER_INDEX}${inverse}-${id}.json`, JSON.stringify({ id }), 'application/json');
+  await writeUtf8(store, layerCatalogKey(summary.recordedAtMs, id), JSON.stringify({ id }), 'application/json');
   return layer;
 }
 /** A layer that is present but cannot be read is an error naming why, never a half-read layer. */

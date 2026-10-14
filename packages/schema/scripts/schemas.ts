@@ -6,6 +6,8 @@ import {
   JourneysFileSchema,
   LayerDocumentSchema,
   ReportStatusSchema,
+  SpecSetSchema,
+  ServerConfigSchema,
   PublishChecksSchema,
   ManifestEnvelopeSchema,
   PathRecordSchema,
@@ -38,7 +40,9 @@ export const SCHEMAS: Record<string, z.ZodType> = {
   'atlas-change': AtlasChangeSchema,
   layer: LayerDocumentSchema,
   'publish-checks': PublishChecksSchema,
-  'report-status': ReportStatusSchema
+  'report-status': ReportStatusSchema,
+  'spec-set': SpecSetSchema,
+  'server-config': ServerConfigSchema
 };
 
 

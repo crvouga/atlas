@@ -1,18 +1,19 @@
 import path from 'node:path';
 
+import { openStore, storeId, storeSpecs } from './store-url';
+
 import type { BackendInput } from './compose';
 import { loadDirectoryOutline } from './directory-outline';
-import { directoryStore } from './directory-store';
 import { createReportsApp } from './reports-route';
 
 export type ReportsHostOptions = {
   /** The specs directory, relative to the project. Its files are the outline every layer fills. */
   readonly specs: string;
   /**
-   * Where layers are: a directory, or any backend. Directories are named by their folder. Several
-   * stores are one report: layers from all of them are laid over the same specs.
+   * Where layers are: a directory, an `s3://` URL, or any backend. Several stores are one report: layers
+   * from all of them are laid over the same specs. Default: `ATLAS_STORE`.
    */
-  readonly stores: readonly (string | BackendInput)[];
+  readonly stores?: readonly (string | BackendInput)[];
   /** Groups the specs in the viewer. */
   readonly domain?: string;
 };
@@ -34,15 +35,15 @@ export function reportsHost(options: ReportsHostOptions): (request: Request, rep
   return async (request, repoRoot) => {
     if (!app || root !== repoRoot) {
       root = repoRoot;
-      // Ids given by the caller are kept; the ones derived from folders step around them.
-      const used = new Set(options.stores.flatMap((store) => (typeof store === 'string' ? [] : [store.id])));
-      const backends = options.stores.map((store, index): BackendInput => {
+      // Ids given by the caller are kept; the ones derived from the store step around them.
+      const given = options.stores ?? storeSpecs([], process.env);
+      const used = new Set(given.flatMap((store) => (typeof store === 'string' ? [] : [store.id])));
+      const backends = given.map((store): BackendInput => {
         if (typeof store !== 'string') return store;
-        const directory = path.resolve(repoRoot, store);
-        const base = path.basename(directory).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || `store-${index + 1}`;
-        const id = used.has(base) ? `${base}-${index + 1}` : base;
+        const opened = openStore(store, { base: repoRoot, env: process.env });
+        const id = storeId(opened.location, used);
         used.add(id);
-        return { id, label: path.basename(directory), store: directoryStore(directory) };
+        return { id, label: opened.location.kind === 'directory' ? path.basename(opened.location.directory) : opened.label, store: opened.store };
       });
       const specs = path.resolve(repoRoot, options.specs);
       app = createReportsApp({

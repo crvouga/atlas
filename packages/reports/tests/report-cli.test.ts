@@ -13,9 +13,9 @@ let root: string;
 beforeAll(async () => { root = await mkdtemp(path.join(tmpdir(), 'atlas-cli-')); });
 afterAll(async () => { await rm(root, { recursive: true, force: true }); });
 
-async function run(args: string[], env: Record<string, string> = {}) {
+async function run(args: string[], env: Record<string, string> = {}, git: (args: readonly string[]) => string | null = () => null) {
   let output = '';
-  const code = await reportMain(args, { out: text => { output += text; }, env, cwd: root, git: () => null });
+  const code = await reportMain(args, { out: text => { output += text; }, env, cwd: root, git, clock: () => 1_700_000_000_000 });
   return { code, output };
 }
 const ctrf = (tests: object[], stop = 500) => JSON.stringify({ reportFormat: 'CTRF', results: { tool: { name: 'jest' }, summary: { stop }, tests } });
@@ -129,9 +129,9 @@ describe('when the checks ran', () => {
 
 describe('where the checks ran', () => {
   test('the CI environment names it, git fills what is left, and a pull request reports its own branch', () => {
-    expect(detectOrigin({ GITHUB_SHA: 'abc', GITHUB_REF_NAME: '12/merge', GITHUB_HEAD_REF: 'feat/x', GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '9' }, () => 'git')).toEqual({ sha: 'abc', branch: 'feat/x', runUrl: 'https://github.com/o/r/actions/runs/9' });
-    expect(detectOrigin({}, args => (args[0] === 'rev-parse' ? 'deadbeef' : 'main'))).toEqual({ sha: 'deadbeef', branch: 'main', runUrl: null });
-    expect(detectOrigin({}, () => null)).toEqual({ sha: null, branch: null, runUrl: null });
+    expect(detectOrigin({ GITHUB_SHA: 'abc', GITHUB_REF_NAME: '12/merge', GITHUB_HEAD_REF: 'feat/x', GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '9' }, () => 'git')).toEqual({ sha: 'abc', branch: 'feat/x', runUrl: 'https://github.com/o/r/actions/runs/9', ci: true });
+    expect(detectOrigin({}, args => (args[0] === 'rev-parse' ? 'deadbeef' : 'main'))).toEqual({ sha: 'deadbeef', branch: 'main', runUrl: null, ci: false });
+    expect(detectOrigin({}, () => null)).toEqual({ sha: null, branch: null, runUrl: null, ci: false });
   });
 });
 
@@ -189,9 +189,9 @@ describe('which specs have results', () => {
     await file('only-cart.xml', '<testsuites><testsuite name="Shopping cart"><testcase classname="Shopping cart" name="Adds"/></testsuite></testsuites>');
     await run(['publish', '--store', 'half', '--producer', 'bdd', '--junit', 'only-cart.xml', '--specs', 'sspecs']);
 
+    // Publishing with --specs also publishes the specs, so a checkout is not needed to know what to expect.
     const plain = JSON.parse((await run(['status', '--store', 'half', '--format', 'json'])).output) as ReportStatus;
-    // Without the spec files, only the specs a layer mentioned are known.
-    expect(plain.specsWithoutEvidence).toEqual([]);
+    expect(plain.specsWithoutEvidence).toEqual(['specs/checkout.feature']);
 
     const lit = await run(['status', '--store', 'half', '--specs', 'sspecs', '--format', 'json']);
     const status = JSON.parse(lit.output) as ReportStatus;
@@ -204,7 +204,9 @@ describe('which specs have results', () => {
     const strict = await run(['status', '--store', 'half', '--specs', 'sspecs', '--require-all-specs']);
     expect(strict.code).toBe(1);
     expect(strict.output).toContain('1 spec has no results: specs/checkout.feature');
-    await expect(run(['status', '--store', 'half', '--require-all-specs'])).rejects.toThrow('--require-all-specs needs --specs');
+    // With no directory given, the store's own spec set says what to expect; a store without one cannot.
+    expect((await run(['status', '--store', 'half', '--require-all-specs'])).code).toBe(1);
+    await expect(run(['status', '--store', 'node1', '--require-all-specs'])).rejects.toThrow('needs to know which specs to expect');
   });
 });
 
@@ -256,6 +258,126 @@ describe('a broken command is not a failed gate', () => {
       process.stderr.write = original;
     }
     expect(written.join('')).toContain('atlas report: Store directory not found');
-    expect(written.join('')).toContain('atlas report: publish needs --store <dir>');
+    expect(written.join('')).toContain('atlas report: Give --store <dir or s3://bucket/prefix>, or set ATLAS_STORE');
+  });
+});
+
+describe('a store given as a URL or by the environment', () => {
+  test('ATLAS_STORE is the default, so a developer sets it once', async () => {
+    await file('env.xml', '<testsuites><testsuite name="s"><testcase classname="C" name="a"/></testsuite></testsuites>');
+    const env = { ATLAS_STORE: path.join(root, 'from-env') };
+    expect((await run(['publish', '--producer', 'unit', '--junit', 'env.xml'], env)).code).toBe(0);
+    const status = JSON.parse((await run(['status', '--format', 'json'], env)).output) as ReportStatus;
+    expect(status.checks.total).toBe(1);
+    await expect(run(['publish', '--producer', 'unit', '--junit', 'env.xml'], { ATLAS_STORE: 'a,b' })).rejects.toThrow('Give one --store');
+  });
+
+  test('keys do not belong in a URL, and an unknown scheme is refused', async () => {
+    await expect(run(['status', '--store', 's3://KEY:SECRET@bucket/p'])).rejects.toThrow('Keys do not belong in a store URL');
+    await expect(run(['status', '--store', 'ftp://host/p'])).rejects.toThrow('Unsupported store');
+    await expect(run(['status', '--store', 's3:///p'])).rejects.toThrow();
+  });
+
+  test('policy prints the least-privilege policy for the bucket and folder', async () => {
+    const policy = JSON.parse((await run(['policy', '--store', 's3://my-bucket/atlas/shop', '--role', 'both'])).output) as { Statement: { Sid: string; Action: string | string[]; Resource: string; Condition?: unknown }[] };
+    const byId = Object.fromEntries(policy.Statement.map(statement => [statement.Sid, statement]));
+    expect(byId.AtlasPublish!.Resource).toBe('arn:aws:s3:::my-bucket/atlas/shop/layers/*');
+    expect(byId.AtlasPublish!.Action).toEqual(['s3:PutObject', 's3:GetObject']);
+    expect(byId.AtlasList!.Resource).toBe('arn:aws:s3:::my-bucket');
+    expect(JSON.stringify(byId.AtlasList!.Condition)).toContain('atlas/shop/');
+    // A HEAD of a missing layer carries no prefix: the condition must not apply to it, or S3 answers 403 instead of 404.
+    expect(Object.keys(byId.AtlasList!.Condition as object)).toEqual(['StringLikeIfExists']);
+    const reader = JSON.parse((await run(['policy', '--store', 's3://my-bucket/atlas/shop', '--role', 'reader'])).output) as { Statement: { Action: unknown }[] };
+    expect(JSON.stringify(reader)).not.toContain('PutObject');
+    await expect(run(['policy', '--store', 'somewhere'])).rejects.toThrow('policy needs one --store s3://');
+  });
+});
+
+describe('publishing from a developer machine', () => {
+  const ci = { GITHUB_SHA: 'a'.repeat(40), GITHUB_REF_NAME: 'main' };
+  const layerOf = async (store: string) => {
+    const opened = directoryStore(path.join(root, store));
+    const [manifest] = await opened.listKeys('layers/manifests/');
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(await new Response((await opened.get(manifest!))!.body).arrayBuffer()))) as { freshness?: string; branch: string | null };
+  };
+
+  test('a worktree with edits to tracked files is marked modified; untracked files do not count', async () => {
+    const edited = (args: readonly string[]) => (args[0] === 'status' ? ' M specs/join.feature' : args[0] === 'rev-parse' ? 'b'.repeat(40) : args[0] === 'branch' ? 'feat/x' : null);
+    const out = await run(['publish', '--store', 'dev-edited', '--producer', 'unit', '--junit', 'env.xml'], {}, edited);
+    expect(out.output).toContain('[from a modified checkout]');
+    expect(await layerOf('dev-edited')).toMatchObject({ freshness: 'modified', branch: 'feat/x' });
+    const clean = (args: readonly string[]) => (args[0] === 'rev-parse' ? 'b'.repeat(40) : args[0] === 'branch' ? 'feat/x' : null);
+    await run(['publish', '--store', 'dev-clean', '--producer', 'unit', '--junit', 'env.xml'], {}, clean);
+    expect((await layerOf('dev-clean')).freshness).toBeUndefined();
+  });
+
+  test('outside git the origin is unknown; in CI the checkout is the commit', async () => {
+    await run(['publish', '--store', 'dev-nogit', '--producer', 'unit', '--junit', 'env.xml']);
+    expect((await layerOf('dev-nogit')).freshness).toBe('unknown');
+    await run(['publish', '--store', 'dev-ci', '--producer', 'unit', '--junit', 'env.xml'], ci);
+    expect((await layerOf('dev-ci')).freshness).toBeUndefined();
+  });
+
+  test('--specs publishes the specs too, once per commit, and --upload-run sends the run for the viewer', async () => {
+    const clean = (args: readonly string[]) => (args[0] === 'rev-parse' ? 'c'.repeat(40) : args[0] === 'branch' ? 'main' : args[0] === 'show' ? '1700000000' : null);
+    await file('pspecs/cart.feature', 'Feature: Shopping cart\n  Scenario: Adds\n');
+    await file('prun/2026-10-09T12-00-00-000Z-fast/manifest.json', JSON.stringify({ run: { id: 'r', startedAt: '2026-10-09T12:00:00.000Z', finishedAt: '2026-10-09T12:01:00.000Z', durationMs: 1, mode: 'fast', commit: 'c'.repeat(40) }, paths: [{ id: 'p', key: 'k1', name: 'Adds', kind: 'journey', status: 'passed', steps: [] }], privacy: { passed: true, findings: [] } }));
+    const first = await run(['publish', '--store', 'dev-all', '--producer', 'statecharts', '--manifest', 'prun/2026-10-09T12-00-00-000Z-fast/manifest.json', '--specs', 'pspecs', '--upload-run'], {}, clean);
+    expect(first.output).toContain('Published spec set');
+    expect(first.output).toContain('Uploaded run 2026-10-09T12-00-00-000Z-fast');
+    const again = await run(['publish', '--store', 'dev-all', '--producer', 'statecharts', '--manifest', 'prun/2026-10-09T12-00-00-000Z-fast/manifest.json', '--specs', 'pspecs', '--upload-run'], {}, clean);
+    expect(again.output).toContain('was already in the store');
+    const keys = await directoryStore(path.join(root, 'dev-all')).listKeys('layers/specs/sets/');
+    expect(keys.length).toBe(1);
+    await expect(run(['publish', '--store', 'dev-all', '--producer', 'x', '--junit', 'env.xml', '--upload-run'])).rejects.toThrow('--upload-run goes with --manifest');
+  });
+});
+
+describe('doctor', () => {
+  test('a healthy directory store passes every step; a reader and a publisher are checked for what they do', async () => {
+    const all = await run(['doctor', '--store', 'node1']);
+    expect(all.code).toBe(0);
+    expect(all.output).toContain('✓ contents');
+    expect(all.output).toContain('✓ write');
+    expect(all.output).toContain('All good.');
+    expect((await run(['doctor', '--store', 'node1', '--role', 'reader'])).output).not.toContain('write');
+    expect((await run(['doctor', '--store', 'node1', '--role', 'publisher'])).output).toContain('wrote and found a scratch object');
+    await expect(run(['doctor', '--store', 'node1', '--role', 'admin'])).rejects.toThrow('--role takes');
+  });
+
+  test('a store that cannot be reached says what to do about it', async () => {
+    const dead = { store: { ...(await import('./memory-store')).memoryStore(), listKeys: async () => { throw new Error('connection refused'); } }, id: 'dead', label: 'Dead' };
+    const { inspectStore } = await import('../src/doctor');
+    const checks = await inspectStore(dead as never);
+    expect(checks.find(check => !check.ok)).toMatchObject({ name: 'contents', detail: 'connection refused' });
+  });
+});
+
+describe('narrowing a report', () => {
+  test('a gate for a branch can leave out the rest, and work in progress from laptops', async () => {
+    const edited = (args: readonly string[]) => (args[0] === 'status' ? ' M specs/join.feature' : args[0] === 'rev-parse' ? 'd'.repeat(40) : args[0] === 'branch' ? 'feat/wip' : null);
+    const clean = (args: readonly string[]) => (args[0] === 'rev-parse' ? 'e'.repeat(40) : args[0] === 'branch' ? 'main' : null);
+    await file('good.xml', '<testsuites><testsuite name="s" timestamp="2026-10-14T10:00:00Z"><testcase name="a" file="specs/x.feature"/></testsuite></testsuites>');
+    await file('bad.xml', '<testsuites><testsuite name="s" timestamp="2026-10-14T11:00:00Z"><testcase name="a" file="specs/x.feature"><failure message="wip"/></testcase></testsuite></testsuites>');
+    await run(['publish', '--store', 'narrow', '--producer', 'unit', '--junit', 'good.xml'], {}, clean);
+    await run(['publish', '--store', 'narrow', '--producer', 'unit', '--junit', 'bad.xml'], {}, edited);
+    // Everything takes part by default: the newest result is the laptop's.
+    expect((await run(['status', '--store', 'narrow'])).code).toBe(1);
+    expect((await run(['status', '--store', 'narrow', '--ignore-modified'])).code).toBe(0);
+    expect((await run(['status', '--store', 'narrow', '--branch', 'main'])).code).toBe(0);
+    expect((await run(['status', '--store', 'narrow', '--branch', 'feat/wip'])).code).toBe(1);
+    expect((await run(['status', '--store', 'narrow'], { ATLAS_IGNORE_MODIFIED: '1' })).code).toBe(0);
+  });
+});
+
+describe('a store named by the environment may have spaces in it', () => {
+  test('ATLAS_STORE splits on commas and new lines, not on spaces', async () => {
+    await file('My Reports/placeholder.txt', 'x');
+    await file('env2.xml', '<testsuites><testsuite name="s"><testcase classname="C" name="a"/></testsuite></testsuites>');
+    const env = { ATLAS_STORE: path.join(root, 'My Reports') };
+    expect((await run(['publish', '--producer', 'unit', '--junit', 'env2.xml'], env)).code).toBe(0);
+    expect(JSON.parse((await run(['status', '--format', 'json'], env)).output).checks.total).toBe(1);
+    const two = { ATLAS_STORE: `${path.join(root, 'My Reports')},${path.join(root, 'node1')}` };
+    expect(JSON.parse((await run(['status', '--format', 'json'], two)).output).backends.length).toBe(2);
   });
 });

@@ -1,4 +1,5 @@
 import { eachLimited } from './completion-order';
+import { bundleKeysOf, type CheckDetail } from './evidence-detail';
 import { recordingPaths, type EvidencePage, type LayerRows } from './evidence-types';
 import { distinctHeaders } from './layer-merge';
 import type { ReportOutline } from './layer-types';
@@ -11,6 +12,15 @@ export function evidenceFile(path: string): string {
   const url = new URL(path || '/', 'http://atlas');
   if (url.pathname === '/') return 'index.json';
   if (url.pathname === '/evidence' && url.searchParams.has('cursor')) return `evidence/pages/${encodeURIComponent(url.searchParams.get('cursor')!)}.json`;
+  // One result's evidence: a file per result, named by its check (and kind), beside its layer's own.
+  const detail = /^\/evidence\/detail\/([^/]+)\/([^/]+)$/.exec(url.pathname);
+  if (detail) {
+    const check = url.searchParams.get('check');
+    const kind = url.searchParams.get('kind');
+    return `evidence/detail/${detail[1]}/${detail[2]}${check === null ? '' : `/${encodeURIComponent(check)}${kind ? `~${encodeURIComponent(kind)}` : ''}`}.json`;
+  }
+  // A file a layer carries: kept as it is, with its type known by its name.
+  if (url.pathname.includes('/blobs/')) return url.pathname.slice(1);
   if (url.pathname.endsWith('/spec')) return `${url.pathname.slice(1, -5)}/specs/${encodeURIComponent(url.searchParams.get('path') ?? '')}.txt`;
   if (url.pathname.includes('/files/') || url.pathname.endsWith('/frame.css') || url.pathname.endsWith('/report.json')) return url.pathname.slice(1);
   return `${url.pathname.slice(1)}.json`;
@@ -60,6 +70,20 @@ export async function exportEvidence(args: { fetch: (path: string) => Promise<Re
       layers++;
       if (layer.sha) revisions.add(layer.sha);
       const rowsText = await copy(`/evidence/rows/${encodeURIComponent(layer.backend)}/${encodeURIComponent(layer.id)}`);
+      // Evidence a result carries: what it says, and every file it points to.
+      if (rowsText) {
+        const withEvidence = (JSON.parse(rowsText) as LayerRows).rows.filter(row => row.evidence);
+        const copyDetail = async (path: string) => {
+          const text = await copy(path);
+          if (!text) return;
+          const read = JSON.parse(text) as CheckDetail | { run: CheckDetail['run'] };
+          const keys = new Set([...bundleKeysOf('check' in read ? read.check : {}), ...bundleKeysOf(read.run)]);
+          await eachLimited([...keys], 4, key => copy(`/layers/${encodeURIComponent(layer.id)}/blobs/${key.split('/').map(encodeURIComponent).join('/')}`).then(() => {}));
+        };
+        const base = `/evidence/detail/${encodeURIComponent(layer.backend)}/${encodeURIComponent(layer.id)}`;
+        if (layer.evidence) await copyDetail(base);
+        for (const row of withEvidence) await copyDetail(`${base}?check=${encodeURIComponent(row.id)}&kind=${encodeURIComponent(row.kind)}`);
+      }
       const recording = layer.recording;
       if (!rowsText || !recording) return;
       const tests = new Set((JSON.parse(rowsText) as LayerRows).rows.flatMap(row => row.testId ? [row.testId] : []));

@@ -19,6 +19,12 @@ export type JunitCase = {
   readonly line: number | null;
   readonly status: 'passed' | 'failed' | 'skipped';
   readonly failure: string | null;
+  /** The case's `<system-out>`, when it has one. */
+  readonly stdout?: string;
+  /** The case's `<system-err>`, when it has one. */
+  readonly stderr?: string;
+  /** The case's `<properties>`, then its suite's: names a runner chose to record. */
+  readonly properties?: Readonly<Record<string, string>>;
 };
 
 const ENTITIES: Readonly<Record<string, string>> = {
@@ -52,7 +58,24 @@ function failureText(body: string): string | null {
   return text.length > 0 ? text : (message ?? 'failed');
 }
 
-function parseCase(tag: string, inner: string, suiteFile: string, suiteName: string): JunitCase {
+function streamText(body: string, name: 'system-out' | 'system-err'): string | undefined {
+  const found = new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)</${name}>`).exec(body);
+  if (!found) return undefined;
+  const text = decodeXml((found[1] ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')).trim();
+  return text.length ? text : undefined;
+}
+
+function propertiesOf(body: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const match of body.matchAll(/<property\b([^>]*?)\/?>/g)) {
+    const name = attr(match[1] ?? '', 'name');
+    const value = attr(match[1] ?? '', 'value');
+    if (name) out[name] = value ?? '';
+  }
+  return out;
+}
+
+function parseCase(tag: string, inner: string, suiteFile: string, suiteName: string, suiteProperties: Record<string, string> = {}): JunitCase {
   const lineRaw = attr(tag, 'line');
   const line = lineRaw === null ? null : Number(lineRaw);
   const failure = failureText(inner);
@@ -66,6 +89,9 @@ function parseCase(tag: string, inner: string, suiteFile: string, suiteName: str
     line: line !== null && Number.isFinite(line) ? line : null,
     status: caseStatus(failure, inner),
     failure,
+    ...(streamText(inner, 'system-out') ? { stdout: streamText(inner, 'system-out')! } : {}),
+    ...(streamText(inner, 'system-err') ? { stderr: streamText(inner, 'system-err')! } : {}),
+    ...(Object.keys({ ...suiteProperties, ...propertiesOf(inner) }).length ? { properties: { ...suiteProperties, ...propertiesOf(inner) } } : {}),
   };
 }
 
@@ -78,24 +104,44 @@ function caseStatus(
   return 'passed';
 }
 
-function parseSuite(tag: string, body: string, out: JunitCase[]): void {
-  const suiteFile = attr(tag, 'file') ?? '';
-  const suiteName = attr(tag, 'name') ?? '';
-  const caseRe = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
-  for (let c = caseRe.exec(body); c; c = caseRe.exec(body)) {
-    out.push(parseCase(c[1] ?? '', c[2] ?? '', suiteFile, suiteName));
+/**
+ * Every `<testcase>` of the document, whatever the nesting of its suites: a suite inside a suite, a case after
+ * an inner suite, an empty self-closing suite. Each case is read with the suite it is in, and that suite's own
+ * `<properties>`. A case is never skipped silently, because a result that goes missing reads as a pass.
+ */
+function allCases(xml: string): JunitCase[] {
+  const cases: JunitCase[] = [];
+  const stack: { file: string; name: string; properties: Record<string, string> }[] = [];
+  const tags = /<(\/?)(testsuite|testcase|properties)\b([^>]*?)(\/?)>/g;
+  for (let tag = tags.exec(xml); tag; tag = tags.exec(xml)) {
+    const [, closing, name, attributes = '', selfClosing] = tag;
+    if (name === 'testsuite') {
+      if (closing) { stack.pop(); continue; }
+      const suite = { file: attr(attributes, 'file') ?? '', name: attr(attributes, 'name') ?? '', properties: {} as Record<string, string> };
+      if (!selfClosing) stack.push(suite);
+    } else if (name === 'testcase' && !closing) {
+      let inner = '';
+      if (!selfClosing) {
+        const end = xml.indexOf('</testcase>', tags.lastIndex);
+        if (end < 0) continue;
+        inner = xml.slice(tags.lastIndex, end);
+        tags.lastIndex = end + '</testcase>'.length;
+      }
+      const suite = stack.at(-1);
+      cases.push(parseCase(attributes, inner, suite?.file ?? '', suite?.name ?? '', Object.assign({}, ...stack.map(item => item.properties))));
+    } else if (name === 'properties' && !closing && !selfClosing && stack.length) {
+      const end = xml.indexOf('</properties>', tags.lastIndex);
+      if (end < 0) continue;
+      Object.assign(stack.at(-1)!.properties, propertiesOf(xml.slice(tags.lastIndex, end)));
+      tags.lastIndex = end + '</properties>'.length;
+    }
   }
+  return cases;
 }
 
 /** Parse the `<testcase>` elements of a JUnit XML document. */
 export function parseJunit(xml: string): JunitCase[] {
-  const cases: JunitCase[] = [];
-  // A self-closing `<testsuite …/>` is an empty suite: it must not swallow the next suite's cases.
-  const suiteRe = /<testsuite\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testsuite>)/g;
-  for (let suite = suiteRe.exec(xml); suite; suite = suiteRe.exec(xml)) {
-    parseSuite(suite[1] ?? '', suite[2] ?? '', cases);
-  }
-  return cases;
+  return allCases(xml);
 }
 
 function sameFile(a: string, b: string): boolean {

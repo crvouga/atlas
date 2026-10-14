@@ -2,7 +2,8 @@ import { eachLimited } from './completion-order';
 import { readBytes } from './object-io';
 import type { ObjectStore } from './object-store';
 
-const INDEX = 'layers/index/';
+/** Catalog entries (layers, spec sets, runs) are copied after what they name, so a reader never sees one without its content. */
+const isCatalog = (key: string) => key.includes('/index/');
 
 /**
  * Copy every layer object (`layers/…`) of `from` that `to` does not have. Only layers: they are
@@ -27,8 +28,8 @@ export async function copyStore(from: ObjectStore, to: ObjectStore, options: { r
     await to.put(key, await readBytes(stored.body), stored.contentType);
     copied += 1;
   };
-  await eachLimited(keys.filter(key => !key.startsWith(INDEX)), width, copy);
-  await eachLimited(keys.filter(key => key.startsWith(INDEX)), width, copy);
+  await eachLimited(keys.filter(key => !isCatalog(key)), width, copy);
+  await eachLimited(keys.filter(isCatalog), width, copy);
   // Said, not silent: whatever is not a layer was left where it is.
   return { copied, skipped, ignored: everything.length - keys.length };
 }

@@ -18,6 +18,23 @@ export type BackendInfo = {
 
 export type StatusCounts = Readonly<Record<EvidenceStatus, number>>;
 
+/**
+ * What a result (or a run) carries beyond its outcome, as counts and short facts: attachments, steps,
+ * annotations, retries, tags, labels, links. It is only there when there is something. The evidence itself
+ * is read when someone opens the result.
+ */
+export type EvidenceSummary = {
+  readonly attachments: number;
+  readonly steps: number;
+  readonly annotations: number;
+  readonly attempts: number;
+  readonly links: number;
+  readonly tags: readonly string[];
+  readonly labels: Readonly<Record<string, string>>;
+  /** The distinct roles of its attachments (or what their media types say), to show what kind of evidence there is. */
+  readonly roles: readonly string[];
+};
+
 /** A report layer's origin and totals. Its checks are read separately, once. */
 export type LayerHeader = {
   readonly id: string;
@@ -38,6 +55,8 @@ export type LayerHeader = {
   readonly counts: StatusCounts;
   /** Equal for the mutable and the archived address of one execution. */
   readonly execution: string;
+  /** What the run as a whole carries: its logs, links and labels. */
+  readonly evidence?: EvidenceSummary;
 };
 
 /** One check of one report part. */
@@ -54,6 +73,8 @@ export type LayerRow = {
   /** What distinguishes this recorded test from another run of the same check. */
   readonly variant: LayerParameters;
   readonly durationMs: number | null;
+  /** What this result carries beyond its outcome. Absent when nothing. */
+  readonly evidence?: EvidenceSummary;
 };
 
 export type LayerRows = {

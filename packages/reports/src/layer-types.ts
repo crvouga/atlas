@@ -3,7 +3,10 @@ import type { ReportPart, SpecEntry } from './explorer-types';
 import type { SourceRecord } from './protocol';
 
 export type LayerParameters = Readonly<Record<string, string>>;
-export type LayerSummary = {
+/** What a layer may carry as a whole. All optional and open: see docs/extending.md. */
+export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>>;
+
+export type LayerSummary = LayerExtras & {
   readonly freshness?: 'unknown' | 'modified';
   readonly id: string;
   readonly recordedAtMs: number;

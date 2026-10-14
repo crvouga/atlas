@@ -7,7 +7,8 @@ import { loadDirectoryOutline, specKindOf } from './directory-outline';
 import { specPath, textFingerprint } from './layer-merge';
 
 const words = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-const stem = (file: string) => path.posix.basename(file).replace(/\.[^.]*(\.[^.]*)?$/, '');
+/** A file's name without the extension of a spec: `user.profile.feature` is `user.profile`, `cart.openslo.yaml` is `cart`. */
+const stem = (file: string) => path.posix.basename(file).replace(/(\.openslo|\.machine)?\.(feature|qnt|dmn|als|ya?ml|json|scxml|md|txt|xml)$/i, '');
 
 export type SpecLinks = {
   /** Every file under this directory is a spec named `specs/<its path>`. */

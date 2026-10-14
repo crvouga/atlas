@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { parseJunit } from './junit';
 import { specPath } from './layer-merge';
 import type { EvidenceCheck, EvidenceStatus } from './explorer-types';
@@ -13,6 +15,8 @@ export type IngestedChecks = {
   readonly recordedAtMs: number | null;
   /** The tool that wrote the report, when it says. */
   readonly tool: string | null;
+  /** What the report says about the run as a whole: the tool, the build, the platform. */
+  readonly labels?: Readonly<Record<string, string>>;
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -54,6 +58,21 @@ export function checksFromCtrf(report: unknown): IngestedChecks {
     const status = CTRF_STATUS[text(test.status)] ?? 'not-run';
     const message = text(test.message) || text(test.trace);
     const duration = finite(test.duration);
+    const tags = Array.isArray(test.tags) ? test.tags.map(text).filter(Boolean) : [];
+    const labels: Record<string, string> = {};
+    for (const key of ['browser', 'device', 'type', 'os', 'osPlatform']) if (text(test[key])) labels[key] = text(test[key]);
+    if (test.flaky === true) labels.flaky = 'true';
+    const steps = Array.isArray(test.steps) ? test.steps.map(step => { const item = record(step); return { name: text(item.name) || 'step', ...(text(item.status) ? { status: text(item.status) } : {}) }; }) : [];
+    const attachments = [
+      ...(Array.isArray(test.attachments) ? test.attachments.flatMap(raw => { const item = record(raw); return text(item.name) || text(item.path) ? [{ name: text(item.name) || path.basename(text(item.path)), ...(text(item.contentType) ? { contentType: text(item.contentType) } : {}), ...(text(item.path) ? { path: text(item.path) } : {}), ...(text(item.url) ? { uri: text(item.url) } : {}) }] : []; }) : []),
+      ...(text(test.screenshot) ? [{ name: 'screenshot.png', role: 'screenshot', contentType: 'image/png', base64: text(test.screenshot) }] : []),
+      ...logOf(test.stdout, 'stdout'),
+      ...logOf(test.stderr, 'stderr'),
+      ...(text(test.trace) ? [{ name: 'stack trace', role: 'log', contentType: 'text/plain', text: text(test.trace) }] : [])
+    ];
+    const attempts = Array.isArray(test.retryAttempts) ? test.retryAttempts.map((raw, at) => { const item = record(raw); return { index: finite(item.attempt) !== null ? Math.max(0, finite(item.attempt)! - 1) : at, status: ((CTRF_STATUS[text(item.status)] ?? 'not-run') as EvidenceStatus), ...(finite(item.duration) !== null ? { durationMs: finite(item.duration)! } : {}), ...(text(item.message) ? { detail: text(item.message) } : {}) }; }) : [];
+    const annotations = text(test.snippet) ? [{ type: 'snippet', message: text(test.snippet), level: 'info', ...(file ? { source: { file, ...(finite(test.line) !== null ? { line: finite(test.line)! } : {}) } } : {}) }] : [];
+    const extra = record(test.extra);
     return {
       id: [file, ...suite, name].filter(Boolean).join(' > '),
       title: name,
@@ -61,7 +80,14 @@ export function checksFromCtrf(report: unknown): IngestedChecks {
       detail: status === 'failed' ? (message || 'failed') : test.flaky === true ? 'Passed on retry (flaky)' : message,
       ...(file ? { specPath: specPath(file) } : {}),
       measurements: [],
-      ...(duration === null ? {} : { durationMs: duration })
+      ...(duration === null ? {} : { durationMs: duration }),
+      ...(tags.length ? { tags } : {}),
+      ...(Object.keys(labels).length ? { labels } : {}),
+      ...(steps.length ? { steps } : {}),
+      ...(attachments.length ? { attachments } : {}),
+      ...(attempts.length ? { attempts } : {}),
+      ...(annotations.length ? { annotations } : {}),
+      ...(Object.keys(extra).length ? { extensions: { 'ctrf.extra': extra } } : {})
     };
   });
   const summary = record(results.summary);
@@ -69,7 +95,18 @@ export function checksFromCtrf(report: unknown): IngestedChecks {
     const test = record(raw);
     return [...(Array.isArray(test.suite) ? test.suite.map(text) : [text(test.suite)]), text(test.filePath)].filter(Boolean);
   });
-  return { checks: uniqueChecks(checks), hints, recordedAtMs: finite(summary.stop) ?? finite(summary.start), tool: text(record(results.tool).name) || null };
+  const tool = record(results.tool);
+  const labels: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record(results.environment))) if (typeof value === 'string' || typeof value === 'number') labels[key] = String(value);
+  if (text(tool.name)) labels.tool = text(tool.name);
+  if (text(tool.version)) labels['tool.version'] = text(tool.version);
+  return { checks: uniqueChecks(checks), hints, recordedAtMs: finite(summary.stop) ?? finite(summary.start), tool: text(tool.name) || null, ...(Object.keys(labels).length ? { labels } : {}) };
+}
+
+/** CTRF writes a stream as a list of lines. */
+function logOf(value: unknown, name: string): { name: string; role: string; contentType: string; text: string }[] {
+  const lines = Array.isArray(value) ? value.map(text).join('\n') : text(value);
+  return lines.trim() ? [{ name, role: 'log', contentType: 'text/plain', text: lines }] : [];
 }
 
 /** Many JUnit writers omit the offset. Read such a time as UTC, so it is the same wherever Atlas runs. */
@@ -83,6 +120,13 @@ export function checksFromJunit(xml: string): IngestedChecks {
   if (cases.length === 0 && !/<testsuite/.test(xml)) throw new Error('Not a JUnit report: no <testsuite> found');
   const checks = cases.map((item): EvidenceCheck => {
     const where = item.file || item.classname;
+    // Jenkins' convention: a line `[[ATTACHMENT|/path/to/file]]` in a test's output attaches that file.
+    const jenkins = [...`${item.stdout ?? ''}\n${item.stderr ?? ''}`.matchAll(/\[\[ATTACHMENT\|([^\]]+)\]\]/g)].map(match => ({ name: path.basename(match[1]!), path: match[1]! }));
+    const attachments = [
+      ...(item.stdout ? [{ name: 'stdout', role: 'log', contentType: 'text/plain', text: item.stdout }] : []),
+      ...(item.stderr ? [{ name: 'stderr', role: 'log', contentType: 'text/plain', text: item.stderr }] : []),
+      ...jenkins
+    ];
     return {
       id: [where, item.name].filter(Boolean).join(' > '),
       title: item.name,
@@ -90,7 +134,9 @@ export function checksFromJunit(xml: string): IngestedChecks {
       detail: item.failure ?? '',
       ...(item.file ? { specPath: specPath(item.file) } : {}),
       measurements: [],
-      ...(item.time === null ? {} : { durationMs: Math.round(item.time * 1000) })
+      ...(item.time === null ? {} : { durationMs: Math.round(item.time * 1000) }),
+      ...(item.properties ? { labels: item.properties } : {}),
+      ...(attachments.length ? { attachments } : {})
     };
   });
   const hints = cases.map(item => [item.classname, item.suite, item.file].filter(Boolean));
@@ -120,6 +166,12 @@ export function checksFromManifest(manifest: unknown): IngestedChecks {
     const progress = text(item.progress);
     const mapped: EvidenceStatus = live && progress === 'running' ? 'running' : live && progress === 'queued' ? 'not-run' : status === 'passed' || status === 'flaky' ? 'passed' : status === 'failed' ? 'failed' : 'not-run';
     const duration = finite(item.durationMs);
+    const steps = Array.isArray(item.steps) ? item.steps.map(raw => {
+      const step = record(raw);
+      const state = text(step.status);
+      return { name: text(step.event) || 'step', kind: 'event', status: state === 'passed' || state === 'flaky' ? 'passed' : state === 'failed' ? 'failed' : 'not-reached', ...(text(step.reason) ? { detail: text(step.reason) } : {}), ...(text(step.transition) ? { extensions: { 'atlas.transition': text(step.transition) } } : {}) };
+    }) : [];
+    const journeys = Array.isArray(item.journeys) ? item.journeys.map(text).filter(Boolean) : [];
     return {
       id: text(item.key) || `${text(item.kind)}: ${text(item.name)}`,
       title: text(item.name) || text(item.id),
@@ -127,7 +179,10 @@ export function checksFromManifest(manifest: unknown): IngestedChecks {
       detail: mapped === 'failed' ? text(attempts.at(-1)?.error) || 'failed' : status === 'flaky' ? 'Passed on retry (flaky)' : '',
       ...(path ? { specPath: path } : {}),
       measurements: [],
-      ...(duration === null ? {} : { durationMs: duration })
+      ...(duration === null ? {} : { durationMs: duration }),
+      ...(steps.length ? { steps } : {}),
+      ...(text(item.kind) ? { labels: { kind: text(item.kind), ...(text(item.seed) ? { seed: text(item.seed) } : {}) } } : {}),
+      ...(journeys.length ? { tags: journeys } : {})
     };
   });
   const startedAt = Date.parse(text(run.startedAt));

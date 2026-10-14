@@ -9,7 +9,7 @@ import type { LayerEvidence } from '../src/evidence-types';
 import { combineEvidence, layerEvidence, textFingerprint } from '../src/layer-merge';
 import { publishChecks } from '../src/publish-checks';
 
-// Budgets are about ten times what a laptop needs, so they catch an accidental O(n²) and not a slow CI machine.
+// Budgets are twenty or more times what a quiet laptop needs, so they catch an accidental O(n²) and not a slow or busy machine.
 
 test('combining 2,000 layers of 100 checks (200,000 results) is one linear pass', () => {
   const evidence: LayerEvidence[] = Array.from({ length: 2_000 }, (_, l) => layerEvidence({
@@ -22,7 +22,7 @@ test('combining 2,000 layers of 100 checks (200,000 results) is one linear pass'
   const summary = summarize(combined);
   const elapsed = performance.now() - started;
   expect(summary.checks.total).toBeGreaterThan(100_000);
-  expect(elapsed).toBeLessThan(3_000);
+  expect(elapsed).toBeLessThan(6_000);
 });
 
 const roots: string[] = [];
@@ -38,7 +38,7 @@ test('300 layers on disk, each recorded against 300 specs, combine in well under
   }
   const started = performance.now();
   const report = await combineBackends([{ id: 'disk', store }]);
-  expect(performance.now() - started).toBeLessThan(5_000);
+  expect(performance.now() - started).toBeLessThan(10_000);
   expect(report.layers.length).toBe(300);
   expect(report.notices).toEqual([]);
 });

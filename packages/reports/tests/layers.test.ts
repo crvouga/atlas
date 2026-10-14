@@ -84,3 +84,12 @@ test('modified and unknown origins contribute outcomes without claiming freshnes
     expect(result.warning).toContain(freshness === 'modified' ? 'modified checkout' : 'origin was not captured');
   }
 });
+
+test('the per-layer result key maker writes exactly the key `resultKey` writes', async () => {
+  const { layerResultKeys, resultKey } = await import('../src/layer-merge');
+  for (const layer of [{ producer: 'p', environment: null, parameters: {} }, { producer: 'we"ird\\n', environment: 'ios', parameters: { b: '2', a: '"1"' } }]) {
+    for (const row of [{ kind: 'checks', specPath: null, id: 'x' }, { kind: 'k"', specPath: 'specs/a b.feature', id: 'é\u2028' }]) {
+      expect(layerResultKeys(layer)(row)).toBe(resultKey(layer, row));
+    }
+  }
+});

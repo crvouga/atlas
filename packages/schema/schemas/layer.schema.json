@@ -226,6 +226,940 @@
                   "description": "How long the check took, when the producer measured it",
                   "type": "number",
                   "minimum": 0
+                },
+                "tags": {
+                  "description": "Free labels to filter and group by: smoke, slow, flaky…",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "labels": {
+                  "description": "Facts about the result, not part of its identity: owner, severity, browser, os, build. Unlike `parameters` they never split a result into another slot",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "links": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "rel": {
+                        "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "url"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "attachments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "Lets another attachment, step or annotation refer to this one",
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "contentType": {
+                        "description": "An IANA media type. Absent means application/octet-stream",
+                        "type": "string"
+                      },
+                      "bundleKey": {
+                        "description": "The key of its bytes in the layer",
+                        "type": "string"
+                      },
+                      "uri": {
+                        "description": "Where else to read it: an https URL, or a path a host understands",
+                        "type": "string"
+                      },
+                      "text": {
+                        "description": "A small UTF-8 value, inline",
+                        "type": "string"
+                      },
+                      "bytes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "sha256": {
+                        "type": "string"
+                      },
+                      "width": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "height": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "durationMs": {
+                        "description": "For video and audio",
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "object",
+                        "properties": {
+                          "step": {
+                            "description": "The `id` of a step",
+                            "type": "string"
+                          },
+                          "offsetMs": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "additionalProperties": {}
+                      },
+                      "poster": {
+                        "description": "The `id` of an attachment that stands for this one before it is opened",
+                        "type": "string"
+                      },
+                      "captions": {
+                        "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "extensions": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "annotations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "level": {
+                        "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "object",
+                        "properties": {
+                          "step": {
+                            "description": "The `id` of a step",
+                            "type": "string"
+                          },
+                          "offsetMs": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "additionalProperties": {}
+                      },
+                      "source": {
+                        "type": "object",
+                        "properties": {
+                          "file": {
+                            "type": "string"
+                          },
+                          "line": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "column": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": {}
+                      },
+                      "links": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "url": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "rel": {
+                              "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "url"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "extensions": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "message"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "extensions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "additionalProperties": {}
+                },
+                "steps": {
+                  "description": "The check's timeline",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "parentId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "description": "An open vocabulary: action, assertion, hook, request, span, given, when, then…",
+                        "type": "string"
+                      },
+                      "status": {
+                        "description": "Conventionally passed, failed, skipped. Anything else is shown as it is",
+                        "type": "string"
+                      },
+                      "offsetMs": {
+                        "description": "When it started, after the check did",
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "durationMs": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "description": "Lets another attachment, step or annotation refer to this one",
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "role": {
+                              "type": "string"
+                            },
+                            "contentType": {
+                              "description": "An IANA media type. Absent means application/octet-stream",
+                              "type": "string"
+                            },
+                            "bundleKey": {
+                              "description": "The key of its bytes in the layer",
+                              "type": "string"
+                            },
+                            "uri": {
+                              "description": "Where else to read it: an https URL, or a path a host understands",
+                              "type": "string"
+                            },
+                            "text": {
+                              "description": "A small UTF-8 value, inline",
+                              "type": "string"
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "sha256": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "durationMs": {
+                              "description": "For video and audio",
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "object",
+                              "properties": {
+                                "step": {
+                                  "description": "The `id` of a step",
+                                  "type": "string"
+                                },
+                                "offsetMs": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "additionalProperties": {}
+                            },
+                            "poster": {
+                              "description": "The `id` of an attachment that stands for this one before it is opened",
+                              "type": "string"
+                            },
+                            "captions": {
+                              "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "extensions": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "annotations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "level": {
+                              "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "object",
+                              "properties": {
+                                "step": {
+                                  "description": "The `id` of a step",
+                                  "type": "string"
+                                },
+                                "offsetMs": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "additionalProperties": {}
+                            },
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "file": {
+                                  "type": "string"
+                                },
+                                "line": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "column": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": {}
+                            },
+                            "links": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "url": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "rel": {
+                                    "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "url"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
+                            "extensions": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "message"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "extensions": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "attempts": {
+                  "description": "Every try, when the check was retried",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      },
+                      "durationMs": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "startedAtMs": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "parentId": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "kind": {
+                              "description": "An open vocabulary: action, assertion, hook, request, span, given, when, then…",
+                              "type": "string"
+                            },
+                            "status": {
+                              "description": "Conventionally passed, failed, skipped. Anything else is shown as it is",
+                              "type": "string"
+                            },
+                            "offsetMs": {
+                              "description": "When it started, after the check did",
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "durationMs": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "detail": {
+                              "type": "string"
+                            },
+                            "attachments": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "description": "Lets another attachment, step or annotation refer to this one",
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "contentType": {
+                                    "description": "An IANA media type. Absent means application/octet-stream",
+                                    "type": "string"
+                                  },
+                                  "bundleKey": {
+                                    "description": "The key of its bytes in the layer",
+                                    "type": "string"
+                                  },
+                                  "uri": {
+                                    "description": "Where else to read it: an https URL, or a path a host understands",
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "description": "A small UTF-8 value, inline",
+                                    "type": "string"
+                                  },
+                                  "bytes": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "sha256": {
+                                    "type": "string"
+                                  },
+                                  "width": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "height": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "durationMs": {
+                                    "description": "For video and audio",
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "at": {
+                                    "type": "object",
+                                    "properties": {
+                                      "step": {
+                                        "description": "The `id` of a step",
+                                        "type": "string"
+                                      },
+                                      "offsetMs": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "additionalProperties": {}
+                                  },
+                                  "poster": {
+                                    "description": "The `id` of an attachment that stands for this one before it is opened",
+                                    "type": "string"
+                                  },
+                                  "captions": {
+                                    "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "extensions": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
+                            "annotations": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "level": {
+                                    "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                                    "type": "string"
+                                  },
+                                  "at": {
+                                    "type": "object",
+                                    "properties": {
+                                      "step": {
+                                        "description": "The `id` of a step",
+                                        "type": "string"
+                                      },
+                                      "offsetMs": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "additionalProperties": {}
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "file": {
+                                        "type": "string"
+                                      },
+                                      "line": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "column": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "additionalProperties": {}
+                                  },
+                                  "links": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "url": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "rel": {
+                                          "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "url"
+                                      ],
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "extensions": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "message"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
+                            "extensions": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "description": "Lets another attachment, step or annotation refer to this one",
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "role": {
+                              "type": "string"
+                            },
+                            "contentType": {
+                              "description": "An IANA media type. Absent means application/octet-stream",
+                              "type": "string"
+                            },
+                            "bundleKey": {
+                              "description": "The key of its bytes in the layer",
+                              "type": "string"
+                            },
+                            "uri": {
+                              "description": "Where else to read it: an https URL, or a path a host understands",
+                              "type": "string"
+                            },
+                            "text": {
+                              "description": "A small UTF-8 value, inline",
+                              "type": "string"
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "sha256": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "durationMs": {
+                              "description": "For video and audio",
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "object",
+                              "properties": {
+                                "step": {
+                                  "description": "The `id` of a step",
+                                  "type": "string"
+                                },
+                                "offsetMs": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "additionalProperties": {}
+                            },
+                            "poster": {
+                              "description": "The `id` of an attachment that stands for this one before it is opened",
+                              "type": "string"
+                            },
+                            "captions": {
+                              "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "extensions": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "annotations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "level": {
+                              "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "object",
+                              "properties": {
+                                "step": {
+                                  "description": "The `id` of a step",
+                                  "type": "string"
+                                },
+                                "offsetMs": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "additionalProperties": {}
+                            },
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "file": {
+                                  "type": "string"
+                                },
+                                "line": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "column": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": {}
+                            },
+                            "links": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "url": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "rel": {
+                                    "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "url"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
+                            "extensions": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "message"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "extensions": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "index",
+                      "status"
+                    ],
+                    "additionalProperties": {}
+                  }
                 }
               },
               "required": [
@@ -235,6 +1169,239 @@
               ],
               "additionalProperties": {}
             }
+          },
+          "tags": {
+            "description": "Free labels to filter and group by: smoke, slow, flaky…",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "labels": {
+            "description": "Facts about the result, not part of its identity: owner, severity, browser, os, build. Unlike `parameters` they never split a result into another slot",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string"
+                },
+                "rel": {
+                  "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "description": "Lets another attachment, step or annotation refer to this one",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "role": {
+                  "type": "string"
+                },
+                "contentType": {
+                  "description": "An IANA media type. Absent means application/octet-stream",
+                  "type": "string"
+                },
+                "bundleKey": {
+                  "description": "The key of its bytes in the layer",
+                  "type": "string"
+                },
+                "uri": {
+                  "description": "Where else to read it: an https URL, or a path a host understands",
+                  "type": "string"
+                },
+                "text": {
+                  "description": "A small UTF-8 value, inline",
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "durationMs": {
+                  "description": "For video and audio",
+                  "type": "number",
+                  "minimum": 0
+                },
+                "description": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "object",
+                  "properties": {
+                    "step": {
+                      "description": "The `id` of a step",
+                      "type": "string"
+                    },
+                    "offsetMs": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "poster": {
+                  "description": "The `id` of an attachment that stands for this one before it is opened",
+                  "type": "string"
+                },
+                "captions": {
+                  "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "extensions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "message": {
+                  "type": "string"
+                },
+                "level": {
+                  "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                  "type": "string"
+                },
+                "at": {
+                  "type": "object",
+                  "properties": {
+                    "step": {
+                      "description": "The `id` of a step",
+                      "type": "string"
+                    },
+                    "offsetMs": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "file": {
+                      "type": "string"
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "column": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "links": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "rel": {
+                        "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "url"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "extensions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "type",
+                "message"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "extensions": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1
+            },
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -363,6 +1530,940 @@
                           "description": "How long the check took, when the producer measured it",
                           "type": "number",
                           "minimum": 0
+                        },
+                        "tags": {
+                          "description": "Free labels to filter and group by: smoke, slow, flaky…",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "labels": {
+                          "description": "Facts about the result, not part of its identity: owner, severity, browser, os, build. Unlike `parameters` they never split a result into another slot",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "links": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "rel": {
+                                "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "url"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        },
+                        "attachments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "description": "Lets another attachment, step or annotation refer to this one",
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "contentType": {
+                                "description": "An IANA media type. Absent means application/octet-stream",
+                                "type": "string"
+                              },
+                              "bundleKey": {
+                                "description": "The key of its bytes in the layer",
+                                "type": "string"
+                              },
+                              "uri": {
+                                "description": "Where else to read it: an https URL, or a path a host understands",
+                                "type": "string"
+                              },
+                              "text": {
+                                "description": "A small UTF-8 value, inline",
+                                "type": "string"
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "sha256": {
+                                "type": "string"
+                              },
+                              "width": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "height": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "durationMs": {
+                                "description": "For video and audio",
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "at": {
+                                "type": "object",
+                                "properties": {
+                                  "step": {
+                                    "description": "The `id` of a step",
+                                    "type": "string"
+                                  },
+                                  "offsetMs": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              "poster": {
+                                "description": "The `id` of an attachment that stands for this one before it is opened",
+                                "type": "string"
+                              },
+                              "captions": {
+                                "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "extensions": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        },
+                        "annotations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "level": {
+                                "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                                "type": "string"
+                              },
+                              "at": {
+                                "type": "object",
+                                "properties": {
+                                  "step": {
+                                    "description": "The `id` of a step",
+                                    "type": "string"
+                                  },
+                                  "offsetMs": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "file": {
+                                    "type": "string"
+                                  },
+                                  "line": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "column": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              "links": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "url": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "rel": {
+                                      "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "url"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "extensions": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "message"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        },
+                        "extensions": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "additionalProperties": {}
+                        },
+                        "steps": {
+                          "description": "The check's timeline",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "parentId": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "description": "An open vocabulary: action, assertion, hook, request, span, given, when, then…",
+                                "type": "string"
+                              },
+                              "status": {
+                                "description": "Conventionally passed, failed, skipped. Anything else is shown as it is",
+                                "type": "string"
+                              },
+                              "offsetMs": {
+                                "description": "When it started, after the check did",
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "durationMs": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "detail": {
+                                "type": "string"
+                              },
+                              "attachments": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "description": "Lets another attachment, step or annotation refer to this one",
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "role": {
+                                      "type": "string"
+                                    },
+                                    "contentType": {
+                                      "description": "An IANA media type. Absent means application/octet-stream",
+                                      "type": "string"
+                                    },
+                                    "bundleKey": {
+                                      "description": "The key of its bytes in the layer",
+                                      "type": "string"
+                                    },
+                                    "uri": {
+                                      "description": "Where else to read it: an https URL, or a path a host understands",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "description": "A small UTF-8 value, inline",
+                                      "type": "string"
+                                    },
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "sha256": {
+                                      "type": "string"
+                                    },
+                                    "width": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "height": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "durationMs": {
+                                      "description": "For video and audio",
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "at": {
+                                      "type": "object",
+                                      "properties": {
+                                        "step": {
+                                          "description": "The `id` of a step",
+                                          "type": "string"
+                                        },
+                                        "offsetMs": {
+                                          "type": "number",
+                                          "minimum": 0
+                                        }
+                                      },
+                                      "additionalProperties": {}
+                                    },
+                                    "poster": {
+                                      "description": "The `id` of an attachment that stands for this one before it is opened",
+                                      "type": "string"
+                                    },
+                                    "captions": {
+                                      "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "extensions": {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "annotations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "message": {
+                                      "type": "string"
+                                    },
+                                    "level": {
+                                      "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                                      "type": "string"
+                                    },
+                                    "at": {
+                                      "type": "object",
+                                      "properties": {
+                                        "step": {
+                                          "description": "The `id` of a step",
+                                          "type": "string"
+                                        },
+                                        "offsetMs": {
+                                          "type": "number",
+                                          "minimum": 0
+                                        }
+                                      },
+                                      "additionalProperties": {}
+                                    },
+                                    "source": {
+                                      "type": "object",
+                                      "properties": {
+                                        "file": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "column": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        }
+                                      },
+                                      "additionalProperties": {}
+                                    },
+                                    "links": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "url": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "rel": {
+                                            "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "url"
+                                        ],
+                                        "additionalProperties": {}
+                                      }
+                                    },
+                                    "extensions": {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "message"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "extensions": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        },
+                        "attempts": {
+                          "description": "Every try, when the check was retried",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "index": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "passed",
+                                  "failed",
+                                  "running",
+                                  "not-run"
+                                ]
+                              },
+                              "durationMs": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "startedAtMs": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "detail": {
+                                "type": "string"
+                              },
+                              "steps": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "parentId": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "description": "An open vocabulary: action, assertion, hook, request, span, given, when, then…",
+                                      "type": "string"
+                                    },
+                                    "status": {
+                                      "description": "Conventionally passed, failed, skipped. Anything else is shown as it is",
+                                      "type": "string"
+                                    },
+                                    "offsetMs": {
+                                      "description": "When it started, after the check did",
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "durationMs": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "detail": {
+                                      "type": "string"
+                                    },
+                                    "attachments": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "description": "Lets another attachment, step or annotation refer to this one",
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "role": {
+                                            "type": "string"
+                                          },
+                                          "contentType": {
+                                            "description": "An IANA media type. Absent means application/octet-stream",
+                                            "type": "string"
+                                          },
+                                          "bundleKey": {
+                                            "description": "The key of its bytes in the layer",
+                                            "type": "string"
+                                          },
+                                          "uri": {
+                                            "description": "Where else to read it: an https URL, or a path a host understands",
+                                            "type": "string"
+                                          },
+                                          "text": {
+                                            "description": "A small UTF-8 value, inline",
+                                            "type": "string"
+                                          },
+                                          "bytes": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "sha256": {
+                                            "type": "string"
+                                          },
+                                          "width": {
+                                            "type": "number",
+                                            "minimum": 0
+                                          },
+                                          "height": {
+                                            "type": "number",
+                                            "minimum": 0
+                                          },
+                                          "durationMs": {
+                                            "description": "For video and audio",
+                                            "type": "number",
+                                            "minimum": 0
+                                          },
+                                          "description": {
+                                            "type": "string"
+                                          },
+                                          "at": {
+                                            "type": "object",
+                                            "properties": {
+                                              "step": {
+                                                "description": "The `id` of a step",
+                                                "type": "string"
+                                              },
+                                              "offsetMs": {
+                                                "type": "number",
+                                                "minimum": 0
+                                              }
+                                            },
+                                            "additionalProperties": {}
+                                          },
+                                          "poster": {
+                                            "description": "The `id` of an attachment that stands for this one before it is opened",
+                                            "type": "string"
+                                          },
+                                          "captions": {
+                                            "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "extensions": {
+                                            "type": "object",
+                                            "propertyNames": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "additionalProperties": {}
+                                          }
+                                        },
+                                        "required": [
+                                          "name"
+                                        ],
+                                        "additionalProperties": {}
+                                      }
+                                    },
+                                    "annotations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "message": {
+                                            "type": "string"
+                                          },
+                                          "level": {
+                                            "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                                            "type": "string"
+                                          },
+                                          "at": {
+                                            "type": "object",
+                                            "properties": {
+                                              "step": {
+                                                "description": "The `id` of a step",
+                                                "type": "string"
+                                              },
+                                              "offsetMs": {
+                                                "type": "number",
+                                                "minimum": 0
+                                              }
+                                            },
+                                            "additionalProperties": {}
+                                          },
+                                          "source": {
+                                            "type": "object",
+                                            "properties": {
+                                              "file": {
+                                                "type": "string"
+                                              },
+                                              "line": {
+                                                "type": "integer",
+                                                "minimum": -9007199254740991,
+                                                "maximum": 9007199254740991
+                                              },
+                                              "column": {
+                                                "type": "integer",
+                                                "minimum": -9007199254740991,
+                                                "maximum": 9007199254740991
+                                              }
+                                            },
+                                            "additionalProperties": {}
+                                          },
+                                          "links": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "url": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                },
+                                                "rel": {
+                                                  "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "url"
+                                              ],
+                                              "additionalProperties": {}
+                                            }
+                                          },
+                                          "extensions": {
+                                            "type": "object",
+                                            "propertyNames": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "additionalProperties": {}
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "message"
+                                        ],
+                                        "additionalProperties": {}
+                                      }
+                                    },
+                                    "extensions": {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "attachments": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "description": "Lets another attachment, step or annotation refer to this one",
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "role": {
+                                      "type": "string"
+                                    },
+                                    "contentType": {
+                                      "description": "An IANA media type. Absent means application/octet-stream",
+                                      "type": "string"
+                                    },
+                                    "bundleKey": {
+                                      "description": "The key of its bytes in the layer",
+                                      "type": "string"
+                                    },
+                                    "uri": {
+                                      "description": "Where else to read it: an https URL, or a path a host understands",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "description": "A small UTF-8 value, inline",
+                                      "type": "string"
+                                    },
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "sha256": {
+                                      "type": "string"
+                                    },
+                                    "width": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "height": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "durationMs": {
+                                      "description": "For video and audio",
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "at": {
+                                      "type": "object",
+                                      "properties": {
+                                        "step": {
+                                          "description": "The `id` of a step",
+                                          "type": "string"
+                                        },
+                                        "offsetMs": {
+                                          "type": "number",
+                                          "minimum": 0
+                                        }
+                                      },
+                                      "additionalProperties": {}
+                                    },
+                                    "poster": {
+                                      "description": "The `id` of an attachment that stands for this one before it is opened",
+                                      "type": "string"
+                                    },
+                                    "captions": {
+                                      "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "extensions": {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "annotations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "message": {
+                                      "type": "string"
+                                    },
+                                    "level": {
+                                      "description": "Conventionally info, warning or error. Anything else is shown as a note",
+                                      "type": "string"
+                                    },
+                                    "at": {
+                                      "type": "object",
+                                      "properties": {
+                                        "step": {
+                                          "description": "The `id` of a step",
+                                          "type": "string"
+                                        },
+                                        "offsetMs": {
+                                          "type": "number",
+                                          "minimum": 0
+                                        }
+                                      },
+                                      "additionalProperties": {}
+                                    },
+                                    "source": {
+                                      "type": "object",
+                                      "properties": {
+                                        "file": {
+                                          "type": "string"
+                                        },
+                                        "line": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "column": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        }
+                                      },
+                                      "additionalProperties": {}
+                                    },
+                                    "links": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "url": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "rel": {
+                                            "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "url"
+                                        ],
+                                        "additionalProperties": {}
+                                      }
+                                    },
+                                    "extensions": {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "message"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "extensions": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "index",
+                              "status"
+                            ],
+                            "additionalProperties": {}
+                          }
                         }
                       },
                       "required": [
@@ -538,6 +2639,239 @@
         ],
         "additionalProperties": {}
       }
+    },
+    "tags": {
+      "description": "Free labels to filter and group by: smoke, slow, flaky…",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "labels": {
+      "description": "Facts about the result, not part of its identity: owner, severity, browser, os, build. Unlike `parameters` they never split a result into another slot",
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "rel": {
+            "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Lets another attachment, step or annotation refer to this one",
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string"
+          },
+          "contentType": {
+            "description": "An IANA media type. Absent means application/octet-stream",
+            "type": "string"
+          },
+          "bundleKey": {
+            "description": "The key of its bytes in the layer",
+            "type": "string"
+          },
+          "uri": {
+            "description": "Where else to read it: an https URL, or a path a host understands",
+            "type": "string"
+          },
+          "text": {
+            "description": "A small UTF-8 value, inline",
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number",
+            "minimum": 0
+          },
+          "height": {
+            "type": "number",
+            "minimum": 0
+          },
+          "durationMs": {
+            "description": "For video and audio",
+            "type": "number",
+            "minimum": 0
+          },
+          "description": {
+            "type": "string"
+          },
+          "at": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "description": "The `id` of a step",
+                "type": "string"
+              },
+              "offsetMs": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": {}
+          },
+          "poster": {
+            "description": "The `id` of an attachment that stands for this one before it is opened",
+            "type": "string"
+          },
+          "captions": {
+            "description": "The `id`s of attachments (WebVTT, SRT) that caption this one",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extensions": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string"
+          },
+          "level": {
+            "description": "Conventionally info, warning or error. Anything else is shown as a note",
+            "type": "string"
+          },
+          "at": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "description": "The `id` of a step",
+                "type": "string"
+              },
+              "offsetMs": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": {}
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "column": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "additionalProperties": {}
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string"
+                },
+                "rel": {
+                  "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "extensions": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {}
     }
   },
   "required": [

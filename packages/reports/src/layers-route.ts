@@ -5,8 +5,10 @@ import { createLiveEvidence, liveRunRecord, type LiveRunRecord } from './evidenc
 import type { ActiveRun, BackendInfo, EvidencePage, LayerEvidence, LayerHeader, LayerRows } from './evidence-types';
 import { isFramePath, isKeySegment } from './keys';
 import { catalogEntries, catalogLayers } from './layer-catalog';
+import { attachmentResponse } from './attachment-response';
+import { checkDetailOf, runEvidence } from './evidence-detail';
 import { layerEvidence } from './layer-merge';
-import { readLayer } from './layer-store';
+import { layerSummary, readLayer } from './layer-store';
 import { readBytes, readUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
 import { SPEC_RUN_ID } from './publish';
@@ -52,6 +54,8 @@ function archived(id: string): boolean {
 /** Bounded pages of layer origins, each layer's checks read once, and the runs still writing. */
 export function createLayersApp(deps: ReportsAppDeps) {
   const backends = reportBackends(deps);
+  // Layers the host leaves out are left out of every route, so a filter cannot be undone by asking for history.
+  const include = deps.include ?? (() => true);
   const listings: (Listing | undefined)[] = backends.map(() => undefined);
   let pending: Promise<Entry[]> | null = null;
   const loaded = new Map<string, { at: number; value: Promise<readonly LayerEvidence[]> }>();
@@ -122,7 +126,8 @@ export function createLayersApp(deps: ReportsAppDeps) {
     if (!reader) {
       for (const backend of backends) {
         const layer = await readLayer(backend.store, id).catch(() => null);
-        if (!layer) continue;
+        // A layer the host leaves out has no files to give either.
+        if (!layer || !include(layerEvidence(layerSummary(layer), backend.id).layer)) continue;
         reader = createBundleReader(backend.store, layer.bundle);
         if (readers.size >= 8) readers.delete(readers.keys().next().value!);
         readers.set(id, reader);
@@ -185,7 +190,7 @@ export function createLayersApp(deps: ReportsAppDeps) {
     for (const [i, listing] of listings.entries()) if (listing && !listing.available) notices.push(`${backends[i]!.label} is unavailable. Layers already loaded remain usable.`);
     await eachLimited(selected, 8, async entry => {
       try {
-        for (const evidence of await entryEvidence(entry)) layers.push(evidence.layer);
+        for (const evidence of await entryEvidence(entry)) if (include(evidence.layer)) layers.push(evidence.layer);
       } catch {
         notices.push('A report layer could not be loaded. Its outcome is unknown.');
       }
@@ -206,9 +211,32 @@ export function createLayersApp(deps: ReportsAppDeps) {
     const backend = backends.findIndex(known => known.id === c.req.param('backend'));
     const id = c.req.param('id');
     const evidence = backend < 0 ? null : await findEvidence(backend, id);
-    if (!evidence) return c.notFound();
+    if (!evidence || !include(evidence.layer)) return c.notFound();
     const rows: LayerRows = { id: evidence.id, rows: evidence.rows, fingerprints: evidence.fingerprints };
     return c.json(rows, 200, { 'cache-control': archived(id) ? 'public, max-age=31536000, immutable' : 'no-cache' });
+  });
+  // The files a layer carries for its checks: screenshots, videos, traces, logs, snapshots, anything.
+  app.get('/layers/:id/blobs/*', async c => {
+    const id = c.req.param('id');
+    let key: string;
+    try { key = decodeURIComponent(new URL(c.req.url).pathname.split(`/layers/${id}/blobs/`)[1] ?? ''); }
+    catch { return c.json({ error: 'Invalid attachment path' }, 400); }
+    if (!archived(id) || !key || key.split('/').some(part => !part || part === '.' || part === '..')) return c.notFound();
+    const entry = await file(id, key);
+    return entry ? attachmentResponse(c.req.raw, entry, `"${id.slice(0, 16)}-${key.replace(/[^\w.-]/g, '_')}"`) : c.notFound();
+  });
+  // Everything one result carries: its timeline, attachments, annotations, retries and extensions.
+  app.get('/evidence/detail/:backend/:id', async c => {
+    const backend = backends.find(known => known.id === c.req.param('backend'));
+    const id = c.req.param('id');
+    if (!backend || !archived(id)) return c.notFound();
+    const layer = await readLayer(backend.store, id).catch(() => null);
+    if (!layer || !include(layerEvidence(layerSummary(layer), backend.id).layer)) return c.notFound();
+    const checkId = c.req.query('check');
+    const headers = { 'cache-control': 'public, max-age=31536000, immutable' };
+    if (checkId === undefined) return c.json({ layer: id, run: runEvidence(layer) }, 200, headers);
+    const detail = checkDetailOf(layer as never, checkId, c.req.query('kind'));
+    return detail ? c.json(detail, 200, headers) : c.notFound();
   });
   app.get('/layers/:id/*', async c => {
     const id = c.req.param('id');

@@ -67,6 +67,8 @@ export const REPORTS_TAIL_MS = 5 * 60_000;
 
 export type ReportsAppDeps = ReportsExplorerDeps & {
   readonly outline?: () => Promise<ReportOutline & { readSpec: (path: string) => Promise<string | null> }>;
+  /** Leave layers out of the report, in every route. */
+  readonly include?: (layer: import('./evidence-types').LayerHeader) => boolean;
   /** Further stores whose layers join the combined report beside `localStore` and `store`. */
   readonly backends?: readonly ReportBackend[];
   /** Results of spec runs that are still running on this machine. */
