@@ -204,3 +204,65 @@ describe('the version of the report', () => {
     expect(a.snapshot()).toBe(a.snapshot());
   });
 });
+
+describe('sending only what changed', () => {
+  const asSent = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+  test.each(SEEDS)('seed %i: the JSON is what JSON.stringify writes, and every earlier version leads to the current report by its delta', async seed => {
+    const { applyEffectiveDelta, isEffectiveDelta } = await import('../src/effective-delta');
+    const all = plans(seed, 60);
+    const r = random(seed * 17);
+    const store = memoryStore();
+    const index = new ReportIndex([{ id: 'node', store }]);
+    const held: ReturnType<typeof index.snapshot>[] = [];
+    for (let from = 0; from < all.length;) {
+      for (const plan of all.slice(from, from += 1 + Math.floor(r.next() * 6))) await publish(store, plan);
+      await index.refresh();
+      expect(index.json().text).toBe(JSON.stringify({ ...index.snapshot(), active: [] }));
+      held.push(asSent(index.snapshot()));
+    }
+    const current = asSent(index.snapshot());
+    for (const earlier of held) {
+      const text = index.delta(earlier.version);
+      expect(text).not.toBeNull();
+      const delta = JSON.parse(text!.text) as unknown;
+      expect(isEffectiveDelta(delta)).toBe(true);
+      expect(asSent(applyEffectiveDelta(earlier, delta as never))).toEqual(current);
+    }
+  });
+
+  test('a version nobody was sent, or from another server, is answered with the whole report', async () => {
+    const store = memoryStore();
+    await publish(store, plans(1, 1)[0]!);
+    const index = new ReportIndex([{ id: 'node', store }]);
+    await index.refresh();
+    expect(index.delta('0123456789abcdef0123')).toBeNull();
+  });
+
+  test('a delta applies only to the report it was made against', async () => {
+    const { applyEffectiveDelta } = await import('../src/effective-delta');
+    const store = memoryStore();
+    const [first, second] = plans(5, 2);
+    await publish(store, first!);
+    const index = new ReportIndex([{ id: 'node', store }]);
+    await index.refresh();
+    const before = asSent(index.snapshot());
+    await publish(store, second!);
+    await index.refresh();
+    const delta = JSON.parse(index.delta(before.version)!.text);
+    expect(applyEffectiveDelta({ ...before, version: 'someone-elses' }, delta)).toBeNull();
+    expect(applyEffectiveDelta(before, delta)?.version).toBe(index.snapshot().version);
+  });
+
+  test('replicas that fold the same layers in another order have the same version', async () => {
+    const all = plans(9, 30);
+    const [one, two] = [memoryStore(), memoryStore()];
+    for (const plan of all) await publish(one, plan);
+    for (const plan of [...all].reverse()) await publish(two, plan);
+    const a = new ReportIndex([{ id: 'x', store: one }]);
+    const b = new ReportIndex([{ id: 'x', store: two }]);
+    await Promise.all([a.refresh(), b.refresh()]);
+    expect(a.snapshot().version).toBe(b.snapshot().version);
+    expect(a.json().text).toBe(b.json().text);
+  });
+});

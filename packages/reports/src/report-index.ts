@@ -28,8 +28,15 @@ export type IndexChange = {
   readonly totalLayers: number;
 };
 
-type Held = { evidence: LayerEvidence; wins: Set<string> };
+/**
+ * A layer that holds winners. What is sent about it (its winning rows, as an object, as JSON, and a digest of
+ * both) is made when first asked for and dropped when a winner changes, so a change to one layer costs one layer.
+ */
+type Held = { evidence: LayerEvidence; wins: Set<string>; rev: number; entry: LayerEvidence | null; json: string | null; digest: string | null };
 const RETRY_FAILED_MS = 5 * 60_000;
+/** Versions a viewer may still be holding, remembered so it can be sent only what changed. */
+const REMEMBERED_VERSIONS = 256;
+const REMEMBERED_REMOVALS = 4096;
 
 /**
  * The report, maintained as layers arrive. Each layer is read once and folded into the winning result
@@ -50,11 +57,17 @@ export class ReportIndex {
   readonly #folded = new Set<string>();
   readonly #failed = new Map<string, { at: number; message: string }>();
   readonly #available = new Map<string, boolean>();
-  #changes = 0;
+  /** Counts every change to what the report shows. A layer remembers the count at which it last changed. */
+  #rev = 0;
+  /** The counts at which versions were seen, oldest first. */
+  readonly #versions = new Map<string, number>();
+  /** Layers that stopped holding any winner, and when. Older removals are forgotten; `#forgotten` says how far. */
+  #removed: { id: string; rev: number }[] = [];
+  #forgotten = 0;
   #refreshing: Promise<boolean> | null = null;
   #timer: ReturnType<typeof setInterval> | null = null;
   #refreshedAt = 0;
-  #cached: { key: string; value: EffectiveEvidence } | null = null;
+  #cached: { key: string; value: EffectiveEvidence; json: string | null; held: Held[] } | null = null;
 
   readonly #include: (layer: LayerHeader) => boolean;
   readonly #fullListEvery: number;
@@ -141,7 +154,7 @@ export class ReportIndex {
   }
 
   async #refresh(): Promise<boolean> {
-    const before = this.#changes;
+    const before = this.#rev;
     const fresh: { backend: BackendInput; key: string }[] = [];
     // The whole catalog on the first pass and now and then; otherwise only its newest end, where new layers sort.
     const full = this.#passes++ % this.#fullListEvery === 0;
@@ -172,7 +185,7 @@ export class ReportIndex {
     await eachLimited(fresh, this.#concurrency, ({ backend, key }) => this.#load(backend, key));
     this.#refreshedAt = this.#now();
     this.#emit();
-    return this.#changes !== before;
+    return this.#rev !== before;
   }
 
   async #load(backend: BackendInput, key: string): Promise<void> {
@@ -201,7 +214,7 @@ export class ReportIndex {
     const known = this.#attribution.get(id);
     if (known !== undefined) {
       // The same immutable layer in another backend: one layer, attributed to the backend that sorts first.
-      if (backend < known) { this.#attribution.set(id, backend); this.#changes += 1; }
+      if (backend < known) { this.#attribution.set(id, backend); const held = this.#held.get(id); if (held) this.#touch(held); else this.#rev += 1; }
       return;
     }
     this.#attribution.set(id, backend);
@@ -219,35 +232,93 @@ export class ReportIndex {
       wins.add(key);
     }
     if (wins.size) {
-      this.#held.set(id, { evidence, wins });
-      this.#changes += 1;
+      this.#held.set(id, { evidence, wins, rev: ++this.#rev, entry: null, json: null, digest: null });
     }
+  }
+
+  /** What this layer sends has changed. */
+  #touch(held: Held): void {
+    held.rev = ++this.#rev;
+    held.entry = held.json = held.digest = null;
   }
 
   #release(layerId: string, key: string): void {
     const held = this.#held.get(layerId);
     if (!held) return;
     held.wins.delete(key);
-    if (!held.wins.size) this.#held.delete(layerId);
+    if (held.wins.size) { this.#touch(held); return; }
+    this.#held.delete(layerId);
+    this.#removed.push({ id: layerId, rev: ++this.#rev });
+    if (this.#removed.length > REMEMBERED_REMOVALS) this.#forgotten = this.#removed.splice(0, this.#removed.length - REMEMBERED_REMOVALS).at(-1)!.rev;
   }
 
-  /** The current report, ready to send. Built once per change, however often it is asked for. */
+  #entryOf(held: Held): LayerEvidence {
+    if (!held.entry) {
+      const id = held.evidence.id;
+      const rows = [...held.wins].map(key => this.#winners.get(key)!.row);
+      held.entry = { id, layer: { ...held.evidence.layer, backend: this.#attribution.get(id) ?? held.evidence.layer.backend }, rows, fingerprints: held.evidence.fingerprints };
+    }
+    return held.entry;
+  }
+
+  /** The current report, ready to send. Built once per change, and only the layers that changed are rebuilt. */
   snapshot(): EffectiveEvidence {
+    return this.#current().value;
+  }
+
+  #current() {
     const backends = this.#backends.map(backend => ({ id: backend.id, label: backend.label ?? backend.id, live: false, available: this.#available.get(backend.id) ?? false })).sort((a, b) => (a.id < b.id ? -1 : 1));
     const notices = [...new Set([...this.#failed.values()].map(failure => failure.message))].sort();
-    const key = [this.#changes, this.#folded.size, backends.map(item => (item.available ? 1 : 0)).join(''), notices.join('\n')].join('|');
-    if (this.#cached?.key === key) return this.#cached.value;
-    const layers: LayerEvidence[] = [];
-    for (const [id, held] of this.#held) {
-      const rows = [...held.wins].map(key => this.#winners.get(key)!.row);
-      const header: LayerHeader = { ...held.evidence.layer, backend: this.#attribution.get(id) ?? held.evidence.layer.backend };
-      layers.push({ id, layer: header, rows, fingerprints: held.evidence.fingerprints });
+    const key = [this.#rev, this.#folded.size, backends.map(item => (item.available ? 1 : 0)).join(''), notices.join('\n')].join('|');
+    if (this.#cached?.key === key) return this.#cached;
+    const held = [...this.#held.values()];
+    held.sort((a, b) => b.evidence.layer.recordedAtMs - a.evidence.layer.recordedAtMs || (a.evidence.id < b.evidence.id ? -1 : a.evidence.id > b.evidence.id ? 1 : 0));
+    const layers = held.map(item => this.#entryOf(item));
+    // A layer's rows are fixed by its id and which of its slots it holds, so a digest of those says when the report differs.
+    const hash = createHash('sha256');
+    for (const item of held) {
+      item.digest ??= `${item.evidence.id}|${this.#attribution.get(item.evidence.id) ?? ''}|${[...item.wins].join('\u0001')}`;
+      hash.update(item.digest).update('\n');
     }
-    layers.sort((a, b) => b.layer.recordedAtMs - a.layer.recordedAtMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    const version = createHash('sha256').update(JSON.stringify({ layers, backends, notices, totalLayers: this.#attribution.size })).digest('hex').slice(0, 20);
-    const value: EffectiveEvidence = { version, layers, backends, notices, totalLayers: this.#attribution.size };
-    this.#cached = { key, value };
-    return value;
+    hash.update(JSON.stringify([backends, notices, this.#attribution.size]));
+    const version = hash.digest('hex').slice(0, 20);
+    if (!this.#versions.has(version)) {
+      this.#versions.set(version, this.#rev);
+      if (this.#versions.size > REMEMBERED_VERSIONS) this.#versions.delete(this.#versions.keys().next().value!);
+    }
+    this.#cached = { key, value: { version, layers, backends, notices, totalLayers: this.#attribution.size }, json: null, held };
+    return this.#cached;
+  }
+
+  /**
+   * The report as JSON text: exactly what `JSON.stringify({ ...snapshot(), active: [] })` writes, put together from
+   * the text of each layer, which is written once. `active` is what a store without live runs always sends: none.
+   */
+  json(): { readonly version: string; readonly text: string } {
+    const current = this.#current();
+    if (current.json === null) {
+      const { value, held } = current;
+      current.json = `{"version":${JSON.stringify(value.version)},"layers":[${held.map(item => (item.json ??= JSON.stringify(this.#entryOf(item)))).join(',')}],"backends":${JSON.stringify(value.backends)},"notices":${JSON.stringify(value.notices)},"totalLayers":${value.totalLayers},"active":[]}`;
+    }
+    return { version: current.value.version, text: current.json };
+  }
+
+  /**
+   * What differs between the report a viewer holds (named by its version) and the current one: the layers that
+   * changed in full, and the ids of those that no longer hold a winner. Null when that version is not remembered,
+   * and the viewer should ask for the whole report. See `applyEffectiveDelta`.
+   */
+  delta(since: string): { readonly text: string; readonly version: string } | null {
+    const current = this.#current();
+    const base = this.#versions.get(since);
+    if (base === undefined || base < this.#forgotten) return null;
+    const changed = current.held.filter(item => item.rev > base);
+    const gone = [...new Set(this.#removed.filter(item => item.rev > base && !this.#held.has(item.id)).map(item => item.id))];
+    const { value } = current;
+    return {
+      version: value.version,
+      text: `{"version":${JSON.stringify(value.version)},"base":${JSON.stringify(since)},"delta":true,"layers":[${changed.map(item => (item.json ??= JSON.stringify(this.#entryOf(item)))).join(',')}],"removed":${JSON.stringify(gone)},"backends":${JSON.stringify(value.backends)},"notices":${JSON.stringify(value.notices)},"totalLayers":${value.totalLayers},"active":[]}`
+    };
   }
 
   /** For `/readyz` and logs. */
