@@ -1,3 +1,15 @@
+/**
+ * @module Streaming reporter
+ *
+ * `createReporter` lets a suite report checks as they finish: each flush is one immutable layer of the checks since the last,
+ * so a run is visible while it is still going, and a check reported `running` then `passed` is two layers whose newer,
+ * completed one wins. A layer that cannot be sent is kept and sent again byte for byte the same (never a second layer), a
+ * layer the server permanently refuses is counted as lost without blocking the ones behind it, and nothing is ever thrown
+ * into the suite being reported on.
+ *
+ * @see docs/server.md#streaming-a-run-as-it-happens
+ */
+
 import { PublishChecksSchema, type PublishChecksInput } from '../../schema/src/layer';
 import { parseWith } from './parse-with';
 import type { ObjectStore } from './object-store';
@@ -8,6 +20,7 @@ type Check = PublishChecksInput['checks'][number];
 /** What every layer of one stream shares: who is reporting, from where. Whatever `publishChecks` takes, except the checks and the time. */
 export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>;
 
+/** How a reporter sends: the `store` (a folder, S3, or `httpStore` for a server), how often (`flushMs`, `batchSize`), how hard it tries (`attempts`, `backoffMs`), what it tells (`onError`, `onPublished`), and the clock and sleep for tests. */
 export type ReporterOptions = {
   /** Where layers go: a directory, S3, or `httpStore` for an Atlas server. */
   readonly store: ObjectStore;
@@ -27,6 +40,7 @@ export type ReporterOptions = {
   readonly sleep?: (ms: number) => Promise<void>;
 };
 
+/** What `close()` says happened: layers and checks that arrived, and checks `lost` (never arrived). `lost` is zero when everything did. */
 export type ReporterResult = {
   /** Layers that arrived. */
   readonly layers: number;
@@ -36,6 +50,7 @@ export type ReporterResult = {
   readonly lost: number;
 };
 
+/** A running reporter. `check` adds a result, `flush` sends what is waiting, `close` sends the rest and stops. */
 export type Reporter = {
   /** Report one check, finished or still running. Reporting the same `id` again replaces it, whatever its state. */
   check(check: Check): void;
@@ -46,6 +61,14 @@ export type Reporter = {
 };
 
 type Batch = { readonly checks: Check[]; readonly recordedAtMs: number };
+
+/**
+ * Trying again cannot help a layer the server refused (too large, not valid) or that cannot be made: it would
+ * stand in front of every later one for ever.
+ */
+function permanent(error: Error): boolean {
+  return (error as { retryable?: boolean }).retryable === false || /^publishChecks:/.test(error.message);
+}
 
 /**
  * A suite that reports as it goes. Each flush is one immutable layer holding the checks reported since the
@@ -99,8 +122,16 @@ export function createReporter(identity: ReporterIdentity, options: ReporterOpti
       for (let attempt = 1; attempt <= tries; attempt++) {
         error = await send(batch);
         if (!error) break;
+        if (permanent(error)) break;
         options.onError?.(error, attempt < tries || !closed);
         if (attempt < tries) await sleep(Math.min(wait * 2 ** (attempt - 1), 30_000));
+      }
+      if (error && permanent(error)) {
+        // Said once, counted as lost, and out of the way of the layers behind it.
+        options.onError?.(error, false);
+        lost += batch.checks.length;
+        failed.shift();
+        continue;
       }
       if (error) {
         if (closed) { lost += failed.reduce((sum, item) => sum + item.checks.length, 0); failed.length = 0; }

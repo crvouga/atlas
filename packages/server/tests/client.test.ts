@@ -109,3 +109,25 @@ describe('atlas report doctor against a server', () => {
     expect(output).toContain('token');
   });
 });
+
+describe('a refused layer does not stand in front of the ones behind it', () => {
+  test('a layer the server will never take is said once and counted as lost; the next ones go through', async () => {
+    const { AtlasHttpError } = await import('../../reports/src/http-store');
+    const store = memoryStore();
+    let manifests = 0;
+    const refusing = { ...store, put: async (key: string, bytes: Uint8Array, type: string) => {
+      if (key.startsWith('layers/manifests/') && manifests++ === 0) throw new AtlasHttpError('refused: too large', 413, false);
+      return store.put(key, bytes, type);
+    } };
+    const errors: string[] = [];
+    let time = 100;
+    const reporter = createReporter({ producer: 'p' }, { store: refusing as typeof store, flushMs: 0, now: () => (time += 10), onError: (error, willRetry) => errors.push(`${error.message}:${willRetry}`) });
+    reporter.check({ id: 'big', title: 'big', status: 'passed' });
+    await reporter.flush();
+    reporter.check({ id: 'next', title: 'next', status: 'passed' });
+    await reporter.flush();
+    expect(await reporter.close()).toEqual({ layers: 1, checks: 1, lost: 1 });
+    expect(errors).toEqual(['refused: too large:false']);
+    expect((await store.listKeys('layers/index/')).length).toBe(1);
+  });
+});
