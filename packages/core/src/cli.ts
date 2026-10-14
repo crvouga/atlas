@@ -21,6 +21,7 @@ const USAGE = `atlas — executable statecharts
                [--no-retry] [--output <dir>]
   atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
   atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
+  atlas report publish|status|merge …   layered evidence for any kind of spec (atlas report --help)
 
   --workers       path attempts that run at once (default: one per CPU, capped by the driver)
   --seed          only paths that start from this seed ("start" for paths setup starts); repeatable
@@ -77,6 +78,8 @@ async function loadConfig(file: string): Promise<{ config: AtlasConfig; base: st
 
 export async function main(argv = process.argv.slice(2)) {
   const [command] = argv;
+  // Loaded on demand: lint, plan and run do not pay for the reports.
+  if (command === 'report') return (await import('../../reports/src/report-cli')).reportMain(argv.slice(1));
   const configFile = flag(argv, 'config') ?? 'atlas.config.ts';
   const specs = flag(argv, 'specs');
   const output = flag(argv, 'output');

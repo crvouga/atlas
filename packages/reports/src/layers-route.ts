@@ -121,7 +121,7 @@ export function createLayersApp(deps: ReportsAppDeps) {
     let reader = readers.get(id);
     if (!reader) {
       for (const backend of backends) {
-        const layer = await readLayer(backend.store, id);
+        const layer = await readLayer(backend.store, id).catch(() => null);
         if (!layer) continue;
         reader = createBundleReader(backend.store, layer.bundle);
         if (readers.size >= 8) readers.delete(readers.keys().next().value!);

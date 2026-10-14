@@ -10,7 +10,8 @@ export function textFingerprint(text: string): string {
   return `${text.length}:${(a >>> 0).toString(16)}:${(b >>> 0).toString(16)}`;
 }
 export function specPath(path: string): string {
-  return path.replaceAll('\\', '/').replace(/^\.\//, '').replace(/^.*?(?=specs\/)/, '');
+  // Up to the first folder named exactly `specs`: `myspecs/x` is not in one.
+  return path.replaceAll('\\', '/').replace(/^\.\//, '').replace(/^(?:.*?\/)?(?=specs\/)/, '');
 }
 export function parameterKey(parameters: LayerParameters): string {
   return JSON.stringify(Object.entries(parameters).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
@@ -51,7 +52,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
       measurements: check.measurements,
       testId: test?.testId ?? null,
       variant,
-      durationMs: test?.durationMs ?? null,
+      durationMs: test?.durationMs ?? check.durationMs ?? null,
     };
   }));
   const recording = summary.recording;
@@ -113,7 +114,12 @@ function replaces(next: EvidenceResult, prior: EvidenceResult): boolean {
   if (done !== priorDone) return done;
   if (next.layer.recordedAtMs !== prior.layer.recordedAtMs) return next.layer.recordedAtMs > prior.layer.recordedAtMs;
   if (RANK[next.row.status] !== RANK[prior.row.status]) return RANK[next.row.status] > RANK[prior.row.status];
-  return next.layer.id > prior.layer.id;
+  // The last tie-break is total, so no input order can change the answer.
+  return layerOrder(next.layer) > layerOrder(prior.layer);
+}
+
+function layerOrder(layer: LayerHeader): string {
+  return `${layer.id}|${layer.backend}`;
 }
 
 export type CombinedEvidence = {
@@ -153,15 +159,32 @@ function archived(id: string): boolean {
   return /^[0-9a-f]{64}$/.test(id);
 }
 
-/** Suppress the mutable address of an execution already archived as an immutable layer. */
-export function distinctHeaders<T extends { readonly id: string; readonly execution: string }>(layers: readonly T[]): T[] {
+/**
+ * Suppress the mutable address of an execution already archived as an immutable layer. An
+ * immutable layer held by several backends is one layer, reported by the backend that sorts first,
+ * whatever order they were read in. A mutable one is its backend's own.
+ */
+export function distinctHeaders<T extends { readonly id: string; readonly execution: string; readonly backend?: string }>(layers: readonly T[]): T[] {
   const kept = new Set(layers.filter(layer => archived(layer.id)).map(layer => layer.execution));
-  return [...new Map(layers.filter(layer => archived(layer.id) || !kept.has(layer.execution)).map(layer => [layer.id, layer])).values()];
+  const chosen = new Map<string, T>();
+  for (const layer of layers) {
+    if (!archived(layer.id) && kept.has(layer.execution)) continue;
+    const key = archived(layer.id) ? layer.id : `${layer.backend ?? ''}|${layer.id}`;
+    const prior = chosen.get(key);
+    if (!prior || (layer.backend ?? '') < (prior.backend ?? '')) chosen.set(key, layer);
+  }
+  return [...chosen.values()];
 }
 
 export function distinctEvidence(layers: readonly LayerEvidence[]): LayerEvidence[] {
-  const kept = new Set(distinctHeaders(layers.map(entry => entry.layer)).map(layer => layer.id));
-  return [...new Map(layers.filter(entry => kept.has(entry.id)).map(entry => [entry.id, entry])).values()];
+  const kept = new Set(distinctHeaders(layers.map(entry => entry.layer)).map(layer => `${layer.backend}|${layer.id}`));
+  const emitted = new Set<string>();
+  return layers.filter(entry => {
+    const key = `${entry.layer.backend}|${entry.id}`;
+    if (!kept.has(key) || emitted.has(key)) return false;
+    emitted.add(key);
+    return true;
+  });
 }
 
 /** Suppress the mutable address of an execution already archived as an immutable layer. */

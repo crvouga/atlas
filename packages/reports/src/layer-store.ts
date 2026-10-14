@@ -2,6 +2,7 @@ import { createBundleReader, writeBundle, type BundleIndex, type BundleEntry } f
 import { readUtf8, writeUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
 import type { LayerSummary, ReportLayer } from './layer-types';
+import { LAYER_SCHEMA_VERSION, parseLayerDocument } from '../../schema/src/layer';
 
 export const LAYER_INDEX = 'layers/index/';
 export function layerKey(id: string): string {
@@ -13,19 +14,27 @@ export async function publishLayer(store: ObjectStore, summary: Omit<LayerSummar
   return publishLayerBundle(store, summary, bundle);
 }
 export async function publishLayerBundle(store: ObjectStore, summary: Omit<LayerSummary, 'id'>, bundle: BundleIndex): Promise<ReportLayer> {
-  const body = JSON.stringify({ ...summary, bundle });
+  // The id is the digest of exactly this document without it, so every producer that records the same thing writes the same layer.
+  const body = JSON.stringify({ schemaVersion: LAYER_SCHEMA_VERSION, ...summary, bundle });
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
   const id = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
   const layer: ReportLayer = { ...summary, id, bundle };
   // Immutable manifest first, independent catalog entry last: concurrent producers never overwrite one another.
-  if (!(await store.head(layerKey(id)))) await writeUtf8(store, layerKey(id), JSON.stringify(layer), 'application/json');
+  if (!(await store.head(layerKey(id)))) await writeUtf8(store, layerKey(id), JSON.stringify({ schemaVersion: LAYER_SCHEMA_VERSION, ...layer }), 'application/json');
   const inverse = String(Number.MAX_SAFE_INTEGER - Math.max(0, Math.floor(summary.recordedAtMs))).padStart(16, '0');
   await writeUtf8(store, `${LAYER_INDEX}${inverse}-${id}.json`, JSON.stringify({ id }), 'application/json');
   return layer;
 }
+/** A layer that is present but cannot be read is an error naming why, never a half-read layer. */
 export async function readLayer(store: ObjectStore, id: string): Promise<ReportLayer | null> {
   const raw = await readUtf8(store, layerKey(id));
-  return raw === null ? null : JSON.parse(raw) as ReportLayer;
+  if (raw === null) return null;
+  let json: unknown;
+  try { json = JSON.parse(raw); } catch { throw new Error(`Layer ${id.slice(0, 12)} is not JSON`); }
+  const parsed = parseLayerDocument(json);
+  if (!parsed.ok) throw new Error(`Layer ${id.slice(0, 12)}: ${parsed.reason}`);
+  const { schemaVersion: _version, ...layer } = parsed.layer;
+  return layer as unknown as ReportLayer;
 }
 export async function readLayerFile(store: ObjectStore, id: string, file: string) {
   const layer = await readLayer(store, id);

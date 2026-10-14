@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/atlas",
   "version": "0.0.0-development",
-  "description": "Atlas: executable statecharts. Spec a product's flows as statecharts, run them against the real app with any driver, and browse what happened.",
+  "description": "Atlas: specs of any kind, reported as layered evidence. Publish checks from any runner (JUnit, CTRF, a script), combine them across nodes, branches, environments and backends, gate CI on the result, and run statecharts against the real app.",
   "license": "MIT",
   "type": "module",
   "sideEffects": [
@@ -17,6 +17,11 @@
     "url": "https://github.com/crvouga/atlas/issues"
   },
   "keywords": [
+    "test-reports",
+    "ctrf",
+    "junit",
+    "gherkin",
+    "specifications",
     "statecharts",
     "scxml",
     "xstate",
@@ -114,6 +119,12 @@
     "packages/visualizer/vite.config.ts",
     "packages/*/README.md",
     "packages/reports/STORAGE.md",
+    "docs/integrating.md",
+    "docs/statecharts.md",
+    "docs/report-contract.md",
+    "docs/report-backends.md",
+    "docs/dogfooding.md",
+    "docs/reporting-issues.md",
     "CHANGELOG.md"
   ],
   "scripts": {

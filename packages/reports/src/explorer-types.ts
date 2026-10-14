@@ -28,6 +28,8 @@ export type EvidenceCheck = {
   readonly detail: string;
   readonly specPath?: string;
   readonly measurements: readonly EvidenceMeasurement[];
+  /** How long the check took, when the producer measured it. */
+  readonly durationMs?: number;
 };
 
 /** `kind` is an open producer key; new parts need no protocol change. */

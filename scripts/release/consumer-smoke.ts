@@ -224,6 +224,24 @@ async function main(): Promise<void> {
       }
     }
 
+    if (atlas) {
+      // The reports are the other way in: two nodes each publish part of a report, and the aggregate gates.
+      const ctrf = (name: string) => JSON.stringify({ results: { tool: { name: 'smoke' }, summary: { stop: 1000 }, tests: [{ name, status: 'passed', filePath: 'specs/flow.feature' }] } });
+      writeFileSync(path.join(app, 'node-1.ctrf.json'), ctrf('first'));
+      writeFileSync(path.join(app, 'node-2.ctrf.json'), ctrf('second'));
+      for (const [runtime, args] of RUNTIMES) {
+        console.log(`consumer-smoke: ${runtime} atlas report publish, merge and status`);
+        const store = (name: string) => `reports-${runtime}-${name}`;
+        for (const node of ['1', '2']) {
+          await must(runtime, [...args, atlas, 'report', 'publish', '--store', store(node), '--producer', 'smoke', '--ctrf', `node-${node}.ctrf.json`, '--environment', 'desktop-web', '--sha', 'a'.repeat(40), '--branch', 'main'], { cwd: app });
+        }
+        const gated = await must(runtime, [...args, atlas, 'report', 'status', '--store', store('1'), '--store', store('2'), '--format', 'json'], { cwd: app });
+        const status = JSON.parse(gated) as { ok: boolean; checks: { passed: number } };
+        if (!status.ok || status.checks.passed !== 2) throw new Error(`atlas report status under ${runtime} did not combine both nodes:\n${gated}`);
+        await must(runtime, [...args, atlas, 'report', 'merge', '--store', store('1'), '--store', store('2'), '--into', store('all')], { cwd: app });
+      }
+    }
+
     const visualizer = bins.get('atlas-visualizer');
     if (visualizer) {
       for (const [runtime, args] of RUNTIMES) {

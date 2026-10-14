@@ -1,0 +1,197 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/publish-checks.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "producer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another",
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "running",
+              "not-run"
+            ]
+          },
+          "detail": {
+            "description": "Why it failed, or what was measured",
+            "default": "",
+            "type": "string"
+          },
+          "specPath": {
+            "description": "The spec this check belongs to, relative to the repository, such as specs/join.feature",
+            "type": "string"
+          },
+          "measurements": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "description": "A finite number",
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "limit": {
+                  "description": "The allowance. A measurement over it is reported, and never fails the check by itself",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "value",
+                "unit"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "durationMs": {
+            "description": "How long the check took, when the producer measured it",
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "kind": {
+      "default": "checks",
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string"
+    },
+    "recordedAtMs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "sha": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "branch": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runUrl": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "environment": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "parameters": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "freshness": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "modified"
+      ]
+    },
+    "specs": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "domain": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "description": "Identity of the spec text the layer was recorded against, to warn when the spec changed since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "domain",
+          "kind",
+          "title"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "producer",
+    "checks",
+    "recordedAtMs"
+  ],
+  "additionalProperties": {}
+}

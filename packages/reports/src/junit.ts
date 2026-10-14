@@ -8,6 +8,12 @@ import type { HtmlReportBundle, HtmlReportTest } from './recording-bundle';
 
 export type JunitCase = {
   readonly file: string;
+  /** The `classname` attribute, which many runners use for the suite or the file. */
+  readonly classname: string;
+  /** The `name` of the `<testsuite>` the case is in. */
+  readonly suite: string;
+  /** Seconds, when the runner emits it. */
+  readonly time: number | null;
   readonly name: string;
   /** 1-based line of the test declaration, when the runner emits it. */
   readonly line: number | null;
@@ -46,12 +52,16 @@ function failureText(body: string): string | null {
   return text.length > 0 ? text : (message ?? 'failed');
 }
 
-function parseCase(tag: string, inner: string, suiteFile: string): JunitCase {
+function parseCase(tag: string, inner: string, suiteFile: string, suiteName: string): JunitCase {
   const lineRaw = attr(tag, 'line');
   const line = lineRaw === null ? null : Number(lineRaw);
   const failure = failureText(inner);
+  const time = Number(attr(tag, 'time'));
   return {
     file: attr(tag, 'file') ?? suiteFile,
+    classname: attr(tag, 'classname') ?? '',
+    suite: suiteName,
+    time: attr(tag, 'time') !== null && Number.isFinite(time) ? time : null,
     name: attr(tag, 'name') ?? '',
     line: line !== null && Number.isFinite(line) ? line : null,
     status: caseStatus(failure, inner),
@@ -70,9 +80,10 @@ function caseStatus(
 
 function parseSuite(tag: string, body: string, out: JunitCase[]): void {
   const suiteFile = attr(tag, 'file') ?? '';
+  const suiteName = attr(tag, 'name') ?? '';
   const caseRe = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
   for (let c = caseRe.exec(body); c; c = caseRe.exec(body)) {
-    out.push(parseCase(c[1] ?? '', c[2] ?? '', suiteFile));
+    out.push(parseCase(c[1] ?? '', c[2] ?? '', suiteFile, suiteName));
   }
 }
 
