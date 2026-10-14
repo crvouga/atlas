@@ -1,5 +1,55 @@
 # Atlas reports
 
+Evidence for specs of any kind, kept as immutable **layers** and read back as one report. Start with
+[integrating Atlas](../../docs/integrating.md); the exact rules are in
+[the report contract](../../docs/report-contract.md).
+
+## The short API
+
+Every module is its own import path: `@crvouga/atlas/reports/<module>`. Nothing runs at import.
+
+| Module | Exports | For |
+| --- | --- | --- |
+| `publish-checks` | `publishChecks(store, input)` | Publish the checks of one producer as one layer. Validates, is idempotent, reads no clock. |
+| `ingest` | `checksFromCtrf`, `checksFromJunit`, `checksFromManifest` | Turn a CTRF report, JUnit XML or an Atlas run into checks, with stable ids. |
+| `compose` | `combineBackends(backends, options?)`, `summarize` | Read every layer of every backend and lay them over the specs. A down backend or unreadable layer becomes a notice. |
+| `report-status` | `reportStatus(report, { requireEnvironments? })`, `formatStatusText`, `formatStatusMarkdown` | The gate: `ok`, `reasons`, `failing`, counts per environment. Fails closed. |
+| `directory-store` | `directoryStore(dir)` | A backend on a directory, with atomic writes. |
+| `object-store` | `ObjectStore` | The backend interface: seven methods, no transactions. |
+| `object-store-conformance` | `verifyObjectStore(store)` | Prove a backend you wrote meets the interface. Runs under any test runner. |
+| `copy-store` | `copyStore(from, to)` | Copy the layers a store is missing. Idempotent and commutative: how partial reports meet. |
+| `host` | `reportsHost({ specs, stores })` | The reports half of the viewer for your stores and specs directory. |
+| `layer-merge` | `combineEvidence`, `layerEvidence`, `textFingerprint` | The composition rule itself, over layers already in memory. |
+| `directory-outline` | `loadDirectoryOutline(dir)` | A specs directory as the outline reports are laid over. |
+
+```ts
+import { combineBackends } from '@crvouga/atlas/reports/compose';
+import { directoryStore } from '@crvouga/atlas/reports/directory-store';
+import { publishChecks } from '@crvouga/atlas/reports/publish-checks';
+import { reportStatus } from '@crvouga/atlas/reports/report-status';
+
+const store = directoryStore('atlas-reports');
+await publishChecks(store, {
+  producer: 'quint',
+  environment: 'desktop-web',
+  recordedAtMs: Date.now(),
+  checks: [{ id: 'specs/booking.qnt > no double booking', title: 'No double booking', status: 'passed', specPath: 'specs/booking.qnt' }]
+});
+
+const report = await combineBackends([{ id: 'local', store }]);
+const status = reportStatus(report);   // { ok, reasons, checks, byEnvironment, failing, notices, … }
+```
+
+The CLI is the same API for people without code: `atlas report publish | status | merge`.
+
+## Recordings, commit-keyed parts and the viewer's API
+
+Everything below is the machinery under the viewer: recorded timelines and captured files
+(`publishSource`), commit-keyed parts (`publishPart`) that older stores hold, and the read-only API
+(`createReportsApp`) the viewer calls. Most projects need only the API above: plain checks need none
+of it, and `reportsHost` wraps `createReportsApp` for your stores.
+
+
 Atlas owns reusable evidence publication, storage, retention, APIs, report navigation and snapshot interpretation. All nondeterministic work is provided through structural `ObjectStore`, `Clock`, `Timers` and `HttpClient` ports. There are no consumer-repository dependencies.
 
 Consumers capture `RunReport` timelines and use `publishSource`, `publishPart` and `publishInventory` to publish them. Existing commit-keyed and compressed report stores remain readable, including reusable sources and independent producer evidence. `createReportsApp` mounts a read-only Hono API over injected stores; it is hosted alongside Atlas, not the product under test.
@@ -37,6 +87,8 @@ Spec runs persist each completed test timeline as it finishes, including failed 
 Freshness warnings preserve the recorded outcome. Changed spec fingerprints or related working-tree files warn; missing fingerprints are unknown, and a different commit warns when related code has not been compared. No rerun is implied. This deliberately favors quick, potentially stale evidence over a consistent fresh execution; release verification remains separate.
 
 ## Standalone development
+
+For your own stores and specs directory, use `reportsHost` ([integrating Atlas](../../docs/integrating.md#6-browse-it)). The rest of this section is for hosts that compose the API themselves.
 
 Configure `ATLAS_REPORTS_MODULE` with a host composition module exporting `reportsDevFetch(request, repoRoot)`. Atlas's Vite middleware serves it at `/api/reports`, alongside specs and chart runs. `INIT_CWD` identifies the consuming repository. Credentials stay in that server module.
 

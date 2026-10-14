@@ -7,6 +7,9 @@ what they find as GitHub issues. They never change this repository: there is no 
 pushes Atlas changes from its own checkout. Every fix and feature is made here and reaches a project
 as a new version.
 
+- **Integrating Atlas into a project?** Follow [docs/integrating.md](docs/integrating.md): it ends
+  every step with a command and the output that means it worked. The exact rules of the report
+  format are in [docs/report-contract.md](docs/report-contract.md).
 - **Working in a project that uses Atlas?** Read [docs/dogfooding.md](docs/dogfooding.md). Install
   `@crvouga/atlas` from npm. Do not edit Atlas from there: no submodule, no
   vendored copy, no patch to `node_modules`. When Atlas is wrong or is missing something, file an
@@ -35,6 +38,21 @@ or publish a second package.
   `bun run release:smoke` checks it with one.
 - A new import path goes in both `exports` (the source) and `publishConfig.exports` (the build).
   See [docs/releasing.md](docs/releasing.md#one-package-many-entry-points).
+
+## The report contract is stable
+
+The layer document, the way layers compose, the `ObjectStore` interface and the `atlas report status`
+JSON are what other projects build on. Change them only as [the report
+contract](docs/report-contract.md#versioning-and-stability) allows.
+
+- Within a schema version, only add optional fields. Never change what a field means, a status, the
+  slot a result fills, or the order in which results win. That is a new `schemaVersion`, a `!` commit
+  and a migration note.
+- `packages/reports/tests/fixtures/layer-v1.json` and `composition-laws.test.ts` guard the contract.
+  Never edit the fixture to make a test pass; fix the code.
+- After changing a Zod schema in `packages/schema/src`, run `bun run schemas` and commit the JSON
+  Schemas: a test fails when they differ.
+- A reader must treat what it cannot read as unknown, never as passed.
 
 ## Releases are automatic
 
