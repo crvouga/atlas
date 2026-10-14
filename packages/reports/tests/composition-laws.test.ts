@@ -172,7 +172,7 @@ describe('reports that are read and shown', () => {
   });
 });
 
-describe('copying carries every catalog last', () => {
+describe('copying carries every catalog last, and every document after its files', () => {
   test('no catalog entry, of layers, spec sets or runs, is written before what it names', async () => {
     const from = memoryStore();
     await publishChecks(from, { producer: 'p', recordedAtMs: 1, checks: [{ id: 'a', title: 'a', status: 'passed' }] });
@@ -188,5 +188,21 @@ describe('copying carries every catalog last', () => {
     expect(firstCatalog).toBeGreaterThan(0);
     expect(order.slice(firstCatalog).every(key => key.includes('/index/'))).toBe(true);
     expect(order.filter(key => key.includes('/index/')).length).toBe(3);
+  });
+
+  test('a layer\'s manifest and a spec set come after the files they name, which a server that checks insists on', async () => {
+    const from = memoryStore();
+    for (let i = 0; i < 12; i++) await publishChecks(from, { producer: 'p', recordedAtMs: i + 1, checks: [{ id: 'a', title: 'a', status: 'passed', attachments: [{ name: `f${i}.txt`, data: new TextEncoder().encode(`file ${i}`.repeat(50)) }] }] });
+    const { publishSpecSet } = await import('../src/spec-set');
+    await publishSpecSet(from, { files: [{ path: 'specs/a.feature', text: 'Feature: A' }, { path: 'specs/b.feature', text: 'Feature: B' }], branch: 'main', sha: null, recordedAtMs: 1 });
+    const order: string[] = [];
+    const to = memoryStore();
+    const recording = { ...to, put: async (key: string, bytes: Uint8Array, type: string) => { order.push(key); return to.put(key, bytes, type); } };
+    await copyStore(from, recording as typeof to, { concurrency: 64 });
+    const isDocument = (key: string) => /^layers\/(manifests|specs\/sets)\//.test(key);
+    const firstDocument = order.findIndex(isDocument);
+    expect(firstDocument).toBeGreaterThan(0);
+    expect(order.slice(0, firstDocument).every(key => !key.includes('/index/') && !isDocument(key))).toBe(true);
+    expect(order.slice(firstDocument).some(key => key.includes('/blobs/'))).toBe(false);
   });
 });
