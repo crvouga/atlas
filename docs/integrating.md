@@ -421,6 +421,7 @@ An integration is complete when each of these holds. Run them and keep the outpu
 
 | You see | Cause and fix |
 | --- | --- |
+| `No check has completed: everything was skipped or not run` | Every check in every layer is `not-run`. Skipped tests are not evidence: run them, or publish the ones that did run. |
 | `No checks were found in any layer` | The `--store` directory is empty or is the wrong level. It must contain `layers/`. |
 | Results show under no spec | The report did not say which spec each check belongs to. Pass `--spec <path>` or `--specs <dir>`, or give `specPath`. |
 | An old result keeps showing | The new run used a different check id, producer, environment or parameter, so it filled another slot. Or its time is older: check `recordedAtMs` and `--recorded-at`. |
@@ -428,6 +429,7 @@ An integration is complete when each of these holds. Run them and keep the outpu
 | One environment has no results | No layer from that environment reached the store. Add it to `--require-environments` so CI says so. |
 | `Written with layer schema version 2…` | A newer Atlas wrote it. Upgrade `@crvouga/atlas` where you read it. |
 | `a layer could not be read, so its outcome is unknown` | A corrupted or half-copied file. Re-run that node's publish and merge again. |
+| `atlas report: Store directory not found` (exit 2) | A `--store` path does not exist. Check the path, and whether the node that should have produced it uploaded its layers. |
 | `X is unavailable` | A backend is down. The rest were combined; fix it or leave it out. |
 | `check id "…" appears twice` | Your suite emits two checks with one name. Make the names unique. Importers number repeats as `#2`. |
 | `Potentially outdated: spec changed` | The spec changed since the layer was recorded. Advisory: the recorded outcome still counts. Re-run to refresh. |

@@ -117,7 +117,20 @@ function ingest(argv: readonly string[], base: string): { ingested: IngestedChec
   return { ingested: { checks: given.checks, recordedAtMs: given.recordedAtMs ?? null, tool: null }, extra: given, modifiedAtMs };
 }
 
-/** `atlas report …`. Returns the exit code: 0 passes, 1 does not, 2 is a usage error. */
+/**
+ * `atlas report …` for a terminal: a mistake in the command or a path is a message on stderr and exit
+ * code 2, so a CI job can tell a broken invocation (2) from a report that does not pass (1).
+ */
+export async function runReportCommand(argv: readonly string[]): Promise<number> {
+  try {
+    return await reportMain(argv);
+  } catch (error) {
+    process.stderr.write(`atlas report: ${error instanceof Error ? error.message : String(error)}\n`);
+    return 2;
+  }
+}
+
+/** `atlas report …`. Returns the exit code: 0 passes, 1 does not. Throws on a mistake in the command (see {@link runReportCommand}). */
 export async function reportMain(argv: readonly string[], io: { readonly out: (text: string) => void; readonly env?: Env; readonly cwd?: string; readonly git?: Git } = { out: text => process.stdout.write(text) }): Promise<number> {
   const [command, ...rest] = argv;
   const base = io.cwd ?? process.cwd();

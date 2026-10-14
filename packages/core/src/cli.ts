@@ -79,7 +79,7 @@ async function loadConfig(file: string): Promise<{ config: AtlasConfig; base: st
 export async function main(argv = process.argv.slice(2)) {
   const [command] = argv;
   // Loaded on demand: lint, plan and run do not pay for the reports.
-  if (command === 'report') return (await import('../../reports/src/report-cli')).reportMain(argv.slice(1));
+  if (command === 'report') return (await import('../../reports/src/report-cli')).runReportCommand(argv.slice(1));
   const configFile = flag(argv, 'config') ?? 'atlas.config.ts';
   const specs = flag(argv, 'specs');
   const output = flag(argv, 'output');

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { directoryStore } from '../src/directory-store';
-import { detectOrigin, reportMain } from '../src/report-cli';
+import { detectOrigin, reportMain, runReportCommand } from '../src/report-cli';
 import type { ReportStatus } from '../../schema/src/layer';
 import { ReportStatusSchema } from '../../schema/src/layer';
 
@@ -218,5 +218,38 @@ describe('mistakes that would otherwise be silent', () => {
     await file('hint.xml', '<testsuites><testsuite name="t"><testcase name="a"/><testcase name="b"/></testsuite></testsuites>');
     expect((await run(['publish', '--store', 'hinted', '--producer', 'unit', '--junit', 'hint.xml'])).output).toContain('; 0 of 2 linked to a spec (pass --specs <dir> or --spec <path>');
     expect((await run(['publish', '--store', 'hinted2', '--producer', 'unit', '--junit', 'hint.xml', '--spec', 'specs/x.feature'])).output).toContain('; 2 of 2 linked to a spec\n');
+  });
+});
+
+describe('what the gate refuses to call a pass', () => {
+  test('a report where everything was skipped has no evidence, so it does not pass', async () => {
+    await file('skipped.json', ctrf([{ name: 'a', status: 'skipped' }, { name: 'b', status: 'pending' }]));
+    await run(['publish', '--store', 'skipped', '--producer', 'unit', '--ctrf', 'skipped.json']);
+    const result = await run(['status', '--store', 'skipped']);
+    expect(result.code).toBe(1);
+    expect(result.output).toContain('No check has completed');
+  });
+
+  test('required environments are spelled the way layers are: iOS and ios are one', async () => {
+    const ok = await run(['status', '--store', 'node1', '--store', 'node2', '--require-environments', 'iOS']);
+    expect(ok.code).toBe(0);
+    const missing = await run(['status', '--store', 'node1', '--store', 'node2', '--require-environments', 'Desktop Web']);
+    expect(missing.output).toContain('No checks on required environment "Desktop Web"');
+  });
+});
+
+describe('a broken command is not a failed gate', () => {
+  test('the terminal command returns 2 and says what is wrong, where a failed gate returns 1', async () => {
+    const written: string[] = [];
+    const original = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((text: string) => { written.push(String(text)); return true; }) as typeof process.stderr.write;
+    try {
+      expect(await runReportCommand(['status', '--store', path.join(root, 'no-such-store')])).toBe(2);
+      expect(await runReportCommand(['publish'])).toBe(2);
+    } finally {
+      process.stderr.write = original;
+    }
+    expect(written.join('')).toContain('atlas report: Store directory not found');
+    expect(written.join('')).toContain('atlas report: publish needs --store <dir>');
   });
 });

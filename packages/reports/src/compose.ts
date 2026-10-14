@@ -93,25 +93,32 @@ export async function combineBackends(backends: readonly BackendInput[], options
     }
   }));
   entries.sort((a, b) => (a.backend.id < b.backend.id ? -1 : a.backend.id > b.backend.id ? 1 : a.entry < b.entry ? -1 : a.entry > b.entry ? 1 : 0));
-  const loaded: LayerEvidence[] = [];
-  const specs = new Map<string, { entry: SpecEntry; at: number }>();
+  const loaded: { readonly evidence: LayerEvidence; readonly specs: readonly SpecEntry[] }[] = [];
   await eachLimited(entries, options.concurrency ?? 16, async ({ backend, entry }) => {
     try {
       for (const summary of await catalogLayers(backend.store, entry)) {
-        loaded.push(layerEvidence(summary, backend.id));
-        for (const spec of summary.specs) {
-          const key = specPath(spec.path);
-          const prior = specs.get(key);
-          if (!prior || summary.recordedAtMs > prior.at) specs.set(key, { entry: { ...spec, path: key }, at: summary.recordedAtMs });
-        }
+        loaded.push({ evidence: layerEvidence(summary, backend.id), specs: summary.specs });
       }
     } catch (error) {
       notices.push(`${backend.label ?? backend.id}: a layer could not be read, so its outcome is unknown (${error instanceof Error ? error.message : String(error)})`);
     }
   });
   const include = options.include;
-  const layers = include ? loaded.filter(evidence => include(evidence.layer)) : loaded;
-  const outline = options.outline ?? { specs: [...specs.values()].map(item => item.entry).sort((a, b) => (a.path < b.path ? -1 : 1)), sha: null, changedFiles: [] };
+  const kept = include ? loaded.filter(item => include(item.evidence.layer)) : loaded;
+  const layers = kept.map(item => item.evidence);
+  // The specs a report is laid over come from the layers that are in it, not from ones left out.
+  const recorded = new Map<string, { entry: SpecEntry; at: number }>();
+  if (!options.outline) {
+    for (const { evidence, specs } of kept) {
+      for (const spec of specs) {
+        const key = specPath(spec.path);
+        const prior = recorded.get(key);
+        const at = evidence.layer.recordedAtMs;
+        if (!prior || at > prior.at || (at === prior.at && (spec.fingerprint ?? '') > (prior.entry.fingerprint ?? ''))) recorded.set(key, { entry: { ...spec, path: key }, at });
+      }
+    }
+  }
+  const outline = options.outline ?? { specs: [...recorded.values()].map(item => item.entry).sort((a, b) => (a.path < b.path ? -1 : 1)), sha: null, changedFiles: [] };
   const combined = combineEvidence(outline, layers);
   const headers = distinctHeaders(layers.map(evidence => evidence.layer)).sort((a, b) => b.recordedAtMs - a.recordedAtMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { combined, layers: headers, backends: info.sort((a, b) => (a.id < b.id ? -1 : 1)), notices: [...new Set(notices)].sort(), summary: summarize(combined) };

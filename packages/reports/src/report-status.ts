@@ -1,5 +1,6 @@
 import { REPORT_STATUS_SCHEMA_VERSION, type ReportStatus } from '../../schema/src/layer';
 import { countResults, type CombinedReport } from './compose';
+import { normalizeEnvironment } from './layer-axes';
 import { isDiagnosticKind, type EvidenceResult } from './layer-merge';
 
 export type StatusOptions = {
@@ -13,6 +14,8 @@ export type StatusOptions = {
  * The gate. A report passes only when it has checks, none failed, none is still running, every
  * layer and backend could be read, and every required environment is present. Unknown never passes.
  */
+const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 export function reportStatus(report: CombinedReport, options: StatusOptions = {}): ReportStatus {
   const results: EvidenceResult[] = [...report.combined.specs.flatMap(entry => entry.results), ...report.combined.unassigned];
   const outcomes = results.some(result => !isDiagnosticKind(result.row.kind)) ? results.filter(result => !isDiagnosticKind(result.row.kind)) : results;
@@ -32,15 +35,21 @@ export function reportStatus(report: CombinedReport, options: StatusOptions = {}
       runUrl: result.layer.runUrl,
       detail: result.row.detail
     }))
-    .sort((a, b) => (a.spec ?? '').localeCompare(b.spec ?? '') || a.check.localeCompare(b.check) || (a.environment ?? '').localeCompare(b.environment ?? ''));
+    // Total, so the output never depends on the order layers were read in.
+    .sort((a, b) => compare(a.spec ?? '', b.spec ?? '') || compare(a.check, b.check) || compare(a.environment ?? '', b.environment ?? '') || compare(a.producer, b.producer) || compare(a.layer, b.layer) || compare(a.backend, b.backend));
   const reasons: string[] = [];
   const { checks, byEnvironment } = report.summary;
   if (checks.total === 0) reasons.push('No checks were found in any layer');
+  else if (checks.passed + checks.failed === 0 && checks.running === 0) reasons.push('No check has completed: everything was skipped or not run');
   if (checks.failed) reasons.push(`${checks.failed} check${checks.failed === 1 ? '' : 's'} failed`);
   if (checks.running) reasons.push(`${checks.running} check${checks.running === 1 ? ' is' : 's are'} still running`);
   const missing = report.summary.specsWithoutEvidence;
   if (options.requireAllSpecs && missing.length) reasons.push(`${missing.length} spec${missing.length === 1 ? ' has' : 's have'} no results: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', …' : ''}`);
-  for (const environment of options.requireEnvironments ?? []) if (!byEnvironment[environment]?.total) reasons.push(`No checks on required environment "${environment}"`);
+  for (const required of options.requireEnvironments ?? []) {
+    // Layers carry normalized environments (`iOS` is `ios`), so a requirement is normalized the same way.
+    const environment = normalizeEnvironment(required) ?? required;
+    if (!byEnvironment[environment]?.total) reasons.push(`No checks on required environment "${required}"`);
+  }
   reasons.push(...report.notices);
   return {
     schemaVersion: REPORT_STATUS_SCHEMA_VERSION,

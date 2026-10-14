@@ -186,12 +186,16 @@ none, and never invents a result.
 
 The gate passes (exit 0) only when **all** of these hold:
 
-- at least one check exists;
+- at least one check has completed (`passed` or `failed`): a report where everything was skipped has
+  no evidence;
 - no slot's winning result is `failed`;
 - no slot's winning result is `running`;
 - every backend and every layer could be read (a notice is a failure);
 - every environment named by `--require-environments` has at least one check;
 - with `--require-all-specs`, every spec in `--specs <dir>` has at least one result.
+
+Exit codes: `0` the report passes, `1` it does not, `2` the command itself is wrong (a store
+directory that does not exist, a missing flag). A CI job can tell a broken invocation from a red report.
 
 `--format json` prints a [`ReportStatus`](../packages/schema/schemas/report-status.schema.json)
 (`schemaVersion: 1`): `ok`, `reasons`, `checks`, `byEnvironment`, `layers`, `backends`, `notices`,

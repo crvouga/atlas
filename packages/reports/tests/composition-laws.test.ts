@@ -7,6 +7,7 @@ import { combineEvidence, layerEvidence } from '../src/layer-merge';
 import type { LayerSummary } from '../src/layer-types';
 import type { ObjectStore } from '../src/object-store';
 import { publishChecks } from '../src/publish-checks';
+import { reportStatus } from '../src/report-status';
 import { memoryStore } from './memory-store';
 
 /** A small deterministic generator, so a failure names its seed and reproduces. */
@@ -191,5 +192,28 @@ describe('combineEvidence on its own', () => {
       const results = combineEvidence(outline, order).unassigned;
       expect(results.map(result => [result.row.status, result.layer.backend])).toEqual([['failed', 'two']]);
     }
+  });
+});
+
+describe('reports that are read and shown', () => {
+  test('the failing list is in one order however layers were read', async () => {
+    const stores = [memoryStore(), memoryStore(), memoryStore()];
+    for (const [i, store] of stores.entries()) await publishChecks(store, { producer: `suite-${i}`, environment: 'ios', recordedAtMs: 5, checks: [{ id: 'join', title: 'join', status: 'failed', specPath: 'specs/x.feature' }] });
+    const failing = async (order: number[]) => reportStatus(await combineBackends(order.map(i => ({ id: `n${i}`, store: stores[i]! })), { concurrency: 1 })).failing.map(item => [item.producer, item.backend]);
+    const expected = await failing([0, 1, 2]);
+    for (const order of [[2, 1, 0], [1, 2, 0], [1, 0, 2]]) expect(await failing(order)).toEqual(expected);
+    expect(expected.length).toBe(3);
+  });
+
+  test('leaving a layer out also leaves out the specs only that layer knew', async () => {
+    const store = memoryStore();
+    const spec = (path: string) => ({ path, domain: 'd', kind: 'gherkin', title: path });
+    await publishChecks(store, { producer: 'p', branch: 'main', recordedAtMs: 1, specs: [spec('specs/a.feature')], checks: [{ id: 'a', title: 'a', status: 'passed', specPath: 'specs/a.feature' }] });
+    await publishChecks(store, { producer: 'p', branch: 'experiment', recordedAtMs: 2, specs: [spec('specs/a.feature'), spec('specs/only-on-experiment.feature')], checks: [{ id: 'a', title: 'a', status: 'passed', specPath: 'specs/a.feature' }] });
+    const everything = await combineBackends([{ id: 'one', store }]);
+    expect(everything.combined.specs.map(entry => entry.spec.path)).toEqual(['specs/a.feature', 'specs/only-on-experiment.feature']);
+    const main = await combineBackends([{ id: 'one', store }], { include: layer => layer.branch === 'main' });
+    expect(main.combined.specs.map(entry => entry.spec.path)).toEqual(['specs/a.feature']);
+    expect(main.summary.specsWithoutEvidence).toEqual([]);
   });
 });

@@ -112,9 +112,11 @@ interface. Atlas ships a directory store with atomic writes; a bucket maps one t
 `verifyObjectStore` proves an adapter before you trust it. Several backends are one report, and one
 that is down is named and skipped.
 
-**The gate** is `atlas report status`. It exits 0 only if there are checks, none failed, none is
+**The gate** is `atlas report status`. It exits 0 only if some check completed, none failed, none is
 still running, every layer and backend could be read, and every `--require-environments` environment
-has results. `--format json` is a [stable schema](packages/schema/schemas/report-status.schema.json).
+has results. `--format json` is a [stable schema](packages/schema/schemas/report-status.schema.json). Exit code 1
+means the report does not pass; 2 means the command itself was wrong (a missing store directory, a bad
+flag).
 
 **The viewer** shows each spec (Gherkin, Quint, DMN, Alloy, OpenSLO, and the rest by file type) with
 its combined result per environment and the layer behind it. See
