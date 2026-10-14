@@ -87,6 +87,40 @@
   animation: pulse 1.4s var(--ease) infinite;
 }
 
+.connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.connectionDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+
+.connection[data-status='live'] {
+  color: var(--place);
+}
+
+.connection[data-status='live'] .connectionDot {
+  background: var(--place);
+}
+
+.connection[data-status='reconnecting'] {
+  color: var(--failed-ink);
+}
+
+.connection[data-status='reconnecting'] .connectionDot {
+  background: currentColor;
+  animation: pulse 1.4s var(--ease) infinite;
+}
+
 @keyframes pulse {
   50% {
     opacity: 0.35;
@@ -195,6 +229,7 @@
   }
 
   .live,
+  .connection,
   .picker {
     display: none;
   }

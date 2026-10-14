@@ -51,6 +51,7 @@
     "./detox": "./packages/detox/src/index.ts",
     "./vitest": "./packages/vitest/src/index.ts",
     "./schema": "./packages/schema/src/index.ts",
+    "./server": "./packages/server/src/index.ts",
     "./reports/*": "./packages/reports/src/*.ts",
     "./schemas/*": "./packages/schema/schemas/*"
   },
@@ -98,6 +99,10 @@
         "types": "./dist/schema/src/index.d.ts",
         "default": "./dist/schema/src/index.js"
       },
+      "./server": {
+        "types": "./dist/server/src/index.d.ts",
+        "default": "./dist/server/src/index.js"
+      },
       "./reports/*": {
         "types": "./dist/reports/src/*.d.ts",
         "default": "./dist/reports/src/*.js"
@@ -120,6 +125,8 @@
     "packages/*/README.md",
     "packages/reports/STORAGE.md",
     "docs/integrating.md",
+    "docs/deploying.md",
+    "docs/extending.md",
     "docs/statecharts.md",
     "docs/report-contract.md",
     "docs/report-backends.md",
@@ -132,6 +139,7 @@
     "test": "bun test && bun test --cwd packages/visualizer --preload ./tests/preload.ts tests",
     "type-check": "for dir in packages/* scripts examples/todo; do tsc --noEmit -p \"$dir\" || exit 1; done",
     "schemas": "bun packages/schema/scripts/emit-json-schemas.ts",
+    "dev": "bun packages/core/bin/atlas.mjs dev --data .atlas-data",
     "viz:dev": "bun packages/visualizer/bin/atlas-visualizer.mjs dev --specs \"$(pwd)/packages/visualizer/fixtures/full/specs\" --runs \"$(pwd)/packages/visualizer/fixtures/full/runs\"",
     "viz:build": "cd packages/visualizer && INIT_CWD=\"$OLDPWD\" bun --bun vite build --configLoader runner",
     "viz:publish-data": "bun packages/visualizer/scripts/publish-data.ts",

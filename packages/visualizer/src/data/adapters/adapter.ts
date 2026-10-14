@@ -1,4 +1,6 @@
-import { AtlasChangeSchema, type AtlasChange } from '@crvouga/atlas/schema';
+import type { AtlasChange } from '@crvouga/atlas/schema';
+
+import { listenChanges } from '../../live/live-stream';
 
 export type { AtlasChange } from '@crvouga/atlas/schema';
 
@@ -93,20 +95,6 @@ export function createHttpAdapter(baseUrl: string, kind: AtlasAdapter['kind'] = 
 function subscribeToEvents(url: string): NonNullable<AtlasAdapter['subscribe']> {
   const location = new URL(url);
   if (!['http:', 'https:'].includes(location.protocol) || location.username || location.password) throw new Error('Use an HTTP event URL without credentials.');
-  return (onChange) => {
-    if (typeof EventSource === 'undefined') return () => undefined;
-    const stream = new EventSource(url);
-    const receive = (event: MessageEvent<string>) => {
-      try {
-        const change = AtlasChangeSchema.safeParse(JSON.parse(event.data));
-        if (change.success) onChange(change.data);
-      } catch {
-        return;
-      }
-    };
-    stream.addEventListener('message', receive);
-    stream.addEventListener('atlas:change', receive);
-    stream.addEventListener('open', () => onChange({ scope: 'runs', files: [], runIds: [] }));
-    return () => stream.close();
-  };
+  // One connection per address, however many parts of the page listen to it.
+  return (onChange) => listenChanges(url, onChange);
 }

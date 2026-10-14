@@ -1,8 +1,20 @@
 import { evidenceFile } from '@crvouga/atlas/reports/export-evidence';
 
+import { runtimeConfig } from '../runtime';
+
+/**
+ * An Atlas server writes its address book into the page it serves (`atlas serve`, and `atlas dev` through
+ * Vite), so one build of the viewer works for every project. A build can instead be pointed at a reports
+ * API when it is made.
+ */
+const runtime = runtimeConfig;
+
 /** A built site without a reports API reads the evidence exported beside it. */
-export const staticEvidence = !import.meta.env.DEV && !import.meta.env.VITE_ATLAS_REPORTS_URL;
-export const reportsBase = (import.meta.env.VITE_ATLAS_REPORTS_URL as string | undefined)?.replace(/\/$/, '') ?? (staticEvidence ? './data/evidence' : '/api/reports');
+export const staticEvidence = !import.meta.env.DEV && !import.meta.env.VITE_ATLAS_REPORTS_URL && !runtime()?.reportsUrl;
+export const reportsBase = (import.meta.env.VITE_ATLAS_REPORTS_URL as string | undefined)?.replace(/\/$/, '') ?? runtime()?.reportsUrl?.replace(/\/$/, '') ?? (staticEvidence ? './data/evidence' : '/api/reports');
+
+/** Does the server answer `/evidence/effective`: the whole report in one request, without per-layer history? */
+export const effectiveEvidence = () => runtime()?.effective === true;
 
 export class ReportsError extends Error {
   constructor(

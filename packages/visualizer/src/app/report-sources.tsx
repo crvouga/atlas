@@ -9,6 +9,7 @@ import type { ReportBackend } from '../data/adapters/report-backend';
 import { getJson, LoadError } from '../data/adapters';
 import { useAdapter } from '../data/adapters/context';
 import { createReportBackend } from '../data/adapters/report-backend';
+import { runtimeConfig, runtimeUrl } from '../runtime';
 
 const SourceListSchema = z
   .object({ schemaVersion: z.literal(1), sources: z.array(RemoteReportSourceSchema) })
@@ -35,15 +36,16 @@ export function useReportSources() {
 
 export function ReportSourcesProvider({ children }: { children: ReactNode }) {
   const adapter = useAdapter();
+  const server = runtimeUrl(runtimeConfig()?.dataUrl);
   const defaultConfig = useMemo<RemoteReportSource>(
     () => ({
       id: 'workspace',
-      label: adapter.kind === 'dev' ? 'Workspace runs' : 'Published reports',
+      label: server ? 'Atlas server' : adapter.kind === 'dev' ? 'Workspace runs' : 'Published reports',
       type: 'http',
-      baseUrl: adapter.kind === 'dev' ? '/__atlas/' : (import.meta.env.VITE_ATLAS_BASE_URL ?? './data/'),
-      live: adapter.kind === 'dev'
+      baseUrl: server ?? (adapter.kind === 'dev' ? '/__atlas/' : (import.meta.env.VITE_ATLAS_BASE_URL ?? './data/')),
+      live: server !== undefined || adapter.kind === 'dev'
     }),
-    [adapter]
+    [adapter, server]
   );
   const configBase = defaultConfig.baseUrl.endsWith('/') ? defaultConfig.baseUrl : `${defaultConfig.baseUrl}/`;
   const configUrl = new URL(import.meta.env.VITE_ATLAS_SOURCES_URL ?? 'sources.json', new URL(configBase, window.location.href)).href;

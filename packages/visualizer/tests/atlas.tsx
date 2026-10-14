@@ -90,7 +90,7 @@ export async function publishRun(store: ObjectStore, args: { producer?: string; 
 export type Atlas = Awaited<ReturnType<typeof openAtlas>>;
 
 /** The whole viewer at an address, reading specs from `specs` and reports from an in-memory reports API. */
-export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps>; specs?: Record<string, string>; down?: { value: boolean } }) {
+export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps>; specs?: Record<string, string>; down?: { value: boolean }; /** An Atlas node to answer `/evidence/effective`, as a deployed one does. */ node?: { fetch: (request: Request) => Promise<Response> } }) {
   const specs = args.specs ?? SPECS;
   const time = testClock(1_000_000);
   const app = createReportsApp({
@@ -105,6 +105,8 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
     if (!url.startsWith(REPORTS_URL)) return new Response('not found', { status: 404 });
     requests.push(url.slice(REPORTS_URL.length));
     if (args.down?.value) return new Response('{"error":"reports_unavailable"}', { status: 503 });
+    // What a node answers beyond the report itself: one result's evidence, and the files it points to.
+    if (args.node && /^\/(evidence\/(effective|detail)|layers\/)/.test(url.slice(REPORTS_URL.length))) return args.node.fetch(new Request(url));
     return app.request(url.slice(REPORTS_URL.length));
   }) as typeof fetch;
   const adapter: AtlasAdapter = {
@@ -122,6 +124,7 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
     mediaUrl: (_, path) => path,
     subscribe: null
   };
+  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = args.node ? { reportsUrl: REPORTS_URL, effective: true } : undefined;
   useUiStore.setState({ excluded: ALL_SOURCES, resultFilter: 'all', sourcesOpen: false });
   const router = createAtlasRouter(createMemoryHistory({ initialEntries: [args.at] }));
   const client = createQueryClient();
@@ -172,6 +175,7 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
       await act(async () => client.refetchQueries({ queryKey: ['evidence-index'] }));
     },
     async close() {
+      (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = undefined;
       await act(async () => root.unmount());
       host.remove();
       document.body.replaceChildren();
