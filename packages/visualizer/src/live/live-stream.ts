@@ -86,6 +86,7 @@ function connect(stream: Stream) {
     emit(stream, { type: 'open' });
   });
   source.addEventListener('hello', heard);
+  source.addEventListener('ping', heard);
   source.addEventListener('report', (event) => {
     heard();
     const report = parse((event as MessageEvent<string>).data) as ReportAnnouncement | null;
@@ -96,8 +97,7 @@ function connect(stream: Stream) {
     const change = AtlasChangeSchema.safeParse(parse((event as MessageEvent<string>).data));
     if (change.success) emit(stream, { type: 'change', change: change.data });
   });
-  // A heartbeat is a comment, which the browser does not show us, so any named event above resets the watchdog
-  // and a quiet server is told apart by the connection itself: the browser closes a connection that stops answering.
+  // The server's heartbeat is a named `ping` event, so a quiet server is told apart from a dead connection.
   source.addEventListener('error', () => {
     setStatus(stream, stream.attempts === 0 && stream.status === 'connecting' ? 'connecting' : 'reconnecting');
     // The browser retries a dropped stream by itself. A refused one (401, 503) it gives up on: retry that here, slowly.

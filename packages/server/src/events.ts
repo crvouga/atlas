@@ -1,8 +1,16 @@
 /**
- * Server-sent events: what the server tells every connected viewer the moment it happens. A viewer that
- * misses some (a dropped connection, a laptop that slept) loses nothing: events say "something changed", the
- * state is always fetched, and a viewer fetches it again on reconnecting.
+ * @module Server-sent events
+ *
+ * What the server tells every connected viewer the moment it happens. A viewer that misses some (a dropped connection, a
+ * laptop that slept) loses nothing: events say "something changed", the state is always fetched, and a viewer reads again
+ * when it reconnects. `EventHub` encodes each event once for all viewers, sends a named `ping` every heartbeat so proxies
+ * keep the connection and a quiet server is told apart from a dead one, refuses past a maximum number of viewers (they poll
+ * instead), and lets go of a viewer that has stopped reading rather than hold its backlog.
+ *
+ * @see docs/server.md#streaming
  */
+
+/** The events the server publishes: `hello` (sent first to a new viewer), `report` (layers arrived) and `atlas:change` (specs or runs changed). `ping` is the heartbeat, sent by the hub itself. */
 export type EventName = 'hello' | 'report' | 'atlas:change';
 
 type Subscriber = { readonly send: (chunk: Uint8Array) => void; readonly close: () => void };
@@ -10,6 +18,7 @@ type Subscriber = { readonly send: (chunk: Uint8Array) => void; readonly close: 
 /** Events a viewer may be behind by before it is let go. */
 const MAX_BACKLOG = 256;
 
+/** The viewers connected to `/api/events` and how to reach them all. One hub per server. */
 export class EventHub {
   readonly #subscribers = new Set<Subscriber>();
   readonly #max: number;
@@ -23,6 +32,7 @@ export class EventHub {
     this.#heartbeatMs = options.heartbeatMs ?? 15_000;
   }
 
+  /** How many viewers are connected right now. */
   get count(): number {
     return this.#subscribers.size;
   }
@@ -65,8 +75,9 @@ export class EventHub {
 
   #startTimer(): void {
     if (this.#timer) return;
-    // A comment line: proxies and load balancers see traffic and keep the connection; viewers ignore it.
-    const ping = this.#encoder.encode(': ping\n\n');
+    // A named event, not a comment: proxies see traffic, and the viewer (which a browser does not tell about comments) can tell a quiet
+    // server from a dead connection.
+    const ping = this.#encoder.encode('event: ping\ndata: {}\n\n');
     this.#timer = setInterval(() => { for (const subscriber of [...this.#subscribers]) subscriber.send(ping); }, this.#heartbeatMs);
     (this.#timer as { unref?: () => void }).unref?.();
   }

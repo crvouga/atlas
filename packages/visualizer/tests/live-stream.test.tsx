@@ -42,6 +42,11 @@ describe('hearing the server', () => {
     expect(heard[1]).toMatchObject({ report: { version: 'v1', added: [{ producer: 'e2e' }] } });
   });
 
+  test('the server\'s heartbeat is a named event the page listens for, so a quiet server is not taken for a dead one', () => {
+    listenLive('http://x/api/events', () => undefined);
+    expect(FakeSource.all[0]!.handlers.get('ping')?.length).toBe(1);
+  });
+
   test('a connection means "read everything again": it is announced as a runs change, in case some were missed', () => {
     const changes: unknown[] = [];
     listenChanges('http://x/api/events', change => changes.push(change));
