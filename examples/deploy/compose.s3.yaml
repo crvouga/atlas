@@ -1,0 +1,43 @@
+# The same, with an S3 bucket as the place results are kept: an S3 server, a bucket, and the Atlas server.
+#
+#   docker compose -f compose.s3.yaml up --build
+#   # publish from your project (another terminal):
+#   export ATLAS_STORE=http://localhost:8080          # everything goes through the server, into the bucket
+#   bunx atlas report publish --producer unit --junit out.xml --specs ./specs
+#   # then open http://localhost:8080
+#   # (CI that has bucket access may also publish straight to it, and the server sees it within its refresh interval:
+#   #  AWS_ACCESS_KEY_ID=atlaskey AWS_SECRET_ACCESS_KEY=atlassecret ATLAS_STORE='s3://atlas/my-project?endpoint=http://localhost:8333&region=us-east-1')
+#
+# The credentials above are for this demo only. Use a real bucket and a role in production.
+services:
+  s3:
+    image: chrislusf/seaweedfs:latest
+    command: server -s3 -s3.config=/etc/s3.json -dir=/data
+    volumes:
+      - ./s3.json:/etc/s3.json:ro
+      - s3-data:/data
+    ports:
+      - "8333:8333"
+  bucket:
+    image: amazon/aws-cli:latest
+    depends_on: [s3]
+    environment: { AWS_ACCESS_KEY_ID: atlaskey, AWS_SECRET_ACCESS_KEY: atlassecret, AWS_DEFAULT_REGION: us-east-1 }
+    entrypoint: ["/bin/sh", "-c", "until aws --endpoint-url http://s3:8333 s3 mb s3://atlas 2>/dev/null || aws --endpoint-url http://s3:8333 s3 ls s3://atlas >/dev/null 2>&1; do sleep 2; done"]
+    restart: "no"
+  atlas:
+    build:
+      context: .
+      args: { ATLAS_PACKAGE: "${ATLAS_PACKAGE:-@crvouga/atlas}" }
+    depends_on: [bucket]
+    environment:
+      ATLAS_STORE: "project=s3://atlas/my-project?endpoint=http://s3:8333&region=us-east-1"
+      ATLAS_WRITE: project       # uploads go to the bucket, so the server holds nothing a replacement would lose
+      AWS_ACCESS_KEY_ID: atlaskey
+      AWS_SECRET_ACCESS_KEY: atlassecret
+      ATLAS_INSECURE: "true"   # local demo; production needs tokens or an authenticated proxy
+      ATLAS_DATA: /tmp/atlas-data
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+volumes:
+  s3-data: {}

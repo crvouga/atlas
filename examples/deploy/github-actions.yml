@@ -1,16 +1,16 @@
-# Every CI node publishes its own layers straight to the bucket: no artifacts to merge, nothing to
-# coordinate. Copy to .github/workflows/specs.yml. The AWS roles come from `atlas report policy`:
-# `atlas-publisher` may write layers, `atlas-reader` may read them (for the gate).
+# Every CI job sends its own layers straight to the project's Atlas server: no artifacts to merge, nothing to
+# coordinate, and the report on the server updates as each job finishes. Copy to .github/workflows/specs.yml.
+#
+# Secrets: ATLAS_PUBLISH_TOKEN (a `publish` token of the server) and ATLAS_READ_TOKEN (a `read` token, for the gate).
+# Variable: ATLAS_URL, such as https://atlas.example.com.
 name: specs
 on: [push, pull_request]
 
 permissions:
-  id-token: write   # to sign in to AWS with GitHub's OIDC token, so no AWS key is stored anywhere
   contents: read
 
 env:
-  ATLAS_STORE: s3://my-bucket/atlas/my-project
-  AWS_REGION: us-east-1
+  ATLAS_STORE: ${{ vars.ATLAS_URL }}
 
 jobs:
   suite:
@@ -27,11 +27,12 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: ${{ matrix.run }}
         continue-on-error: true      # a failing suite must still publish: a failure is evidence
-      - uses: aws-actions/configure-aws-credentials@v4
-        if: always()
-        with: { role-to-assume: "arn:aws:iam::123456789012:role/atlas-publisher", aws-region: us-east-1 }
       - run: bunx atlas report publish --producer ${{ matrix.producer }} --junit out.xml --specs ./specs --environment ${{ matrix.environment }}
         if: always()
+        env: { ATLAS_TOKEN: "${{ secrets.ATLAS_PUBLISH_TOKEN }}" }
+      # To see a long suite while it runs, stream instead of publishing at the end (checks as JSON lines):
+      #   - run: ./scripts/e2e-ios --json | bunx atlas report stream --producer e2e --environment ios
+      #     env: { ATLAS_TOKEN: "${{ secrets.ATLAS_PUBLISH_TOKEN }}" }
 
   gate:
     needs: suite
@@ -41,11 +42,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - uses: aws-actions/configure-aws-credentials@v4
-        with: { role-to-assume: "arn:aws:iam::123456789012:role/atlas-reader", aws-region: us-east-1 }
       # This branch laid over main: what this run did not re-run is inherited from main's latest results,
-      # and a laptop's work in progress or another branch's results cannot turn this red. The specs are this
-      # checkout's own, so a spec the PR adds must have results too.
-      - run: bunx atlas report status --branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" --branch main --ignore-modified --specs ./specs --require-all-specs --require-environments desktop-web,ios --format markdown >> "$GITHUB_STEP_SUMMARY"
+      # and a laptop's work in progress or another branch's results cannot turn this red. The server works it out
+      # from the layers it holds, so only the verdict travels, and the specs are those `publish --specs` sent from main. To
+      # hold the PR to the specs of its own checkout instead, give the gate `--specs ./specs` and a read-capable store.
+      - run: bunx atlas report status --branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" --branch main --ignore-modified --require-all-specs --require-environments desktop-web,ios --format markdown >> "$GITHUB_STEP_SUMMARY"
+        env: { ATLAS_TOKEN: "${{ secrets.ATLAS_READ_TOKEN }}" }
         continue-on-error: true
-      - run: bunx atlas report status --branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" --branch main --ignore-modified --specs ./specs --require-all-specs --require-environments desktop-web,ios
+      - run: bunx atlas report status --branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" --branch main --ignore-modified --require-all-specs --require-environments desktop-web,ios
+        env: { ATLAS_TOKEN: "${{ secrets.ATLAS_READ_TOKEN }}" }
