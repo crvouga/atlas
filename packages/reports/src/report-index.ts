@@ -6,6 +6,7 @@ import { LAYER_INDEX, layerSummary, readLayer } from './layer-store';
 import { layerEvidence, layerResultKeys, replaces, type EvidenceResult } from './layer-merge';
 import { readUtf8 } from './object-io';
 import type { BackendInput } from './compose';
+import type { ReportLayer } from './layer-types';
 import { isPaged } from './object-store';
 
 /** What a viewer needs to show the report, and nothing that is only history. */
@@ -106,13 +107,13 @@ export class ReportIndex {
    * Take in a layer an uploader has just written, from its catalog entry, without listing anything. Entries
    * are read one after another; one already known is ignored. The regular refresh still reconciles the rest.
    */
-  accept(backendId: string, indexKey: string): Promise<void> {
+  accept(backendId: string, indexKey: string, known?: ReportLayer): Promise<void> {
     const backend = this.#backends.find(item => item.id === backendId);
     if (!backend) return Promise.resolve();
     this.#accepting = this.#accepting.then(async () => {
       const mark = `${backend.id}|${indexKey}`;
       if (this.#folded.has(mark)) return;
-      await this.#load(backend, indexKey);
+      await this.#load(backend, indexKey, known);
       this.#emit();
     }).catch(() => {});
     return this.#accepting;
@@ -188,12 +189,20 @@ export class ReportIndex {
     return this.#rev !== before;
   }
 
-  async #load(backend: BackendInput, key: string): Promise<void> {
+  async #load(backend: BackendInput, key: string, known?: ReportLayer): Promise<void> {
     const mark = `${backend.id}|${key}`;
     try {
-      const raw = await readUtf8(backend.store, key);
-      const id = raw ? (JSON.parse(raw) as { id?: string }).id : undefined;
-      const layer = id ? await readLayer(backend.store, id) : null;
+      let layer: ReportLayer | null;
+      let id: string | undefined;
+      if (known && key.endsWith(`-${known.id}.json`)) {
+        // The caller has just written and read this layer: its entry names it, so there is nothing to look up.
+        id = known.id;
+        layer = known;
+      } else {
+        const raw = await readUtf8(backend.store, key);
+        id = raw ? (JSON.parse(raw) as { id?: string }).id : undefined;
+        layer = id ? await readLayer(backend.store, id) : null;
+      }
       if (!id || !layer) throw new Error('an indexed layer is missing');
       this.#fold(layerEvidence(layerSummary(layer), backend.id), backend.id);
       this.#folded.add(mark);

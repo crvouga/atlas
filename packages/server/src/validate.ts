@@ -1,6 +1,8 @@
 import { parseLayerDocument, SpecSetSchema } from '../../schema/src/layer';
 import { readUtf8 } from '../../reports/src/object-io';
 import type { ObjectStore } from '../../reports/src/object-store';
+import { eachLimited } from '../../reports/src/completion-order';
+import type { ReportLayer } from '../../reports/src/layer-types';
 import { sha256Hex } from '../../reports/src/sigv4';
 
 /** Why an upload was not accepted. The status is what to answer. */
@@ -50,31 +52,45 @@ async function exists(store: ObjectStore, key: string): Promise<boolean> {
   return store.head(key);
 }
 
+/** Which of `keys` the store does not have, asked 16 at a time (a store far away answers each in its own time). */
+async function missingOf(store: ObjectStore, keys: readonly string[]): Promise<string[]> {
+  const absent = new Set<string>();
+  await eachLimited(keys, 16, async key => { if (!(await exists(store, key))) absent.add(key); });
+  return keys.filter(key => absent.has(key));
+}
+
 /**
  * Check an object before it is stored. What is checked is what would otherwise corrupt the report for everyone:
  * a layer whose content is not its name, a catalog entry for something not there yet, a run that failed its
  * privacy scan. Everything that is checked is checked cheaply, from the bytes in hand.
  */
-export async function validateUpload(key: string, bytes: Uint8Array, store: ObjectStore): Promise<UploadKind> {
+export async function validateUpload(key: string, bytes: Uint8Array, store: ObjectStore, parsedLayer?: (layer: ReportLayer) => void): Promise<UploadKind> {
   const known = classify(key);
   if (!known) throw new Refusal(422, `"${key}" is not a key Atlas writes`);
-  const text = () => new TextDecoder().decode(bytes);
+  // Parsed once, however many of the checks below look at it.
+  let parsed: { value: unknown } | undefined;
   const json = (): unknown => {
-    try { return JSON.parse(text()); } catch { throw new Refusal(422, `${key} is not JSON`); }
+    if (!parsed) {
+      try { parsed = { value: JSON.parse(new TextDecoder().decode(bytes)) }; } catch { throw new Refusal(422, `${key} is not JSON`); }
+    }
+    return parsed.value;
   };
 
   switch (known.kind) {
     case 'layer': {
-      const parsed = parseLayerDocument(json());
-      if (!parsed.ok) throw new Refusal(422, parsed.reason);
+      const document = parseLayerDocument(json());
+      if (!document.ok) throw new Refusal(422, document.reason);
       const raw = json() as Record<string, unknown>;
       if (raw.id !== known.id) throw new Refusal(422, 'The layer\'s id is not the one in its key');
       // The id is the digest of the document without it: a layer cannot be named for something it is not.
       const { id: _id, ...rest } = raw;
       if ((await sha256Hex(JSON.stringify(rest))) !== known.id) throw new Refusal(422, 'The layer\'s content does not match its id (it was changed, or written by something that does not follow the format)');
-      const missing: string[] = [];
-      for (const entry of Object.values(parsed.layer.bundle)) for (const part of entry.parts) if (!(await exists(store, part.blob))) missing.push(part.blob);
-      if (missing.length) throw new Refusal(409, `The layer needs files that have not been uploaded yet: ${[...new Set(missing)].slice(0, 3).join(', ')}. Upload blobs before the manifest.`);
+      const blobs = [...new Set(Object.values(document.layer.bundle).flatMap(entry => entry.parts.map(part => part.blob)))];
+      const missing = await missingOf(store, blobs);
+      if (missing.length) throw new Refusal(409, `The layer needs files that have not been uploaded yet: ${missing.slice(0, 3).join(', ')}. Upload blobs before the manifest.`);
+      // What was just read is what the report folds in: handed on so it is not read from the store again.
+      const { schemaVersion: _version, ...layer } = document.layer;
+      parsedLayer?.(layer as unknown as ReportLayer);
       break;
     }
     case 'layer-catalog': {
@@ -87,10 +103,12 @@ export async function validateUpload(key: string, bytes: Uint8Array, store: Obje
       if ((await sha256Hex(bytes)) !== known.id) throw new Refusal(422, 'The spec\'s text does not match the digest in its key');
       break;
     case 'spec-set': {
-      const parsed = SpecSetSchema.safeParse(json());
-      if (!parsed.success) throw new Refusal(422, `Not a valid spec set: ${parsed.error.issues[0]?.message ?? 'unknown'}`);
-      if (parsed.data.id !== known.id) throw new Refusal(422, 'The spec set\'s id is not the one in its key');
-      for (const file of parsed.data.files) if (!(await exists(store, `layers/specs/blobs/${file.digest}.txt`))) throw new Refusal(409, `The spec set needs ${file.path}, which has not been uploaded yet`);
+      const set = SpecSetSchema.safeParse(json());
+      if (!set.success) throw new Refusal(422, `Not a valid spec set: ${set.error.issues[0]?.message ?? 'unknown'}`);
+      if (set.data.id !== known.id) throw new Refusal(422, 'The spec set\'s id is not the one in its key');
+      const lacking = new Set(await missingOf(store, [...new Set(set.data.files.map(file => `layers/specs/blobs/${file.digest}.txt`))]));
+      const first = set.data.files.find(file => lacking.has(`layers/specs/blobs/${file.digest}.txt`));
+      if (first) throw new Refusal(409, `The spec set needs ${first.path}, which has not been uploaded yet`);
       break;
     }
     case 'spec-catalog': {

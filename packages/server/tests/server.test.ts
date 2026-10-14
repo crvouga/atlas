@@ -102,6 +102,21 @@ describe('sending a viewer only what changed', () => {
   });
 });
 
+describe('a restart shows what was shown before it', () => {
+  test('the report folded as results arrive, by either route, is the report a fresh server reads back from disk', async () => {
+    const { ReportIndex } = await import('../../reports/src/report-index');
+    const { url, store, server } = await start();
+    const client = httpStore({ url });
+    const rich = { id: 'r', title: 'rich', status: 'failed' as const, detail: 'boom', specPath: 'specs/a.feature', durationMs: 12, tags: ['smoke'], labels: { build: '7' }, steps: [{ name: 's', status: 'failed', offsetMs: 1, durationMs: 2 }], attachments: [{ name: 'log.txt', text: 'x'.repeat(20_000) }], extensions: { 'com.acme.trace': { id: 4 } } };
+    await publishChecks(client, { producer: 'sdk', environment: 'ios', branch: 'main', recordedAtMs: 10, checks: [rich, check('plain')] });
+    await fetch(`${url}/api/checks`, { method: 'POST', body: JSON.stringify({ producer: 'curl', environment: 'android', recordedAtMs: 20, checks: [rich, check('plain', 'failed')] }) });
+    const restarted = new ReportIndex([{ id: 'data', store }]);
+    await restarted.refresh();
+    expect(JSON.parse(restarted.json().text)).toEqual(JSON.parse(server.index.json().text));
+    expect(restarted.snapshot().version).toBe(server.index.snapshot().version);
+  });
+});
+
 describe('what the server refuses', () => {
   test('a layer is named by its content: one whose content is not its name is refused, whoever sends it', async () => {
     const { url, client } = await start();
@@ -349,5 +364,22 @@ describe('being operated', () => {
 
   test('a write backend that does not exist is refused at the start', () => {
     expect(() => createAtlasServer({ backends: [{ id: 'data', store: memoryStore() }], write: 'nope' })).toThrow('not among the backends');
+  });
+});
+
+describe('a viewer that stops reading', () => {
+  test('is let go once it is far behind, and the others are not held up', async () => {
+    const { EventHub } = await import('../src/events');
+    const hub = new EventHub({ heartbeatMs: 3_600_000 });
+    const stalled = hub.stream(new Request('http://x/'), () => ({}));
+    const listening = hub.stream(new Request('http://x/'), () => ({}));
+    const reader = listening.body!.getReader();
+    expect(hub.count).toBe(2);
+    for (let i = 0; i < 400; i++) { hub.publish('report', { i }); await reader.read(); }
+    // `stalled` never read: past the limit it was dropped, `listening` kept up.
+    expect(hub.count).toBe(1);
+    await reader.cancel();
+    void stalled.body!.cancel();
+    hub.close();
   });
 });

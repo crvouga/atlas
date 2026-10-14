@@ -129,6 +129,12 @@ describe('the site', () => {
     const asset = await get(node, '/assets/app-abc123.js', { 'accept-encoding': 'gzip' });
     expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
     expect(asset.headers.get('content-encoding')).toBe('gzip');
+    // The smallest form for the viewer's own files, made once; gzip for those who cannot read it.
+    const packed = await get(node, '/assets/app-abc123.js', { 'accept-encoding': 'gzip, br' });
+    expect(packed.headers.get('content-encoding')).toBe('br');
+    expect(packed.headers.get('vary')).toBe('accept-encoding');
+    const { brotliDecompressSync } = await import('node:zlib');
+    expect(brotliDecompressSync(new Uint8Array(await packed.arrayBuffer())).toString()).toBe(await (await get(node, '/assets/app-abc123.js')).text());
     expect((await get(node, '/some/route')).status).toBe(200);
     expect((await get(node, '/missing.js')).status).toBe(404);
     // The URL is normalized before it gets here; either way nothing outside the site is read.

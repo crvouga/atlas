@@ -1,7 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { gzip } from 'node:zlib';
+import { brotliCompress, constants as zlibConstants, gzip } from 'node:zlib';
 
 import { Hono, type Context } from 'hono';
 
@@ -25,6 +25,7 @@ import { EventHub } from './events';
 import { readLimited, storeApi } from './store-api';
 
 const gzipAsync = promisify(gzip);
+const brotliAsync = promisify(brotliCompress);
 
 export type AtlasServerOptions = {
   /** Every backend, read together. */
@@ -154,16 +155,24 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
   });
   const stopListening = index.onChange(change => events.publish('report', summaryOf(change)));
 
-  async function body(c: Context, data: string | Uint8Array, contentType: string, headers: Record<string, string>, cacheKey?: string): Promise<Response> {
+  /**
+   * A response, compressed when the client accepts it and it is worth it. What is the same for everyone (a page,
+   * a script, one version of the report) is compressed once and kept; `slow` asks for the smallest form, which
+   * is worth waiting for only when it is made once and sent to every visitor: the viewer's own files.
+   */
+  async function body(c: Context, data: string | Uint8Array, contentType: string, headers: Record<string, string>, cacheKey?: string, slow = false): Promise<Response> {
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
-    const wantsGzip = COMPRESSIBLE.test(contentType) && bytes.length > 1024 && /\bgzip\b/.test(c.req.header('accept-encoding') ?? '');
+    const accepts = c.req.header('accept-encoding') ?? '';
+    const encoding = COMPRESSIBLE.test(contentType) && bytes.length > 1024 ? (slow && /\bbr\b/.test(accepts) ? 'br' : /\bgzip\b/.test(accepts) ? 'gzip' : null) : null;
     let out: Uint8Array = bytes;
-    if (wantsGzip) {
-      const key = cacheKey ? `${cacheKey}|${bytes.length}` : null;
-      out = (key && compressed.get(key)) || new Uint8Array(await gzipAsync(bytes));
+    if (encoding) {
+      const key = cacheKey ? `${encoding}|${cacheKey}|${bytes.length}` : null;
+      out = (key && compressed.get(key)) || new Uint8Array(encoding === 'br'
+        ? await brotliAsync(bytes, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: bytes.length } })
+        : await gzipAsync(bytes));
       if (key) { if (compressed.size > 64) compressed.delete(compressed.keys().next().value!); compressed.set(key, out); }
     }
-    return new Response(out as BodyInit, { headers: { 'content-type': contentType, vary: 'accept-encoding', ...(wantsGzip ? { 'content-encoding': 'gzip' } : {}), ...headers } });
+    return new Response(out as BodyInit, { headers: { 'content-type': contentType, vary: 'accept-encoding', ...(encoding ? { 'content-encoding': encoding } : {}), ...headers } });
   }
 
   const app = new Hono();
@@ -222,8 +231,8 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
   // Upload: the store protocol, and a simple JSON way in for anything that can make a request.
   app.route('/api/store', storeApi({
     store: writeBackend.store, auth, maxObjectBytes: limits.object,
-    onStored: async (key, kind) => {
-      if (kind === 'layer-catalog') await index.accept(writeBackend.id, key);
+    onStored: async (key, kind, layer) => {
+      if (kind === 'layer-catalog') await index.accept(writeBackend.id, key, layer);
       else if (kind === 'spec-catalog') { specs.invalidate(); events.publish('atlas:change', { scope: 'specs', files: [], runIds: [] }); }
       else if (kind === 'run-catalog') { runs.invalidate(); events.publish('atlas:change', { scope: 'runs', files: [], runIds: [/-([\w.-]+)\.json$/.exec(key)?.[1] ?? ''].filter(Boolean) }); }
     }
@@ -237,7 +246,7 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
       try { input = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>; } catch { throw new Refusal(422, 'The body is not JSON'); }
       // Anything that can make a request can report: the time defaults to now, and the rest is the layer format.
       const layer = await publishChecks(writeBackend.store, { recordedAtMs: now(), ...input } as never);
-      await index.accept(writeBackend.id, layerCatalogKey(layer.recordedAtMs, layer.id));
+      await index.accept(writeBackend.id, layerCatalogKey(layer.recordedAtMs, layer.id), layer);
       return c.json({ ok: true, id: layer.id, checks: layer.parts[0]?.checks.length ?? 0 }, 201);
     } catch (error) {
       if (error instanceof Refusal) return c.json({ error: error.message }, error.status as 422);
@@ -337,7 +346,7 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
       let data: string | Uint8Array = new Uint8Array(await readFile(file));
       if (isIndex) data = new TextDecoder().decode(data).replace('</head>', `<script>window.__ATLAS_CONFIG__=${config}</script></head>`);
       const hashed = /(^|\/)assets\//.test(relative);
-      return body(c, data, typeOf(file), { 'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache' }, `${file}|${info.mtimeMs}`);
+      return body(c, data, typeOf(file), { 'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache' }, `${file}|${info.mtimeMs}`, true);
     });
   }
 

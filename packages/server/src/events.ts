@@ -5,7 +5,10 @@
  */
 export type EventName = 'hello' | 'report' | 'atlas:change';
 
-type Subscriber = { readonly send: (chunk: string) => void; readonly close: () => void };
+type Subscriber = { readonly send: (chunk: Uint8Array) => void; readonly close: () => void };
+
+/** Events a viewer may be behind by before it is let go. */
+const MAX_BACKLOG = 256;
 
 export class EventHub {
   readonly #subscribers = new Set<Subscriber>();
@@ -27,7 +30,8 @@ export class EventHub {
   /** Tell every viewer. `data` is JSON. */
   publish(name: EventName, data: unknown): void {
     this.#id += 1;
-    const frame = `id: ${this.#id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
+    // Written once, however many are listening.
+    const frame = this.#encoder.encode(`id: ${this.#id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
     for (const subscriber of [...this.#subscribers]) subscriber.send(frame);
   }
 
@@ -37,15 +41,21 @@ export class EventHub {
     let subscriber: Subscriber | null = null;
     const body = new ReadableStream<Uint8Array>({
       start: (controller) => {
-        const send = (text: string) => { try { controller.enqueue(this.#encoder.encode(text)); } catch { drop(); } };
+        const send = (chunk: Uint8Array) => {
+          try {
+            // A viewer that has stopped reading (a laptop asleep, a dead connection) must not make the server hold its backlog: it reconnects and reads everything again.
+            if ((controller.desiredSize ?? 1) < -MAX_BACKLOG) { drop(); controller.close(); return; }
+            controller.enqueue(chunk);
+          } catch { drop(); }
+        };
         const drop = () => { if (subscriber) this.#subscribers.delete(subscriber); subscriber = null; if (!this.#subscribers.size) this.#stopTimer(); };
         subscriber = { send, close: () => { drop(); try { controller.close(); } catch { /* already closed */ } } };
         this.#subscribers.add(subscriber);
         this.#startTimer();
         // `retry` is how long the browser waits before reconnecting by itself.
-        send(`retry: 3000\n\n`);
+        send(this.#encoder.encode(`retry: 3000\n\n`));
         this.#id += 1;
-        send(`id: ${this.#id}\nevent: hello\ndata: ${JSON.stringify(greeting())}\n\n`);
+        send(this.#encoder.encode(`id: ${this.#id}\nevent: hello\ndata: ${JSON.stringify(greeting())}\n\n`));
         request.signal.addEventListener('abort', drop, { once: true });
       },
       cancel: () => { if (subscriber) this.#subscribers.delete(subscriber); subscriber = null; if (!this.#subscribers.size) this.#stopTimer(); }
@@ -56,7 +66,8 @@ export class EventHub {
   #startTimer(): void {
     if (this.#timer) return;
     // A comment line: proxies and load balancers see traffic and keep the connection; viewers ignore it.
-    this.#timer = setInterval(() => { for (const subscriber of [...this.#subscribers]) subscriber.send(': ping\n\n'); }, this.#heartbeatMs);
+    const ping = this.#encoder.encode(': ping\n\n');
+    this.#timer = setInterval(() => { for (const subscriber of [...this.#subscribers]) subscriber.send(ping); }, this.#heartbeatMs);
     (this.#timer as { unref?: () => void }).unref?.();
   }
 

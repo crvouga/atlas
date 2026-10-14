@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 
 import { isPaged, type ObjectStore } from '../../reports/src/object-store';
 import { readBytes } from '../../reports/src/object-io';
+import type { ReportLayer } from '../../reports/src/layer-types';
 import type { Auth } from './auth';
 import { classify, isCatalog, Refusal, sameBytes, validateUpload, validKey } from './validate';
 
@@ -10,7 +11,7 @@ export type StoreApiOptions = {
   readonly auth: Auth;
   readonly maxObjectBytes: number;
   /** Told after something was uploaded: its key, and what kind of thing it is. */
-  readonly onStored: (key: string, kind: string) => void | Promise<void>;
+  readonly onStored: (key: string, kind: string, layer?: ReportLayer) => void | Promise<void>;
 };
 
 /** Read a request body, refusing as soon as it is over the limit rather than after holding it all. */
@@ -55,6 +56,8 @@ const safePath = (value: string) => value.length > 0 && value.length <= 1024 && 
 export function storeApi(options: StoreApiOptions) {
   const app = new Hono();
   const { store, auth } = options;
+  // A layer's manifest is validated when it arrives and its catalog entry follows: what was read the first time serves the second.
+  const recent = new Map<string, ReportLayer>();
   const refuse = (c: Context, status: number, message: string) => c.json({ error: message }, status as 400);
 
   app.get('/', async c => {
@@ -100,13 +103,13 @@ export function storeApi(options: StoreApiOptions) {
     if (name === null || !validKey(name)) return refuse(c, 422, 'Not a key Atlas holds');
     try {
       const bytes = await readLimited(c.req.raw, options.maxObjectBytes);
-      const kind = await validateUpload(name, bytes, store);
+      const kind = await validateUpload(name, bytes, store, layer => { recent.set(layer.id, layer); if (recent.size > 8) recent.delete(recent.keys().next().value!); });
       const present = await sameBytes(store, name, bytes);
       // Scratch objects may be overwritten (an object store's contract says writing a key twice is fine); layers may not.
       if (present === 'different' && kind !== 'scratch') throw new Refusal(409, `${name} already exists with other content. Layers are immutable: publish a new one.`);
       if (present !== 'same') await store.put(name, bytes, c.req.header('content-type') ?? 'application/octet-stream');
       // Catalog entries make a layer, spec set or run visible, so everyone is told only once they are in.
-      if (present === 'absent' || isCatalog(kind)) await options.onStored(name, kind);
+      if (present === 'absent' || isCatalog(kind)) await options.onStored(name, kind, kind === 'layer-catalog' ? recent.get(classify(name)?.id ?? '') : undefined);
       return c.json({ ok: true, key: name, kind, created: present === 'absent' }, present === 'absent' ? 201 : 200);
     } catch (error) {
       if (error instanceof Refusal) return refuse(c, error.status, error.message);
