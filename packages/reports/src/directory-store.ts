@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/p
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { ObjectStore, StoredObject } from './object-store';
+import type { ObjectStore, PagedListing, StoredObject } from './object-store';
 import { ObjectStoreWithPrefix } from './store-prefix';
 
 const TYPE_SUFFIX = '.content-type';
@@ -49,8 +49,8 @@ async function writeAtomically(file: string, bytes: Uint8Array | string): Promis
  * only the directories a prefix can reach, and two stores over copies of the same layers can be
  * merged with `cp -R` because layers are immutable and addressed by content.
  */
-export function directoryStore(root: string): ObjectStore {
-  const store: ObjectStore = {
+export function directoryStore(root: string): ObjectStore & PagedListing {
+  const store: ObjectStore & PagedListing = {
     async get(key): Promise<StoredObject | null> {
       const file = fileOf(root, key);
       try {
@@ -122,6 +122,12 @@ export function directoryStore(root: string): ObjectStore {
       if (prefix.startsWith('/') || prefix.includes('\\') || prefix.split('/').some((part) => part === '..')) throw new Error(`Invalid object store prefix: ${prefix}`);
       await walk(slash < 0 ? rootPath : path.resolve(rootPath, prefix.slice(0, slash)));
       return found.sort();
+    },
+    async listPage(prefix, options = {}) {
+      const all = await store.listKeys(prefix);
+      const from = options.after === undefined ? 0 : all.findIndex(key => key > options.after!);
+      const keys = from < 0 ? [] : all.slice(from, from + (options.limit ?? 1000));
+      return { keys, next: from >= 0 && from + keys.length < all.length ? keys.at(-1) ?? null : null };
     },
     withPrefix(prefix) {
       return new ObjectStoreWithPrefix(store, prefix);

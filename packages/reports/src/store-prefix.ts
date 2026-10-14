@@ -1,4 +1,4 @@
-import type { ObjectStore, StoredObject } from './object-store';
+import type { ObjectStore, PagedListing, StoredObject } from './object-store';
 import { assertLogicalObjectKey } from './namespace-guard';
 
 export function normalizeObjectStorePrefix(prefix: string): string {
@@ -27,6 +27,13 @@ export class ObjectStoreWithPrefix implements ObjectStore {
     prefix: string
   ) {
     this.prefix = normalizeObjectStorePrefix(prefix);
+    const paged = (inner as Partial<PagedListing>).listPage;
+    if (paged) {
+      this.listPage = async (listPrefix, options = {}) => {
+        const page = await paged.call(inner, `${this.prefix}${listPrefix}`, { ...options, ...(options.after === undefined ? {} : { after: `${this.prefix}${options.after}` }) });
+        return { keys: page.keys.map(key => key.slice(this.prefix.length)), next: page.next === null ? null : page.next.slice(this.prefix.length) };
+      };
+    }
   }
 
   private scopedKey(key: string): string {
@@ -63,6 +70,9 @@ export class ObjectStoreWithPrefix implements ObjectStore {
     const keys = await this.inner.listKeys(scopedPrefix);
     return keys.map((k) => k.slice(this.prefix.length));
   }
+
+  /** Paged listing, when the store underneath has it. */
+  listPage?: (prefix: string, options?: { readonly after?: string; readonly limit?: number }) => Promise<{ readonly keys: readonly string[]; readonly next: string | null }>;
 
   withPrefix(subPrefix: string): ObjectStore {
     return new ObjectStoreWithPrefix(

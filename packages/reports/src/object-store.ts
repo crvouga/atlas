@@ -74,3 +74,16 @@ export interface ObjectStore {
    */
   withPrefix(prefix: string): ObjectStore;
 }
+
+/**
+ * Optional, beyond the seven methods: list one page of keys, starting after a key. A reader that has
+ * already seen most of a catalog uses it to find what is new without listing all of it. A store without
+ * it works the same, a little slower. Pages are in the same code-unit order as {@link ObjectStore.listKeys}.
+ */
+export interface PagedListing {
+  listPage(prefix: string, options?: { readonly after?: string; readonly limit?: number }): Promise<{ readonly keys: readonly string[]; /** The `after` for the next page, or null on the last. */ readonly next: string | null }>;
+}
+
+export function isPaged(store: ObjectStore): store is ObjectStore & PagedListing {
+  return typeof (store as Partial<PagedListing>).listPage === 'function';
+}
