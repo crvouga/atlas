@@ -55,3 +55,34 @@ describe('which stores a command uses', () => {
     expect(store!.label).not.toContain('supersecret');
   });
 });
+
+describe('a token belongs to one server', () => {
+  const tokenOf = (spec: string, env: Record<string, string>, others: string[] = []) => {
+    const seen: string[] = [];
+    const fetcher = (async (_url: string, init: RequestInit) => { seen.push(String((init.headers as Record<string, string>)?.authorization ?? '')); return new Response('{}', { status: 200 }); }) as unknown as typeof fetch;
+    const [backend] = openBackends([spec, ...others], { base: '/work', env, fetch: fetcher });
+    return { backend: backend!, seen };
+  };
+
+  test('with one server, ATLAS_TOKEN is its token', async () => {
+    const { backend, seen } = tokenOf('https://atlas.corp.example', { ATLAS_TOKEN: 'corp-token-123456' });
+    await backend.store.head('layers/x');
+    expect(seen).toEqual(['Bearer corp-token-123456']);
+  });
+
+  test('with several servers, ATLAS_TOKEN is sent to none; ATLAS_TOKEN_<ID> is for the store of that name', async () => {
+    const env = { ATLAS_TOKEN: 'corp-token-123456', ATLAS_TOKEN_LAB: 'lab-token-1234567' };
+    const both = openBackends(['https://atlas.corp.example', 'lab=https://lab.partner.example'], { base: '/work', env, fetch: (async (url: string, init: RequestInit) => new Response(JSON.stringify({ url, auth: (init.headers as Record<string, string>)?.authorization ?? null }), { status: 200 })) as unknown as typeof fetch });
+    const sent = async (i: number) => (await (await both[i]!.store.get('layers/x'))!.body.getReader().read()).value as Uint8Array;
+    expect(JSON.parse(new TextDecoder().decode(await sent(0)))).toMatchObject({ auth: null });
+    expect(JSON.parse(new TextDecoder().decode(await sent(1)))).toMatchObject({ auth: 'Bearer lab-token-1234567' });
+  });
+
+  test('a token is not sent over plain http beyond this machine, unless the network is said to be trusted', () => {
+    expect(() => tokenOf('http://atlas.corp.example', { ATLAS_TOKEN: 'corp-token-123456' })).toThrow('over plain http');
+    expect(() => tokenOf('http://127.0.0.1:8080', { ATLAS_TOKEN: 'corp-token-123456' })).not.toThrow();
+    expect(() => tokenOf('http://localhost:8080', { ATLAS_TOKEN: 'corp-token-123456' })).not.toThrow();
+    expect(() => tokenOf('http://atlas.corp.example', { ATLAS_TOKEN: 'corp-token-123456', ATLAS_TRUST_NETWORK: '1' })).not.toThrow();
+    expect(() => tokenOf('http://atlas.corp.example', {})).not.toThrow();
+  });
+});
