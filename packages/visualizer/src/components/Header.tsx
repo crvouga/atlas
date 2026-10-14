@@ -2,8 +2,7 @@ import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-route
 import { useEffect, useMemo, useState } from 'react';
 
 import { useAtlas } from '../app/atlas-context';
-import { commandKey } from '../find/Finder';
-import { setFinderOpen } from '../find/open';
+import { commandKey, setFinderOpen } from '../find/open';
 import type { AtlasView } from '../data/model';
 import { LATEST } from '../data/queries';
 import { useEvidence } from '../evidence/evidence-context';

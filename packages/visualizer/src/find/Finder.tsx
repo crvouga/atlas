@@ -9,7 +9,7 @@ import { StatusMark } from '../evidence/marks';
 import { useEvidence } from '../evidence/evidence-context';
 import { kindOfFile } from '../spec-kind';
 import { corpusFrom } from './corpus';
-import { setFinderOpen, setHelpOpen, toggleFinder, useFinderOpen, useHelpOpen, isHelpOpen } from './open';
+import { commandKey, setFinderOpen, setHelpOpen, toggleFinder, useFinderOpen, useHelpOpen, isHelpOpen } from './open';
 import { FIND_GROUPS, indexCorpus, notationOf, rankIndex, splitQuery, type FindDoc, type FindKind, type FindTarget, type Ranked } from './rank';
 import { applySemantic, createWorkerEmbedder, embeddingsAvailable, embedText, textHash, type Embedder } from './semantic';
 import styles from './Finder.module.css';
@@ -35,10 +35,6 @@ const SHORTCUTS: readonly { readonly keys: string; readonly does: string }[] = [
   { keys: '←  →', does: 'Previous and next moment' },
   { keys: 'Home  End', does: 'Start and end of a recording' }
 ];
-
-function commandKey() {
-  return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘K' : 'Ctrl+K';
-}
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -299,5 +295,3 @@ function Row({ hit }: { hit: Ranked }) {
     </>
   );
 }
-
-export { commandKey };

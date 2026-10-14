@@ -1,4 +1,5 @@
 import { Outlet, useLocation, useSearch } from '@tanstack/react-router';
+import { lazy, Suspense } from 'react';
 
 import { Header } from '../components/Header';
 import { EvidenceProvider } from '../evidence/evidence-context';
@@ -6,9 +7,13 @@ import { SourcesPanel } from '../evidence/sources-panel';
 import { SpecIndex } from '../evidence/spec-index';
 import { kindOfAddress } from '../spec-kind';
 import styles from '../views/views.module.css';
-import { Finder } from '../find/Finder';
 import { AtlasProvider, useAtlas } from './atlas-context';
 import { Gazetteer } from './gazetteer';
+
+// The finder brings every spec parser with it. It loads as soon as the page has drawn, long before anyone presses ⌘K.
+const loadFinder = () => import('../find/Finder').then((m) => ({ default: m.Finder }));
+const Finder = lazy(loadFinder);
+if (typeof window !== 'undefined') setTimeout(() => void loadFinder(), 0);
 
 function Index() {
   const { pathname } = useLocation();
@@ -47,7 +52,9 @@ export function AppShell() {
             </main>
           </div>
           <SourcesPanel />
-          <Finder />
+          <Suspense fallback={null}>
+            <Finder />
+          </Suspense>
         </div>
       </EvidenceProvider>
     </AtlasProvider>
