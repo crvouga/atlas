@@ -21,7 +21,9 @@ Every module is its own import path: `@crvouga/atlas/reports/<module>`. Nothing 
 | `spec-set` | `publishSpecSet`, `latestSpecSet`, `collectSpecFiles` | Publish the specs of a commit, and pick the newest committed set of `main` as the outline. |
 | `run-bundle` | `publishRunBundle`, `listRunSummaries` | Upload a finished statechart run with its media (privacy-gated). |
 | `report-index` | `ReportIndex` | The report, maintained incrementally: each layer read once, only winners kept. |
-| `@crvouga/atlas/server` | `createAtlasServer({ backends, write, site, tokens, include })`, `listen` | The live report server as a `fetch` handler, served over HTTP on Bun and Node. |
+| `http-store` | `httpStore({ url, token })`, `AtlasHttpError` | An `ObjectStore` on an Atlas server (`/api/store`): everything that publishes to a store publishes to a server. Retries, and says what to do about each refusal. |
+| `reporter` | `createReporter(identity, { store })` | Stream a run as it happens: each flush is one immutable layer, a retry is byte for byte the same layer, and it never throws into the suite. |
+| `effective-delta` | `applyEffectiveDelta`, `isEffectiveDelta` | A viewer holding a version of the report is sent only what changed since; this makes it whole again. |
 | `doctor` | `inspectStore`, `iamPolicy` | Check a store end to end; the least-privilege IAM policy. |
 | `object-store` | `ObjectStore` | The backend interface: seven methods, no transactions. |
 | `object-store-conformance` | `verifyObjectStore(store)` | Prove a backend you wrote meets the interface. Runs under any test runner. |
@@ -29,6 +31,9 @@ Every module is its own import path: `@crvouga/atlas/reports/<module>`. Nothing 
 | `host` | `reportsHost({ specs, stores })` | The reports half of the viewer for your stores and specs directory. |
 | `layer-merge` | `combineEvidence`, `layerEvidence`, `textFingerprint` | The composition rule itself, over layers already in memory. |
 | `directory-outline` | `loadDirectoryOutline(dir)` | A specs directory as the outline reports are laid over. |
+
+The server itself, `createAtlasServer({ backends, write, site, tokens, include })` and `listen`, is
+[`@crvouga/atlas/server`](../server/README.md), with its own import path.
 
 ```ts
 import { combineBackends } from '@crvouga/atlas/reports/compose';

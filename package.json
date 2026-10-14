@@ -126,6 +126,7 @@
     "packages/reports/STORAGE.md",
     "docs/integrating.md",
     "docs/deploying.md",
+    "docs/server.md",
     "docs/extending.md",
     "docs/statecharts.md",
     "docs/report-contract.md",

@@ -60,6 +60,25 @@ contract](docs/report-contract.md#versioning-and-stability) allows.
   an evidence field required, never let evidence change a status, a slot or a winner.
 - Attachment bytes are untrusted. Serve them only through `attachment-response.ts`.
 
+## The server is a living application, and a protocol
+
+`packages/server` (`atlas serve`, `atlas dev`, `@crvouga/atlas/server`) is a Bun API that serves the viewer from the
+same host; clients upload to it and viewers stream from it ([docs/server.md](docs/server.md)). Older and newer
+clients, viewers and servers meet over its HTTP API, so treat that API like the report contract.
+
+- Within a version of the API (`/api/store`, `/api/events`, `/api/status`, `/api/reports/*`, `/api/checks`) only add:
+  optional parameters, optional response fields, new events. Never change what an existing one means. A viewer or CLI
+  that does not know a new field must still work, and a server that does not know a new parameter (like `?since=`)
+  must be answered with the whole thing.
+- The server may refuse an upload, never alter one. Everything it checks (`validate.ts`) is what would corrupt the
+  report for everyone: keep it checking, and keep it cheap.
+- Uploading needs a Bearer token; a browser's sign-in box may only look. Do not weaken that.
+- The incremental report (`report-index.ts`) must always equal combining every layer from scratch, and
+  `applyEffectiveDelta(held, delta)` must equal the full report. Both are tested over random runs: keep them passing.
+- Performance is a feature here. Before and after a change to the index, the upload path or the viewer's data
+  loading, run `ATLAS_BENCH_DIR=/tmp/atlas-bench bun packages/server/bench/bench.ts 2000 100` and do not make
+  the numbers worse. Speed never buys a weaker guarantee: keep the code as simple as the numbers allow.
+
 ## The S3 store is tested against a real server
 
 `packages/reports/tests/s3-store.integration.test.ts` and `s3-flow.integration.test.ts` run only when

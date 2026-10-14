@@ -16,9 +16,10 @@ backends, and tells you in one command whether the product still does what it wa
   Gherkin, Quint, DMN, Alloy, OpenSLO); evidence stays open.
 - **Open standards, stable schemas.** JUnit XML and CTRF in, JSON Schema 2020-12 contracts, a
   versioned layer format with a golden fixture, and an `ObjectStore` interface any bucket fits.
-- **One node, one bucket.** Developers' worktrees and every CI job publish to S3 (or R2, MinIO, a
-  folder). One `atlas serve` shows the whole project to developers and the business, from the
-  bucket, with no checkout and no state of its own ([deploying](docs/deploying.md)).
+- **One server, live.** A project runs one `atlas serve`: a Bun API that serves the viewer from the same host.
+  Every laptop and CI job sends results to it as they finish (`atlas report publish`, or `atlas report stream` while
+  a suite runs), it keeps them on its own disk (or in S3, R2, MinIO), and every viewer sees the combined report
+  update live, receiving only what changed ([the server](docs/server.md), [deploying](docs/deploying.md)).
 - **Fast and fail-closed.** Publishing is two small writes. A thousand layers of a hundred checks
   combine in about a second. An unreadable layer, a downed backend or a check still running is never
   counted as a pass.
@@ -59,7 +60,8 @@ bunx atlas report status --store all --specs ./specs --require-environments desk
 | Read | When |
 | --- | --- |
 | **[Integrating Atlas](docs/integrating.md)** | Start here. Step by step, with the command and expected output for each step, a CI workflow for sharded nodes, and troubleshooting. |
-| **[Running Atlas for a project](docs/deploying.md)** | Production: an S3 bucket and its policies, publishing from CI and from laptops, the node (Docker, Kubernetes, auth), filters, operating it and performance. |
+| **[The Atlas server](docs/server.md)** | The living application: configuration, tokens, the upload and streaming protocol, the full API, what it refuses, performance. |
+| **[Running Atlas for a project](docs/deploying.md)** | Production: the server (Docker, Kubernetes, auth), sending results from CI and laptops, an S3 bucket and its policies, filters, operating it. |
 | [The report contract](docs/report-contract.md) | The exact rules: the layer document, how layers compose, guarantees, backends, versioning, failure behaviour. |
 | **[Evidence: attachments, timelines and everything else](docs/extending.md)** | What a result can carry, the rules that keep the format compatible forever, and how to attach anything from any framework. |
 | [Report backends and live snapshots](docs/report-backends.md) | Connecting directories, HTTP files and APIs, streaming, and writing another transport. |
@@ -77,7 +79,8 @@ bun add -d @crvouga/atlas
 
 | Import | What it is |
 | --- | --- |
-| [`@crvouga/atlas/reports/<module>`](packages/reports) | Evidence for any spec: publish layers (`publish-checks`, `ingest`), store them (`s3-store`, `directory-store`, any `object-store`), combine and gate them (`compose`, `report-status`), copy them (`copy-store`), serve them (`@crvouga/atlas/server`, `host`). |
+| [`@crvouga/atlas/reports/<module>`](packages/reports) | Evidence for any spec: publish layers (`publish-checks`, `ingest`, `reporter` to stream them), store them (`s3-store`, `directory-store`, `http-store` for a server, any `object-store`), combine and gate them (`compose`, `report-status`), copy them (`copy-store`). |
+| [`@crvouga/atlas/server`](packages/server) | The Atlas server as a `fetch` handler (`createAtlasServer`), served over HTTP on Bun and Node (`listen`). |
 | [`@crvouga/atlas/schema`](packages/schema) | The contract: Zod schemas and JSON Schemas for layers, check files, report status, specs, journeys, manifests, timelines and the runs index. |
 | [`@crvouga/atlas`](packages/core) | Spec loading (SCXML and XState), composition, lint, planning, the runner, multi-client runs (`combineDrivers`), `httpDriver` and `functionDriver`, CloudEvents, privacy, config and the `atlas` CLI. `@crvouga/atlas/spec` is a browser-safe subset; `@crvouga/atlas/signals` holds the driver-neutral signals. |
 | [`@crvouga/atlas/playwright`](packages/playwright) | Playwright driver: signal-based screen recognisers, paced taps and typing with a touch overlay, device-resolution screenshots and H.264 clips. |
@@ -127,16 +130,20 @@ has results. `--format json` is a [stable schema](packages/schema/schemas/report
 means the report does not pass; 2 means the command itself was wrong (a missing store directory, a bad
 flag).
 
-**The node** is `atlas serve`: one process that serves the viewer and the report from the store.
-Point `ATLAS_STORE` at a bucket and every developer's laptop and every CI job publishes into it with the
-same command; everyone then looks at one report. Uploads default to its local data folder; choose a shared write backend when running several copies. See
+**The server** is `atlas serve`: one process that serves the viewer, takes in results and streams the report to
+every viewer. Point `ATLAS_STORE` at it and every developer's laptop and every CI job sends results with the same
+commands that write to a folder; everyone then looks at one report, live. Results are kept in its data folder
+unless you choose a bucket. `atlas dev` runs the same server with the viewer's dev server in front, so
+development is one host too. See [the server](docs/server.md) and
 [running Atlas for a project](docs/deploying.md).
 
 ```sh
-export ATLAS_STORE=s3://my-bucket/atlas/my-project   # AWS_* or `aws sso login` for credentials
-atlas report doctor                                  # is the bucket usable, and what is missing?
-atlas report publish --producer unit --junit out.xml --specs ./specs   # from CI or a laptop
-atlas serve                                   # the whole project, at :8080
+atlas serve                                          # the project's server, at :8080 (ATLAS_TOKEN says who may upload)
+
+export ATLAS_STORE=https://atlas.example.com ATLAS_TOKEN=…   # on every laptop and CI job
+atlas report publish --producer unit --junit out.xml --specs ./specs     # when a suite is done
+my-suite --json | atlas report stream --producer e2e --environment ios  # or as its checks finish
+atlas report status --branch main --ignore-modified  # the gate, answered by the server
 ```
 
 **The viewer** shows each spec (Gherkin, Quint, DMN, Alloy, OpenSLO, and the rest by file type) with

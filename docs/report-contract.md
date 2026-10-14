@@ -191,7 +191,7 @@ publisher records where it came from, and the reader chooses what to include:
   tracked files, `unknown` outside git, and absent for a CI checkout or a clean worktree at its commit.
   Untracked files do not count. A modified layer takes part with a warning and is never mistaken for the
   commit's own result.
-- `atlas report status` and `atlas serve` take `--branch <name>` (repeatable) and `--ignore-modified`
+- `atlas report status` and `atlas serve` (and `GET /api/status?branch=&ignoreModified=1` on a server) take `--branch <name>` (repeatable) and `--ignore-modified`
   (`ATLAS_ONLY_BRANCH`, `ATLAS_IGNORE_MODIFIED`). They only choose which layers are read; the rules above are
   unchanged. A pull request's gate is `--branch "$PR_BRANCH" --branch main --ignore-modified`: the branch
   laid over `main`, so what it did not re-run is inherited.

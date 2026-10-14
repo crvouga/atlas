@@ -509,7 +509,7 @@ directory. Relative paths in it resolve against the config file's directory.
 
 Evidence for specs of any kind, not only statecharts: `publish`, `status`, `merge`, `doctor`, `policy`
 and `stream`. Run `atlas report --help` for every flag. [Integrating Atlas](integrating.md) is the guide,
-[running Atlas for a project](deploying.md) covers S3 and the node, and
+[running Atlas for a project](deploying.md) covers the server, S3 and filters, and
 [the report contract](report-contract.md) holds the rules. For a statechart run:
 
 ```sh
@@ -517,7 +517,7 @@ atlas report publish --producer statecharts --environment desktop-web \
   --manifest atlas-runs/<run>/manifest.json --specs ./specs --upload-run
 ```
 
-`--upload-run` also sends the run's screenshots and clips to the store so the node can show them
+`--upload-run` also sends the run's screenshots and clips to the store (or the server) so the viewer can show them
 (only when the run's privacy scan passed).
 
 ## Config reference

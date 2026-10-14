@@ -1,15 +1,16 @@
-# Running Atlas for a project: one node, one bucket
+# Running Atlas for a project: one server
 
-This is the production setup. A project keeps **one object-store bucket** and runs **one Atlas node**.
-Developers' machines and every CI job publish their results into the bucket. The node shows everyone,
-developers and the business alike, the whole project at once. Nothing is partitioned by run, branch or
-person: results are layered.
+This is the production setup. A project runs **one Atlas server**. Developers' machines and every CI job send
+their results to it, as they finish or when they are done, and it shows everyone, developers and the business
+alike, the whole project at once, live. It keeps results on its own disk by default, or in an object-store bucket
+if you prefer; either way nothing is partitioned by run, branch or person: results are layered. The server's API,
+configuration and protocol are in **[the Atlas server](server.md)**; this page is the path to production.
 
 ```
-  a developer's worktree ─┐                                    ┌─▶ developers   (browser)
-  a CI job, any branch ───┼─ atlas report publish ─▶  BUCKET ◀─┤   atlas serve  (the server: reads the bucket,
-  a device lab, nightly ──┘   (immutable layers)    s3://…     ├─▶ business       keeps uploads in its write backend)
-                                                               └─▶ CI gate     atlas report status
+  a developer's worktree ─┐                                       ┌─▶ developers   (browser, live)
+  a CI job, any branch ───┼─ atlas report publish|stream ─▶ SERVER ◀┤   atlas serve: keeps layers in ./atlas-data
+  a device lab, nightly ──┘   (immutable layers, over HTTP)  or S3  ├─▶ business      or in a bucket (--write)
+                                                                    └─▶ CI gate     atlas report status
 ```
 
 Why this holds together:
@@ -17,25 +18,31 @@ Why this holds together:
 - **Publishing never conflicts.** A layer is one immutable file named by its content. Two machines that
   publish at once write different files; a retry writes the same one. There is no lock, no index to
   corrupt, nothing to merge.
-- **The node is disposable.** It reads the bucket and keeps a cache; uploads go to its configured write backend. Replace it, scale it to three
-  copies, or run it on a laptop: they all show the same report, because a report is a function of the
-  layers in the bucket ([the contract](report-contract.md)).
+- **The server is replaceable.** What it knows is its write backend (a folder, or a bucket). Replace it, restore it
+  from a backup, or run a copy on a laptop: they show the same report, because a report is a function of the
+  layers ([the contract](report-contract.md)).
 - **One view.** The newest completed result of every check, in every environment, from anyone. A
   developer's local run on a feature branch, CI on `main` and a device lab's nightly sit side by side.
   Narrow it only when you choose to ([filters](#5-choosing-what-takes-part)).
 
-- [1. The bucket](#1-the-bucket)
+- [1. Where results are kept](#1-where-results-are-kept)
 - [2. Check it](#2-check-it)
-- [3. Publish from CI and from laptops](#3-publish-from-ci-and-from-laptops)
-- [4. The node](#4-the-node)
+- [3. Send results from CI and from laptops](#3-send-results-from-ci-and-from-laptops)
+- [4. The server](#4-the-server)
 - [5. Choosing what takes part](#5-choosing-what-takes-part)
 - [6. Operating it](#6-operating-it)
 - [7. Performance](#7-performance)
 - [8. Troubleshooting](#8-troubleshooting)
 
-## 1. The bucket
+## 1. Where results are kept
 
-A store is named by a URL. Keys never go in it.
+**By default, on the server's own disk** (`./atlas-data`, or the volume you mount at `ATLAS_DATA`). Nothing else
+needs to exist: skip to [section 3](#3-send-results-from-ci-and-from-laptops). Back that folder up like any data
+directory; starting a new server on a restored copy shows the same report.
+
+**To keep results in a bucket instead** (so a replaced server loses nothing, or CI already has bucket access),
+name it and make it the place uploads go: `ATLAS_STORE=project=s3://my-bucket/atlas/my-project ATLAS_WRITE=project`.
+The rest of this section is that setup. A store is named by a URL. Keys never go in it.
 
 | Store | URL |
 | --- | --- |
@@ -60,7 +67,8 @@ so run `atlas report doctor` against yours before relying on it.
 
    ```sh
    atlas report policy --store s3://my-bucket/atlas/my-project --role publisher   # CI and developers
-   atlas report policy --store s3://my-bucket/atlas/my-project --role reader      # the node and the gate
+   atlas report policy --store s3://my-bucket/atlas/my-project --role reader      # a server that only reads it, and the gate
+   # the server that uploads into it needs --role both
    ```
 
    A publisher may write and read `layers/*` and list the folder. A reader may read `layers/*` and list.
@@ -77,7 +85,7 @@ Versioning and replication are optional: nothing is ever overwritten with differ
 export ATLAS_STORE=s3://my-bucket/atlas/my-project
 atlas report doctor                    # a role that can do everything
 atlas report doctor --role publisher   # what CI and developers can do
-atlas report doctor --role reader      # what the node can do
+atlas report doctor --role reader      # what a reader can do
 ```
 
 ```
@@ -96,16 +104,34 @@ off. The credentials come from the same places an AWS SDK looks, in this order: 
 `~/.aws/credentials`, the AWS CLI (which covers SSO, assumed roles and `credential_process`), and EC2
 instance metadata. Credentials that expire are refreshed before they do.
 
-## 3. Publish from CI and from laptops
+## 3. Send results from CI and from laptops
 
-Every publisher runs the same command. Set `ATLAS_STORE` once and it needs no flags for the store.
+Every environment runs the same command. Set `ATLAS_STORE` once and it needs no flags for the store.
+
+### To the server
+
+```sh
+export ATLAS_STORE=https://atlas.example.com     # once, in .envrc, CI variables or your shell profile
+export ATLAS_TOKEN=…                             # a publish token of the server (never in the URL)
+bun test --reporter=junit --reporter-outfile=out.xml
+bunx atlas report publish --producer unit --junit out.xml --specs ./specs --environment desktop-web
+```
+
+The result is in everyone's view within a few milliseconds, with no bucket credentials anywhere, and no
+artifacts to merge. To show a long suite *while it runs*, stream it: `my-suite --json | atlas report stream
+--producer e2e --environment ios` ([sending results](server.md#sending-results)). The gate asks the server for the
+verdict, so only the verdict travels: `atlas report status --branch main --ignore-modified`.
+[`examples/deploy/github-actions.yml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/github-actions.yml)
+is the whole workflow, publishers and gate. The rest of this section is publishing straight to a bucket, for
+CI that has bucket access and no route to the server.
+
+### Straight to the bucket
 
 ### CI
 
 Give CI a role, not a key. On GitHub Actions that is OIDC, so no AWS secret is stored anywhere. Every
-node publishes its own layers straight to the bucket: no artifacts to download and merge.
-[`examples/deploy/github-actions.yml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/github-actions.yml)
-is the whole workflow, publishers and gate.
+node publishes its own layers straight to the bucket: no artifacts to download and merge. The server finds them
+at its next refresh.
 
 ```yaml
 permissions: { id-token: write, contents: read }
@@ -120,7 +146,7 @@ steps:
 ```
 
 `--sha`, `--branch` and the run URL come from the CI's variables. `--specs ./specs` also publishes the
-specs themselves, so the node can show them without a checkout (below).
+specs themselves, so the server can show them without a checkout (below).
 
 ### A developer's laptop
 
@@ -136,7 +162,7 @@ marked **modified**: it appears in the shared view with the warning "Potentially
 modified checkout", never as the commit's own result. Outside a git checkout the origin is **unknown**.
 A CI checkout is the commit it names. Untracked files (build output, `out.xml`) do not count.
 
-Developers can publish and look at the result in the shared view within the node's refresh interval
+Through the server a result is in the shared view at once; straight to a bucket, within the server's refresh interval
 (10 seconds by default).
 
 ### What lands in the bucket
@@ -161,7 +187,7 @@ bunx atlas report publish --producer statecharts --environment desktop-web \
 
 A run is uploaded only when its privacy scan passed: the same rule the static viewer applies.
 
-## 4. The node
+## 4. The server
 
 ```sh
 atlas serve                    # ATLAS_STORE says where; listens on :8080
@@ -188,24 +214,29 @@ use a named `--store project=s3://… --write project` to put uploads in a share
 ### Run it
 
 **Docker.** [`examples/deploy/Dockerfile`](https://github.com/crvouga/atlas/blob/main/examples/deploy/Dockerfile)
-installs Atlas, builds the viewer once (it is the same for every project: the node tells the page where its
-data is) and starts the node:
+installs Atlas, builds the viewer once (it is the same for every project: the server tells the page where its
+data is) and starts the server, keeping results on the volume at `/data`:
 
 ```sh
-docker build -t atlas-node examples/deploy
-docker run -p 8080:8080 -e ATLAS_STORE=s3://my-bucket/atlas/my-project -e AWS_REGION=us-east-1 -e ATLAS_READ_TOKEN atlas-node
+docker build -t atlas examples/deploy
+docker run -p 8080:8080 -v atlas-data:/data -e ATLAS_TOKEN=$(openssl rand -hex 24) atlas
 ```
 
-On ECS, EKS or EC2, attach the **reader** role to the task, service account or instance and set no keys.
+For a bucket as the system of record add `-e ATLAS_STORE=project=s3://my-bucket/atlas/my-project -e ATLAS_WRITE=project -e AWS_REGION=us-east-1`.
+On ECS, EKS or EC2, attach a role with the **publisher** and **reader** policies to the task, service account or
+instance and set no keys.
 
 **Try it on one machine.** [`examples/deploy/compose.yaml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/compose.yaml)
-starts an S3 server, a bucket and the node; publish to it from your project and open `http://localhost:8080`.
+starts the server on a volume; `compose.s3.yaml` starts it with an S3 server and a bucket as its storage.
+Publish to `http://localhost:8080` from your project and open it.
 
 **Kubernetes.** [`examples/deploy/kubernetes.yaml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/kubernetes.yaml):
-a Deployment of two copies, readiness on `/readyz`, an IRSA service account.
+one copy (the server is a singleton for the project), results in the bucket, readiness on `/readyz`, an IRSA
+service account.
 
 **Without a container.** `bun add -d @crvouga/atlas`, then `bunx atlas-visualizer build --no-data --out
-atlas-site` and `bunx atlas serve`. It runs on Bun and on Node 22.18 or later.
+atlas-site` and `bunx atlas serve`. It runs on Bun and on Node 22.18 or later. Everything it can be told is in
+[the Atlas server](server.md#configuration).
 
 ### Who may look
 
@@ -218,7 +249,7 @@ layer too. Pass `--insecure` only when that proxy handles sign-in.
 
 | Path | |
 | --- | --- |
-| `/` | The viewer. Its page carries the node's address book, so one build serves every project. |
+| `/` | The viewer. Its page carries the server's address book, so one build serves every project. |
 | `/api/reports/evidence/effective` | The whole report in one request: only the layers that win a check, each with only the rows that win. ETag, gzip. |
 | `/api/reports/evidence`, `/evidence/rows/<backend>/<id>`, `/outline`, `/outline/spec?path=` | History, one layer's checks, the specs. |
 | `/api/reports/evidence/detail/<backend>/<id>?check=<id>&kind=<kind>` | Everything one result carries: its timeline, annotations, retries, attachments and extensions, and the run's own. Without `check`, only the run's. |
@@ -229,7 +260,7 @@ layer too. Pass `--insecure` only when that proxy handles sign-in.
 | `/healthz` | The process is up. |
 | `/readyz` | `200` once the bucket was read and at least one store answers; `503` otherwise. Route traffic on this. |
 
-The specs come from the newest **spec set** published from `main` (`publish --specs`), so the node needs no
+The specs come from the newest **spec set** published from `main` (`publish --specs`), so the server needs no
 checkout and no git access. A set from someone's modified worktree is used only if no committed one exists.
 
 ## 5. Choosing what takes part
@@ -250,44 +281,46 @@ Narrow it by choice, per consumer, never by moving data:
 
 ## 6. Operating it
 
-- **Upgrades.** The layer format is a stable, versioned contract. A node reads every layer a publisher of
+- **Upgrades.** The layer format is a stable, versioned contract. A server reads every layer a publisher of
   an older or the same schema version wrote, and names (never guesses at) a layer of a newer one. Upgrade
-  readers (the node, the gate) before publishers when a release bumps `schemaVersion`; within a version
+  readers (the server, the gate) before publishers when a release bumps `schemaVersion`; within a version
   they never need to move together.
 - **Logs.** One JSON line per request to stdout. `/healthz` and `/readyz` are not logged. At start it
   prints what it reads and any store it cannot reach.
-- **A store goes down.** The node keeps serving what it has, names the store in the viewer's notices and
+- **A store goes down.** The server keeps serving what it has, names the store in the viewer's notices and
   in `/readyz`, and recovers by itself. The gate fails closed: unknown is not a pass.
 - **A layer cannot be read** (corrupt, or written by a newer Atlas): a notice names it. It is tried again
   every five minutes.
-- **Scaling.** Run as many copies as you like; they share nothing. A copy's memory grows with the number of
-  distinct checks, plus about a hundred bytes for each layer ever seen (to know it has read it). A process holding 12,000 checks folded from 2,000 layers measured about
-  300 MB in total in a benchmark that also ran its own S3 stand-in.
+- **Scaling.** One server per project is the design, and it is enough: it takes in an upload in milliseconds and a
+  report of 100,000 checks costs a viewer kilobytes per change ([performance](server.md#performance)). Memory
+  grows with the number of distinct checks, plus about a hundred bytes for each layer ever seen (to know it has
+  read it). More than one server on a backend works and shows the same report, but each hears of uploads to
+  another only at its next refresh.
 - **Cost.** Between full listings a refresh asks for one page of the catalog, newest first, and stops at the
   first page it already knows: one `LIST` request every refresh interval, however long the history. A full
   listing (one request per thousand layers) runs at the start and every 30 refreshes (five minutes by
   default), which is also how a layer recorded with an old timestamp is found. One small `GET` per new
   layer, once.
 - **Retention.** Atlas deletes nothing. `atlas report doctor` shows what the bucket holds.
-- **Disaster recovery.** The bucket is the only state. Replicate or version it as you do any bucket; the
-  node is rebuilt from nothing in the time it takes to read the layers (below). It listens at once and answers
-  `/readyz` 503 until it has, so a liveness probe never kills a node that is still reading.
+- **Disaster recovery.** The write backend (the data folder, or the bucket) is the only state. Back it up, replicate or version it as you
+  do any data; a server is rebuilt from nothing in the time it takes to read the layers (below). It listens at once
+  and answers `/readyz` 503 until it has, so a liveness probe never kills one that is still reading.
 - **A second bucket.** Another team's layers, a device lab, an archive: pass several `--store`s. They are one
   report, attributed to the store they came from.
 
 ## 7. Performance
 
 Measured, not promised (a laptop, a local S3 server, so these are the client's own costs; real S3 adds its
-latency per request, which the node hides by reading 64 at a time):
+latency per request, which the server hides by reading 64 at a time):
 
 | What | Cost |
 | --- | --- |
 | Publish a layer of plain checks | One `HEAD` and two small `PUT`s. Two thousand layers published in under two seconds from one process, in parallel. |
-| Node cold start | About 0.2 ms of CPU per layer, plus S3 latency ÷ 64 per layer: 2,000 layers in well under a second on a fast store, a few seconds on S3. Each layer is read once, ever. |
+| Server start | About 0.2 ms of CPU per layer, plus S3 latency ÷ 64 per layer: 2,000 layers in well under a second on a fast store, a few seconds on S3. Each layer is read once, ever. |
 | Refresh with nothing new | One `LIST` request for the newest page of the catalog, whatever the history. |
 | The report, to a viewer | One request. 12,000 checks from 2,000 layers is 108 KB gzipped, built once per change. |
-| The viewer asking again | `304 Not Modified` in under a millisecond (it asks every five seconds). |
-| The viewer in a browser | One request for the report, plus the spec index, outline and run index and the specs it opens. None per layer, whatever the history (measured in Chromium against a node reading S3). |
+| The viewer asking again | `304 Not Modified` in under a millisecond. While the live stream is open it asks only when told, and then for only what changed. |
+| The viewer in a browser | One request for the report, plus the spec index, outline and run index and the specs it opens. None per layer, whatever the history (measured in Chromium against a server reading S3). |
 
 How: each layer is folded into the winning result of every check once and dropped unless it still holds a
 winner, so work and memory follow the number of checks. Because the winner rule is a total order, folding in
@@ -305,8 +338,8 @@ leave a source out (which needs the history).
 | `the signature was rejected` | Wrong secret, or wrong region/endpoint for these keys, or the clock is off by more than 15 minutes. |
 | `the bucket does not exist` | Typo, another account, or the store needs `?endpoint=…` (R2, MinIO). |
 | `cannot reach <host>` | Network, DNS or endpoint. Requests are retried with backoff first. |
-| The node says `listening … no store can be reached yet` | The bucket is unreachable from the node. It retries; `/readyz` stays 503 until it can read. |
-| A new layer does not show | Wait one refresh interval (10 s). Check `atlas report status --store <url>` sees it. |
+| The server says `listening … no backend can be read yet` | The bucket is unreachable from the server. It retries; `/readyz` stays 503 until it can read. |
+| A new layer does not show | Uploaded through the server it is there at once: check the token (`401`/`403` say so). Written straight to a bucket, wait one refresh interval (10 s). Check `atlas report status --store <url>` sees it. |
 | Everything is red because of one laptop | By design the newest result wins. Gate on `--ignore-modified` and a branch ([above](#5-choosing-what-takes-part)). |
 | Specs are empty in the viewer | Nothing published with `--specs` yet, or only from a branch other than `main`: set `--outline-branch`. |
 | `Run … is not shared: its privacy scan did not pass` | `--upload-run` refuses runs whose scan found real data. Fix what it found and run again. |

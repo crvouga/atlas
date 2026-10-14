@@ -336,8 +336,11 @@ bunx atlas report status --branch "$BRANCH" --branch main --ignore-modified --re
 ```
 
 Developers publish from their laptops the same way, and `atlas serve` shows everyone the whole
-project. [Running Atlas for a project](deploying.md) is the full guide: the bucket and its IAM policies,
-CI with OIDC, the node, auth and filters.
+project. Better still, point everything at the project's server (`ATLAS_STORE=https://atlas.example.com`,
+`ATLAS_TOKEN=…`): the same commands upload to it, results are in everyone's view at once, `atlas report stream`
+sends a suite's checks as they finish, and the gate is answered by the server. See [the Atlas server](server.md).
+[Running Atlas for a project](deploying.md) is the full guide: the server, the bucket and its IAM policies,
+CI with OIDC, auth and filters.
 
 To fold a directory of layers (an artifact, a laptop's `atlas-reports/`) into the bucket after the fact:
 `atlas report merge --store ./all --into s3://my-bucket/atlas/my-project`. It copies what is missing and is
@@ -458,7 +461,7 @@ An integration is complete when each of these holds. Run them and keep the outpu
 | One environment has no results | No layer from that environment reached the store. Add it to `--require-environments` so CI says so. |
 | `Written with layer schema version 2…` | A newer Atlas wrote it. Upgrade `@crvouga/atlas` where you read it. |
 | `a layer could not be read, so its outcome is unknown` | A corrupted or half-copied file. Re-run that node's publish and merge again. |
-| `atlas report: Store directory not found` (exit 2) | A `--store` path does not exist. Check the path, and whether the node that should have produced it uploaded its layers. |
+| `atlas report: Store directory not found` (exit 2) | A `--store` path does not exist. Check the path, and whether the server that should have produced it uploaded its layers. |
 | `X is unavailable` | A backend is down. The rest were combined; fix it or leave it out. |
 | `check id "…" appears twice` | Your suite emits two checks with one name. Make the names unique. Importers number repeats as `#2`. |
 | `Potentially outdated: spec changed` | The spec changed since the layer was recorded. Advisory: the recorded outcome still counts. Re-run to refresh. |
