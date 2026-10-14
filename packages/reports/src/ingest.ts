@@ -72,6 +72,11 @@ export function checksFromCtrf(report: unknown): IngestedChecks {
   return { checks: uniqueChecks(checks), hints, recordedAtMs: finite(summary.stop) ?? finite(summary.start), tool: text(record(results.tool).name) || null };
 }
 
+/** Many JUnit writers omit the offset. Read such a time as UTC, so it is the same wherever Atlas runs. */
+function parseTimestamp(value: string): number {
+  return Date.parse(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value) ? `${value}Z` : value);
+}
+
 /** A JUnit XML report: one check per `<testcase>`, identified by its file or class and its name. */
 export function checksFromJunit(xml: string): IngestedChecks {
   const cases = parseJunit(xml);
@@ -89,7 +94,7 @@ export function checksFromJunit(xml: string): IngestedChecks {
     };
   });
   const hints = cases.map(item => [item.classname, item.suite, item.file].filter(Boolean));
-  const stamps = [...xml.matchAll(/<testsuite\b[^>]*\stimestamp="([^"]+)"/g)].map(match => Date.parse(match[1]!)).filter(Number.isFinite);
+  const stamps = [...xml.matchAll(/<testsuite\b[^>]*\stimestamp="([^"]+)"/g)].map(match => parseTimestamp(match[1]!)).filter(Number.isFinite);
   return { checks: uniqueChecks(checks), hints, recordedAtMs: stamps.length ? Math.max(...stamps) : null, tool: null };
 }
 

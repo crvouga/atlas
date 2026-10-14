@@ -117,3 +117,19 @@ describe('ingesting the reports tools already write', () => {
     expect(() => checksFromManifest({})).toThrow('Not an Atlas manifest');
   });
 });
+
+describe('JUnit as real tools write it', () => {
+  test('a self-closing empty suite does not swallow the suite after it', () => {
+    const result = checksFromJunit('<testsuites><testsuite name="empty" tests="0"/><testsuite name="Login" file="specs/login.feature"><testcase name="a"/></testsuite></testsuites>');
+    expect(result.checks.map(item => item.id)).toEqual(['specs/login.feature > a']);
+    expect(result.hints).toEqual([['Login', 'specs/login.feature']]);
+  });
+
+  test('a time with no offset is read as UTC, so the layer is the same wherever Atlas runs', () => {
+    const at = (stamp: string) => checksFromJunit(`<testsuites><testsuite name="s" timestamp="${stamp}"><testcase name="a"/></testsuite></testsuites>`).recordedAtMs;
+    expect(at('2024-01-01T00:00:00')).toBe(Date.UTC(2024, 0, 1));
+    expect(at('2024-01-01T00:00:00.250')).toBe(Date.UTC(2024, 0, 1) + 250);
+    expect(at('2024-01-01T00:00:00Z')).toBe(Date.UTC(2024, 0, 1));
+    expect(at('2024-01-01T02:00:00+02:00')).toBe(Date.UTC(2024, 0, 1));
+  });
+});

@@ -90,7 +90,8 @@ function parseSuite(tag: string, body: string, out: JunitCase[]): void {
 /** Parse the `<testcase>` elements of a JUnit XML document. */
 export function parseJunit(xml: string): JunitCase[] {
   const cases: JunitCase[] = [];
-  const suiteRe = /<testsuite\b([^>]*)>([\s\S]*?)<\/testsuite>/g;
+  // A self-closing `<testsuite …/>` is an empty suite: it must not swallow the next suite's cases.
+  const suiteRe = /<testsuite\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testsuite>)/g;
   for (let suite = suiteRe.exec(xml); suite; suite = suiteRe.exec(xml)) {
     parseSuite(suite[1] ?? '', suite[2] ?? '', cases);
   }
