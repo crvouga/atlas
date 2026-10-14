@@ -1,3 +1,14 @@
+/**
+ * @module Bun WebView driver
+ *
+ * `bunWebViewDriver()` is the core `Driver` that runs a statechart's paths in Bun's built-in headless browser
+ * (`Bun.WebView`), the quickest way to run a chart against a real page. It provides a `WebViewContext` whose
+ * `user.tap` and `user.type` act on `Signal`s, found by the shared in-page DOM probe from core, so an implementation
+ * written against `SignalContext` runs here and on the other web drivers unchanged. `Bun.WebView` is typed
+ * structurally (`BunWebView`), so this package builds without Bun's types; at run time the Bun runtime is required.
+ *
+ * @see docs/statecharts.md
+ */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -46,6 +57,7 @@ export type WebViewContext = SignalContext & {
   };
 };
 
+/** Options of `bunWebViewDriver`; every field is optional. */
 export type BunWebViewDriverOptions = {
   /** Where `goto` paths resolve; the implementation's setup decides where to open. */
   baseUrl?: string | (() => string | Promise<string>);
@@ -56,7 +68,10 @@ export type BunWebViewDriverOptions = {
   backend?: 'webkit' | 'chrome';
   /** How long a tap waits for its target to show, in milliseconds (default 10 000). */
   actionTimeoutMs?: number;
-  /** Showcase pacing, in milliseconds. */
+  /**
+   * Showcase pacing, in milliseconds: the hold before each event runs and after its state shows (default 400 and
+   * 900).
+   */
   pacing?: { before: number; after: number };
   /** Views open at once (one per worker); 8 when omitted. */
   concurrency?: number;
@@ -112,11 +127,34 @@ function contextFor(view: BunWebView, baseUrl: string | undefined, timeline: Tim
 }
 
 /**
- * Drive a web app in Bun's built-in headless browser: the system WebKit on macOS (nothing to
- * install), Chrome over CDP elsewhere. A view starts in milliseconds and screenshots take about
- * ten, so it is the quickest way to run a chart against a real page. Clips are encoded from
- * screenshots with FFmpeg. Needs the Bun runtime; there is no fake clock, so time events use the
- * app's own controls.
+ * Drives a web app in Bun's built-in headless browser for `atlas run`: the system WebKit on macOS (nothing to
+ * install), Chrome over CDP elsewhere. A view starts in milliseconds and screenshots take about ten, so it is the
+ * quickest way to run a chart against a real page. Each path attempt gets its own view, closed afterwards. Screenshots
+ * are PNG files without a thumbnail. Clips are encoded from screenshots with FFmpeg (no clip is recorded without it).
+ * `user.tap` and `user.type` wait up to `actionTimeoutMs` for the target signal to show, then click its centre; a
+ * target that never shows fails the step with "<signal> is not on screen". Needs the Bun runtime (run
+ * `bun --bun atlas run`), and throws on open without it. There is no fake clock, so time events use the app's own
+ * controls.
+ *
+ * @see docs/statecharts.md
+ *
+ * @example
+ * ```ts
+ * import { defineConfig } from '@crvouga/atlas';
+ * import { bunWebViewDriver, screen, text } from '@crvouga/atlas/bun';
+ *
+ * export default defineConfig({
+ *   specs: './specs',
+ *   driver: () => bunWebViewDriver({ baseUrl: 'http://127.0.0.1:4317' }),
+ *   implementation: {
+ *     async setup(ctx) { await ctx.goto('/'); },
+ *     events: {
+ *       // one entry per event of the spec
+ *     },
+ *     states: { 'No todos': screen({ all: [text('Nothing to do yet')] }) }
+ *   }
+ * });
+ * ```
  */
 export function bunWebViewDriver(options: BunWebViewDriverOptions = {}): Driver<WebViewContext> {
   const width = options.width ?? 390;
@@ -148,5 +186,12 @@ export function bunWebViewDriver(options: BunWebViewDriverOptions = {}): Driver<
   };
 }
 
-/** A state recognised from its signals in the page: every `all` visible and no `none` visible. */
+/**
+ * Builds a state implementation for a `WebViewContext` from its signals in the page: every `all` signal visible, one
+ * `any` signal visible (when given), no `none` signal visible. It is core's `signatureScreen` over `ctx.isVisible`, so
+ * it takes the same spec as `screen` from `@crvouga/atlas/signals` (`checks`, `transient`, `sameAs`, `lookIn`,
+ * `settle` included).
+ *
+ * @see docs/statecharts.md
+ */
 export const screen = signatureScreen<WebViewContext>((ctx, signal) => ctx.isVisible(signal), describeSignal);

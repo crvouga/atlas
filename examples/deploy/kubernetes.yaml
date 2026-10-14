@@ -1,0 +1,52 @@
+# The Atlas server on Kubernetes (EKS): ONE copy, because it is a singleton for the project. It holds nothing of its own:
+# results are kept in the bucket (ATLAS_WRITE), so a pod that is replaced loses nothing and starts from the bucket.
+# The service account's role needs the `publisher` policy, since uploads are written through it
+# (`atlas report policy --store <url> --role both`).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlas
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/atlas-publisher   # replace
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas
+spec:
+  replicas: 1
+  strategy: { type: Recreate }   # never two writers of one report's live view
+  selector:
+    matchLabels: { app: atlas }
+  template:
+    metadata:
+      labels: { app: atlas }
+    spec:
+      serviceAccountName: atlas
+      containers:
+        - name: atlas
+          image: ghcr.io/your-org/atlas:latest   # build examples/deploy/Dockerfile and push it
+          ports:
+            - containerPort: 8080
+          env:
+            - { name: ATLAS_STORE, value: "project=s3://my-bucket/atlas/my-project" }
+            - { name: ATLAS_WRITE, value: project }
+            - { name: AWS_REGION, value: us-east-1 }
+            # Create this secret with long random tokens: CI and laptops upload with `publish`, dashboards read with `read`.
+            - { name: ATLAS_PUBLISH_TOKEN, valueFrom: { secretKeyRef: { name: atlas, key: publish } } }
+            - { name: ATLAS_READ_TOKEN, valueFrom: { secretKeyRef: { name: atlas, key: read } } }
+            - { name: ATLAS_DATA, value: /tmp/atlas-data }
+          readinessProbe: { httpGet: { path: /readyz, port: 8080 }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: 8080 }, periodSeconds: 15 }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas
+spec:
+  selector: { app: atlas }
+  ports:
+    - { port: 80, targetPort: 8080 }

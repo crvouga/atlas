@@ -1,3 +1,10 @@
+/**
+ * @module Commit list route
+ *
+ * The handler for the reports list: commits of the shared store newest first, the evidence versions found in the
+ * stores, and the checkout when there is one. It degrades to the local view instead of failing when the shared store
+ * is down.
+ */
 import type { WorkspaceReports } from './explorer-types';
 import { listExplorerVersions } from './explorer-versions';
 import { listCommits } from './read';
@@ -6,6 +13,15 @@ import type { ReportsExplorerDeps } from './reports-explorer-route';
 
 const NO_STORE = { 'cache-control': 'no-store' } as const;
 
+/**
+ * Returns the handler for `GET /`: `{ commits, cursor, evidenceVersions?, workspace?, notice? }`.
+ *
+ * `commits` are the shared store's, 30 per page, continued with `?cursor=`. `evidenceVersions` (first page only) are
+ * the distinct versions found in the shared and local stores. 503 `reports_unavailable` when there is no shared
+ * store, no workspace and no local store. With no shared store it answers no commits and a notice; when listing the
+ * shared store throws and there is a workspace, it answers from the local store with a notice, otherwise the error
+ * propagates. Always `no-store`.
+ */
 export function reportsListRoute(deps: ReportsExplorerDeps) {
   return async (c: Context) => {
     const workspace = await deps.workspace?.();

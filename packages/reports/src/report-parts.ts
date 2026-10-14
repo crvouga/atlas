@@ -1,3 +1,11 @@
+/**
+ * @module Report parts of a commit
+ *
+ * Reads, writes and validates "parts": one producer's checks for one commit, stored under
+ * `commits/<sha>/parts/<producer>/` in the older commit-keyed layout. Publishing a part also publishes it as an
+ * immutable layer, so it composes with everything else; reading parts picks the latest per producer for the explorer.
+ * A part that is corrupt or belongs to another commit fails visibly instead of being skipped.
+ */
 import { normalizeEnvironment } from './layer-axes';
 import { publishLayer } from './layer-store';
 import { readCommit } from './read';
@@ -11,6 +19,7 @@ import { isCommitSha, isKeySegment } from './keys';
 
 const STATUSES = new Set(['passed', 'failed', 'running', 'not-run']);
 
+/** The status of a whole part: `failed` if any check failed, else `running` if any is running, else `not-run` if it has no checks or any is `not-run`, else `passed`. */
 export function partStatus(part: ReportPart): EvidenceStatus {
   const statuses = part.checks.map((check) => check.status);
   if (statuses.includes('failed')) return 'failed';
@@ -19,6 +28,13 @@ export function partStatus(part: ReportPart): EvidenceStatus {
   return 'passed';
 }
 
+/**
+ * Throws unless `part` is well formed: a 40-hex `sha`, an `id` usable as a key segment, a non-empty `kind` and
+ * `title`, a non-negative safe-integer `recordedAtMs`, string `parameters` values, and checks with a unique non-empty
+ * `id`, non-empty `title`, a string `detail`, one of the four statuses and finite-number measurements with a name and
+ * unit. The error is `Invalid report part`, `Invalid report parameters`, `Invalid evidence check` or `Invalid evidence
+ * measurement`; it does not say which field.
+ */
 export function validatePart(part: ReportPart): void {
   if (
     !isCommitSha(part.sha) ||
@@ -66,7 +82,14 @@ function partsPrefix(sha: string): string {
   return `commits/${sha}/parts/`;
 }
 
-/** Each producer owns a separate key, independent of the spec-run attempt. */
+/**
+ * Stores a part and publishes it as a layer. Validates first (`validatePart`, which throws and writes nothing).
+ *
+ * Each producer owns a separate key, `commits/<sha>/parts/<id>/<recordedAtMs>-<sha256 of the JSON>.json`, independent
+ * of the spec-run attempt, so republishing identical content rewrites the same key. It then records the commit as an
+ * explorer version and publishes a layer (producer `part.id`, environment from the `environment` parameter, the
+ * commit's branch and run URL when a commit record exists, the commit's spec inventory) with no captured files.
+ */
 export async function publishPart(
   store: ObjectStore,
   part: ReportPart
@@ -95,7 +118,13 @@ export async function publishPart(
   }, (async function* () {})());
 }
 
-/** Latest result per producer, sorted stably; corrupt evidence fails visibly. */
+/**
+ * Reads the latest part of every producer for a commit (see `latestParts`), sorted by kind then id.
+ *
+ * Throws `Invalid commit` for a sha that is not 40 hex, a validation error (see `validatePart`) or a `SyntaxError` for
+ * a part that is corrupt, `Report part disappeared` when a listed part vanishes, and `Report part belongs to another
+ * commit` when a part's `sha` or `id` does not match its key. Corrupt evidence fails visibly; it is never skipped.
+ */
 export async function readParts(
   store: ObjectStore,
   sha: string
@@ -115,7 +144,12 @@ export async function readParts(
   return latestParts(parts);
 }
 
-/** Ties are conservative and independent of write/list order. */
+/**
+ * Keeps one part per producer id and sorts by kind then id. The newer `recordedAtMs` wins; at the same time the more
+ * severe status wins (`failed`, then `running`, then `not-run`, then `passed`); at the same status the greater JSON
+ * text wins, so the answer is independent of write and list order. This is not the layer winner rule: here a newer
+ * unfinished part replaces an older completed one.
+ */
 export function latestParts(
   parts: readonly ReportPart[]
 ): readonly ReportPart[] {

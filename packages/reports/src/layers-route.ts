@@ -1,3 +1,17 @@
+/**
+ * @module Layers HTTP routes
+ *
+ * The read-only HTTP API the viewer uses to see layers: a paged list of layer headers merged from every backend, the
+ * rows of one layer, its attachments and recorded timelines, the live runs still writing on this machine, and the
+ * spec outline. It is mounted under `/api/reports` by `reportsHost` and by the Atlas server. Immutable layers (64-hex
+ * ids) are read once and cached for good and answered with long-lived `immutable` cache headers; mutable commit-keyed
+ * recordings are re-read after a short wait. A backend that cannot be listed or a layer that cannot be read becomes a
+ * notice in the page, never a silent omission and never a pass. Layers the host's `include` filter rejects are absent
+ * from every route here, so a filter cannot be undone by asking for history.
+ *
+ * @see docs/server.md
+ * @see docs/report-contract.md#failure-behaviour
+ */
 import { Hono } from 'hono';
 import { createBundleReader } from './bundle';
 import { eachLimited } from './completion-order';
@@ -5,8 +19,10 @@ import { createLiveEvidence, liveRunRecord, type LiveRunRecord } from './evidenc
 import type { ActiveRun, BackendInfo, EvidencePage, LayerEvidence, LayerHeader, LayerRows } from './evidence-types';
 import { isFramePath, isKeySegment } from './keys';
 import { catalogEntries, catalogLayers } from './layer-catalog';
+import { attachmentResponse } from './attachment-response';
+import { checkDetailOf, runEvidence } from './evidence-detail';
 import { layerEvidence } from './layer-merge';
-import { readLayer } from './layer-store';
+import { layerSummary, readLayer } from './layer-store';
 import { readBytes, readUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
 import { SPEC_RUN_ID } from './publish';
@@ -18,11 +34,13 @@ const LOCAL_TTL = 1_500;
 const PAGE = 40;
 const CACHED_ENTRIES = 4_096;
 
-/** A further store whose layers join the combined report, beside the local and the shared one. */
+/** A further store whose layers join the combined report, beside the local and the shared one. Passed as `backends` in `ReportsAppDeps`. */
 export type ReportBackend = {
-  /** Stable and unique: letters, digits and hyphens. `local` and `shared` are taken. */
+  /** Stable and unique: lowercase letters, digits and hyphens. `local` and `shared` are taken. Appears in cursors and URLs. */
   readonly id: string;
+  /** Human name shown for the backend in the viewer. */
   readonly label: string;
+  /** Where the backend's layers are read from. */
   readonly store: ObjectStore;
 };
 
@@ -30,10 +48,18 @@ type Backend = ReportBackend & { readonly live: boolean };
 type Listing = { at: number; keys: readonly string[]; available: boolean };
 type Entry = { readonly backend: number; readonly key: string };
 
+/** The id of the backend for this machine's own store (`localStore`), where runs may still be writing. */
 export const LOCAL_BACKEND = 'local';
+/** The id of the backend for the shared reports store (`store`). */
 export const SHARED_BACKEND = 'shared';
 
-/** The stores that contribute layers, in the order they answer for a recording. */
+/**
+ * The stores that contribute layers, in the order they answer for a recording: `localStore` (id `local`, live), then
+ * `store` (id `shared`) when it is a different store, then each of `backends`.
+ *
+ * Throws `Invalid report backend id: "<id>"` when an extra backend's id is not lowercase letters, digits and hyphens
+ * or repeats an earlier id (including `local` and `shared`).
+ */
 export function reportBackends(deps: ReportsAppDeps): Backend[] {
   const backends: Backend[] = [];
   if (deps.localStore) backends.push({ id: LOCAL_BACKEND, label: 'This machine', store: deps.localStore, live: true });
@@ -45,13 +71,35 @@ export function reportBackends(deps: ReportsAppDeps): Backend[] {
   return backends;
 }
 
+/** Whether a layer id is a content digest (64 lowercase hex digits), that is an immutable layer. */
 function archived(id: string): boolean {
   return /^[0-9a-f]{64}$/.test(id);
 }
 
-/** Bounded pages of layer origins, each layer's checks read once, and the runs still writing. */
+/**
+ * Builds the Hono app that serves layers: bounded pages of layer origins, each layer's checks read once, and the
+ * runs still writing. Throws (as `reportBackends`) when a backend id is invalid.
+ *
+ * Routes, relative to where it is mounted:
+ * - `GET /outline` the current specs as `{ specs, sha, changedFiles }` (503 when the host has no outline), cached 30 s.
+ * - `GET /outline/spec?path=` one outline spec's text; 404 for a path not in the outline.
+ * - `GET /evidence?cursor=&retry=` one page of layer headers (`EvidencePage`) from 40 catalog entries across all
+ *   backends: immutable layers newest first, then commit-keyed recordings. Without a cursor it also carries the live
+ *   runs of this machine. `cursor` is the previous page's; 409 when it no longer matches the listing (refresh).
+ *   Any `retry` value re-lists backends that were unavailable now instead of after the wait.
+ * - `GET /evidence/rows/:backend/:id` the checks and spec fingerprints of one layer (`LayerRows`).
+ * - `GET /evidence/detail/:backend/:id?check=&kind=` the run-level evidence of an immutable layer, or one check's detail.
+ * - `GET /layers/:id/blobs/*` an attachment of an immutable layer by its bundle key, served by `attachmentResponse`.
+ * - `GET /layers/:id/*` the recorded `frame.css`, `tests/<test>/report.json` and `tests/<test>/files/<frame>` of a layer.
+ * - `GET /live/:source/frame.css` and `GET /live/:source/tests/:testId/*` the same for a run still writing (uncached).
+ *
+ * Directory listings are cached for 30 s (1.5 s for the local store). A listing that fails keeps the previous keys and
+ * marks the backend unavailable; the page then carries a notice.
+ */
 export function createLayersApp(deps: ReportsAppDeps) {
   const backends = reportBackends(deps);
+  // Layers the host leaves out are left out of every route, so a filter cannot be undone by asking for history.
+  const include = deps.include ?? (() => true);
   const listings: (Listing | undefined)[] = backends.map(() => undefined);
   let pending: Promise<Entry[]> | null = null;
   const loaded = new Map<string, { at: number; value: Promise<readonly LayerEvidence[]> }>();
@@ -121,8 +169,9 @@ export function createLayersApp(deps: ReportsAppDeps) {
     let reader = readers.get(id);
     if (!reader) {
       for (const backend of backends) {
-        const layer = await readLayer(backend.store, id);
-        if (!layer) continue;
+        const layer = await readLayer(backend.store, id).catch(() => null);
+        // A layer the host leaves out has no files to give either.
+        if (!layer || !include(layerEvidence(layerSummary(layer), backend.id).layer)) continue;
         reader = createBundleReader(backend.store, layer.bundle);
         if (readers.size >= 8) readers.delete(readers.keys().next().value!);
         readers.set(id, reader);
@@ -185,7 +234,7 @@ export function createLayersApp(deps: ReportsAppDeps) {
     for (const [i, listing] of listings.entries()) if (listing && !listing.available) notices.push(`${backends[i]!.label} is unavailable. Layers already loaded remain usable.`);
     await eachLimited(selected, 8, async entry => {
       try {
-        for (const evidence of await entryEvidence(entry)) layers.push(evidence.layer);
+        for (const evidence of await entryEvidence(entry)) if (include(evidence.layer)) layers.push(evidence.layer);
       } catch {
         notices.push('A report layer could not be loaded. Its outcome is unknown.');
       }
@@ -206,9 +255,32 @@ export function createLayersApp(deps: ReportsAppDeps) {
     const backend = backends.findIndex(known => known.id === c.req.param('backend'));
     const id = c.req.param('id');
     const evidence = backend < 0 ? null : await findEvidence(backend, id);
-    if (!evidence) return c.notFound();
+    if (!evidence || !include(evidence.layer)) return c.notFound();
     const rows: LayerRows = { id: evidence.id, rows: evidence.rows, fingerprints: evidence.fingerprints };
     return c.json(rows, 200, { 'cache-control': archived(id) ? 'public, max-age=31536000, immutable' : 'no-cache' });
+  });
+  // The files a layer carries for its checks: screenshots, videos, traces, logs, snapshots, anything.
+  app.get('/layers/:id/blobs/*', async c => {
+    const id = c.req.param('id');
+    let key: string;
+    try { key = decodeURIComponent(new URL(c.req.url).pathname.split(`/layers/${id}/blobs/`)[1] ?? ''); }
+    catch { return c.json({ error: 'Invalid attachment path' }, 400); }
+    if (!archived(id) || !key || key.split('/').some(part => !part || part === '.' || part === '..')) return c.notFound();
+    const entry = await file(id, key);
+    return entry ? attachmentResponse(c.req.raw, entry, `"${id.slice(0, 16)}-${key.replace(/[^\w.-]/g, '_')}"`) : c.notFound();
+  });
+  // Everything one result carries: its timeline, attachments, annotations, retries and extensions.
+  app.get('/evidence/detail/:backend/:id', async c => {
+    const backend = backends.find(known => known.id === c.req.param('backend'));
+    const id = c.req.param('id');
+    if (!backend || !archived(id)) return c.notFound();
+    const layer = await readLayer(backend.store, id).catch(() => null);
+    if (!layer || !include(layerEvidence(layerSummary(layer), backend.id).layer)) return c.notFound();
+    const checkId = c.req.query('check');
+    const headers = { 'cache-control': 'public, max-age=31536000, immutable' };
+    if (checkId === undefined) return c.json({ layer: id, run: runEvidence(layer) }, 200, headers);
+    const detail = checkDetailOf(layer as never, checkId, c.req.query('kind'));
+    return detail ? c.json(detail, 200, headers) : c.notFound();
   });
   app.get('/layers/:id/*', async c => {
     const id = c.req.param('id');

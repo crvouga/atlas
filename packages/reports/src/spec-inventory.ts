@@ -1,3 +1,10 @@
+/**
+ * @module Spec inventory of a commit
+ *
+ * The older, commit-keyed record of which spec documents a commit has: `commits/<sha>/inventory.json` (the entries) and
+ * `commits/<sha>/specs/<path>` (their bodies). Document bodies are written first, so an inventory always names readable
+ * content. The newer form is the spec set (`spec-set.ts`).
+ */
 import { textFingerprint } from './layer-merge';
 import { readUtf8, writeUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
@@ -6,6 +13,7 @@ import type { SpecEntry, SpecInventory } from './explorer-types';
 import { recordExplorerVersion } from './explorer-versions';
 import { isCommitSha } from './keys';
 
+/** Whether `path` is a safe spec path: starts with `specs/` and no segment is empty, `.`, `..`, or contains a backslash or control character. */
 export function isSpecPath(path: string): boolean {
   return (
     path.startsWith('specs/') &&
@@ -21,6 +29,12 @@ export function isSpecPath(path: string): boolean {
   );
 }
 
+/**
+ * Describes one spec document: its `path`, a text `fingerprint`, a `kind` (the file extension, `openslo` for
+ * `*.openslo.yaml`, `document` when there is none), a `title` (the first `Feature:` line, else the first `# ` heading,
+ * else the file name) and a `domain` (the folder right under `specs/`, or `Overview` for a file directly in it).
+ * Throws `Invalid spec path` unless `isSpecPath(path)`.
+ */
 export function specEntry(path: string, content: string): SpecEntry {
   if (!isSpecPath(path)) throw new Error('Invalid spec path');
   const file = path.split('/').at(-1) ?? path;
@@ -51,7 +65,12 @@ function documentKey(sha: string, path: string): string {
   return `commits/${sha}/specs/${encodeURIComponent(path)}`;
 }
 
-/** Publish document bodies first; an inventory always names readable content. */
+/**
+ * Publishes a commit's spec documents and its inventory, and returns the inventory (entries sorted by path).
+ * Publish document bodies first; an inventory always names readable content. Throws `Duplicate spec` for a repeated
+ * path (before writing anything), `Invalid spec path` or `Invalid commit` for malformed input. Publishing the same
+ * documents again writes the same keys.
+ */
 export async function publishInventory(
   store: ObjectStore,
   args: {
@@ -86,6 +105,7 @@ export async function publishInventory(
   return inventory;
 }
 
+/** Reads a commit's inventory, or `null` when it has none. Throws `Invalid spec inventory` when the stored one is for another sha, malformed, or names an unsafe path, and `Invalid commit` for a bad sha. */
 export async function readInventory(
   store: ObjectStore,
   sha: string
@@ -102,6 +122,7 @@ export async function readInventory(
   return inventory;
 }
 
+/** Reads one spec document's text, or `null` when the commit has no inventory or the inventory does not list `path`. Throws `Invalid spec path` for an unsafe path. */
 export async function readSpecDocument(
   store: ObjectStore,
   sha: string,

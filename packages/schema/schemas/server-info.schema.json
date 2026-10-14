@@ -1,0 +1,114 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/server-info.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "atlas"
+    },
+    "version": {
+      "description": "The @crvouga/atlas version the server runs, or null when it does not know",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "role": {
+      "description": "What the token of this request may do. A server with no tokens treats everyone as admin",
+      "type": "string",
+      "enum": [
+        "read",
+        "publish",
+        "admin"
+      ]
+    },
+    "open": {
+      "description": "True when the server has no tokens at all",
+      "type": "boolean"
+    },
+    "write": {
+      "description": "The id of the backend uploads go to",
+      "type": "string"
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "viewers": {
+      "description": "Viewers connected to /api/events right now",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "time": {
+      "description": "The server clock, epoch milliseconds",
+      "type": "number"
+    },
+    "backends": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "write": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "available",
+          "write"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "layers": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "slots": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "capabilities": {
+      "description": "Features this server has, by name: `events`, `ingest`, `store`, `checks`, `status`, `effective`. A client checks a name before using what it names",
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    }
+  },
+  "required": [
+    "name",
+    "version",
+    "role",
+    "open",
+    "write",
+    "ready",
+    "viewers",
+    "time",
+    "backends",
+    "layers",
+    "slots",
+    "capabilities"
+  ],
+  "additionalProperties": {}
+}

@@ -1,10 +1,10 @@
-import type { ObjectStore, StoredObject } from '../src/object-store';
+import type { ObjectStore, PagedListing, StoredObject } from '../src/object-store';
 import { ObjectStoreWithPrefix } from '../src/store-prefix';
 
 /** An in-memory store for tests, with a switch that makes every read fail like an unreachable service. */
-export function memoryStore(): ObjectStore & { down: boolean; lists: number } {
+export function memoryStore(): ObjectStore & PagedListing & { down: boolean; lists: number } {
   const objects = new Map<string, { bytes: Uint8Array; contentType: string }>();
-  const store: ObjectStore & { down: boolean; lists: number } = {
+  const store: ObjectStore & PagedListing & { down: boolean; lists: number } = {
     down: false,
     lists: 0,
     async get(key): Promise<StoredObject | null> {
@@ -33,6 +33,13 @@ export function memoryStore(): ObjectStore & { down: boolean; lists: number } {
       if (store.down) throw new Error('store unavailable');
       store.lists += 1;
       return [...objects.keys()].filter(key => key.startsWith(prefix)).sort();
+    },
+    async listPage(prefix = '', options = {}) {
+      if (store.down) throw new Error('store unavailable');
+      store.lists += 1;
+      const all = [...objects.keys()].filter(key => key.startsWith(prefix) && (options.after === undefined || key > options.after)).sort();
+      const keys = all.slice(0, options.limit ?? 1000);
+      return { keys, next: all.length > keys.length ? keys.at(-1)! : null };
     },
     withPrefix(prefix) {
       return new ObjectStoreWithPrefix(store, prefix);

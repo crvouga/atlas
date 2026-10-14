@@ -1,19 +1,36 @@
+/**
+ * @module Chart graph simulator
+ *
+ * A pure, deterministic simulator over a composed machine (see `composeCharts`): given a
+ * configuration and an event it computes the next configuration and names the transitions that
+ * fired. The planner, linter and runner all use it to reason about a chart without running
+ * the product. It never executes guards or actions (the linter rejects charts that have them), and
+ * it identifies states by name alone, so names must be unique across the composed product.
+ *
+ * @see docs/statecharts.md
+ */
 import { createMachine, initialTransition, transition } from 'xstate';
 
 import type { HandOff } from './spec/compose';
 import type { MachineConfig, StateConfig } from './spec/types';
 import { targetOf, transitionId, walkStates } from './spec/types';
 
+/** An XState state value: a leaf state's name, or an object mapping each active child to its own value (parallel regions have several keys). */
 export type StateValue = string | { [key: string]: StateValue };
 
+/** One event taken during a replay. */
 export type Step = {
   event: string;
+  /** Ids of the transitions that fired (see `transitionId`). */
   transitions: string[];
+  /** True when the event was inserted automatically because a child chart's final state became active. */
   handOff: boolean;
 };
 
+/** A configuration of the chart: where it is right now. */
 export type Config = {
   value: StateValue;
+  /** Names of every active state, ancestors included (see `activeKeys`). */
   active: string[];
 };
 
@@ -24,6 +41,7 @@ export function configKey(value: StateValue): string {
   return JSON.stringify(canonical(value));
 }
 
+/** Names of every state in a state value, each parent before its children. */
 export function activeKeys(value: StateValue): string[] {
   if (typeof value === 'string') return [value];
   return Object.entries(value).flatMap(([key, child]) => [key, ...activeKeys(child)]);
@@ -34,11 +52,17 @@ export function activeKeys(value: StateValue): string[] {
  * names which transitions fired, so coverage and the report can talk about transitions.
  */
 export class ChartGraph {
+  /** The XState machine built from the composed config, used for transition semantics. */
   readonly machine;
   private readonly nodes = new Map<string, StateConfig>();
   private readonly parentOf = new Map<string, string | null>();
+  /** Hand-off state name to the event it passes to the parent chart. */
   readonly handOffStates: Map<string, string>;
 
+  /**
+   * @param config the composed machine (`composeCharts(bundle).machine`).
+   * @param handOffs the composition's hand-offs; without them `replay` inserts none.
+   */
   constructor(
     readonly config: MachineConfig,
     handOffs: HandOff[] = []
@@ -51,6 +75,7 @@ export class ChartGraph {
     this.handOffStates = new Map(handOffs.map((h) => [h.finalState, h.event]));
   }
 
+  /** The config of the state called `name`, or `undefined` when there is none. */
   node(name: string) {
     return this.nodes.get(name);
   }
@@ -60,14 +85,17 @@ export class ChartGraph {
     return targetOf(this.nodes.get(source)?.on?.[event]);
   }
 
+  /** Whether the state has no child states. */
   isLeaf(name: string) {
     return !this.nodes.get(name)?.states;
   }
 
+  /** The name of the enclosing state, or `null` for a top-level state (or an unknown name). */
   parent(name: string) {
     return this.parentOf.get(name) ?? null;
   }
 
+  /** Every state name in the composed chart, parents before children. */
   stateNames() {
     return [...this.nodes.keys()];
   }
@@ -108,6 +136,7 @@ export class ChartGraph {
     return [...keyed.values()];
   }
 
+  /** The configuration the chart starts in. */
   initial(): Config {
     const [snapshot] = initialTransition(this.machine);
     return {
@@ -124,6 +153,7 @@ export class ChartGraph {
     return trail.reduceRight<StateValue | null>((inner, name) => (inner === null ? name : { [name]: inner }), null)!;
   }
 
+  /** Fills a partial state value in with each parent's initial child, returning a complete configuration. */
   resolve(value: StateValue): Config {
     const snapshot = this.machine.resolveState({ value });
     return {
@@ -132,6 +162,7 @@ export class ChartGraph {
     };
   }
 
+  /** Names of the events some active state handles (a state's own or an ancestor's), without duplicates. Whether the event moves anything is for `step` to say. */
   enabledEvents(config: Config) {
     const events = new Set<string>();
     for (const name of config.active) {
@@ -157,6 +188,7 @@ export class ChartGraph {
     return false;
   }
 
+  /** Takes `event` from `config`: the next configuration and the transition ids that fired, or `null` when no active state handles the event. */
   step(config: Config, event: string): { config: Config; fired: string[] } | null {
     const fired = this.firedBy(config, event);
     if (fired.length === 0) return null;

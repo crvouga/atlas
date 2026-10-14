@@ -45,6 +45,27 @@ manager sets it to where you ran the command, or the current directory). With no
 Editing a spec file or a run publishing a snapshot updates the open page in about a second, without a reload,
 keeping selection, zoom and pan.
 
+### Layered reports for any spec
+
+Besides charts and runs, the viewer shows the combined result of every spec (Gherkin, Quint, DMN,
+Alloy, OpenSLO, …) from the layers your suites published. Point `ATLAS_REPORTS_MODULE` at a module in
+your project that exports `reportsDevFetch`, built with `reportsHost` from
+`@crvouga/atlas/reports/host`:
+
+```ts
+// atlas.reports.ts
+import { reportsHost } from '@crvouga/atlas/reports/host';
+
+export const reportsDevFetch = reportsHost({ specs: './specs', stores: ['./atlas-reports'] });
+```
+
+```sh
+ATLAS_REPORTS_MODULE="$(pwd)/atlas.reports.ts" atlas-visualizer dev --specs ./specs
+```
+
+See [integrating Atlas](../../docs/integrating.md#6-browse-it) for publishing layers and the routes
+this serves.
+
 ### Commands
 
 ```sh

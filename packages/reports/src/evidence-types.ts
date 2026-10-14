@@ -1,3 +1,13 @@
+/**
+ * @module Report evidence types
+ *
+ * The shapes the report API and the viewer exchange about layers: a layer's header (origin and totals), its rows
+ * (one per check), the backends that contributed, runs in progress, and the address of a recorded test's
+ * timeline. These are the wire shapes of `/api/reports/*`, so within a version they only gain optional fields.
+ * Also holds {@link recordingPaths}, the one place the URL layout of a recording is defined.
+ *
+ * @see docs/report-contract.md
+ */
 import type { EvidenceMeasurement, EvidenceStatus } from './explorer-types';
 import type { LayerParameters } from './layer-types';
 
@@ -9,60 +19,107 @@ export type RecordingAddress =
 
 /** One store that contributes report layers. */
 export type BackendInfo = {
+  /** Stable backend id (lowercase letters, digits, hyphens); names where a result came from. */
   readonly id: string;
+  /** What a person sees for the backend. */
   readonly label: string;
   /** Spec runs on this machine write here while they are still running. */
   readonly live: boolean;
+  /** False when the backend could not be read; a notice says why, and its results are unknown, not passed. */
   readonly available: boolean;
 };
 
+/** How many results have each status (`passed`, `failed`, `running`, `not-run`). */
 export type StatusCounts = Readonly<Record<EvidenceStatus, number>>;
+
+/**
+ * What a result (or a run) carries beyond its outcome, as counts and short facts: attachments, steps,
+ * annotations, retries, tags, labels, links. It is only there when there is something. The evidence itself
+ * is read when someone opens the result.
+ */
+export type EvidenceSummary = {
+  /** Attachments on the result, including those on its steps and attempts. */
+  readonly attachments: number;
+  readonly steps: number;
+  readonly annotations: number;
+  /** How many tries were recorded when the check was retried. */
+  readonly attempts: number;
+  readonly links: number;
+  readonly tags: readonly string[];
+  readonly labels: Readonly<Record<string, string>>;
+  /** The distinct roles of its attachments (or what their media types say), to show what kind of evidence there is. */
+  readonly roles: readonly string[];
+};
 
 /** A report layer's origin and totals. Its checks are read separately, once. */
 export type LayerHeader = {
+  /** The layer's id: 64 hex digits for an archived layer, `live-<source>` for a live one. */
   readonly id: string;
+  /** The id of the backend it was read from (the one whose id sorts first when several hold it). */
   readonly backend: string;
+  /** The suite or tool that made it. Part of the slot. */
   readonly producer: string;
+  /** The package directory of a spec run, when the layer came from one. */
   readonly packageDir: string | null;
+  /** When the checks ran, epoch milliseconds; the newest completed result wins its slot. */
   readonly recordedAtMs: number;
+  /** Provenance: the commit it was recorded at. Never part of the slot. */
   readonly sha: string | null;
+  /** Provenance: the branch it was recorded on. Never part of the slot. */
   readonly branch: string | null;
   /** The client this layer checked. Null when the layer did not say. */
   readonly environment: string | null;
+  /** Provenance: the CI run that made it. */
   readonly runUrl: string | null;
+  /** Other string choices that make a result its own slot. */
   readonly parameters: LayerParameters;
+  /** `modified`: recorded from a checkout with uncommitted changes; `unknown`: origin not captured; absent: clean. Advisory; never changes a status. */
   readonly freshness?: 'unknown' | 'modified';
+  /** Where this layer's recorded timelines and captured files are read from, or null when it has none. */
   readonly recording: RecordingAddress | null;
   /** From a spec run that has not been collected into a layer yet. */
   readonly live: boolean;
+  /** Its checks by status. Parts of kind `performance` are not counted when anything else was recorded. */
   readonly counts: StatusCounts;
   /** Equal for the mutable and the archived address of one execution. */
   readonly execution: string;
+  /** What the run as a whole carries: its logs, links and labels. */
+  readonly evidence?: EvidenceSummary;
 };
 
 /** One check of one report part. */
 export type LayerRow = {
+  /** The kind of the part holding the check (`behavior`, `performance`, ...). Part of the slot. */
   readonly kind: string;
+  /** The check's stable id. Part of the slot. */
   readonly id: string;
   readonly title: string;
   readonly status: EvidenceStatus;
+  /** The spec the check belongs to (`specs/<path>`), or null. */
   readonly specPath: string | null;
+  /** Why it has this status, for a person; empty when there is nothing to add. */
   readonly detail: string;
   readonly measurements: readonly EvidenceMeasurement[];
   /** The recorded test behind this check, when it has a timeline to open. */
   readonly testId: string | null;
   /** What distinguishes this recorded test from another run of the same check. */
   readonly variant: LayerParameters;
+  /** How long the check took, milliseconds, or null when unknown. */
   readonly durationMs: number | null;
+  /** What this result carries beyond its outcome. Absent when nothing. */
+  readonly evidence?: EvidenceSummary;
 };
 
+/** The checks of one layer, read separately from its header. */
 export type LayerRows = {
+  /** The layer's id. */
   readonly id: string;
   readonly rows: readonly LayerRow[];
   /** Spec path to the fingerprint the layer recorded for it. */
   readonly fingerprints: Readonly<Record<string, string>>;
 };
 
+/** A layer's rows together with its header: everything composition needs to lay the layer over the specs. */
 export type LayerEvidence = LayerRows & { readonly layer: LayerHeader };
 
 /** A spec run that is writing results right now. */
@@ -73,19 +130,30 @@ export type ActiveRun = {
   readonly startedAtMs: number;
   /** Spec files the run planned, when the producer recorded it. */
   readonly plannedChecks?: number;
+  /** Checks finished so far: passed, failed or not-run. */
   readonly completed: number;
+  /** Of those, how many failed. */
   readonly failed: number;
 };
 
+/** One page of the layer listing the viewer reads. */
 export type EvidencePage = {
+  /** The layers on this page, newest first. */
   readonly layers: readonly LayerHeader[];
+  /** Opaque token for the next page, or null at the end. */
   readonly cursor: string | null;
+  /** What could not be read; a gate treats any as unknown, never as a pass. */
   readonly notices: readonly string[];
   readonly backends: readonly BackendInfo[];
+  /** Runs writing results right now. */
   readonly active: readonly ActiveRun[];
 };
 
-/** The report API paths of one recorded test. */
+/**
+ * The report API paths (relative to the reports API root) of one recorded test: its `report` JSON, a `file(path)`
+ * builder for its captured files (each path segment is URL-encoded), and the `css` its snapshots render with.
+ * The layout depends on where the recording lives: an archived layer, a commit (the older layout) or a live run.
+ */
 export function recordingPaths(address: RecordingAddress, testId: string) {
   const test = encodeURIComponent(testId);
   const file = (base: string) => (path: string) =>

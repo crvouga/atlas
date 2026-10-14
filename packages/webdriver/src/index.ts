@@ -1,3 +1,10 @@
+/**
+ * @module WebDriver driver entry point
+ *
+ * Public surface of `@crvouga/atlas/webdriver`: the driver (`webdriverDriver`), the protocol client
+ * (`WebDriverSession`), the shared UI signals, and builders for raw locators that only Appium
+ * understands. Requires a WebDriver server at run time; importing it has no side effects.
+ */
 import type { Locator } from './protocol';
 
 export { webdriverDriver, screen, nativeLocator, type Mode, type Target, type WebDriverContext, type WebDriverDriverOptions, type WebDriverServer } from './driver';
@@ -6,6 +13,7 @@ export { css, label, role, testId, text, describeSignal, type Signal } from '../
 
 /** Appium: an accessibility identifier (iOS) or content description (Android); React Native's `testID`. */
 export const accessibilityId = (value: string): Locator => ({ using: 'accessibility id', value, name: `accessibility id "${value}"` });
+/** An XPath 1.0 expression over the page or Appium source tree. */
 export const xpath = (value: string): Locator => ({ using: 'xpath', value, name: `xpath ${value}` });
 /** Appium iOS: an NSPredicate over the element tree, e.g. `label == "Book" AND type == "XCUIElementTypeButton"`. */
 export const iosPredicate = (value: string): Locator => ({ using: '-ios predicate string', value, name: `predicate ${value}` });

@@ -1,3 +1,15 @@
+/**
+ * @module Bundles of captured files
+ *
+ * Packs many small captured files (screenshots, frames, attachments) into a few gzip-compressed, content-addressed
+ * blobs in an {@link ObjectStore}, and reads single files back out. The bytes of every entry are concatenated into
+ * chunks of at most {@link BUNDLE_BYTES} uncompressed bytes; each chunk is gzipped and stored once at
+ * `<prefix><sha256 of the uncompressed chunk>.gz`, so identical chunks and re-publishes write nothing new. A
+ * {@link BundleIndex} says, per file key, which byte ranges of which blobs hold it. A layer document keeps that
+ * index in its `bundle` field. Blobs are immutable; the index is the only mutable-looking part and is written last.
+ *
+ * @see docs/report-contract.md (where bytes go)
+ */
 import {
   readObjectBytes,
   readUtf8,
@@ -6,15 +18,24 @@ import {
 import type { ObjectStore } from './object-store';
 import { eachLimitedStream } from './completion-order';
 
+/** Uncompressed size of one chunk, in bytes (4 MiB). A file larger than this is split across several chunks. */
 export const BUNDLE_BYTES = 4 * 1024 * 1024;
 type Location = { blob: string; offset: number; size: number };
+/**
+ * Where each file of a bundle is, keyed by the file's key (for a layer, `attachments/<sha256>` and the like).
+ * `parts` lists, in order, the byte ranges (`offset`, `size` within the decompressed blob `blob`, a store key) whose
+ * concatenation is the file.
+ */
 export type BundleIndex = Record<
   string,
   { contentType: string; parts: Location[] }
 >;
+/** One file to bundle, or one file read back. */
 export type BundleEntry = {
+  /** The file's name inside the bundle; the key in the {@link BundleIndex}. A repeated key appends more parts to the same file. */
   key: string;
   bytes: Uint8Array;
+  /** The media type to serve the bytes with. The first entry with a key decides it. */
   contentType: string;
 };
 type BundleWrites = {
@@ -22,6 +43,7 @@ type BundleWrites = {
   pending: Map<string, Promise<void>>;
 };
 
+/** The store key of a commit's bundle index for one source: `commits/<sha>/bundles/<source>.json`. This is the older, per-commit layout; layers hold their index in the layer document instead. */
 export function bundleIndexKey(sha: string, source: string): string {
   return `commits/${sha}/bundles/${source}.json`;
 }
@@ -109,7 +131,13 @@ async function* chunks(
   if (pending.length > 0) yield pending;
 }
 
-/** Four bounded compressed chunks in flight, with one small index published last. */
+/**
+ * Writes `entries` as blobs next to `key` and then the index at `key`: up to four compressed chunks in flight,
+ * with the one small index published last, so a reader never finds an index whose blobs have not arrived.
+ *
+ * Trap: blobs go to `<key up to "/bundles/">/blobs/`, so `key` must contain `/bundles/` (as {@link bundleIndexKey}
+ * gives); otherwise the prefix is computed from a wrong slice.
+ */
 export async function publishBundle(
   store: ObjectStore,
   key: string,
@@ -119,6 +147,15 @@ export async function publishBundle(
   await writeUtf8(store, key, JSON.stringify(index), 'application/json');
 }
 
+/**
+ * Packs `entries` into gzip blobs under `prefix` (for layers, `layers/blobs/`) and returns the index that locates
+ * every file; the caller stores the index (a layer keeps it as its `bundle`).
+ *
+ * The entries are consumed lazily with up to four chunks in flight. A blob that already exists in the store is not
+ * written again (one `head` per distinct blob). The gzip header's timestamp is zeroed, and the blob name is the
+ * SHA-256 of the uncompressed chunk, so the same files in the same order always produce the same blobs. Order of
+ * entries matters for that: chunking follows input order. A store error rejects after started writes settle.
+ */
 export async function writeBundle(store: ObjectStore, entries: AsyncIterable<BundleEntry>, prefix: string): Promise<BundleIndex> {
   const index: BundleIndex = {};
   const writes: BundleWrites = { prefix, pending: new Map() };
@@ -126,7 +163,13 @@ export async function writeBundle(store: ObjectStore, entries: AsyncIterable<Bun
   return index;
 }
 
-/** Cache only immutable blobs; mutable indexes are read for each request. */
+/**
+ * Creates a reader that returns one file of a bundle by key, or `null` when the key is not in `index` or one of
+ * its blobs is missing from the store.
+ *
+ * Only immutable blobs are cached (the last four decompressed blobs, oldest evicted first, including a cached
+ * "missing" answer); mutable indexes are read for each request. Transport errors from the store reject.
+ */
 export function createBundleReader(
   store: ObjectStore,
   index: BundleIndex
@@ -161,6 +204,7 @@ export function createBundleReader(
   };
 }
 
+/** Reads and parses the bundle index at `key`; an index that is not there is an empty bundle (`{}`). Invalid JSON throws. */
 export async function readBundleIndex(
   store: ObjectStore,
   key: string

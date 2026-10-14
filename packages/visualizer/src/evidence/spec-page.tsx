@@ -1,16 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { lazy, Suspense } from 'react';
 
 import { keys, specKey, useAdapter } from '../data/queries';
 import { outlinePath, specFile, specKind } from '../spec-kind';
 import type { SelectCheck } from './check-detail';
-import { DocumentPage } from './document-page';
 import { useEvidence } from './evidence-context';
 import styles from './evidence.module.css';
-import { FeaturePage } from './feature-page';
-import { ModelPage } from './model-page';
 import { Overview } from './overview';
-import { RecordingPage } from './recording-page';
+
+// Each kind of spec has a page with a parser of its own (Gherkin, Quint, DMN); a page loads only the one it shows.
+const DocumentPage = lazy(() => import('./document-page').then((m) => ({ default: m.DocumentPage })));
+const FeaturePage = lazy(() => import('./feature-page').then((m) => ({ default: m.FeaturePage })));
+const ModelPage = lazy(() => import('./model-page').then((m) => ({ default: m.ModelPage })));
+const RecordingPage = lazy(() => import('./recording-page').then((m) => ({ default: m.RecordingPage })));
+
+function Loading({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<article className={styles.page}><p className={styles.aside} role="status">Loading…</p></article>}>{children}</Suspense>;
+}
 
 /** One spec tab: its overview, one of its documents, or a recording opened from that document. */
 export function SpecPage() {
@@ -63,15 +70,17 @@ export function SpecPage() {
     const spec = `${evidence.titleOf(file)}: `;
     const label = slot ? (slot.title.startsWith(spec) ? slot.title.slice(spec.length) : slot.title) : 'Recorded test';
     return (
-      <RecordingPage
-        slot={slot}
-        layerId={search.layer}
-        label={label}
-        back={evidence.titleOf(file)}
-        moment={search.moment ?? null}
-        onMoment={(moment, replace) => void navigate({ search: (prev) => ({ ...prev, moment }), replace })}
-        onClose={() => select({ view: null })}
-      />
+      <Loading>
+        <RecordingPage
+          slot={slot}
+          layerId={search.layer}
+          label={label}
+          back={evidence.titleOf(file)}
+          moment={search.moment ?? null}
+          onMoment={(moment, replace) => void navigate({ search: (prev) => ({ ...prev, moment }), replace })}
+          onClose={() => select({ view: null })}
+        />
+      </Loading>
     );
   }
   if (text.isPending) return <article className={styles.page}><p className={styles.aside} role="status">Loading the {kind.one}…</p></article>;
@@ -86,7 +95,5 @@ export function SpecPage() {
     );
   }
   const page = { file, text: text.data, kind, entry, selection: { check: search.check, layer: search.layer }, select };
-  if (kind.id === 'gherkin') return <FeaturePage {...page} />;
-  if (kind.id === 'quint') return <ModelPage {...page} />;
-  return <DocumentPage {...page} />;
+  return <Loading>{kind.id === 'gherkin' ? <FeaturePage {...page} /> : kind.id === 'quint' ? <ModelPage {...page} /> : <DocumentPage {...page} />}</Loading>;
 }

@@ -1,14 +1,14 @@
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useAtlas } from '../app/atlas-context';
-import { commandKey } from '../find/Finder';
-import { setFinderOpen } from '../find/open';
+import { commandKey, setFinderOpen } from '../find/open';
 import type { AtlasView } from '../data/model';
 import { LATEST } from '../data/queries';
 import { useEvidence } from '../evidence/evidence-context';
 import { plural } from '../evidence/format';
 import { excludedCount } from '../evidence/sources-panel';
+import { eventsAddress, listenLive, useLiveStatus, type ReportAnnouncement } from '../live/live-stream';
 import { kindOfAddress, outlinePath, SPEC_KINDS } from '../spec-kind';
 import { useUiStore } from '../state/ui-store';
 import { DataIssues } from './DataIssues';
@@ -69,6 +69,42 @@ function LiveRuns() {
   );
 }
 
+/** Is this page being kept up to date by its server, and what arrived last. Nothing at all for a static site. */
+function ServerConnection() {
+  const status = useLiveStatus();
+  const [arrival, setArrival] = useState<ReportAnnouncement | null>(null);
+  useEffect(() => {
+    const url = eventsAddress();
+    if (!url) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = listenLive(url, (event) => {
+      if (event.type !== 'report' || !event.report.added.length) return;
+      setArrival(event.report);
+      clearTimeout(timer);
+      timer = setTimeout(() => setArrival(null), 8_000);
+    });
+    return () => {
+      clearTimeout(timer);
+      stop();
+    };
+  }, []);
+  if (status === 'off') return null;
+  const first = arrival?.added[0];
+  const failed = arrival?.added.reduce((sum, layer) => sum + (layer.counts?.failed ?? 0), 0) ?? 0;
+  return (
+    <span className={styles.connection} data-status={status} role="status" title={status === 'live' ? 'This page updates as results reach the server.' : status === 'connecting' ? 'Connecting to the server.' : 'The connection to the server was lost. Trying again; the report on screen is the last one received.'}>
+      <span className={styles.connectionDot} aria-hidden="true" />
+      {arrival && first
+        ? `${first.producer}${first.environment ? ` · ${first.environment}` : ''}${arrival.addedTotal > 1 ? ` +${arrival.addedTotal - 1}` : ''}${failed ? ` · ${plural(failed, 'failure', 'failures')}` : ' · new results'}`
+        : status === 'live'
+          ? 'Live'
+          : status === 'connecting'
+            ? 'Connecting'
+            : 'Reconnecting'}
+    </span>
+  );
+}
+
 function SourcesButton() {
   const { layers, ready, unavailable, excluded } = useEvidence();
   const setOpen = useUiStore((s) => s.setSourcesOpen);
@@ -116,6 +152,7 @@ export function Header() {
         ))}
       </nav>
       <div className={styles.tools}>
+        <ServerConnection />
         <LiveRuns />
         {!kind && view && <RunPicker view={view} />}
         {!kind && view && <DataIssues issues={view.issues} />}

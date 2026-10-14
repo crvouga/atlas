@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "producer": "gherkin",
+  "recordedAtMs": 1760000000000,
+  "sha": "0123456789abcdef0123456789abcdef01234567",
+  "branch": "main",
+  "runUrl": "https://ci.example.com/runs/42",
+  "environment": "ios",
+  "parameters": { "device": "iphone-15" },
+  "specs": [
+    { "path": "specs/join.feature", "domain": "list", "kind": "feature", "title": "Join a list", "fingerprint": "13:1a2b3c:4d5e6f" }
+  ],
+  "parts": [
+    {
+      "sha": "0123456789abcdef0123456789abcdef01234567",
+      "id": "gherkin",
+      "kind": "behavior",
+      "title": "Gherkin",
+      "recordedAtMs": 1760000000000,
+      "checks": [
+        { "id": "specs/join.feature > Join a list", "title": "Join a list", "status": "passed", "detail": "", "specPath": "specs/join.feature", "measurements": [], "durationMs": 120 },
+        { "id": "specs/join.feature > Leave a list", "title": "Leave a list", "status": "failed", "detail": "expected 2 members, saw 3", "specPath": "specs/join.feature", "measurements": [{ "name": "latency", "value": 1400, "unit": "ms", "limit": 2500 }] }
+      ]
+    }
+  ],
+  "source": null,
+  "recording": null,
+  "bundle": {},
+  "addedByALaterMinorVersion": { "anything": true }
+}

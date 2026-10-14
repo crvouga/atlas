@@ -1,8 +1,7 @@
-import { createHashHistory, createRootRoute, createRoute, createRouter, type RouterHistory } from '@tanstack/react-router';
+import { createHashHistory, createRootRoute, createRoute, createRouter, lazyRouteComponent, type RouterHistory } from '@tanstack/react-router';
 import { z } from 'zod/v4';
 
 import { SpecPage } from '../evidence/spec-page';
-import { ChartPage } from '../views/ChartPage';
 import { ProductPage } from '../views/ProductPage';
 import { AppShell } from './AppShell';
 
@@ -44,7 +43,8 @@ function routeTree() {
     getParentRoute: () => rootRoute,
     path: '/chart/$chartId',
     validateSearch: (search) => ChartSearch.parse(search),
-    component: ChartPage
+    // The map (the graph, its layout and its renderer) is the largest part of the page and only this route needs it.
+    component: lazyRouteComponent(() => import('../views/ChartPage'), 'ChartPage')
   });
   const specRoute = createRoute({
     getParentRoute: () => rootRoute,

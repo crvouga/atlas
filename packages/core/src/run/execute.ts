@@ -1,3 +1,16 @@
+/**
+ * @module Path runner and manifest
+ *
+ * Runs planned paths against the product through a driver and turns what happened into a run: a
+ * directory holding `manifest.json`, `junit.xml`, `ctrf.json`, `chart.mmd`, `outcomes.json` and `media/`.
+ * The invariants: the manifest is a pure fold of the plan and the per-path outcomes in plan order (so
+ * worker scheduling, sharding and reruns never change the report); it is rewritten atomically after
+ * every path so a crash keeps what ran; a failed path is retried once, and passing the second time is
+ * `flaky`. This module is the only one that touches the driver and the file system for a run. Its
+ * outputs follow the manifest schema in `packages/schema` (`schemaVersion: 1`).
+ *
+ * @see docs/statecharts.md
+ */
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -38,6 +51,7 @@ export type Shard = { index: number; count: number };
 
 /** What a run reports about: the spec, the scope, and the implementation's metadata. */
 export type RunContext<C> = {
+  /** The loaded charts. Their files are re-read (to hash them into `specVersion`) when the manifest is built. */
   bundle: SpecBundle;
   composition: Composition;
   graph: ChartGraph;
@@ -45,21 +59,28 @@ export type RunContext<C> = {
   implementation: Implementation<C>;
   /** The journeys of the plan, as the paths they are cut into; journeys are reported from them. */
   journeys?: PlannedJourney[];
+  /** The plan's seeds, reported in the manifest with the paths that start from and verify each. */
   seeds?: PlannedSeed[];
+  /** How a business event name is recognised, by name; see `EventMatcher`. */
   eventMatchers?: Record<string, EventMatcher>;
   privacy?: PrivacyRules;
   /** Recorded in the manifest as the run's environment. */
   environment?: Record<string, unknown>;
 };
 
+/** Everything `runPaths` needs: the `RunContext`, the paths to run and how to run them. */
 export type RunOptions<C> = RunContext<C> & {
+  /** The whole plan, in plan order. Paths marked `skipRun` are reported but not run. The manifest covers all of them. */
   paths: PlannedPath[];
   driver: Driver<C>;
   mode: RunMode;
   /** Runs land in `<outputRoot>/<run-id>/`. */
   outputRoot: string;
+  /** Whether a failed path runs a second time to tell flaky from broken; true unless `false`. */
   retry?: boolean;
+  /** How long to wait for a state to be recognised after an event, in milliseconds; 45 000 when omitted. */
   stepTimeoutMs?: number;
+  /** Where business events come from. Sources named with a `log:` prefix are treated as log files, not CloudEvents sources. */
   eventSources?: EventSource[];
   /** Path attempts that run at once, capped by the driver's `concurrency`; 1 when omitted. */
   workers?: number;
@@ -67,6 +88,7 @@ export type RunOptions<C> = RunContext<C> & {
   shard?: Shard;
   /** Passed outcomes of an earlier run to keep instead of running those paths again. */
   reuse?: { runDir: string; outcomes: Record<string, PathOutcome> };
+  /** Receives progress lines; writes to stdout when omitted. */
   log?: (line: string) => void;
 };
 
@@ -93,14 +115,19 @@ type Observed = {
  */
 export type PathOutcome = {
   id: string;
+  /** The path's `key`; outcomes are matched across runs by it, not by `id`. */
   key: string;
+  /** `failed` when the last attempt failed, `flaky` when the first failed and the retry passed, `not-reached` when the path stopped at a blocked event, else `passed`. */
   status: Status;
   attempts: Attempt[];
   steps: StepResult[];
   stoppedAt: string | null;
   observed: Observed[];
+  /** Where and why the last attempt failed; `null` when it did not. */
   failure: { state: string; recognizer: RecognizerResult | null; looksLike: string[]; shot: Image | null } | null;
+  /** Privacy findings from the text the driver reported; they fail the run. */
   leaks: string[];
+  /** Wall-clock milliseconds for all attempts of the path. */
   durationMs: number;
   /** How long the last attempt took to seed (or set up) and recognise its start. */
   setupMs?: number;
@@ -149,7 +176,7 @@ const relative = (root: string, file: string) => path.relative(root, file).split
 const pad = (n: number) => String(n).padStart(2, '0');
 const sameStates = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|');
 
-/** A rough cost of a path before it has ever run: setting it up, then each step. */
+/** A rough cost in milliseconds of a path that has never run (5 s to set up, 2.5 s a step); used to order and shard paths. */
 export const estimateMs = (p: PlannedPath) => 5_000 + 2_500 * p.steps.length;
 
 /**
@@ -195,7 +222,10 @@ function copyMedia(outcome: PathOutcome, from: string, to: string) {
   }
 }
 
-/** The plan keys and outcomes a run wrote, for merging shards and reusing passed paths. */
+/**
+ * Reads the `outcomes.json` of a run directory: the run id and each finished path's outcome by key.
+ * Returns `null` when the file is missing or unreadable, never throws.
+ */
 export function readOutcomes(runDir: string): { runId: string; outcomes: Record<string, PathOutcome> } | null {
   const file = path.join(runDir, 'outcomes.json');
   if (!existsSync(file)) return null;
@@ -207,7 +237,11 @@ export function readOutcomes(runDir: string): { runId: string; outcomes: Record<
   }
 }
 
-/** How long each path took in the newest run under `outputRoot` that recorded it, by path key. */
+/**
+ * Milliseconds each path took, by path key, taken from the newest of the last 10 runs under
+ * `outputRoot` that ran it (outcomes reused from elsewhere are ignored). Empty when the directory
+ * does not exist. `runPaths` uses it to start the slowest paths first.
+ */
 export function durationHistory(outputRoot: string) {
   const history: Record<string, number> = {};
   if (!existsSync(outputRoot)) return history;
@@ -224,7 +258,7 @@ export function durationHistory(outputRoot: string) {
   return history;
 }
 
-/** The newest run under `outputRoot` that wrote outcomes. */
+/** The directory of the newest run under `outputRoot` that wrote `outcomes.json` (run ids sort by time), or `null`. */
 export function latestRun(outputRoot: string) {
   if (!existsSync(outputRoot)) return null;
   const runs = readdirSync(outputRoot)
@@ -234,8 +268,20 @@ export function latestRun(outputRoot: string) {
 }
 
 /**
- * Fold path outcomes into the run's report, in plan order: the same plan and outcomes always give
- * the same manifest, however many workers ran them, in whatever order they finished.
+ * Folds path outcomes into the run's manifest object, in plan order: the same plan and outcomes
+ * always give the same manifest, however many workers ran them, in whatever order they finished.
+ *
+ * A state or transition is `passed` when a path reached it, `flaky` when only a flaky path did,
+ * `failed` when any failure touched it (a failed check fails its state), else `not-reached`. Reaching a
+ * state also marks its ancestors reached. The whole manifest is scanned for privacy findings, and any
+ * finding sets `privacy.passed` to false. Reads the chart files (for `specVersion`) and runs `git`
+ * in the current directory (for `commit` and `branch`, `null` when that fails). Apart from the
+ * wall-clock fields (`finishedAt`, `updatedAt`, `durationMs`) and those that depend on the working
+ * directory (`commit`, `branch`, `specDirectory`), two folds of the same outcomes are identical.
+ *
+ * @param outcomes finished or in-progress outcomes by path key; a path with none is `queued` or `running`.
+ * @param run.activePaths ids of the paths in flight; they are reported `running` and not counted complete.
+ * @param run.extra extra fields merged into `run` of the manifest (workers, shard, reused, mergedFrom).
  */
 export function buildManifest<C>(
   context: RunContext<C>,
@@ -529,6 +575,7 @@ export function buildManifest<C>(
   return found.length ? { ...draft, privacy: { findings: [...draft.privacy.findings, ...found], passed: false } } : draft;
 }
 
+/** The manifest object `buildManifest` returns; it is what `manifest.json` contains. */
 export type Manifest = ReturnType<typeof buildManifest>;
 
 function writeAtomic(file: string, text: string) {
@@ -537,7 +584,11 @@ function writeAtomic(file: string, text: string) {
   renameSync(temporary, file);
 }
 
-/** Write a run's manifest, reports and outcomes; returns the manifest. */
+/**
+ * Writes a run's `junit.xml`, `ctrf.json`, `chart.mmd`, `outcomes.json` and `manifest.json` into
+ * `runDir` (each through a temporary file and a rename, so a reader never sees half a file) and returns
+ * the manifest. `outcomes.json` holds only finished paths, not those in `run.activePaths`.
+ */
 export function writeRun<C>(
   runDir: string,
   context: RunContext<C>,
@@ -558,9 +609,14 @@ export function writeRun<C>(
 const newRunId = (mode: RunMode) => `${new Date().toISOString().replace(/[:.]/g, '-')}-${mode}`;
 
 /**
- * Compose the outcomes of several runs of the same plan (the shards of one run, or a rerun of the
- * paths that failed) into one run, folded in plan order. Media are copied in, so the merged run
- * stands on its own. Later runs win when two ran the same path.
+ * Composes the outcomes of several runs of the same plan (the shards of one run, or a rerun and
+ * the run before it) into one new run directory under `options.outputRoot`, folded in plan order. Media are
+ * copied in, so the merged run stands on its own. Later entries of `runDirs` win when two ran the same
+ * path; outcomes whose key is not in `paths` are ignored. The merged run's mode and driver name are
+ * taken from the run manifests unless `options` gives them.
+ *
+ * @returns the new `runDir`, its `manifest`, and `ok` (privacy passed and no path failed).
+ * @throws Error when a run directory has no `outcomes.json`.
  */
 export function mergeRuns<C>(
   context: RunContext<C>,
@@ -598,12 +654,22 @@ export function mergeRuns<C>(
 }
 
 /**
- * Run planned paths against a system through a driver. Paths start from their seed (or the
- * implementation's `setup`) and run on a pool of workers, longest first, each attempt in its own
- * driver context; every state is recognised from the outside after every step; a failed path is
- * retried once to tell flaky from broken. The manifest is rewritten as each path finishes, from
- * all outcomes so far in plan order, so a crash keeps what ran and the order paths finished in
- * never changes the report.
+ * Runs planned paths against a system through a driver and writes the run to
+ * `<outputRoot>/<timestamp>-<mode>/`. Paths start from their seed (or the implementation's
+ * `setup`) and run on a pool of workers, longest first (by earlier timings, else `estimateMs`),
+ * each attempt in its own driver context; every state is recognised from the outside after every step;
+ * a failed path is retried once to tell flaky from broken. The manifest is rewritten as each path
+ * finishes, from all outcomes so far in plan order, so a crash keeps what ran and the order paths
+ * finished in never changes the report.
+ *
+ * Workers are capped by `driver.concurrency` (1 if the driver gives none) and by the number of paths.
+ * Without `implementation.correlate`, a run on several workers reports business events as "no
+ * signal" rather than guess which attempt they belong to. While it runs it installs
+ * `uncaughtException` and `unhandledRejection` handlers that log and swallow stray errors from
+ * drivers, and removes them when it ends. Passed paths of `options.reuse` are kept instead of re-run.
+ *
+ * @returns the run directory, the final manifest, and `ok` (privacy passed and no path failed).
+ * @see docs/statecharts.md
  */
 export async function runPaths<C>(options: RunOptions<C>) {
   const { driver, implementation: impl, graph, scope } = options;

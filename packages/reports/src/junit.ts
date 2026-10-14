@@ -1,18 +1,38 @@
 /**
- * Overlay test-runner outcomes (JUnit XML) onto a report bundle. A harness run
- * only sees failures raised inside its own steps; assertions in the test body
- * surface through the runner's report instead.
+ * @module JUnit XML parsing
+ *
+ * Reads the `<testcase>` elements of a JUnit XML document without an XML library, and overlays test-runner
+ * outcomes (JUnit XML) onto a report bundle. A harness run only sees failures raised inside its own steps;
+ * assertions in the test body surface through the runner's report instead. Parsing is tolerant by design
+ * (nested suites, self-closing elements, CDATA) and never drops a case silently, because a result that goes
+ * missing reads as a pass. `ingest.ts` turns the cases into checks.
  */
 
 import type { HtmlReportBundle, HtmlReportTest } from './recording-bundle';
 
+/** One `<testcase>` as read, with the suite it is in. */
 export type JunitCase = {
+  /** The case's `file` attribute, else its suite's, else empty. */
   readonly file: string;
+  /** The `classname` attribute, which many runners use for the suite or the file. */
+  readonly classname: string;
+  /** The `name` of the `<testsuite>` the case is in. */
+  readonly suite: string;
+  /** Seconds, when the runner emits it. */
+  readonly time: number | null;
   readonly name: string;
   /** 1-based line of the test declaration, when the runner emits it. */
   readonly line: number | null;
+  /** `failed` when the case has a `<failure>` or an `<error>`, `skipped` when it has `<skipped>`, otherwise `passed`. */
   readonly status: 'passed' | 'failed' | 'skipped';
+  /** The failure's text (else its `message`, else `failed`), or null when the case did not fail. */
   readonly failure: string | null;
+  /** The case's `<system-out>`, when it has one. */
+  readonly stdout?: string;
+  /** The case's `<system-err>`, when it has one. */
+  readonly stderr?: string;
+  /** The case's `<properties>`, then its suite's: names a runner chose to record. */
+  readonly properties?: Readonly<Record<string, string>>;
 };
 
 const ENTITIES: Readonly<Record<string, string>> = {
@@ -38,24 +58,49 @@ function attr(tag: string, name: string): string | null {
 }
 
 function failureText(body: string): string | null {
-  const m = /<failure\b([^>]*)(?:\/>|>([\s\S]*?)<\/failure>)/.exec(body);
+  // `<failure>` is an assertion that did not hold, `<error>` an unexpected exception: both are a check that failed.
+  const m = /<(failure|error)\b([^>]*)(?:\/>|>([\s\S]*?)<\/\1>)/.exec(body);
   if (m === null) return null;
-  const message = attr(m[1] ?? '', 'message');
-  const inner = (m[2] ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+  const message = attr(m[2] ?? '', 'message');
+  const inner = (m[3] ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
   const text = decodeXml(inner).trim();
   return text.length > 0 ? text : (message ?? 'failed');
 }
 
-function parseCase(tag: string, inner: string, suiteFile: string): JunitCase {
+function streamText(body: string, name: 'system-out' | 'system-err'): string | undefined {
+  const found = new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)</${name}>`).exec(body);
+  if (!found) return undefined;
+  const text = decodeXml((found[1] ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')).trim();
+  return text.length ? text : undefined;
+}
+
+function propertiesOf(body: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const match of body.matchAll(/<property\b([^>]*?)\/?>/g)) {
+    const name = attr(match[1] ?? '', 'name');
+    const value = attr(match[1] ?? '', 'value');
+    if (name) out[name] = value ?? '';
+  }
+  return out;
+}
+
+function parseCase(tag: string, inner: string, suiteFile: string, suiteName: string, suiteProperties: Record<string, string> = {}): JunitCase {
   const lineRaw = attr(tag, 'line');
   const line = lineRaw === null ? null : Number(lineRaw);
   const failure = failureText(inner);
+  const time = Number(attr(tag, 'time'));
   return {
     file: attr(tag, 'file') ?? suiteFile,
+    classname: attr(tag, 'classname') ?? '',
+    suite: suiteName,
+    time: attr(tag, 'time') !== null && Number.isFinite(time) ? time : null,
     name: attr(tag, 'name') ?? '',
     line: line !== null && Number.isFinite(line) ? line : null,
     status: caseStatus(failure, inner),
     failure,
+    ...(streamText(inner, 'system-out') ? { stdout: streamText(inner, 'system-out')! } : {}),
+    ...(streamText(inner, 'system-err') ? { stderr: streamText(inner, 'system-err')! } : {}),
+    ...(Object.keys({ ...suiteProperties, ...propertiesOf(inner) }).length ? { properties: { ...suiteProperties, ...propertiesOf(inner) } } : {}),
   };
 }
 
@@ -68,22 +113,44 @@ function caseStatus(
   return 'passed';
 }
 
-function parseSuite(tag: string, body: string, out: JunitCase[]): void {
-  const suiteFile = attr(tag, 'file') ?? '';
-  const caseRe = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
-  for (let c = caseRe.exec(body); c; c = caseRe.exec(body)) {
-    out.push(parseCase(c[1] ?? '', c[2] ?? '', suiteFile));
-  }
-}
-
-/** Parse the `<testcase>` elements of a JUnit XML document. */
-export function parseJunit(xml: string): JunitCase[] {
+/**
+ * Every `<testcase>` of the document, whatever the nesting of its suites: a suite inside a suite, a case after
+ * an inner suite, an empty self-closing suite. Each case is read with the suite it is in, and that suite's own
+ * `<properties>`. A case is never skipped silently, because a result that goes missing reads as a pass.
+ */
+function allCases(xml: string): JunitCase[] {
   const cases: JunitCase[] = [];
-  const suiteRe = /<testsuite\b([^>]*)>([\s\S]*?)<\/testsuite>/g;
-  for (let suite = suiteRe.exec(xml); suite; suite = suiteRe.exec(xml)) {
-    parseSuite(suite[1] ?? '', suite[2] ?? '', cases);
+  const stack: { file: string; name: string; properties: Record<string, string> }[] = [];
+  const tags = /<(\/?)(testsuite|testcase|properties)\b([^>]*?)(\/?)>/g;
+  for (let tag = tags.exec(xml); tag; tag = tags.exec(xml)) {
+    const [, closing, name, attributes = '', selfClosing] = tag;
+    if (name === 'testsuite') {
+      if (closing) { stack.pop(); continue; }
+      const suite = { file: attr(attributes, 'file') ?? '', name: attr(attributes, 'name') ?? '', properties: {} as Record<string, string> };
+      if (!selfClosing) stack.push(suite);
+    } else if (name === 'testcase' && !closing) {
+      let inner = '';
+      if (!selfClosing) {
+        const end = xml.indexOf('</testcase>', tags.lastIndex);
+        if (end < 0) continue;
+        inner = xml.slice(tags.lastIndex, end);
+        tags.lastIndex = end + '</testcase>'.length;
+      }
+      const suite = stack.at(-1);
+      cases.push(parseCase(attributes, inner, suite?.file ?? '', suite?.name ?? '', Object.assign({}, ...stack.map(item => item.properties))));
+    } else if (name === 'properties' && !closing && !selfClosing && stack.length) {
+      const end = xml.indexOf('</properties>', tags.lastIndex);
+      if (end < 0) continue;
+      Object.assign(stack.at(-1)!.properties, propertiesOf(xml.slice(tags.lastIndex, end)));
+      tags.lastIndex = end + '</properties>'.length;
+    }
   }
   return cases;
+}
+
+/** Parses every `<testcase>` of a JUnit XML document, in document order, whatever the nesting of its suites. Returns `[]` for text with none; never throws. */
+export function parseJunit(xml: string): JunitCase[] {
+  return allCases(xml);
 }
 
 function sameFile(a: string, b: string): boolean {
@@ -94,7 +161,9 @@ function sameFile(a: string, b: string): boolean {
 
 /**
  * The test case whose declaration precedes `sourceLine` in the same file and
- * is the nearest one (bodies follow declarations).
+ * is the nearest one (bodies follow declarations). Files match when equal or when one path ends with the other
+ * (after normalising backslashes). With one case in the file, or no line, the first case in the file is used.
+ * Null when no case is in the file, or none declared at or before the line.
  */
 export function matchJunitCase(
   cases: readonly JunitCase[],
@@ -131,7 +200,12 @@ function overlayTest(test: HtmlReportTest, c: JunitCase): HtmlReportTest {
   };
 }
 
-/** Apply runner outcomes / titles to every test with a known source file. */
+/**
+ * Applies runner outcomes and titles to every test of a bundle that has a known source file and a matching case:
+ * the test takes the case's name as title, its failure as error (a harness error is kept), and fails if either the
+ * runner or the harness failed. The bundle fails if any test does. Tests without a match are returned unchanged;
+ * the input is not mutated.
+ */
 export function applyJunitOutcomes(
   bundle: HtmlReportBundle,
   cases: readonly JunitCase[]

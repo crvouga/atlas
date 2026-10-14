@@ -1,18 +1,28 @@
+/**
+ * @module Gherkin scenario view of a recorded run
+ *
+ * Recognises the Gherkin-keyword steps (`Given`, `When`, `Then`, `And`, `But`, `*`) at the top of a recorded step tree
+ * and groups the harness actions nested under each, so the viewer can show a run as a readable script. Pure functions
+ * over `ReportStep`.
+ */
 import type { ReportStep } from './report-types';
 
 const GHERKIN = new Set(['given', 'when', 'then', 'and', 'but', '*']);
 
+/** One Gherkin line of a scenario and what the harness did while it ran. */
 export type ScenarioLine = {
+  /** The Gherkin step itself. */
   readonly step: ReportStep;
   /** Nested harness steps: the actions taken while this line ran. */
   readonly actions: readonly ReportStep[];
 };
 
+/** Whether a step's `kind` (trimmed, any case) is a Gherkin keyword: `given`, `when`, `then`, `and`, `but` or `*`. */
 export function isGherkinStep(step: ReportStep): boolean {
   return GHERKIN.has(step.kind.trim().toLowerCase());
 }
 
-/** Title with the keyword removed, so the script can show the keyword once. */
+/** The step's title with a leading copy of its `kind` removed (case-insensitively, not word-aware), so the script can show the keyword once. Returns the trimmed title unchanged when it does not start with the kind. */
 export function gherkinText(step: ReportStep): string {
   const kind = step.kind.trim();
   const title = step.title.trim();
@@ -30,9 +40,9 @@ function walkActions(steps: readonly ReportStep[], out: ReportStep[]): void {
 }
 
 /**
- * Top-level Gherkin lines and the actions nested under each. Null when the
- * run is not a scenario (a model check, a property), so the step tree is
- * the action log instead.
+ * Groups a run's top-level Gherkin steps with the actions nested under each, every descendant step flattened in
+ * depth-first order. Returns `null` when no top-level step is a Gherkin step (a model check, a property), so the step
+ * tree is the action log instead. Gherkin steps nested deeper than the top level are only listed as actions.
  */
 export function scenarioScript(
   steps: readonly ReportStep[]

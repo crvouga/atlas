@@ -1,0 +1,37 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/problem.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "type": {
+      "description": "A URI naming the kind of problem. `about:blank` means the status code says it all",
+      "default": "about:blank",
+      "type": "string"
+    },
+    "title": {
+      "description": "The status in words, such as \"Unauthorized\"",
+      "type": "string"
+    },
+    "status": {
+      "description": "The HTTP status code",
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "detail": {
+      "description": "What went wrong and what to do about it, in a sentence an agent or a person can act on",
+      "type": "string"
+    },
+    "error": {
+      "description": "The same as `detail`. Kept for clients that read `error`",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "status",
+    "detail",
+    "error"
+  ],
+  "additionalProperties": {}
+}

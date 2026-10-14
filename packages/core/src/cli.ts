@@ -1,3 +1,14 @@
+/**
+ * @module The `atlas` command
+ *
+ * Dispatches `atlas <command>`: the statechart commands (`lint`, `plan`, `run`, `merge`, `export`) and, loaded on demand so
+ * they cost nothing otherwise, `serve`, `dev`, `init` and `report`. Statechart configuration is `atlas.config.ts` (see
+ * `defineConfig`). A command that is wrong prints a message and exits 2; a plan, lint or run that finds problems exits 1.
+ *
+ * @see docs/statecharts.md
+ * @see docs/reference/cli.md
+ */
+
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,7 +23,8 @@ import { composeCharts } from './spec/compose';
 import { loadSpecDirectory } from './spec/load';
 import { machineToScxml } from './spec/scxml';
 
-const USAGE = `atlas — executable statecharts
+/** The text `atlas --help` prints: every command, and the flags of the statechart commands. */
+export const USAGE = `atlas — executable statecharts
 
   atlas lint   [--config atlas.config.ts | --specs <dir>] [--require-implementations]
   atlas plan   [--config atlas.config.ts] [--state <name>]
@@ -21,6 +33,10 @@ const USAGE = `atlas — executable statecharts
                [--no-retry] [--output <dir>]
   atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
   atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
+  atlas serve  [--data <dir>] [--port 8080] [--store <url>]...   the Atlas server: results in, the live report out
+  atlas dev    [--port 5180]                                     the server and the viewer's dev server, on one host
+  atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
+  atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
 
   --workers       path attempts that run at once (default: one per CPU, capped by the driver)
   --seed          only paths that start from this seed ("start" for paths setup starts); repeatable
@@ -75,8 +91,20 @@ async function loadConfig(file: string): Promise<{ config: AtlasConfig; base: st
   return { config: mod.default, base: path.dirname(absolute) };
 }
 
+/** Runs `atlas` with `argv` (default: the process arguments) and returns the exit code. Throws for a command that is wrong, which the `atlas` binary reports as a message and exit code 2. */
 export async function main(argv = process.argv.slice(2)) {
   const [command] = argv;
+  // Loaded on demand: lint, plan and run do not pay for the reports.
+  if (command === 'serve') {
+    const { serveMain } = await import('../../server/src/main');
+    return serveMain(argv.slice(1), { out: text => process.stdout.write(text) });
+  }
+  if (command === 'dev') {
+    const { devMain } = await import('../../server/src/dev');
+    return devMain(argv.slice(1), { out: text => process.stdout.write(text) });
+  }
+  if (command === 'init') return (await import('../../reports/src/init')).initMain(argv.slice(1), { out: text => process.stdout.write(text) });
+  if (command === 'report') return (await import('../../reports/src/report-cli')).runReportCommand(argv.slice(1));
   const configFile = flag(argv, 'config') ?? 'atlas.config.ts';
   const specs = flag(argv, 'specs');
   const output = flag(argv, 'output');

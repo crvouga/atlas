@@ -1,3 +1,14 @@
+/**
+ * @module UI signals
+ *
+ * A driver-neutral vocabulary for saying what is on screen (`testId`, `role`, `label`, `text`, `css`),
+ * and `screen(...)`, which builds a state recogniser from signals. Every UI driver (Playwright, Bun
+ * WebView, WebDriver, Detox) resolves the same signals against its own UI tree, so an implementation
+ * written with them runs on any of them. Also holds the wire form and the in-page probe used by drivers
+ * that evaluate JavaScript in a page. This module is browser-safe and has no driver dependencies.
+ *
+ * @see docs/statecharts.md
+ */
 import type { CheckResult, RecognizerResult, StateImplementation } from './run/types';
 
 /**
@@ -13,12 +24,18 @@ export type Signal =
   | { label: string | RegExp }
   | { css: string };
 
+/** A signal for the element with this test ID (`data-testid` on the web, the accessibility identifier on native). */
 export const testId = (id: string): Signal => ({ testId: id });
+/** A signal for visible text: a string matches as a case-insensitive substring unless `exact`, a RegExp is tested as is. */
 export const text = (value: string | RegExp, options: { exact?: boolean } = {}): Signal => ({ text: value, ...options });
+/** A signal for an element with an accessibility role (`button`, `heading`, ...), optionally filtered by its accessible name (same matching as `text`). */
 export const role = (r: string, name?: string | RegExp, options: { exact?: boolean } = {}): Signal => ({ role: r, ...(name ? { name } : {}), ...options });
+/** A signal for a form control by its label text. */
 export const label = (value: string | RegExp): Signal => ({ label: value });
+/** A signal for a CSS selector. Web only: the WebDriver and Detox drivers throw for it in native sessions, so prefer the other signals. */
 export const css = (selector: string): Signal => ({ css: selector });
 
+/** Describes a signal in words for recogniser output and failure messages, e.g. `button "Add"`. */
 export function describeSignal(signal: Signal) {
   if ('testId' in signal) return `test ID "${signal.testId}"`;
   if ('role' in signal) return `${signal.role}${signal.name ? ` "${String(signal.name)}"` : ''}`;
@@ -27,20 +44,39 @@ export function describeSignal(signal: Signal) {
   return `text ${String(signal.text)}`;
 }
 
-export type SignatureSpec<S = Signal> = { all?: S[]; any?: S[]; none?: S[] };
+/** What a screen looks like, as signals. */
+export type SignatureSpec<S = Signal> = {
+  /** Every one must be visible. */
+  all?: S[];
+  /** At least one must be visible (ignored when empty). */
+  any?: S[];
+  /** None may be visible. */
+  none?: S[];
+};
 
+/** A `SignatureSpec` plus the optional parts of a `StateImplementation`, which are passed through. */
 export type ScreenSpec<C, S = Signal> = SignatureSpec<S> & {
+  /** Each `check` is a statement from the state's `meta.checks`; it passes when its `signal` is visible. */
   checks?: { check: string; signal: S }[];
+  /** See `StateImplementation.transient`. */
   transient?: boolean;
+  /** See `StateImplementation.sameAs`. */
   sameAs?: string;
+  /** See `StateImplementation.lookIn`. */
   lookIn?: (ctx: C) => Promise<void>;
+  /** See `StateImplementation.settle`. */
   settle?: (ctx: C) => Promise<void>;
 };
 
 /**
- * Build `screen()` for a driver from one question: is this signal visible right now? A state is
- * recognised when every `all` is visible, one `any` is visible and no `none` is. Drivers with
- * their own locators (WebDriver's) pass their signal type and how to describe it.
+ * Builds a `screen()` function for a driver from one question: is this signal visible right now?
+ * A state is recognised when every `all` is visible, one `any` is visible and no `none` is; the result
+ * lists every signal looked at with whether it was visible, for failure reports. An `isVisible` that
+ * rejects counts as not visible. Drivers with their own locators (WebDriver's) pass their signal type
+ * and how to describe it.
+ *
+ * @param isVisible answers whether one signal is visible in the context.
+ * @param describe names a signal in words.
  */
 export function signatureScreen<C, S = Signal>(isVisible: (ctx: C, signal: S) => Promise<boolean>, describe: (signal: S) => string) {
   const visible = (ctx: C, signal: S) => isVisible(ctx, signal).catch(() => false);
@@ -86,17 +122,29 @@ export function signatureScreen<C, S = Signal>(isVisible: (ctx: C, signal: S) =>
 export type SignalContext = {
   /** Open a URL (a path resolves against the driver's base URL; a deep link in a native app). */
   goto(url: string): Promise<void>;
+  /** Whether the signal is visible now. */
   isVisible(signal: Signal): Promise<boolean>;
+  /** Actions a person does. Drivers log each to the step's timeline, which becomes the clip's captions. */
   user: {
+    /** Taps or clicks the target; `label` is the caption shown for it. */
     tap(target: Signal, label: string): Promise<void>;
+    /** Types `text` into the target; `label` is the caption shown for it. */
     type(target: Signal, text: string, label: string): Promise<void>;
   };
 };
 
-/** A state recognised from signals on any driver that provides a `SignalContext`. */
+/**
+ * Builds a state implementation that is recognised from signals on any driver that provides a
+ * `SignalContext`.
+ *
+ * @example
+ * states: { 'No todos': screen({ all: [text('Nothing to do yet')], none: [role('listitem')] }) }
+ */
 export const screen = signatureScreen<SignalContext>((ctx, signal) => ctx.isVisible(signal), describeSignal);
 
+/** A string or regular expression as JSON. */
 type WireMatch = { text: string; exact: boolean } | { regex: string; flags: string };
+/** A `Signal` as plain JSON, the form sent to the in-page `DOM_PROBE`. */
 export type WireSignal =
   | { kind: 'css'; selector: string }
   | { kind: 'testId'; id: string }
@@ -107,7 +155,7 @@ export type WireSignal =
 const wire = (value: string | RegExp, exact = false): WireMatch =>
   typeof value === 'string' ? { text: value, exact } : { regex: value.source, flags: value.flags };
 
-/** A signal as JSON, for a probe that runs inside the page. */
+/** Converts a signal to its JSON form for a probe that runs inside the page. */
 export function toWire(signal: Signal): WireSignal {
   if ('testId' in signal) return { kind: 'testId', id: signal.testId };
   if ('role' in signal) return { kind: 'role', role: signal.role, name: signal.name ? wire(signal.name, signal.exact) : null };

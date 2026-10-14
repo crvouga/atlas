@@ -1,7 +1,18 @@
+/**
+ * @module Reading a source's files
+ *
+ * Chooses how to read the files of one source of a commit: through its bundle index when it has one, otherwise as
+ * individual objects (stores written before bundles existed stay readable).
+ */
 import type { ObjectStore } from './object-store';
 import type { BundleEntry } from './bundle';
 import { bundleIndexKey, createBundleReader, readBundleIndex } from './bundle';
 
+/**
+ * Returns a function that reads one file of a source by key, resolving to its bytes and media type or `null` when it is
+ * absent. Reads through the bundle index at `commits/<sha>/bundles/<source>.json` when that has entries, otherwise reads
+ * the key directly from `store`. Throws when the index is present but not JSON.
+ */
 export async function sourceReader(
   store: ObjectStore,
   args: { sha: string; source: string }

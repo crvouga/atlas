@@ -1,4 +1,11 @@
-/** Indexed gzip chunks keep snapshot uploads small in count and reads bounded. */
+/**
+ * @module Snapshot bundles
+ *
+ * Packs the frame files of one recorded test into a few gzip chunks of roughly 1 MiB (JSON of base64 snapshots), with a
+ * small index from file to chunk, so a test with hundreds of frames uploads as a handful of objects and a reader
+ * fetches only the chunks it needs. Keys are `<prefix>snapshots.json` (the index, written last) and
+ * `<prefix>snapshots-<n>.json.gz`. Reads reject a chunk name that does not look like `snapshots-<n>.json.gz`.
+ */
 import {
   readBytes,
   readObjectBytes,
@@ -24,11 +31,25 @@ async function gzip(text: string): Promise<Uint8Array> {
   return readBytes(input.pipeThrough(new CompressionStream('gzip')));
 }
 
+/**
+ * Copies `files` from `local` into gzip chunks on `remote`, then writes the index last, so a reader that finds the
+ * index can read every chunk it names.
+ *
+ * Each file is read from `local` at `localPrefix + file` and stored under the name `file` in the index. Chunks are
+ * packed up to about 1 MiB of encoded text (a larger single file gets a chunk of its own) and uploaded four at a time
+ * to `remotePrefix`. Throws `Missing report snapshot: <key>` when a listed file is absent in `local`, before anything
+ * is written to `remote`.
+ */
 export async function publishSnapshotBundle(args: {
+  /** Where the recorded files are now. */
   readonly local: ObjectStore;
+  /** Where the bundle is written. */
   readonly remote: ObjectStore;
+  /** The key prefix of the files in `local`. */
   readonly localPrefix: string;
+  /** The key prefix to write the bundle under; end it with `/`. */
   readonly remotePrefix: string;
+  /** The file names, relative to `localPrefix`. */
   readonly files: readonly string[];
 }): Promise<void> {
   const index: Record<string, string> = {};
@@ -76,6 +97,11 @@ export async function publishSnapshotBundle(args: {
   );
 }
 
+/**
+ * Reads one file from a bundle written by `publishSnapshotBundle`, decompressing the chunk that holds it. Returns `null`
+ * when the bundle has no index, the file is not in the index, or its chunk is missing. Throws `Invalid snapshot chunk`
+ * for a chunk name that is not `snapshots-<n>.json.gz`, and a `SyntaxError` for a corrupt index or chunk.
+ */
 export async function readBundledSnapshot(
   store: ObjectStore,
   prefix: string,
@@ -119,7 +145,11 @@ function snapshotBody(
   return { bytes, contentType: snapshot.contentType };
 }
 
-/** A streamed test reads each compressed chunk once even when it contains many frames. */
+/**
+ * Streams the requested `files` of a bundle as `{ file, bytes, contentType }`, in the order chunks finish reading (not
+ * the order of `files`). A streamed test reads each compressed chunk once even when it contains many frames. Files not
+ * in the index and chunks that are missing are skipped silently; a bundle with no index yields nothing.
+ */
 export async function* readBundledSnapshots(
   store: ObjectStore,
   prefix: string,

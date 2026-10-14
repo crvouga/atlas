@@ -1,26 +1,30 @@
+/**
+ * @module Reports HTTP API
+ *
+ * The HTTP API behind the viewer, as one Hono app: the layer routes of `layers-route.ts`, the explorer routes, and the
+ * read-only commit-keyed routes for recordings written before layers existed. Every route is a GET (or HEAD) with
+ * `cache-control: no-store` unless a layer route says otherwise, and CORS reflects the caller's origin. Nothing here
+ * writes. Mounted at `/api/reports` by `reportsHost` and by the Atlas server.
+ *
+ * Commit-keyed routes (`:sha` is a 40-hex commit; anything else is 404 `not_found`, no store configured is 503
+ * `reports_unavailable`):
+ * - `GET /` commits with a report, newest first (`?cursor=`), see `reportsListRoute`.
+ * - `GET /:sha` one commit's run record.
+ * - `GET /:sha/events` Server-Sent Events: the commit, then each source as it is read. A running commit stays open and
+ *   sends new sources as they are published, for at most `REPORTS_TAIL_MS`; `?have=a,b` skips sources a reconnecting
+ *   client already holds.
+ * - `GET /:sha/sources` every source record of the commit, merged from the shared and the local store.
+ * - `GET /:sha/frame.css` the stylesheet its snapshots render with.
+ * - `GET /:sha/tests/:source/:testId` one test's timeline without frames.
+ * - `GET /:sha/tests/:source/:testId/files/*` one frame file.
+ * - `GET /:sha/tests/:source/:testId/events` a test, then its frames, as Server-Sent Events.
+ * - `GET /:sha/explorer` and `GET /:sha/spec?path=` see `createReportsExplorerApp`.
+ *
+ * @see docs/server.md
+ */
 import type { LiveSource } from './evidence-live';
 import type { ReportOutline } from './layer-types';
 import { createLayersApp, type ReportBackend } from './layers-route';
-/**
- * The spec reports API: read-only views of the shared reports store (R2,
- * keyed by commit sha; Atlas owns the layout), streamed to
- * the reports screen as Server-Sent Events.
- *
- * - `GET /reports` — commits with a report, newest first (`?cursor=`)
- * - `GET /reports/:sha` — one commit's run record
- * - `GET /reports/:sha/events` — the commit, then each source as it is read;
- *   a running commit stays open and sends new sources as CI publishes them
- *   (`?have=a,b` skips the sources a reconnecting client holds)
- * - `GET /reports/:sha/sources` — every source record of the selected attempt
- * - `GET /reports/:sha/frame.css` — the stylesheet its snapshots render with
- * - `GET /reports/:sha/tests/:source/:testId` — one test's timeline, no frames
- * - `GET /reports/:sha/tests/:source/:testId/files/*` — one frame file
- * - `GET /reports/:sha/tests/:source/:testId/events` — a test, then its frames
- *
- * Mounted ahead of the per-request database middleware: nothing here touches
- * Postgres, and a long-lived stream must not hold a connection. Every
- * environment reads the same store, so any deployment serves any commit.
- */
 
 import type { Clock, Timers } from './clock';
 import {
@@ -58,22 +62,28 @@ import {
   reportsStoreForSource,
 } from './reports-store';
 
-/** Commits per page of `GET /reports`. */
+/** Intended commits per page of the commit list. The list route currently pages by its own constant of the same value (30) and does not read this one. */
 export const REPORTS_PAGE_SIZE = 30;
-/** How often a running commit is re-listed for new sources. */
+/** How often, in milliseconds, a running commit's event stream re-lists the store for new sources. */
 export const REPORTS_POLL_MS = 2_000;
-/** A running commit's stream ends after this long; the client reconnects. */
+/** How long, in milliseconds, a running commit's event stream stays open before it ends; the client reconnects. */
 export const REPORTS_TAIL_MS = 5 * 60_000;
 
+/** What `createReportsApp` and `createLayersApp` need from their host: stores, an outline of current specs, and time. */
 export type ReportsAppDeps = ReportsExplorerDeps & {
+  /** Loads the current specs (and the text of each) every report is laid over. Without it `GET /outline` answers 503. */
   readonly outline?: () => Promise<ReportOutline & { readSpec: (path: string) => Promise<string | null> }>;
+  /** Leave layers out of the report, in every route. */
+  readonly include?: (layer: import('./evidence-types').LayerHeader) => boolean;
   /** Further stores whose layers join the combined report beside `localStore` and `store`. */
   readonly backends?: readonly ReportBackend[];
   /** Results of spec runs that are still running on this machine. */
   readonly live?: LiveSource;
   /** The shared reports store; null when this deployment has no credential. */
   readonly store: ObjectStore | null;
+  /** Time source; injected so caches and polling are testable. */
   readonly clock: Clock;
+  /** Timer functions for the event streams; injected so tests need no real time. */
   readonly timers: Timers;
 };
 
@@ -238,6 +248,14 @@ function testEventsRoute(deps: ReportsAppDeps) {
   };
 }
 
+/**
+ * Builds the complete reports app (layer routes, explorer routes and the commit-keyed routes). Read-only: nothing it
+ * serves can change a store. CORS reflects any caller's origin for GET, HEAD and OPTIONS.
+ *
+ * @example
+ * const app = createReportsApp({ store: null, backends: [{ id: 'ci', label: 'CI', store }], clock: { now: Date.now }, timers });
+ * const response = await app.request('/evidence');
+ */
 export function createReportsApp(deps: ReportsAppDeps) {
   return new Hono()
     .use('*', cors({ origin: (origin) => origin, allowMethods: ['GET', 'HEAD', 'OPTIONS'] }))

@@ -8,7 +8,10 @@ This replaces the Git submodule workflow. Several projects pushing to one `main`
 submodules lost work and mixed unrelated changes together. If your project still has
 `vendor/atlas`, follow [Migrating from the submodule](#migrating-from-the-submodule).
 
-This guide is written for people and coding agents working in a project that uses Atlas.
+This guide is written for people and coding agents working in a project that uses Atlas. To set
+Atlas up in a project, follow [integrating Atlas](integrating.md): it takes a project from nothing to
+a layered, gated report of its specs. This page is about the relationship with Atlas itself: install,
+upgrade, and what to do when something is wrong.
 
 ## The rules
 
@@ -43,16 +46,18 @@ and nothing runs just because the package is installed.
 | `@crvouga/atlas/webdriver` | The WebDriver and Appium driver. |
 | `@crvouga/atlas/detox` | The Detox driver. Also install `detox`. |
 | `@crvouga/atlas/vitest` | Each planned path as a test in Vitest, `bun test` or any Jest-style runner. |
-| `@crvouga/atlas/schema` | Zod schemas for manifests, timelines and the runs index. |
+| `@crvouga/atlas/schema` | Zod schemas for layers, check files, report status, manifests, timelines and the runs index. |
 | `@crvouga/atlas/schemas/<name>.schema.json` | The same contract as JSON Schema files. |
-| `@crvouga/atlas/reports/<module>` | Publishing, storing and serving test evidence. |
+| `@crvouga/atlas/reports/<module>` | Publishing, storing, combining, gating and serving test evidence for specs of any kind. |
 
-It also installs two commands: `atlas` (lint, plan, run, merge, export) and `atlas-visualizer`
-(browse specs and runs).
+It also installs two commands: `atlas` (report, lint, plan, run, merge, export) and
+`atlas-visualizer` (browse specs, runs and reports).
 
-`playwright` and `detox` are optional peers: install the one your driver uses, as above. The README
-of each part ships in the package, at `node_modules/@crvouga/atlas/packages/<part>/README.md`,
-matching the version you installed.
+`playwright` and `detox` are optional peers: install the one your driver uses, as above. The
+documentation ships in the package, matching the version you installed: the README of each part at
+`node_modules/@crvouga/atlas/packages/<part>/README.md`, and these guides at
+`node_modules/@crvouga/atlas/docs/` (`integrating.md`, `deploying.md`, `extending.md`, `report-contract.md`,
+`report-backends.md`, `statecharts.md`, `dogfooding.md`, `reporting-issues.md`).
 
 Your `atlas.config.ts`, specs, implementation, fixtures and generated `atlas-runs/` stay in your
 project. Import only the paths in the table; files under the package's `dist` or `packages` are not
@@ -61,7 +66,7 @@ part of its interface.
 ## Upgrade
 
 Every releasable change that lands on Atlas's `main` is published within minutes; nobody cuts
-releases by hand ([releasing.md](releasing.md)). There is one package and one version, so an upgrade
+releases by hand ([releasing.md](https://github.com/crvouga/atlas/blob/main/docs/releasing.md)). There is one package and one version, so an upgrade
 is one line:
 
 ```sh

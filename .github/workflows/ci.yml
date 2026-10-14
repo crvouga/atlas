@@ -85,6 +85,34 @@ jobs:
       - name: Consumer smoke (pack, install, import, type-check, tree-shake and run the published package on Bun and Node)
         run: bun run release:smoke
 
+  # The object-store backend against a real S3 server (SeaweedFS), which verifies request signatures and
+  # paginates listings the way S3 does. The unit tests cannot stand in for that.
+  s3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Start an S3 server
+        run: |
+          cat > "$RUNNER_TEMP/s3.json" <<'JSON'
+          {"identities":[{"name":"admin","credentials":[{"accessKey":"atlaskey","secretKey":"atlassecret"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+          JSON
+          docker run -d --name s3 -p 18333:8333 -v "$RUNNER_TEMP/s3.json:/etc/s3.json" chrislusf/seaweedfs:latest server -s3 -s3.config=/etc/s3.json -dir=/data
+          export AWS_ACCESS_KEY_ID=atlaskey AWS_SECRET_ACCESS_KEY=atlassecret AWS_DEFAULT_REGION=us-east-1
+          for i in $(seq 1 60); do aws --endpoint-url http://localhost:18333 s3 mb s3://atlas-test 2>/dev/null && break; sleep 2; done
+          aws --endpoint-url http://localhost:18333 s3 ls
+      - name: Run the S3 store and node tests against it
+        env:
+          ATLAS_TEST_S3_ENDPOINT: http://localhost:18333
+          ATLAS_TEST_S3_BUCKET: atlas-test
+          ATLAS_TEST_S3_KEY: atlaskey
+          ATLAS_TEST_S3_SECRET: atlassecret
+        run: bun test packages/reports/tests/s3-store.integration.test.ts packages/reports/tests/s3-flow.integration.test.ts
+
   # The todo example, run for real: once in a single browser and once across a phone, a desktop and
   # a server. The two runs share nothing, so each gets its own job.
   example:

@@ -1,5 +1,17 @@
 # Report backends and live snapshots
 
+> [!NOTE]
+> Atlas has two kinds of backend, and this page is about the first.
+>
+> - **Run sources** (this page): where the viewer finds *statechart runs* (`manifest.json` per run)
+>   and live snapshots of a run in progress: a directory, HTTP files, or an HTTP API.
+> - **Layer stores**: where *layers of evidence for any kind of spec* are kept, an `ObjectStore`
+>   such as a directory or a bucket. Any number of them are one report. See
+>   [the report contract](report-contract.md#backends) and [integrating Atlas](integrating.md).
+>
+> Publish a run as a layer (`atlas report publish --manifest`) to have it combine with other suites,
+> environments and branches.
+
 Atlas maps the product's areas, screens, events and journeys from a spec, then overlays evidence
 of what the product did. Specs and reports are independent. Local development, CI, device labs
 and hosted runners can supply reports to the same product atlas simultaneously. The viewer works

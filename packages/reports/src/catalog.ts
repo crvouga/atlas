@@ -1,14 +1,26 @@
-/** Shared search, filter, group and sort for reports and the tests inside one. */
+/**
+ * @module Catalog search, filter, group and sort
+ *
+ * The pure view logic behind the viewer's list of reports (and of the tests inside one): given entities and a
+ * query (text, status, grouping, sort), it returns the groups to draw. It owns no data and does no I/O; the
+ * caller maps its own records to {@link CatalogEntity}. Input is never mutated.
+ */
 
+/** A status filter: one of the four result statuses as the list names them (`skipped` is a check that was `not-run`), or `all`. */
 export type CatalogStatus = 'all' | 'passed' | 'failed' | 'skipped' | 'running';
 
+/** What the list is grouped by; `none` gives one group named `All`. */
 export type CatalogGroup = 'none' | 'file' | 'status' | 'package' | 'runtime';
 
+/** How entities are ordered inside a group: `recent` keeps the input order, `name` is by title, `duration` is longest first, `status` is failed first then by title. */
 export type CatalogSort = 'recent' | 'name' | 'duration' | 'status';
 
+/** How the list is drawn. */
 export type CatalogLayout = 'list' | 'grid';
 
+/** The user's current choices, mirrored in the URL (see {@link catalogParams}). */
 export type CatalogQuery = {
+  /** Free text; matched case-insensitively as a substring of each entity's `search` text. Blank matches everything. */
   readonly q: string;
   readonly status: CatalogStatus;
   readonly group: CatalogGroup;
@@ -16,24 +28,35 @@ export type CatalogQuery = {
   readonly layout: CatalogLayout;
 };
 
+/** One row of the list: a report or a test, flattened to what the list needs. */
 export type CatalogEntity = {
+  /** Stable identifier of the row. */
   readonly id: string;
   readonly title: string;
+  /** A status string; only `passed`, `failed`, `skipped` and `running` are counted and ranked, any other sorts after them. */
   readonly status: string;
+  /** Duration in milliseconds, or null when unknown (sorted last by `duration`, counted as 0 in a group's total). */
   readonly durationMs: number | null;
   /** Group label for `file` (a source file, or a branch). */
   readonly file: string;
+  /** Group label for `package`; empty groups under `Other`. */
   readonly packageName: string;
+  /** Group label for `runtime`; empty groups under `Other`. */
   readonly runtime: string;
   /** One muted line under the title: a failure, or a date. */
   readonly detail: string;
+  /** Everything the text query may match (title, ids, paths, ...), built by the caller. */
   readonly search: string;
+  /** Where selecting the row navigates, or null when it is not a link. */
   readonly href: string | null;
 };
 
+/** One drawn group of the list. */
 export type CatalogGroupView = {
   readonly name: string;
+  /** Sum of the members' durations in milliseconds; unknown durations count as 0. */
   readonly durationMs: number;
+  /** How many members have status `failed`. */
   readonly failed: number;
   readonly entities: readonly CatalogEntity[];
 };
@@ -45,6 +68,7 @@ const STATUS_RANK: Readonly<Record<string, number>> = {
   passed: 3,
 };
 
+/** Counts entities per status filter (`all` is the total); a status the list does not know is counted only in `all`. */
 export function catalogCounts(
   entities: readonly CatalogEntity[]
 ): Record<CatalogStatus, number> {
@@ -127,7 +151,7 @@ const LIST_KEYS = [
   'partq',
 ] as const;
 
-/** The list's search params, dropped when a test route carries frame and zoom. */
+/** Keeps only the list's own URL search params (`q`, `status`, `group`, `sort`, `layout`, `spec`, `tab`, `partq`) and drops empty ones, so a test route's frame and zoom params do not leak into a link back to the list. */
 export function catalogParams(
   params: Readonly<Record<string, string>>
 ): Record<string, string> {
@@ -139,7 +163,14 @@ export function catalogParams(
   return out;
 }
 
-/** Filter, sort, then one group per chosen key. `recent` keeps input order. */
+/**
+ * Filters entities by the query's status and text, sorts them, then splits them into one group per value of the
+ * chosen key. `recent` keeps input order.
+ *
+ * Group order: for `status`, failed, running, skipped, passed; otherwise alphabetical by name with `Other` (the
+ * label for an empty file, package or runtime) last. With `none` there is a single group named `All`. When
+ * nothing matches, no group is returned.
+ */
 export function arrangeCatalog(
   entities: readonly CatalogEntity[],
   query: CatalogQuery

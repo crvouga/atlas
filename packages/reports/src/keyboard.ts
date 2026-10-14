@@ -1,3 +1,11 @@
+/**
+ * @module Keyboard shortcuts of the reports viewer
+ *
+ * One `keydown` handler for the viewer: the command palette (Cmd/Ctrl+K), help (`?`), Escape, and, on a test page,
+ * scrubbing frames, jumping between steps and failures, moving to the neighbouring test and toggling the view. It is
+ * framework-free: everything it changes goes through the {@link KeyNavHandlers} the host supplies, and it ignores
+ * keys typed into inputs, buttons and links.
+ */
 import type { HtmlReportTest } from './recording-bundle';
 
 import { catalogParams } from './catalog';
@@ -14,16 +22,25 @@ import type { Route } from './hash';
 import { showAside, showPress, viewMode, zoomMode } from './hash';
 import type { ReportData } from './types';
 
+/** What {@link onReportKeyDown} may ask the host to do, and what it reads from it. */
 export type KeyNavHandlers = {
+  /** Opens or closes the shortcut help. */
   toggleHelp: () => void;
+  /** Whether the help is open. */
   showHelp: () => boolean;
+  /** Whether the command palette is open; while it is, no other shortcut acts. */
   showPalette: () => boolean;
   togglePalette: () => void;
+  /** Stops frame playback. */
   stopPlay: () => void;
+  /** Goes to a route (writes the URL hash). */
   navigate: (route: Route) => void;
+  /** Selects a frame, optionally of a given client (`node`). */
   goFrame: (frame: FlatFrame | null, node?: string) => void;
   togglePlay: () => void;
+  /** Sets a URL param on the current route; the empty string removes it. */
   setParam: (key: string, value: string) => void;
+  /** The current route. */
   route: () => Route;
 };
 
@@ -137,6 +154,17 @@ function viewKeys(
   }
 }
 
+/**
+ * Handles one `keydown` for the viewer. Keys: Cmd/Ctrl+K palette; `?` help; Escape closes help or the palette,
+ * else stops playback and returns to the list. On a test page: Left/Right/Home/End scrub frames, Space plays,
+ * Up/Down jump between steps, `n`/`N` between failures, `[`/`]` to the previous/next test (keeping the list's
+ * params), `1`-`9` pick a client, and, when the frame has a UI snapshot, `m` single/multi view, `a` aside, `p`
+ * press targets, `f` cycles zoom (fit, 50, 75, 100).
+ *
+ * Cmd/Ctrl+K and Escape-closing-the-palette work anywhere. Every other key is ignored while the palette is open and
+ * while focus is in an input, textarea, select, button, link or editable element; the test-page keys also need the
+ * route to be a test that is in `data`.
+ */
 export function onReportKeyDown(
   e: KeyboardEvent,
   data: ReportData,

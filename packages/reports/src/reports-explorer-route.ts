@@ -1,3 +1,10 @@
+/**
+ * @module Explorer routes
+ *
+ * Two read-only routes that give the explorer one commit's spec inventory, latest evidence parts and spec text, drawn
+ * from the checkout (when the commit is the one checked out), this machine's store and the shared store. A shared store
+ * that cannot be read degrades to a notice when anything local is available.
+ */
 import type { WorkspaceReports } from './explorer-types';
 import { isCommitSha } from './keys';
 import {
@@ -12,12 +19,25 @@ import {
 import { Hono } from 'hono';
 import type { ReportsStores } from './reports-store';
 
+/** The stores plus an optional provider of the current checkout. */
 export type ReportsExplorerDeps = ReportsStores & {
+  /** The checkout the host is serving. Only composition roots provide it; its content is never CI evidence. */
   readonly workspace?: () => Promise<WorkspaceReports>;
 };
 
 const NO_STORE = { 'cache-control': 'no-store' } as const;
 
+/**
+ * Builds the Hono app for `GET /:sha/explorer` and `GET /:sha/spec`.
+ *
+ * `/:sha/explorer` answers `{ inventory, parts, notice? }` for a 40-hex sha. The inventory is the checkout's when `sha`
+ * is the workspace's, else the local store's, else the shared store's. The parts are the shared store's followed by the
+ * checkout's (or the local store's), reduced to the latest part per producer. If the shared store fails but something
+ * local exists, it answers with a `notice`; with nothing local it throws. 404 for a
+ * bad sha, 503 `reports_unavailable` when there is no shared store and nothing local. `/:sha/spec?path=` answers a
+ * spec's text (`text/plain`) from the workspace, else the local store, else the shared store, or 404 for a bad sha,
+ * a path that is not a spec path, or a missing file. Both are `no-store`.
+ */
 export function createReportsExplorerApp(deps: ReportsExplorerDeps) {
   return new Hono()
     .get('/:sha/explorer', async (c) => {

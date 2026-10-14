@@ -7,6 +7,9 @@ what they find as GitHub issues. They never change this repository: there is no 
 pushes Atlas changes from its own checkout. Every fix and feature is made here and reaches a project
 as a new version.
 
+- **Integrating Atlas into a project?** Follow [docs/integrating.md](docs/integrating.md): it ends
+  every step with a command and the output that means it worked. The exact rules of the report
+  format are in [docs/report-contract.md](docs/report-contract.md).
 - **Working in a project that uses Atlas?** Read [docs/dogfooding.md](docs/dogfooding.md). Install
   `@crvouga/atlas` from npm. Do not edit Atlas from there: no submodule, no
   vendored copy, no patch to `node_modules`. When Atlas is wrong or is missing something, file an
@@ -35,6 +38,77 @@ or publish a second package.
   `bun run release:smoke` checks it with one.
 - A new import path goes in both `exports` (the source) and `publishConfig.exports` (the build).
   See [docs/releasing.md](docs/releasing.md#one-package-many-entry-points).
+
+## The report contract is stable
+
+The layer document, the way layers compose, the `ObjectStore` interface and the `atlas report status`
+JSON are what other projects build on. Change them only as [the report
+contract](docs/report-contract.md#versioning-and-stability) allows.
+
+- Within a schema version, only add optional fields. Never change what a field means, a status, the
+  slot a result fills, or the order in which results win. That is a new `schemaVersion`, a `!` commit
+  and a migration note.
+- `packages/reports/tests/fixtures/layer-v1.json` and `composition-laws.test.ts` guard the contract.
+  Never edit the fixture to make a test pass; fix the code.
+- After changing a Zod schema in `packages/schema/src`, run `bun run schemas` and commit the JSON
+  Schemas: a test fails when they differ.
+- A reader must treat what it cannot read as unknown, never as passed.
+- Evidence (attachments, steps, annotations, attempts, tags, labels, links, `extensions`) is where the format
+  grows, and it grows only as [docs/extending.md](docs/extending.md) allows: optional fields, open objects, open
+  vocabularies, nothing that decides a result. To add a kind of evidence, add it to
+  `layer-v1-extended.json` and keep `layer-extensibility.test.ts` passing. Never close a vocabulary, never make
+  an evidence field required, never let evidence change a status, a slot or a winner.
+- Attachment bytes are untrusted. Serve them only through `attachment-response.ts`.
+
+## The server is a living application, and a protocol
+
+`packages/server` (`atlas serve`, `atlas dev`, `@crvouga/atlas/server`) is a Bun API that serves the viewer from the
+same host; clients upload to it and viewers stream from it ([docs/server.md](docs/server.md)). Older and newer
+clients, viewers and servers meet over its HTTP API, so treat that API like the report contract.
+
+- Within a version of the API (`/api/store`, `/api/events`, `/api/status`, `/api/reports/*`, `/api/checks`) only add:
+  optional parameters, optional response fields, new events. Never change what an existing one means. A viewer or CLI
+  that does not know a new field must still work, and a server that does not know a new parameter (like `?since=`)
+  must be answered with the whole thing.
+- The server may refuse an upload, never alter one. Everything it checks (`validate.ts`) is what would corrupt the
+  report for everyone: keep it checking, and keep it cheap.
+- Uploading needs a Bearer token; a browser's sign-in box may only look. Do not weaken that.
+- The incremental report (`report-index.ts`) must always equal combining every layer from scratch, and
+  `applyEffectiveDelta(held, delta)` must equal the full report. Both are tested over random runs: keep them passing.
+- Performance is a feature here. Before and after a change to the index, the upload path or the viewer's data
+  loading, run `ATLAS_BENCH_DIR=/tmp/atlas-bench bun packages/server/bench/bench.ts 2000 100` and do not make
+  the numbers worse. Speed never buys a weaker guarantee: keep the code as simple as the numbers allow.
+
+## Documentation lives in the code, and is generated from it
+
+An agent integrating Atlas reads generated documentation, so it must not be able to disagree with the code. The rule is
+colocation: say it once, next to what it describes, and generate everything else from there.
+
+- Every library module (`packages/*/src`) starts with a `/** @module Title … */` comment and every exported declaration
+  has a doc comment (summary, parameters, failure behaviour, `@example` on entry points). `bun scripts/docs/coverage.ts`
+  lists gaps; a test fails on any. Write the comment when you write the code.
+- Generated, never edited by hand: `docs/reference/*.md` (from those comments, the usage text and the operation table),
+  `packages/server/openapi.json`, `llms.txt`, `llms-full.txt`, the JSON Schemas (`bun run schemas`), and the blocks between
+  `<!-- generated:NAME -->` markers in the guides. After changing a comment, a route, a setting, a schema or a command's
+  usage, run `bun run docs` (and `bun run schemas`) and commit the result; `bun run docs -- --check` and the tests fail when
+  anything is stale.
+- A new HTTP route needs an operation in `packages/server/src/openapi.ts` (a test fails if a route is undescribed). A new
+  server setting needs a row in `SERVER_SETTINGS` with an example that a test proves. A new command output document needs a
+  Zod schema in `packages/schema/src/cli-results.ts` and a line in `docs/agents.md`. Every command that prints a result
+  supports `--format json`.
+- Guides in `docs/` are written by hand and listed in `scripts/docs/generate.ts` (`GUIDES`) so they reach `llms.txt`; a test
+  checks every relative link and anchor.
+
+## The S3 store is tested against a real server
+
+`packages/reports/tests/s3-store.integration.test.ts` and `s3-flow.integration.test.ts` run only when
+`ATLAS_TEST_S3_ENDPOINT` names an S3-protocol server (CI starts SeaweedFS in the `s3` job). To run them
+locally: start one (`docker run -p 18333:8333 -v $PWD/examples/deploy/s3.json:/etc/s3.json
+chrislusf/seaweedfs server -s3 -s3.config=/etc/s3.json -dir=/data`), create a bucket, and set
+`ATLAS_TEST_S3_ENDPOINT=http://localhost:18333`, `ATLAS_TEST_S3_BUCKET`, `ATLAS_TEST_S3_KEY` and
+`ATLAS_TEST_S3_SECRET` (the demo credentials in `examples/deploy/s3.json` are `atlaskey` / `atlassecret`).
+Change `s3-store.ts` or `sigv4.ts` only with those passing: a unit test with a fake `fetch` cannot tell you
+that S3 accepts your signature.
 
 ## Releases are automatic
 

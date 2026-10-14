@@ -49,3 +49,7 @@ export function useFinderOpen() {
 export function useHelpOpen() {
   return useSyncExternalStore(subscribeFinder, isHelpOpen, () => false);
 }
+
+export function commandKey() {
+  return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘K' : 'Ctrl+K';
+}

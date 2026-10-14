@@ -1,0 +1,74 @@
+/**
+ * @module llms.txt of a running server
+ *
+ * The plain-text guide ([llms.txt](https://llmstxt.org)) a server serves about itself at `GET /llms.txt`, for an AI
+ * agent that was handed nothing but the server's address. It is written from this server's own settings (its
+ * address, whether it needs a token), so what it says is true of the server that says it, and it points at the
+ * machine-readable description (`/api/openapi.json`) rather than repeating it.
+ */
+
+/** What the guide says about the server that serves it. */
+export type LlmsContext = {
+  /** The address clients use, such as `https://atlas.example.com`, no trailing slash. */
+  readonly url: string;
+  /** True when the server has no tokens: anyone who can reach it may upload. */
+  readonly open: boolean;
+  /** The id of the backend uploads go to. */
+  readonly write: string;
+};
+
+/** The guide for one server, Markdown. Stable in structure: an agent may read it by its headings. */
+export function llmsTxt(context: LlmsContext): string {
+  const { url } = context;
+  return `# Atlas server at ${url}
+
+> Atlas shows whether a product still does what it was specified to do. Every environment (laptops, CI, device labs) sends its test results here as immutable "layers"; this server keeps them and shows everyone one combined report, live. The newest completed result of every check wins its slot, whoever sent it.
+
+## Machine-readable description
+
+- [OpenAPI 3.1](${url}/api/openapi.json): every endpoint, parameter, body, response and error. Generate a client or a test suite from it.
+- [JSON Schemas](https://unpkg.com/@crvouga/atlas/packages/schema/schemas/): the layer format, the checks file, the report status and the server's responses.
+- Errors are RFC 9457 problem documents (\`application/problem+json\`); \`detail\` says what to do.
+- Live updates: \`GET ${url}/api/events\` (server-sent events: \`hello\`, \`report\`, \`atlas:change\`, \`ping\`).
+
+## Authenticate
+
+${context.open
+    ? 'This server has **no tokens**: anyone who can reach it may upload. Nothing to configure.'
+    : `This server needs a token. Ask the operator for a \`publish\` token (to upload) and a \`read\` token (to look). Send \`Authorization: Bearer <token>\`; the CLI reads \`ATLAS_TOKEN\`. Uploading needs the Bearer header. A token is a secret of this one server: never put it in a URL or send it to another host.`}
+
+## Integrate a project (run in the project's repository)
+
+\`\`\`sh
+export ATLAS_STORE=${url}${context.open ? '' : '\nexport ATLAS_TOKEN=<a publish token>'}
+bunx @crvouga/atlas init --server ${url}          # detects test runners and specs, prints a plan (add --json for a machine-readable one)
+bunx @crvouga/atlas init --server ${url} --write  # writes the CI workflow and the AGENTS.md section the plan names
+bunx @crvouga/atlas report doctor                 # proves the server can be written to and read
+\`\`\`
+
+After each suite, send its results (a JUnit or CTRF file, or JSON lines as checks finish):
+
+\`\`\`sh
+bunx @crvouga/atlas report publish --producer <suite> --junit out.xml --specs ./specs --environment <env>
+my-suite --json | bunx @crvouga/atlas report stream --producer <suite> --environment <env>
+\`\`\`
+
+Or with no tooling at all: \`POST ${url}/api/checks\` with \`{"producer":"smoke","checks":[{"id":"login","title":"can log in","status":"passed"}]}\`.
+
+## Ask whether it passes
+
+\`\`\`sh
+bunx @crvouga/atlas report status --format json --branch main --ignore-modified   # exit 0 pass, 1 does not, 2 wrong command
+curl ${context.open ? '' : '-H "authorization: Bearer $ATLAS_TOKEN" '}${url}/api/status                      # the same verdict; header X-Atlas-Ok: true|false
+\`\`\`
+
+## Rules worth knowing
+
+- **Layered, never partitioned.** A check is identified by its \`id\` (keep it stable across runs) plus producer, kind, spec, environment and parameters. A layer that re-ran one check leaves every other check as the last layer that ran it.
+- **Unknown is never a pass.** A check still \`running\`, a layer that could not be read, a backend that is down, or a required environment with no results all fail the gate.
+- **Failures are evidence: publish them.** Run the suite, ignore its exit code, publish, then gate.
+- **Layers are immutable** and named by their content: re-publishing is safe, and a retry never makes a duplicate.
+- Uploads go to the backend \`${context.write}\`. Read \`${url}/api/server\` for the backends and what this server can do (\`capabilities\`).
+- Evidence (screenshots, videos, traces, logs, steps, annotations, your own data) rides on checks: see https://github.com/crvouga/atlas/blob/main/docs/extending.md
+`;
+}

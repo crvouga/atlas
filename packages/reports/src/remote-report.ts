@@ -1,8 +1,10 @@
 /**
- * A commit's report, streamed from a reports API into a Solid store the
- * viewer renders as it grows: the test list fills in source by source, and
- * a test's steps and frame files stream in the first time it is opened.
- * Transport and time are injected; nothing here touches a global.
+ * @module Remote commit report
+ *
+ * A commit's report, streamed from a reports API into a Solid store the viewer renders as it grows: the test list
+ * fills in source by source, and a test's steps and frame files stream in the first time it is opened. Transport and
+ * time are injected (`http`, `timers`, `fetcher`); nothing here touches a global. It reads only: it never writes to
+ * the API. It serves the older commit-keyed recordings (see `protocol.ts`), not layers.
  */
 
 import type { Timers } from './clock';
@@ -34,16 +36,21 @@ import type { ReportTestLoader, TestLoad } from './report-loader';
 /** Wait before reconnecting a stream that failed. */
 const RETRY_MS = 3_000;
 
+/** What `createRemoteReport` needs: transport, timers, and which commit to open. */
 export type RemoteReportArgs = {
+  /** The HTTP client used for the event stream. */
   readonly http: HttpClient;
+  /** Timer functions for the reconnect wait. */
   readonly timers: Timers;
   /** The reports API root (`https://api.example.com/api/reports`). */
   readonly apiBase: string;
+  /** The full 40-hex commit sha to open. */
   readonly sha: string;
   /** Cached reads (sources, stylesheet, one test, one frame file). */
   readonly fetcher: ReportFetcher;
 };
 
+/** Where the commit stream is: `connecting` before the first event, `live` while tailing a running commit, `complete` or `missing` once it ended for good, `error` after a stream failed (it retries). */
 export type RemoteReportPhase =
   | 'connecting'
   | 'live'
@@ -51,17 +58,29 @@ export type RemoteReportPhase =
   | 'missing'
   | 'error';
 
+/** An open report: reactive data that grows as the stream delivers, and the handles to load more or stop. */
 export type RemoteReport = {
+  /** The tests of the commit as a Solid store; steps and frame files fill in when a test is loaded. */
   readonly data: ReportData;
+  /** The commit record, `null` until the stream sends it (or when none exists). */
   readonly commit: Accessor<CommitRecord | null>;
+  /** The stream's phase. */
   readonly phase: Accessor<RemoteReportPhase>;
+  /** The source records received so far. */
   readonly sources: Accessor<readonly SourceRecord[]>;
+  /** The stylesheet snapshots render with: `undefined` until read, `''` when there is none. */
   readonly frameCss: Accessor<string | undefined>;
+  /** Loads one test's timeline and frame files on demand. */
   readonly loader: ReportTestLoader;
+  /** Stops the stream and any pending reconnect. Safe to call more than once. */
   readonly dispose: () => void;
 };
 
-/** Read an SSE response body, handing each message to `onEvent`. */
+/**
+ * Reads a Server-Sent Events response body to its end, handing each message's parsed `data` to `onEvent` in order.
+ * Throws `reports API answered <status>` when the response is not ok or has no body; rejects when the stream breaks
+ * or a message is not JSON.
+ */
 export async function readEventStream<T>(
   response: Response,
   onEvent: (event: T) => void
@@ -366,8 +385,10 @@ async function loadCached(ctx: Ctx): Promise<void> {
 }
 
 /**
- * Open a commit's report. The commit stream reconnects on its own (sending
- * the sources it already holds) until the commit is complete or missing.
+ * Opens a commit's report and starts streaming it. The commit stream reconnects on its own (sending the sources it
+ * already holds as `?have=`; after a failure it waits 3 seconds first) until the commit is complete or missing, or
+ * `dispose` is called. Sources and the stylesheet are also read from the query cache so a revisit paints at once.
+ * Call this inside a Solid root: it creates signals and a store.
  */
 export function createRemoteReport(args: RemoteReportArgs): RemoteReport {
   const [store, setStore] = createStore<Store>({

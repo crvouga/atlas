@@ -1,0 +1,59 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/stream-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "description": "False when any check could not be sent (the exit code is then 1)",
+      "type": "boolean"
+    },
+    "producer": {
+      "type": "string"
+    },
+    "environment": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "layers": {
+      "description": "Layers that arrived",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "checks": {
+      "description": "Checks that arrived",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "lost": {
+      "description": "Checks that never arrived",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "warnings": {
+      "description": "Input lines that were skipped, and sends that failed",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "producer",
+    "environment",
+    "layers",
+    "checks",
+    "lost",
+    "warnings"
+  ],
+  "additionalProperties": {}
+}

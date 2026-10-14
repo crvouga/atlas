@@ -1,7 +1,21 @@
+/**
+ * @module Report parts of a recorded source
+ *
+ * Turns a recorded source (a package bucket's tests with their outcomes) into the report parts (checks grouped by kind)
+ * that become a layer's `parts`. Fail-closed: a source that failed as a whole always carries at least one failed check,
+ * so recorded passes cannot hide a producer that did not complete.
+ */
 import type { ReportPart } from './explorer-types';
 import { viewerTestId } from './keys';
 import type { SourceRecord } from './protocol';
 
+/**
+ * The main part of a source: its own evidence part (the first one that is not `performance`) re-keyed to the source,
+ * or else one check per test. Check ids become `<source>/<testId>` so two packages can name a test alike. The part's
+ * `kind` is `ui-quality` for the `ui-quality` bucket and `behavior` otherwise (unless its evidence says otherwise); a
+ * skipped test is `not-run`. When the source failed but no check did, a failing `<source>:producer-failure` check is
+ * added.
+ */
 export function sourcePart(sha: string, source: SourceRecord): ReportPart {
   const kind = source.bucket === 'ui-quality' ? 'ui-quality' : 'behavior';
   const primary = source.evidence?.find((part) => part.kind !== 'performance');
@@ -64,6 +78,7 @@ function withProducerFailure(
   };
 }
 
+/** The parts of a source: `sourcePart`, then each `performance` evidence part as its own part with id `<source>--performance`, re-keyed to the source's time and check ids. */
 export function sourceParts(
   sha: string,
   source: SourceRecord

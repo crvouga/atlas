@@ -1,3 +1,14 @@
+/**
+ * @module Atlas core
+ *
+ * The public entry point of `@crvouga/atlas`: define a config (`defineConfig`), then load, lint, plan
+ * and run executable statecharts against a real product through a driver, and write a manifest of the
+ * results. This file only re-exports, grouped by stage: spec (types, load, SCXML, composition), graph,
+ * lint, plan, run (drivers, implementations, execution), business events, privacy, report formats and
+ * config. It does no work at import time. Browser-safe parts are also available from `./spec`.
+ *
+ * @see docs/statecharts.md
+ */
 export * from './spec/types';
 export { parseChart, parseJourneys, loadSpecDirectory, bundleOf, childChartIds } from './spec/load';
 export { scxmlToMachine, machineToScxml, scxmlToken, ATLAS_NS } from './spec/scxml';

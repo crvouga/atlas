@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
 
 import { reportJson } from './api';
+import { ResultEvidence } from './artifacts';
 import { useEvidence } from './evidence-context';
 import styles from './evidence.module.css';
 import { ago, duration, plural, statusWord, useNow } from './format';
@@ -77,7 +78,7 @@ export function ResultRow({ label, slot, open, onToggle, children }: { label: st
         </span>
         {slot?.live && <span className={styles.liveTag}>Running now</span>}
         <span className={styles.resultAside}>
-          {newest ? [duration(newest.row.durationMs), slot.live ? '' : ago(slot.latestAtMs, now)].filter(Boolean).join(' · ') : 'No result'}
+          {newest ? [newest.row.evidence?.attachments ? plural(newest.row.evidence.attachments, 'attachment', 'attachments') : '', duration(newest.row.durationMs), slot.live ? '' : ago(slot.latestAtMs, now)].filter(Boolean).join(' · ') : 'No result'}
         </span>
         <span className={styles.chevron} aria-hidden="true" />
       </button>
@@ -253,6 +254,7 @@ export function CheckDetail({ slot, layerId, select, reads, written }: Props) {
           </p>
         );
       }))}
+      <ResultEvidence layer={chosen.layer} row={chosen.row} />
       {(moments > 0 || chosen.layer.runUrl) && (
         <p className={styles.actionsLine}>
           {moments > 0 && (

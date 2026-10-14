@@ -1,0 +1,62 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/outline.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "specs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "`specs/<path>`",
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "The kind of spec: `gherkin`, `quint`, `dmn`, …",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "description": "Identity of the spec text, so a result recorded against other text is flagged as possibly outdated",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "domain",
+          "kind",
+          "title"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "sha": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "changedFiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "specs",
+    "sha",
+    "changedFiles"
+  ],
+  "additionalProperties": {}
+}

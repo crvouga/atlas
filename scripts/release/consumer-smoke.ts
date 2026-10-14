@@ -18,6 +18,7 @@
  *   bun run build && bun run release:smoke
  *   bun run release:smoke --keep     (leave the installed project behind to inspect)
  */
+import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -89,6 +90,9 @@ export function exportSpecifiers(name: string, manifest: Manifest, files: string
   for (const [subpath, target] of Object.entries(manifest.exports ?? {})) {
     if (subpath === './package.json') continue;
     if (!subpath.includes('*')) {
+      // A data file (`./openapi.json`, `./llms.txt`) is not importable as a module: the tarball check covers that it ships.
+      const file = typeof target === 'string' ? target : (target as { default?: string } | null)?.default;
+      if (file && /\.(json|txt)$/.test(file)) continue;
       specifiers.push(subpath === '.' ? name : `${name}/${subpath.slice(2)}`);
       continue;
     }
@@ -103,6 +107,53 @@ export function exportSpecifiers(name: string, manifest: Manifest, files: string
     }
   }
   return specifiers.sort();
+}
+
+/** Start the server, read from it, send results to it, hear them on its stream, and stop it with SIGTERM, which has to end it cleanly. */
+async function probeNode(runtime: string, args: string[], cwd: string): Promise<void> {
+  const child = spawn(runtime, args, { cwd, stdio: ['ignore', 'pipe', 'inherit'] });
+  let output = '';
+  const url = await new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`atlas serve under ${runtime} did not start:\n${output}`)), 60_000);
+    child.stdout.on('data', (chunk) => {
+      output += String(chunk);
+      const found = /Atlas ready on (http:\/\/[^\s:]+:\d+)/.exec(output);
+      if (found) { clearTimeout(timer); resolve(found[1]!); }
+    });
+    child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`atlas serve under ${runtime} exited with ${code}:\n${output}`)); });
+  });
+  try {
+    if (!(await fetch(`${url}/healthz`)).ok) throw new Error('/healthz is not ok');
+    const effective = (await (await fetch(`${url}/api/reports/evidence/effective`)).json()) as { layers: unknown[] };
+    if (effective.layers.length < 1) throw new Error('the server served no layers from its data');
+    if (!(await fetch(`${url}/readyz`)).ok) throw new Error('/readyz is not ok');
+    // The server describes itself, without a token: the description for tools and the guide for agents.
+    const described = (await (await fetch(`${url}/api/openapi.json`)).json()) as { openapi?: string; paths?: object };
+    if (described.openapi !== '3.1.0' || !described.paths) throw new Error('/api/openapi.json is not an OpenAPI 3.1 document');
+    if (!(await (await fetch(`${url}/llms.txt`)).text()).includes(`# Atlas server at ${url}`)) throw new Error('/llms.txt does not describe this server');
+    // Results go in over the API and come out on the stream, through the same host.
+    const events = await fetch(`${url}/api/events`);
+    const reader = events.body!.getReader();
+    const decoder = new TextDecoder();
+    let heard = decoder.decode((await reader.read()).value);
+    if (!heard.includes('event: hello')) throw new Error(`the event stream did not say hello: ${heard}`);
+    const sent = await fetch(`${url}/api/checks`, { method: 'POST', body: JSON.stringify({ producer: 'smoke', checks: [{ id: 'smoke-check', title: 'smoke', status: 'passed' }] }) });
+    if (sent.status !== 201) throw new Error(`uploading to the server answered ${sent.status}: ${await sent.text()}`);
+    const deadline = Date.now() + 15_000;
+    while (!heard.includes('event: report') && Date.now() < deadline) heard += decoder.decode((await reader.read()).value);
+    await reader.cancel();
+    if (!heard.includes('event: report')) throw new Error('the server did not announce the uploaded results');
+    const after = (await (await fetch(`${url}/api/reports/evidence/effective`)).json()) as { layers: unknown[] };
+    if (after.layers.length <= effective.layers.length) throw new Error('an uploaded layer did not reach the report');
+    const page = await (await fetch(`${url}/`)).text();
+    if (!page.includes('__ATLAS_CONFIG__') || !page.includes('<div id="root">')) throw new Error('the node did not serve the viewer with its address book');
+  } finally {
+    child.removeAllListeners('exit');
+    const exited = new Promise<number | null>((resolve) => child.on('exit', resolve));
+    child.kill('SIGTERM');
+    const code = await exited;
+    if (code !== 0) throw new Error(`atlas serve under ${runtime} did not stop cleanly on SIGTERM (exit ${code})`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -224,6 +275,27 @@ async function main(): Promise<void> {
       }
     }
 
+    if (atlas) {
+      // The reports are the other way in: two nodes each publish part of a report, and the aggregate gates.
+      const ctrf = (name: string) => JSON.stringify({ results: { tool: { name: 'smoke' }, summary: { stop: 1000 }, tests: [{ name, status: 'passed', filePath: 'specs/flow.feature' }] } });
+      writeFileSync(path.join(app, 'node-1.ctrf.json'), ctrf('first'));
+      writeFileSync(path.join(app, 'node-2.ctrf.json'), ctrf('second'));
+      for (const [runtime, args] of RUNTIMES) {
+        console.log(`consumer-smoke: ${runtime} atlas report publish, merge and status`);
+        const store = (name: string) => `reports-${runtime}-${name}`;
+        for (const node of ['1', '2']) {
+          await must(runtime, [...args, atlas, 'report', 'publish', '--store', store(node), '--producer', 'smoke', '--ctrf', `node-${node}.ctrf.json`, '--environment', 'desktop-web', '--sha', 'a'.repeat(40), '--branch', 'main'], { cwd: app });
+        }
+        const gated = await must(runtime, [...args, atlas, 'report', 'status', '--store', store('1'), '--store', store('2'), '--format', 'json'], { cwd: app });
+        const status = JSON.parse(gated) as { ok: boolean; checks: { passed: number } };
+        if (!status.ok || status.checks.passed !== 2) throw new Error(`atlas report status under ${runtime} did not combine both nodes:\n${gated}`);
+        await must(runtime, [...args, atlas, 'report', 'merge', '--store', store('1'), '--store', store('2'), '--into', store('all')], { cwd: app });
+        // An agent's first command: it reads the project and prints a plan as JSON, under both runtimes.
+        const planned = JSON.parse(await must(runtime, [...args, atlas, 'init', '--server', 'https://atlas.example.com', '--format', 'json'], { cwd: app })) as { ok: boolean; server: { url: string }; files: { path: string }[]; suites: unknown[] };
+        if (!planned.ok || planned.server.url !== 'https://atlas.example.com' || !planned.files.some(file => file.path === 'AGENTS.md')) throw new Error(`atlas init under ${runtime} did not plan:\n${JSON.stringify(planned)}`);
+      }
+    }
+
     const visualizer = bins.get('atlas-visualizer');
     if (visualizer) {
       for (const [runtime, args] of RUNTIMES) {
@@ -233,6 +305,16 @@ async function main(): Promise<void> {
         if (!existsSync(path.join(app, out, 'index.html'))) throw new Error(`atlas-visualizer build wrote no ${out}/index.html`);
         // Its stylesheet is a side-effect import: gone if the package wrongly declares the app side-effect free.
         if (!readdirSync(path.join(app, out, 'assets')).some((file) => file.endsWith('.css'))) throw new Error(`atlas-visualizer build dropped its stylesheet under ${runtime}`);
+      }
+    }
+
+    if (atlas && visualizer) {
+      // The server: one process that serves the viewer, the API and the stream, on its own data folder, on both runtimes.
+      for (const [runtime, args] of RUNTIMES) {
+        const site = `node-site-${runtime}`;
+        console.log(`consumer-smoke: ${runtime} atlas-visualizer build --no-data, then atlas serve`);
+        await must(runtime, [...args, visualizer, 'build', '--no-data', '--out', site], { cwd: app });
+        await probeNode(runtime, [...args, atlas, 'serve', '--data', `reports-${runtime}-all`, '--site', site, '--port', '0', '--host', '127.0.0.1', '--no-log'], app);
       }
     }
 

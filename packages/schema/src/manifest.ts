@@ -1,11 +1,29 @@
+/**
+ * @module Statechart run manifest schemas
+ *
+ * Zod schemas for `runs/<run-id>/manifest.json`, the file `atlas run` writes for one run of a statechart spec: run
+ * info, the map of states and edges, one record per state, transition, path, journey and seed, the timeline and
+ * business events observed, and coverage. The envelope keeps each section `unknown` so a reader can validate every
+ * record on its own and keep the ones that parse (the visualizer's `parse/manifest.ts` does). Within a
+ * `schemaVersion` only optional fields are added. A run is published into the layered report with `atlas report
+ * publish --manifest`.
+ *
+ * @see docs/statecharts.md
+ * @see docs/report-contract.md
+ */
 import { z } from 'zod/v4';
 
 import { CountSchema, EventKindSchema, ImageSchema, RunStatusSchema } from './common.js';
 
 /** Manifest schema versions this package describes. Readers accept these and try newer ones. */
 export const MANIFEST_SCHEMA_VERSIONS = [1] as const;
+/**
+ * The newest manifest `schemaVersion` this package describes. The visualizer reads a manifest without a version as
+ * this one, and reads a newer one as far as it understands it.
+ */
 export const LATEST_MANIFEST_SCHEMA_VERSION = 1;
 
+/** Whether a screenshot or clip a run promised is `ready`, still `processing` or `failed`. Absent means ready. */
 export const MEDIA_STATES = ['ready', 'processing', 'failed'] as const;
 
 /**
@@ -14,8 +32,17 @@ export const MEDIA_STATES = ['ready', 'processing', 'failed'] as const;
  */
 export const MediaStateSchema = z.enum(MEDIA_STATES);
 
+/**
+ * Kinds of `TimelineEntry` a driver records during a transition: `tap`, `type`, `system` (a call to or from another
+ * system), `screen` (the screen changed), `toast`, `note`, `time` (a clock jump), `notification`. A reader shows a
+ * kind it does not know as a `note`.
+ */
 export const TIMELINE_KINDS = ['tap', 'type', 'system', 'screen', 'toast', 'note', 'time', 'notification'] as const;
 
+/**
+ * A call between the product and another system during a transition, recorded on a `system` timeline entry: source,
+ * endpoint, event type, payload and response. The HTTP driver records these.
+ */
 export const SystemCallSchema = z.object({
   source: z.string().optional(),
   endpoint: z.string().optional(),
@@ -39,6 +66,10 @@ export const NotificationSchema = z.object({
   body: z.string().optional()
 });
 
+/**
+ * One moment in a transition's timeline: what happened (`kind`, `label`), when (`atMs` from the start of the clip)
+ * and the details that go with the kind. The timeline becomes the captions of the transition's clip.
+ */
 export const TimelineEntrySchema = z.object({
   atMs: z.number().nonnegative().describe('Milliseconds from the start of the clip'),
   kind: z.enum(TIMELINE_KINDS),
@@ -51,6 +82,7 @@ export const TimelineEntrySchema = z.object({
   notification: NotificationSchema.optional(),
   client: z.string().optional().describe('The client that did it, in a multi-client run')
 });
+/** A parsed `TimelineEntrySchema` value. */
 export type TimelineEntry = z.infer<typeof TimelineEntrySchema>;
 
 /** A CloudEvents 1.0 event (JSON format), as an event source observed it. */
@@ -66,8 +98,13 @@ export const CloudEventSchema = z
     data: z.unknown().optional()
   })
   .passthrough();
+/** A parsed `CloudEventSchema` value. */
 export type CloudEvent = z.infer<typeof CloudEventSchema>;
 
+/**
+ * The business events a state expects (from `meta.events`) against what event sources observed while the step ran:
+ * `expected`, `observed`, `missing`, and `noSignal` for those with no observable signal mapped.
+ */
 export const BusinessEventsSchema = z.object({
   expected: z.array(z.string()),
   observed: z.array(z.string()),
@@ -75,21 +112,36 @@ export const BusinessEventsSchema = z.object({
   noSignal: z.array(z.string()).describe('No observable signal is mapped yet'),
   events: z.array(CloudEventSchema).optional().describe('The CloudEvents observed during the step')
 });
+/** A parsed `BusinessEventsSchema` value. */
 export type BusinessEvents = z.infer<typeof BusinessEventsSchema>;
 
+/**
+ * The result of one item of a state's `meta.checks`: its text, whether it held, and what was expected and seen when
+ * it did not. A failed check fails the state.
+ */
 export const CheckResultSchema = z.object({
   check: z.string(),
   passed: z.boolean(),
   expected: z.string().optional(),
   actual: z.string().optional()
 });
+/** A parsed `CheckResultSchema` value. */
 export type CheckResult = z.infer<typeof CheckResultSchema>;
 
+/**
+ * What a state's recogniser saw: whether the state matched, and each signal with what was expected (visible or
+ * hidden) and whether it was visible.
+ */
 export const RecognizerSchema = z.object({
   matched: z.boolean(),
   signals: z.array(z.object({ signal: z.string(), expected: z.string(), visible: z.boolean() }))
 });
 
+/**
+ * The `run` section of a manifest: identity, timing and provenance of the run (id, start and finish, commit, branch,
+ * environment, mode), the spec version and directory, how far it has got, and how the plan was split, scoped, reused
+ * or merged.
+ */
 export const RunInfoSchema = z.object({
   id: z.string().min(1),
   startedAt: z.string(),
@@ -116,8 +168,13 @@ export const RunInfoSchema = z.object({
   reused: z.object({ from: z.string(), paths: z.number().int().nonnegative() }).optional().describe('Passed paths kept from an earlier run instead of running again'),
   mergedFrom: z.array(z.string()).optional().describe('The runs this run was composed from')
 });
+/** A parsed `RunInfoSchema` value. */
 export type RunInfo = z.infer<typeof RunInfoSchema>;
 
+/**
+ * A chart that took part in the run: its id, spec file and description, the state of its parent that invokes it, and,
+ * for each of its final states, the hand-off event its parent receives.
+ */
 export const ManifestChartSchema = z.object({
   id: z.string().min(1),
   file: z.string(),
@@ -126,6 +183,10 @@ export const ManifestChartSchema = z.object({
   handOffs: z.record(z.string(), z.string()).optional()
 });
 
+/**
+ * A state in the map of the composed product: id, parent state, chart, type, initial child, and whether it is inside
+ * the scope of the run.
+ */
 export const MapNodeSchema = z.object({
   id: z.string().min(1),
   parent: z.string().nullable(),
@@ -135,6 +196,10 @@ export const MapNodeSchema = z.object({
   inScope: z.boolean().optional()
 });
 
+/**
+ * A transition in the map: its id (see `transitionId`), source and target state names (the target is empty when the
+ * event leads nowhere), the event, who sends it, and whether it is inside the scope of the run.
+ */
 export const MapEdgeSchema = z.object({
   id: z.string().min(1),
   source: z.string(),
@@ -144,6 +209,11 @@ export const MapEdgeSchema = z.object({
   inScope: z.boolean().optional()
 });
 
+/**
+ * The result for one state: what the spec says about it (description, snapshot, confidence, sources, expected
+ * events), whether the run reached it, its screenshots, what the recogniser saw, the business events and
+ * `meta.checks` results, and the paths that reached it.
+ */
 export const StateRecordSchema = z.object({
   name: z.string(),
   chart: z.string().nullable().optional(),
@@ -166,8 +236,13 @@ export const StateRecordSchema = z.object({
   reachedBy: z.array(z.string()).optional(),
   notes: z.array(z.string()).optional()
 });
+/** A parsed `StateRecordSchema` value. */
 export type StateRecord = z.infer<typeof StateRecordSchema>;
 
+/**
+ * A video of one transition: `video` and `poster` as paths relative to the run directory, its duration, and which
+ * client's screen it shows.
+ */
 export const ClipSchema = z.object({
   video: z.string().min(1),
   poster: z.string().optional(),
@@ -176,8 +251,14 @@ export const ClipSchema = z.object({
   client: z.string().optional().describe('The client whose screen was recorded'),
   state: MediaStateSchema.optional()
 });
+/** A parsed `ClipSchema` value. */
 export type Clip = z.infer<typeof ClipSchema>;
 
+/**
+ * The result for one transition (an event leaving a state): source, target, event, who sends it, how the
+ * implementation makes it happen, its status, clip and timeline, why it was not reached, and the paths that took it.
+ * Keyed in a manifest by its id (see `transitionId`).
+ */
 export const TransitionRecordSchema = z.object({
   id: z.string().optional(),
   source: z.string(),
@@ -192,8 +273,10 @@ export const TransitionRecordSchema = z.object({
   reason: z.string().nullable().optional(),
   reachedBy: z.array(z.string()).optional()
 });
+/** A parsed `TransitionRecordSchema` value. */
 export type TransitionRecord = z.infer<typeof TransitionRecordSchema>;
 
+/** One step of a path: the event, the transition it takes and its outcome, with the reason when it was not reached. */
 export const PathStepSchema = z.object({
   transition: z.string().optional(),
   event: z.string(),
@@ -201,6 +284,11 @@ export const PathStepSchema = z.object({
   reason: z.string().nullable().optional()
 });
 
+/**
+ * The result for one planned path: a curated `journey` or a `generated` path covering transitions. It holds the
+ * status, every attempt (a failed first attempt is retried once unless retries are off), the steps and where it
+ * stopped, and the identity (`key`), start states and seed that let results from different runs compose.
+ */
 export const PathRecordSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
@@ -229,6 +317,7 @@ export const PathRecordSchema = z.object({
   setupMs: z.number().nonnegative().optional().describe('How long seeding (or setup) and the start check took'),
   reusedFrom: z.string().optional().describe('The run this result was kept from')
 });
+/** A parsed `PathRecordSchema` value. */
 export type PathRecord = z.infer<typeof PathRecordSchema>;
 
 /** A journey's result, composed from the paths it is cut into (one per seeded stretch). */
@@ -239,6 +328,7 @@ export const JourneyRecordSchema = z.object({
   paths: z.array(z.string()),
   stoppedAt: z.string().nullable().optional().describe('The first path that did not pass')
 });
+/** A parsed `JourneyRecordSchema` value. */
 export type JourneyRecord = z.infer<typeof JourneyRecordSchema>;
 
 /** A configuration the implementation can put the system in directly, and what checks it. */
@@ -252,6 +342,7 @@ export const SeedRecordSchema = z.object({
   paths: z.array(z.string()).describe('Paths that start from it'),
   verifiedBy: z.array(z.string()).describe('Passed paths that reached the same states through the steps, so results either side of it compose')
 });
+/** A parsed `SeedRecordSchema` value. */
 export type SeedRecord = z.infer<typeof SeedRecordSchema>;
 
 /** Other formats the run wrote, relative to the manifest: JUnit XML, CTRF JSON, Mermaid. */
@@ -261,6 +352,10 @@ export const ReportsSchema = z.object({
   mermaid: z.string().optional()
 });
 
+/**
+ * Result of the privacy scan of a run: whether it passed and what it found. Media of a run whose scan did not pass
+ * are not uploaded with `--upload-run`.
+ */
 export const PrivacySchema = z.object({
   passed: z.boolean(),
   findings: z.array(z.string())

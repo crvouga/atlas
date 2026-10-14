@@ -1,0 +1,28 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/store-write-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true
+    },
+    "key": {
+      "type": "string"
+    },
+    "kind": {
+      "description": "What the server recognised the key as: `layer`, `layer-catalog`, `blob`, `spec-body`, `spec-set`, `spec-catalog`, `run-manifest`, `run-catalog`, `run-file` or `scratch`",
+      "type": "string"
+    },
+    "created": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ok",
+    "key",
+    "kind",
+    "created"
+  ],
+  "additionalProperties": {}
+}

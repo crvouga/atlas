@@ -1,6 +1,7 @@
 # @crvouga/atlas
 
-Executable statecharts. Load charts in W3C SCXML or XState v5 machine config, compose child charts,
+Executable statecharts, and the `atlas report` command for layered evidence of specs of any kind
+([integrating Atlas](../../docs/integrating.md)). Load charts in W3C SCXML or XState v5 machine config, compose child charts,
 lint them, plan paths that cover every transition, run those paths against a real system through
 any driver, and write a manifest with JUnit, CTRF, Mermaid and WebVTT alongside.
 
