@@ -1,3 +1,12 @@
+/**
+ * @module Authentication and roles
+ *
+ * Who is asking, and may they. Tokens have a role (`read` < `publish` < `admin`) and are compared in constant time. Reading
+ * accepts a Bearer token or the browser's sign-in box (any user name, the token as the password); changing anything needs
+ * the Bearer header, because a browser sends the sign-in box's credentials to any page that asks, which would let another
+ * site upload with them. A server with no tokens is open, and refuses to listen beyond this machine unless told it may.
+ */
+
 import { timingSafeEqual } from 'node:crypto';
 
 import type { ServerRole } from '../../schema/src/server-config';
@@ -5,6 +14,7 @@ import type { ResolvedToken } from './config';
 
 const RANK: Readonly<Record<ServerRole, number>> = { read: 1, publish: 2, admin: 3 };
 
+/** Who a request is: the token's `name` (never the token), its `role`, and how it was presented (`bearer`, `basic`, or `none` for an open server or an anonymous reader). */
 export type Identity = {
   readonly name: string;
   readonly role: ServerRole;
@@ -12,6 +22,7 @@ export type Identity = {
   readonly via: 'bearer' | 'basic' | 'none';
 };
 
+/** The answer to "may this request do that": allowed with the identity, or refused with the status to answer (`401` no or unknown token, `403` a known token that may not) and a message that says what to do. */
 export type Verdict =
   | { readonly ok: true; readonly identity: Identity }
   | { readonly ok: false; readonly status: 401 | 403; readonly message: string };
@@ -62,4 +73,5 @@ export function createAuth(tokens: readonly ResolvedToken[], anonymousRead: bool
   return { identify, check, open: tokens.length === 0 };
 }
 
+/** The authentication of one server: `identify` (who is this), `check` (may they, for a needed role) and `open` (the server has no tokens). */
 export type Auth = ReturnType<typeof createAuth>;

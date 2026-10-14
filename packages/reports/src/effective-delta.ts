@@ -1,3 +1,13 @@
+/**
+ * @module Report deltas
+ *
+ * The client half of "send only what changed": `applyEffectiveDelta` turns the report a viewer holds and a delta from the
+ * server (`GET /api/reports/evidence/effective?since=<version>`) into the current report. Pure and free of Node APIs, so a
+ * browser bundle uses it. The server half is `ReportIndex.delta`; a test holds the two together over random runs.
+ *
+ * @see docs/server.md#reading-only-what-changed
+ */
+
 import type { LayerEvidence } from './evidence-types';
 import type { EffectiveEvidence } from './report-index';
 
@@ -18,6 +28,7 @@ export type EffectiveDelta = Omit<EffectiveEvidence, 'layers'> & {
   readonly removed: readonly string[];
 };
 
+/** Is `value` a delta (`delta: true`, a `base` version, `layers` and `removed`) and not a whole report? Decides which of the two a server answered. */
 export const isEffectiveDelta = (value: unknown): value is EffectiveDelta =>
   typeof value === 'object' && value !== null && (value as { delta?: unknown }).delta === true && typeof (value as { base?: unknown }).base === 'string' && Array.isArray((value as { layers?: unknown }).layers) && Array.isArray((value as { removed?: unknown }).removed);
 

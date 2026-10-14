@@ -1,3 +1,10 @@
+/**
+ * @module Markdown chart map
+ *
+ * Renders a chart (usually the composed product) as a Markdown document for the people who own the
+ * product, not for developers: plain Markdown with internal links, so it renders on any code host
+ * and diffs with the chart. Pure and deterministic.
+ */
 import type { Journey, MachineConfig, StateConfig } from '../spec/types';
 import { targetOf } from '../spec/types';
 
@@ -53,6 +60,14 @@ const cell = (text: string) => text.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, '
  * regions apart), each state with what it means, what the user sees, and every event that can
  * happen there and where it leads, then the named journeys. Plain Markdown, so it renders on any
  * code host and diffs with the chart.
+ *
+ * Top-level states become sections, and each region of a top-level parallel state gets its own. A
+ * `snapshot` is shown only when it contains whitespace (so an identifier-like snapshot is left out),
+ * and a state with `confidence: 'assumed'` is marked as unconfirmed. Links use GitHub's heading anchors.
+ *
+ * @param machine the chart, composed if child charts should be inlined.
+ * @param journeys the named journeys to list at the end; none by default.
+ * @see docs/statecharts.md
  */
 export function toMarkdown(machine: MachineConfig, journeys: Journey[] = []) {
   const sections = sectionsOf(machine);

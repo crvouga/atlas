@@ -1,3 +1,17 @@
+/**
+ * @module Layers HTTP routes
+ *
+ * The read-only HTTP API the viewer uses to see layers: a paged list of layer headers merged from every backend, the
+ * rows of one layer, its attachments and recorded timelines, the live runs still writing on this machine, and the
+ * spec outline. It is mounted under `/api/reports` by `reportsHost` and by the Atlas server. Immutable layers (64-hex
+ * ids) are read once and cached for good and answered with long-lived `immutable` cache headers; mutable commit-keyed
+ * recordings are re-read after a short wait. A backend that cannot be listed or a layer that cannot be read becomes a
+ * notice in the page, never a silent omission and never a pass. Layers the host's `include` filter rejects are absent
+ * from every route here, so a filter cannot be undone by asking for history.
+ *
+ * @see docs/server.md
+ * @see docs/report-contract.md#failure-behaviour
+ */
 import { Hono } from 'hono';
 import { createBundleReader } from './bundle';
 import { eachLimited } from './completion-order';
@@ -20,11 +34,13 @@ const LOCAL_TTL = 1_500;
 const PAGE = 40;
 const CACHED_ENTRIES = 4_096;
 
-/** A further store whose layers join the combined report, beside the local and the shared one. */
+/** A further store whose layers join the combined report, beside the local and the shared one. Passed as `backends` in `ReportsAppDeps`. */
 export type ReportBackend = {
-  /** Stable and unique: letters, digits and hyphens. `local` and `shared` are taken. */
+  /** Stable and unique: lowercase letters, digits and hyphens. `local` and `shared` are taken. Appears in cursors and URLs. */
   readonly id: string;
+  /** Human name shown for the backend in the viewer. */
   readonly label: string;
+  /** Where the backend's layers are read from. */
   readonly store: ObjectStore;
 };
 
@@ -32,10 +48,18 @@ type Backend = ReportBackend & { readonly live: boolean };
 type Listing = { at: number; keys: readonly string[]; available: boolean };
 type Entry = { readonly backend: number; readonly key: string };
 
+/** The id of the backend for this machine's own store (`localStore`), where runs may still be writing. */
 export const LOCAL_BACKEND = 'local';
+/** The id of the backend for the shared reports store (`store`). */
 export const SHARED_BACKEND = 'shared';
 
-/** The stores that contribute layers, in the order they answer for a recording. */
+/**
+ * The stores that contribute layers, in the order they answer for a recording: `localStore` (id `local`, live), then
+ * `store` (id `shared`) when it is a different store, then each of `backends`.
+ *
+ * Throws `Invalid report backend id: "<id>"` when an extra backend's id is not lowercase letters, digits and hyphens
+ * or repeats an earlier id (including `local` and `shared`).
+ */
 export function reportBackends(deps: ReportsAppDeps): Backend[] {
   const backends: Backend[] = [];
   if (deps.localStore) backends.push({ id: LOCAL_BACKEND, label: 'This machine', store: deps.localStore, live: true });
@@ -47,11 +71,31 @@ export function reportBackends(deps: ReportsAppDeps): Backend[] {
   return backends;
 }
 
+/** Whether a layer id is a content digest (64 lowercase hex digits), that is an immutable layer. */
 function archived(id: string): boolean {
   return /^[0-9a-f]{64}$/.test(id);
 }
 
-/** Bounded pages of layer origins, each layer's checks read once, and the runs still writing. */
+/**
+ * Builds the Hono app that serves layers: bounded pages of layer origins, each layer's checks read once, and the
+ * runs still writing. Throws (as `reportBackends`) when a backend id is invalid.
+ *
+ * Routes, relative to where it is mounted:
+ * - `GET /outline` the current specs as `{ specs, sha, changedFiles }` (503 when the host has no outline), cached 30 s.
+ * - `GET /outline/spec?path=` one outline spec's text; 404 for a path not in the outline.
+ * - `GET /evidence?cursor=&retry=` one page of layer headers (`EvidencePage`) from 40 catalog entries across all
+ *   backends: immutable layers newest first, then commit-keyed recordings. Without a cursor it also carries the live
+ *   runs of this machine. `cursor` is the previous page's; 409 when it no longer matches the listing (refresh).
+ *   Any `retry` value re-lists backends that were unavailable now instead of after the wait.
+ * - `GET /evidence/rows/:backend/:id` the checks and spec fingerprints of one layer (`LayerRows`).
+ * - `GET /evidence/detail/:backend/:id?check=&kind=` the run-level evidence of an immutable layer, or one check's detail.
+ * - `GET /layers/:id/blobs/*` an attachment of an immutable layer by its bundle key, served by `attachmentResponse`.
+ * - `GET /layers/:id/*` the recorded `frame.css`, `tests/<test>/report.json` and `tests/<test>/files/<frame>` of a layer.
+ * - `GET /live/:source/frame.css` and `GET /live/:source/tests/:testId/*` the same for a run still writing (uncached).
+ *
+ * Directory listings are cached for 30 s (1.5 s for the local store). A listing that fails keeps the previous keys and
+ * marks the backend unavailable; the page then carries a notice.
+ */
 export function createLayersApp(deps: ReportsAppDeps) {
   const backends = reportBackends(deps);
   // Layers the host leaves out are left out of every route, so a filter cannot be undone by asking for history.

@@ -1,3 +1,11 @@
+/**
+ * @module Static export of a report
+ *
+ * Copies what a running reports API serves (outline, spec texts, layer pages, rows, per-result evidence, recorded
+ * files) into an {@link ObjectStore}, one file per URL, so the viewer can be hosted statically. {@link evidenceFile}
+ * is the single mapping from an API path to the exported file name; the exporter writes with it and a static host
+ * must read with it. Only collected layers are exported (a static site has no running suite).
+ */
 import { eachLimited } from './completion-order';
 import { bundleKeysOf, type CheckDetail } from './evidence-detail';
 import { recordingPaths, type EvidencePage, type LayerRows } from './evidence-types';
@@ -8,6 +16,11 @@ import type { ObjectStore } from './object-store';
 import { capturedFiles } from './frames';
 import type { RunReport } from './report-types';
 
+/**
+ * Maps a report API path (with its query) to the file an export stores it under, for example `/evidence?cursor=x`
+ * to `evidence/pages/x.json` and `/` to `index.json`. Files a layer carries (`/blobs/`, `/files/`, `frame.css`,
+ * `report.json`) keep their path so their type stays known by name; everything else gets `.json` appended. Pure.
+ */
 export function evidenceFile(path: string): string {
   const url = new URL(path || '/', 'http://atlas');
   if (url.pathname === '/') return 'index.json';
@@ -26,7 +39,17 @@ export function evidenceFile(path: string): string {
   return `${url.pathname.slice(1)}.json`;
 }
 
-/** Export the combined report, preserving layer provenance and lazy recording addresses. */
+/**
+ * Exports the combined report, preserving layer provenance and lazy recording addresses.
+ *
+ * `args.fetch` answers report API paths (`/outline`, `/evidence?cursor=`, ...), for example the reports app's own
+ * `request`. Every response is stored in `args.target` under {@link evidenceFile}, each path once. A 404 or 503 for
+ * a path is recorded in `missing` and skipped; any other failure throws, as does a layer catalog that repeats a
+ * page. Live runs are left out and each execution is exported once. Nothing in `target` is deleted.
+ *
+ * @returns `revisions` (distinct commits among the exported layers), `layers` (layers exported) and `missing`
+ * (paths that were not there).
+ */
 export async function exportEvidence(args: { fetch: (path: string) => Promise<Response>; target: ObjectStore }) {
   const missing: string[] = [];
   const copied = new Map<string, Promise<string | null>>();

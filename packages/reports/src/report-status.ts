@@ -1,8 +1,19 @@
+/**
+ * @module The report gate
+ *
+ * Reduces a combined report to a pass or fail with reasons (`reportStatus`) and renders that result as text or
+ * markdown. The JSON of `ReportStatus` is a stable contract (`schemaVersion` 1); the text and markdown are for people
+ * and are not. The gate fails closed: no checks, a failed or still-running check, an unreadable layer or backend
+ * (a notice), a missing required environment, or (when asked) a spec with no result each make it fail.
+ *
+ * @see docs/report-contract.md#statuses-and-the-gate
+ */
 import { REPORT_STATUS_SCHEMA_VERSION, type ReportStatus } from '../../schema/src/layer';
 import { countResults, type CombinedReport } from './compose';
 import { normalizeEnvironment } from './layer-axes';
 import { isDiagnosticKind, type EvidenceResult } from './layer-merge';
 
+/** Extra conditions for the gate beyond "all checks pass". */
 export type StatusOptions = {
   /** Environments that must have at least one check, such as `ios,android`. A missing one fails the gate. */
   readonly requireEnvironments?: readonly string[];
@@ -10,12 +21,25 @@ export type StatusOptions = {
   readonly requireAllSpecs?: boolean;
 };
 
+/** Total string order by code unit. */
+const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
  * The gate. A report passes only when it has checks, none failed, none is still running, every
  * layer and backend could be read, and every required environment is present. Unknown never passes.
+ *
+ * Returns a `ReportStatus` (schemaVersion 1): `ok` is true exactly when `reasons` is empty. Reasons name, in order: no
+ * checks (or none completed), failed checks, running checks, specs without results (only with `requireAllSpecs`),
+ * each required environment with no checks (the name is normalised, so `iOS` means `ios`), then every notice of the
+ * report (an unreadable layer or backend). `failing` lists each failed or running winner, in a fixed order that does
+ * not depend on read order; diagnostic `performance` checks are left out unless nothing else was recorded.
+ *
+ * @example
+ * const status = reportStatus(await combineBackends(backends), { requireEnvironments: ['ios'] });
+ * if (!status.ok) throw new Error(status.reasons.join('\n'));
+ *
+ * @see docs/report-contract.md#atlas-report-status
  */
-const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
 export function reportStatus(report: CombinedReport, options: StatusOptions = {}): ReportStatus {
   const results: EvidenceResult[] = [...report.combined.specs.flatMap(entry => entry.results), ...report.combined.unassigned];
   const outcomes = results.some(result => !isDiagnosticKind(result.row.kind)) ? results.filter(result => !isDiagnosticKind(result.row.kind)) : results;
@@ -89,6 +113,11 @@ function specOutcome(path: string | null, title: string, kind: string, results: 
 
 const row = (counts: { passed: number; failed: number; running: number; 'not-run': number; total: number }) => `${counts.passed} passed, ${counts.failed} failed, ${counts.running} running, ${counts['not-run']} not run`;
 
+/**
+ * Renders a status as plain text for a terminal: a `PASS`/`FAIL` line with totals, one line per environment, each
+ * failing or running check with where it ran and the first line of its detail, notices, reasons and specs with no
+ * results. Ends with a newline. For people: the layout is not a contract; parse `--format json` instead.
+ */
 export function formatStatusText(status: ReportStatus): string {
   const lines = [`${status.ok ? 'PASS' : 'FAIL'}  ${row(status.checks)} — ${status.layers} layer${status.layers === 1 ? '' : 's'} from ${status.backends.length} backend${status.backends.length === 1 ? '' : 's'}`];
   for (const [environment, counts] of Object.entries(status.byEnvironment)) lines.push(`  ${environment.padEnd(14)} ${row(counts)}`);
@@ -104,7 +133,11 @@ export function formatStatusText(status: ReportStatus): string {
 
 const cell = (value: string) => value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
-/** For a pull request comment or `$GITHUB_STEP_SUMMARY`. */
+/**
+ * Renders a status as GitHub-flavoured markdown for a pull request comment or `$GITHUB_STEP_SUMMARY`: a heading with
+ * totals, a table per environment, a table of failing checks (`|` and newlines in cells are escaped) and the reasons.
+ * Ends with a newline. For people: the layout is not a contract.
+ */
 export function formatStatusMarkdown(status: ReportStatus): string {
   const lines = [`### ${status.ok ? '✅' : '❌'} Atlas report: ${row(status.checks)}`, '', `${status.layers} layer${status.layers === 1 ? '' : 's'} from ${status.backends.length} backend${status.backends.length === 1 ? '' : 's'}.`, ''];
   const environments = Object.entries(status.byEnvironment);

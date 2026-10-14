@@ -1,3 +1,15 @@
+/**
+ * @module Business event sources
+ *
+ * Where a run learns which business events actually happened: an HTTP endpoint that accepts
+ * CloudEvents (`cloudEventsHttpSource`), or the lines a log file gains (`logFileSource`), plus the pure
+ * functions that compare what a state expects (`meta.events`) with what was collected. Every source
+ * implements `EventSource`: `mark()` records a position before a step and `collect(mark)` returns only
+ * what arrived after it. An event with no way to be observed is reported as "no signal", never as
+ * missing, so absence of evidence is not read as failure.
+ *
+ * @see docs/statecharts.md
+ */
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -27,7 +39,17 @@ function readBody(req: IncomingMessage) {
   });
 }
 
-/** Parse an HTTP delivery in either CloudEvents content mode (structured, binary or batch). */
+/**
+ * Parses an HTTP delivery in any CloudEvents content mode: structured (`application/cloudevents+json`),
+ * batch (`application/cloudevents-batch+json`) or binary (`ce-*` headers, with the body as `data`).
+ * A request with none of those (no `ce-type` header and a different content type) yields no events.
+ * In binary mode a missing `ce-id` becomes a random UUID and a missing `ce-source` becomes `unknown`;
+ * other `ce-*` headers become extension attributes; the body is parsed as JSON when the content type
+ * says JSON and it parses, else kept as text.
+ *
+ * @param headers lower-cased header names, as Node's `IncomingMessage.headers`.
+ * @throws SyntaxError when a structured or batch body is not valid JSON.
+ */
 export function cloudEventsFromHttp(headers: Record<string, string | string[] | undefined>, body: string): CloudEvent[] {
   const header = (name: string) => {
     const value = headers[name];
@@ -69,8 +91,19 @@ export function cloudEventsFromHttp(headers: Record<string, string | string[] | 
 }
 
 /**
- * An HTTP endpoint the system under test sends CloudEvents to (any content mode). Point the
- * product's event bus, webhook relay or OpenTelemetry collector's CloudEvents exporter at it.
+ * Starts an HTTP endpoint the system under test sends CloudEvents to (any content mode). Point the
+ * product's event bus, webhook relay or OpenTelemetry collector's CloudEvents exporter at its `url`.
+ *
+ * It answers every valid POST with 202 and an unparseable delivery with 400, and keeps events in
+ * memory. It does no authentication and listens on `127.0.0.1` unless `host` says otherwise, so
+ * only the local machine can reach it by default. `mark()` is the number of events received so far.
+ * Call `close()` to stop the server; `runPaths` does that for the sources it is given.
+ *
+ * @param options.port the port to listen on; an unused port when omitted (read the real one from `url`).
+ * @param options.host the interface to listen on; `127.0.0.1` when omitted.
+ *
+ * @example
+ * eventSources: async () => [await cloudEventsHttpSource({ port: 4318 })]
  */
 export async function cloudEventsHttpSource(options: { port?: number; host?: string } = {}): Promise<EventSource & { url: string }> {
   const received: CloudEvent[] = [];
@@ -95,7 +128,18 @@ export async function cloudEventsHttpSource(options: { port?: number; host?: str
   };
 }
 
-/** Lines appended to a log file during a step, for products whose only event stream is a log. */
+/**
+ * An event source for products whose only event stream is a log file: `collect` returns the text
+ * appended to the file since `mark` (match it with an `{ pattern }` matcher), and no CloudEvents.
+ *
+ * `mark()` is the file's size in bytes (0 when it does not exist). `collect` first waits `settleMs`
+ * for the product to write, then reads from the mark to the end of the file; a missing or
+ * unreadable file gives empty text, and a file that was truncated or rotated since the mark is not
+ * detected. The source's name starts with `log:`, which is how the runner tells it from a CloudEvents source.
+ *
+ * @param file the log file path.
+ * @param options.settleMs how long `collect` waits before reading, in milliseconds; 1000 when omitted.
+ */
 export function logFileSource(file: string, options: { settleMs?: number } = {}): EventSource {
   return {
     name: `log:${file}`,
@@ -124,17 +168,24 @@ export function logFileSource(file: string, options: { settleMs?: number } = {})
   };
 }
 
+/** The outcome of comparing a state's expected business events with what the sources collected. */
 export type BusinessEventResult = {
+  /** The names listed in the state's `meta.events`. */
   expected: string[];
+  /** Expected names that a matcher (or a CloudEvent of that type) confirmed. */
   observed: string[];
+  /** Expected names that could be observed but were not. */
   missing: string[];
+  /** Expected names with no way to be observed (no matcher and no CloudEvents source). Not a failure. */
   noSignal: string[];
+  /** The CloudEvents collected for this step. */
   events: CloudEvent[];
 };
 
 /**
- * Keep what belongs to one attempt when attempts run side by side: events and log lines that
- * mention one of its correlation ids. With no ids, everything is kept.
+ * Keeps what belongs to one attempt when attempts run side by side: events (whose JSON mentions an
+ * id) and log lines that contain one of its correlation ids. Empty ids are ignored; with no ids,
+ * everything is kept.
  */
 export function correlated(collected: { events: CloudEvent[]; text: string }, ids: string[]) {
   const wanted = ids.filter(Boolean);
@@ -147,9 +198,15 @@ export function correlated(collected: { events: CloudEvent[]; text: string }, id
 }
 
 /**
- * Compare the business events a state expects with what the sources saw. A business event is
- * observed when its matcher matches; with no matcher, a CloudEvent whose `type` equals the name.
- * Events with neither a matcher nor any CloudEvents source are "no signal", never "missing".
+ * Compares the business events a state expects with what the sources saw, sorting each expected
+ * name into `observed`, `missing` or `noSignal`. A business event is observed when its matcher
+ * matches (a function gets the events and log text; `{ type }` compares CloudEvent types;
+ * `{ pattern }` tests the log text); with no matcher, when a CloudEvent's `type` equals the name.
+ * With neither a matcher nor any CloudEvents source (`hasCloudEvents` false) it is "no signal",
+ * never "missing". Pure.
+ *
+ * @param matchers matchers by business event name.
+ * @param hasCloudEvents whether any non-log source was configured.
  */
 export function compareBusinessEvents(
   expected: string[],

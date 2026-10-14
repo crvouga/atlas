@@ -1,6 +1,9 @@
 /**
- * Persist the TanStack query cache. Frame-file queries stay out of this
- * document — those bytes live in {@link ReportCache} on their own keys.
+ * @module Query cache persistence
+ *
+ * Persists the viewer's TanStack query cache into a `ReportCache` (IndexedDB in the browser) so a reload starts from
+ * what was already fetched. Frame-file queries stay out of this document: those bytes live in `ReportCache` on their
+ * own keys.
  */
 
 import {
@@ -14,6 +17,7 @@ import type { ReportCache } from './fetcher';
 const CACHE_KEY = 'reports-query-cache';
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 
+/** A TanStack `Persister` that keeps the whole query client as one JSON string under one key in `cache`. A stored value that is not valid JSON is removed and treated as no cache. */
 export function reportPersister(cache: ReportCache): Persister {
   return {
     persistClient: (client) => cache.set(CACHE_KEY, JSON.stringify(client)),
@@ -40,7 +44,12 @@ function keepQuery(query: {
   return query.state.status === 'success' && query.queryKey[1] !== 'blob';
 }
 
-/** Restore the cache, then keep writing it. Returns unsubscribe. */
+/**
+ * Restores the query client from `cache`, then keeps writing it back as queries change. Returns
+ * `[unsubscribe, restored]`: the function that stops writing, and a promise that settles when the restore is done.
+ * Only successful queries are stored, never `blob` queries (those are the frame files); a stored cache older than a
+ * week, or from a different cache version, is discarded.
+ */
 export function attachReportCache(
   client: QueryClient,
   cache: ReportCache

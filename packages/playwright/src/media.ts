@@ -1,3 +1,13 @@
+/**
+ * @module Playwright screenshots, clips and paced actions
+ *
+ * The media side of the Playwright driver: `UserActions` taps and types like a person (pausing, and drawing a touch
+ * indicator in showcase videos) while logging each action to the step's timeline; `captureScreen` takes a settled,
+ * deterministic screenshot at device resolution plus a WebP thumbnail; `ScreencastRecorder` records an H.264 clip at
+ * device resolution; `ffmpeg` runs the `ffmpeg` binary, which must be on the PATH for thumbnails and clips.
+ *
+ * @see docs/statecharts.md
+ */
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -9,6 +19,10 @@ import { locate } from './signals';
 
 const isLocator = (target: Locator | Signal): target is Locator => 'waitFor' in target;
 
+/**
+ * Pauses, in milliseconds, that make a showcase video readable: how long the touch indicator takes to glide to a tap
+ * target, the pause before the tap, the delay between typed characters, and the holds after and before a step.
+ */
 export type Pacing = {
   moveMs: number;
   pauseBeforeTapMs: number;
@@ -17,6 +31,7 @@ export type Pacing = {
   holdBeforeMs: number;
 };
 
+/** The default pacing of showcase mode: a visible glide and pauses, so a person can follow the clip. */
 export const SHOWCASE_PACING: Pacing = {
   moveMs: 600,
   pauseBeforeTapMs: 300,
@@ -25,6 +40,7 @@ export const SHOWCASE_PACING: Pacing = {
   holdBeforeMs: 500
 };
 
+/** No pauses at all; the pacing of fast mode. */
 export const FAST_PACING: Pacing = {
   moveMs: 0,
   pauseBeforeTapMs: 0,
@@ -33,6 +49,10 @@ export const FAST_PACING: Pacing = {
   holdBeforeMs: 0
 };
 
+/**
+ * The default `device` of `playwrightDriver`: a 390 by 844 CSS pixel viewport at device scale factor 3 (screenshots
+ * are 1170 by 2532 pixels), a mobile user agent and touch.
+ */
 export const PHONE = {
   viewport: { width: 390, height: 844 },
   deviceScaleFactor: 3,
@@ -84,7 +104,10 @@ const TOUCH_OVERLAY = `(() => {
   if (document.documentElement) install(); else document.addEventListener('DOMContentLoaded', install);
 })();`;
 
-/** Taps and typing a person would do, paced for showcase videos and logged to the step timeline. */
+/**
+ * Taps and typing a person would do, paced for showcase videos and logged to the step timeline. Provided to event
+ * implementations as `user` on the `PlaywrightContext`. `showTouches` turns on the touch indicator (showcase mode).
+ */
 export class UserActions {
   constructor(
     readonly page: Page,
@@ -93,6 +116,10 @@ export class UserActions {
     readonly showTouches: boolean
   ) {}
 
+  /**
+   * Registers the touch indicator overlay to be added to every page load, so it exists before the app's scripts run.
+   * Call it once per page, before navigating.
+   */
   static async install(page: Page) {
     await page.addInitScript(TOUCH_OVERLAY);
   }
@@ -112,7 +139,13 @@ export class UserActions {
       .catch(() => undefined) as Promise<T>;
   }
 
-  /** Tap a locator or a signal (resolved with `locate`). */
+  /**
+   * Taps the centre of a locator or a signal (resolved with `locate`). Waits up to 15 s for it to be visible, scrolls
+   * it
+   * into view, logs a `tap` entry labelled `label` to the timeline, then clicks (10 s timeout). In showcase mode the
+   * touch
+   * indicator glides there first. Throws when the target has no position on screen.
+   */
   async tap(target: Locator | Signal, label: string) {
     const locator = isLocator(target) ? target : locate(this.page, target);
     await locator.waitFor({ state: 'visible', timeout: 15_000 });
@@ -134,6 +167,10 @@ export class UserActions {
     }
   }
 
+  /**
+   * Taps `target`, clears it, then types `text` one character at a time, `pacing.typeDelayMs` apart. Logs a `tap` and
+   * a `type` entry labelled `label` to the timeline.
+   */
   async type(target: Locator | Signal, text: string, label: string) {
     const locator = isLocator(target) ? target : locate(this.page, target);
     await this.tap(locator, label);
@@ -142,22 +179,31 @@ export class UserActions {
     await locator.pressSequentially(text, { delay: this.pacing.typeDelayMs });
   }
 
+  /** Waits `ms` milliseconds; does nothing when `ms` is zero or less. */
   async hold(ms: number) {
     if (ms > 0) await this.page.waitForTimeout(ms);
   }
 
+  /** Hides the touch indicator, so a screenshot does not show it. */
   async hideTouches() {
     await this.overlay('visible', false);
   }
 
+  /** Shows the touch indicator again after `hideTouches`. */
   async showTouchLayer() {
     await this.overlay('visible', true);
   }
 }
 
+/** The files `captureScreen` wrote: the full-size PNG and its WebP thumbnail. */
 export type ScreenshotFiles = { png: string; webp?: string };
 
-/** A settled, deterministic capture at device resolution, with the touch layer hidden. */
+/**
+ * Takes a settled, deterministic screenshot at device resolution, with the touch layer hidden: waits for the network to
+ * go quiet (up to 5 s) and for fonts, disables animations and hides the caret. Writes the PNG to `file` (creating its
+ * folder) and a 400 px wide WebP thumbnail beside it with FFmpeg. `mask` lists locators to paint over. Rejects when
+ * FFmpeg is missing or fails.
+ */
 export async function captureScreen(
   page: Page,
   driver: UserActions,
@@ -192,6 +238,10 @@ export async function captureScreen(
   return { png: file, webp };
 }
 
+/**
+ * Runs `ffmpeg` with `args` and resolves when it exits with code 0. Rejects with the spawn error when `ffmpeg` is not
+ * on the PATH, or with `ffmpeg <code>: <stderr>` when it fails.
+ */
 export function ffmpeg(args: string[]) {
   return new Promise<void>((resolve, reject) => {
     const child = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -205,7 +255,7 @@ export function ffmpeg(args: string[]) {
 }
 
 /**
- * Records a clip at the phone's physical resolution (1170×2532). Chrome's screencast, and
+ * Records a clip of a page at its physical resolution (1170×2532 for the default `PHONE`). Chrome's screencast, and
  * Playwright's built-in video that rides on it, only deliver CSS-pixel frames (390×844) and
  * upscale them, so text goes soft. Instead this loops device-scale JPEG captures (about 20 fps
  * here), keeps each frame's own timestamp, and encodes H.264 at 30 fps, holding each frame for as
@@ -224,6 +274,7 @@ export class ScreencastRecorder {
     private readonly scale: number = PHONE.deviceScaleFactor
   ) {}
 
+  /** Begins capturing frames of the page into `workDirectory`, which is emptied first. Call `stop` to encode them. */
   async start(workDirectory: string) {
     this.directory = workDirectory;
     rmSync(workDirectory, { recursive: true, force: true });
@@ -259,6 +310,11 @@ export class ScreencastRecorder {
     })();
   }
 
+  /**
+   * Stops capturing and encodes the frames to the MP4 file `output` (the poster is written beside it, with `.mp4`
+   * replaced by `.poster.webp`), then deletes the work directory. Resolves to `{ video, poster, durationMs }`, or
+   * `null` when no frame was captured.
+   */
   async stop(output: string) {
     this.stoppedAt = Date.now();
     this.running = false;

@@ -1,3 +1,14 @@
+/**
+ * @module Importing checks from existing test reports
+ *
+ * Turns the output of tools that already exist (CTRF JSON, JUnit XML, an Atlas run `manifest.json`) into checks a
+ * layer can hold, so any test suite can publish without a custom producer. It owns the mapping of foreign
+ * statuses onto the four Atlas statuses (anything not clearly passed or failed is `not-run`, never a pass) and the
+ * rule for check ids: stable across runs, built from the file, suite and name, with a repeated id numbered
+ * (`#2`, `#3`) so no check is silently counted as another. It reads text it is given and touches no files.
+ *
+ * @see docs/report-contract.md (choosing a check id)
+ */
 import path from 'node:path';
 
 import { parseJunit } from './junit';
@@ -6,12 +17,14 @@ import type { EvidenceCheck, EvidenceStatus } from './explorer-types';
 
 /** The checks an existing test report holds, and when it was recorded when the report says. */
 export type IngestedChecks = {
+  /** One per test, with ids made unique. Attachments that name a file carry a `path` for the publisher to read; see `attachment-files.ts`. */
   readonly checks: readonly EvidenceCheck[];
   /**
    * For each check, in order, the names the report gave its container (suite, class, file), which
    * can name the spec it checks when the report has no path for it.
    */
   readonly hints?: readonly (readonly string[])[];
+  /** When the report says the run ended (or started), epoch milliseconds; null when it does not say. */
   readonly recordedAtMs: number | null;
   /** The tool that wrote the report, when it says. */
   readonly tool: string | null;
@@ -29,7 +42,7 @@ function finite(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-/** Never silently count two checks as one: a repeated id gets the number of its occurrence. */
+/** Never silently count two checks as one: the first check with an id keeps it and a repeat becomes `<id> #2`, `<id> #3`, ... in input order. */
 export function uniqueChecks(checks: readonly EvidenceCheck[]): EvidenceCheck[] {
   const seen = new Map<string, number>();
   return checks.map(check => {
@@ -44,7 +57,14 @@ const CTRF_STATUS: Readonly<Record<string, EvidenceStatus>> = { passed: 'passed'
 /**
  * A [CTRF](https://ctrf.io) report (`results.tests`). A check's id is its file, its suites and its
  * name, so the same test keeps the same id in every run. Skipped, pending and other results are
- * `not-run`: never a pass.
+ * `not-run`: never a pass; a status this function does not know is also `not-run`.
+ *
+ * Also carries what CTRF has beyond the outcome as evidence: tags, labels (browser, device, flaky, run environment
+ * and tool), steps, attachments (files by `path`, `url` as `uri`, inline screenshot, stdout/stderr, trace), retry
+ * attempts, a snippet annotation and `extra` under the `ctrf.extra` extension. `recordedAtMs` is `summary.stop`,
+ * else `summary.start`. Throws `Not a CTRF report: results.tests is missing` when there is no `results.tests` array.
+ *
+ * @param report The parsed CTRF JSON.
  */
 export function checksFromCtrf(report: unknown): IngestedChecks {
   const results = record(record(report).results);
@@ -114,7 +134,15 @@ function parseTimestamp(value: string): number {
   return Date.parse(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value) ? `${value}Z` : value);
 }
 
-/** A JUnit XML report: one check per `<testcase>`, identified by its file or class and its name. */
+/**
+ * A JUnit XML report: one check per `<testcase>`, identified by its file or class and its name (`file or classname > name`).
+ *
+ * A case with a `<failure>` (an assertion that did not hold) or an `<error>` (an exception) is `failed`, one with
+ * `<skipped>` is `not-run`, any other is `passed`. Durations are seconds converted to milliseconds. Properties become labels, `<system-out>`/`<system-err>` become log
+ * attachments, and a Jenkins `[[ATTACHMENT|path]]` line in the output attaches that file by `path`. `recordedAtMs`
+ * is the newest `<testsuite timestamp>` (a timestamp with no offset is read as UTC). Throws
+ * `Not a JUnit report: no <testsuite> found` when the text has no test cases and no `<testsuite`.
+ */
 export function checksFromJunit(xml: string): IngestedChecks {
   const cases = parseJunit(xml);
   if (cases.length === 0 && !/<testsuite/.test(xml)) throw new Error('Not a JUnit report: no <testsuite> found');
@@ -148,6 +176,12 @@ export function checksFromJunit(xml: string): IngestedChecks {
  * An Atlas run (`manifest.json`): one check per path. A path's key, which the same start and
  * events give in every run, is its id. A flaky path passed. While the run is still going, a
  * running path is `running` and a queued one `not-run`, so a snapshot never reads as finished.
+ *
+ * Every check's `specPath` is the run's root chart file under its spec directory. A run is still going when
+ * `run.finishedAt` is `null`. `recordedAtMs` is `run.finishedAt`, else `run.startedAt` plus `run.durationMs`.
+ * Throws `Not an Atlas manifest: run and paths are required` when `paths` or `run.id` is missing.
+ *
+ * @param manifest The parsed `manifest.json` of an Atlas run.
  */
 export function checksFromManifest(manifest: unknown): IngestedChecks {
   const root = record(manifest);

@@ -1,0 +1,47 @@
+# Atlas
+
+> Atlas shows whether a product still does what it was specified to do. Test results from any suite on any machine are published as immutable layers; a report is computed from layers, never partitioned, and one Atlas server per project keeps them and shows everyone the combined report, live. Specs of any kind (Gherkin, Quint, DMN, Alloy, OpenSLO, statecharts); evidence of any kind (screenshots, videos, traces, logs). Distributed as the npm package `@crvouga/atlas`; runs on Bun and Node.
+
+To integrate a project: `bunx @crvouga/atlas init --server <url> --format json` prints a plan; `--write` applies it. Everything prints JSON on request, has a JSON Schema, and exits 0 (worked), 1 (the answer is no) or 2 (the command was wrong).
+
+## Start here
+
+- [Atlas for AI agents](https://raw.githubusercontent.com/crvouga/atlas/main/docs/agents.md): Everything an agent needs to integrate a project with Atlas, send it test results, and read them back, with nothing to click and nothing to guess.
+- [Integrating Atlas into a project](https://raw.githubusercontent.com/crvouga/atlas/main/docs/integrating.md): This guide takes a project from nothing to a layered, gated report of its specs.
+
+## Run and use the server
+
+- [The Atlas server](https://raw.githubusercontent.com/crvouga/atlas/main/docs/server.md): One process per project that takes in results from every environment, keeps them, and shows everyone the combined report, live.
+- [Running Atlas for a project: one server](https://raw.githubusercontent.com/crvouga/atlas/main/docs/deploying.md): This is the production setup. A project runs one Atlas server.
+
+## Formats and rules
+
+- [The report contract](https://raw.githubusercontent.com/crvouga/atlas/main/docs/report-contract.md): This is the normative description of what Atlas reads and writes when it reports on specs of any kind:
+- [Evidence: attachments, timelines, snapshots and everything else](https://raw.githubusercontent.com/crvouga/atlas/main/docs/extending.md): Atlas is opinionated about specs and open about evidence.
+- [Report backends and live snapshots](https://raw.githubusercontent.com/crvouga/atlas/main/docs/report-backends.md): Atlas maps the product's areas, screens, events and journeys from a spec, then overlays evidence of what the product did.
+- [Executable statecharts](https://raw.githubusercontent.com/crvouga/atlas/main/docs/statecharts.md): Write down how a product behaves as statecharts in open formats, then let Atlas lint them, plan paths that cover every transition, run those paths against the real product through any driver (a browser, a phone, a pla…
+
+## Working with this project
+
+- [Dogfooding Atlas from another project](https://raw.githubusercontent.com/crvouga/atlas/main/docs/dogfooding.md): Atlas is developed by using it in real projects.
+- [Reporting issues](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reporting-issues.md): How people and coding agents in a project that uses Atlas report a bug or a missing feature.
+
+## Reference (generated from the code)
+
+- [HTTP API (OpenAPI 3.1)](https://raw.githubusercontent.com/crvouga/atlas/main/packages/server/openapi.json): every endpoint of the server, machine-readable. A running server serves it at /api/openapi.json and a guide for itself at /llms.txt.
+- [HTTP API, in words](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/http-api.md): the same operations as Markdown.
+- [Command line](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/cli.md): the usage of every command.
+- [TypeScript API: core](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/core.md): Executable statecharts: loading, composing, linting, planning and running specs against real apps, and the `atlas` command.
+- [TypeScript API: reports](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/reports.md): Layered evidence for any kind of spec: publishing layers, stores (folder, S3, an Atlas server), combining and gating, the incremental report, init.
+- [TypeScript API: schema](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/schema.md): The contract: Zod schemas, and the JSON Schemas generated from them, for layers, checks, report status, command results, server responses and configuration.
+- [TypeScript API: server](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/server.md): The Atlas server: the API results are uploaded to, the live report, and the viewer on one host.
+- [TypeScript API: playwright](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/playwright.md): The Playwright driver for statechart runs.
+- [TypeScript API: bun](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/bun.md): The Bun WebView driver for statechart runs.
+- [TypeScript API: webdriver](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/webdriver.md): The W3C WebDriver / Appium driver for statechart runs.
+- [TypeScript API: detox](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/detox.md): The Detox driver for statechart runs of React Native apps.
+- [TypeScript API: vitest](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/vitest.md): Run a statechart plan as Vitest tests.
+- [JSON Schemas](https://unpkg.com/@crvouga/atlas/packages/schema/schemas/): the layer format, checks file, report status, command results, server responses, server configuration.
+
+## Optional
+
+- [Releasing](https://raw.githubusercontent.com/crvouga/atlas/main/docs/releasing.md): How @crvouga/atlas gets from main to npm.

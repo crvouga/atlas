@@ -1,3 +1,12 @@
+/**
+ * @module Spec directory loader
+ *
+ * Reads a specs directory from disk into a `SpecBundle`: every chart file and journeys file directly
+ * inside it (no recursion), and works out the root chart. Node only. Parsing itself lives in `./parse`;
+ * loading throws on the first malformed file rather than skipping it.
+ *
+ * @see docs/statecharts.md
+ */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -20,6 +29,13 @@ export function childChartIds(machine: MachineConfig) {
   return ids;
 }
 
+/**
+ * Assembles a bundle from already-parsed charts and journeys, choosing the root chart: the first
+ * chart (in the order given) that no other chart invokes, or the first chart when every chart is
+ * invoked by another (a cycle, which `composeCharts` later rejects).
+ *
+ * @throws Error when `charts` is empty.
+ */
 export function bundleOf(directory: string, charts: Chart[], journeys: Journey[]): SpecBundle {
   const invoked = new Set(charts.flatMap((c) => [...childChartIds(c.machine)]));
   const roots = charts.filter((c) => !invoked.has(c.machine.id));
@@ -28,7 +44,21 @@ export function bundleOf(directory: string, charts: Chart[], journeys: Journey[]
   return { directory, charts, journeys, root };
 }
 
-/** Load every chart and journeys file directly inside `directory`. */
+/**
+ * Loads every chart and journeys file directly inside `directory` into a bundle.
+ *
+ * Chart files are `*.scxml`, `*.machine.json` and `*.machine.yaml`/`.yml`; journeys files are
+ * `journeys.yaml`/`.yml`/`.json`. When two files declare the same chart id the first wins, in the
+ * order SCXML, then YAML, then JSON, then by file name, so the result does not depend on directory
+ * order.
+ *
+ * @throws Error when the directory is missing, a file does not parse, or no chart is found.
+ * @see docs/statecharts.md
+ *
+ * @example
+ * const bundle = loadSpecDirectory('./specs');
+ * bundle.root; // the id of the chart no other chart invokes
+ */
 export function loadSpecDirectory(directory: string): SpecBundle {
   if (!existsSync(directory)) throw new Error(`Spec directory not found: ${directory}`);
   const files = readdirSync(directory).sort();

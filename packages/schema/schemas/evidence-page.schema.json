@@ -1,0 +1,271 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/evidence-page.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content",
+            "type": "string"
+          },
+          "backend": {
+            "description": "The backend it was read from; the one that sorts first when several hold it",
+            "type": "string"
+          },
+          "producer": {
+            "description": "The suite or tool that made it. Part of the slot",
+            "type": "string"
+          },
+          "packageDir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordedAtMs": {
+            "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot",
+            "type": "number"
+          },
+          "sha": {
+            "description": "The commit it was recorded at. Provenance only",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "branch": {
+            "description": "The branch it was recorded on. Provenance only",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "environment": {
+            "description": "The client it checked, such as `ios`. Part of the slot",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parameters": {
+            "description": "Other choices that make a result its own slot",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "freshness": {
+            "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent: clean",
+            "type": "string",
+            "enum": [
+              "unknown",
+              "modified"
+            ]
+          },
+          "recording": {
+            "description": "Where recorded timelines are read from, or null",
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "live": {
+            "type": "boolean"
+          },
+          "counts": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "running",
+                "not-run"
+              ]
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "execution": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "attachments": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "annotations": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "attempts": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "links": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "labels": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "attachments",
+              "steps",
+              "annotations",
+              "attempts",
+              "links",
+              "tags",
+              "labels",
+              "roles"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "backend",
+          "producer",
+          "packageDir",
+          "recordedAtMs",
+          "sha",
+          "branch",
+          "environment",
+          "runUrl",
+          "parameters",
+          "recording",
+          "live",
+          "counts",
+          "execution"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "cursor": {
+      "description": "Pass as `?cursor=` for the next page; null at the end",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "backends": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "live": {
+            "description": "Always false on a server",
+            "type": "boolean"
+          },
+          "available": {
+            "description": "False when the backend could not be read; its results are then unknown, never passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "live",
+          "available"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "active": {
+      "type": "array",
+      "items": {}
+    }
+  },
+  "required": [
+    "layers",
+    "cursor",
+    "notices",
+    "backends",
+    "active"
+  ],
+  "additionalProperties": {}
+}

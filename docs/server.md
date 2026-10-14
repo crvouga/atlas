@@ -80,21 +80,8 @@ is said in words and the server does not start. The file has a published
 }
 ```
 
-| Setting | Flag | Environment | Default |
-| --- | --- | --- | --- |
-| Address to listen on | `--host` | `ATLAS_HOST`, `HOST` | `127.0.0.1` |
-| Port (`0` picks a free one) | `--port` | `ATLAS_PORT`, `PORT` | `8080` |
-| The server's own folder | `--data` | `ATLAS_DATA` | `./atlas-data` |
-| More backends | `--store [id=]<url>` (repeatable) | `ATLAS_STORE` (comma or newline separated) | none |
-| Where uploads go | `--write <id>` | `ATLAS_WRITE` | `data` |
-| The built viewer | `--site <dir>` | `ATLAS_SITE` | `./atlas-site`, else built once |
-| Whose specs the report is laid over | `--outline-branch` | `ATLAS_OUTLINE_BRANCH` | `main`, `master`, then newest |
-| Only these branches take part | `--branch` (repeatable) | `ATLAS_ONLY_BRANCH` | all |
-| Leave out modified checkouts | `--ignore-modified` | `ATLAS_IGNORE_MODIFIED=1` | no |
-| Look for layers written elsewhere | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
-| Let anyone look, not upload | `--anonymous-read` | `ATLAS_ANONYMOUS_READ=1` | no |
-| Listen publicly with no tokens | `--insecure` | `ATLAS_INSECURE=1` | no |
-| No request log | `--no-log` | | one JSON line per request |
+<!-- generated:server-settings -->
+<!-- /generated:server-settings -->
 
 `ATLAS_HOST` and `ATLAS_PORT` win over `HOST` and `PORT`, which other tools on a machine often set for their own
 purposes.
@@ -151,7 +138,10 @@ Every route ends as the same immutable layers, so use what fits:
 
 `ATLAS_STORE` may name the server instead of a folder or bucket: **every `atlas report` command works against it**
 (`publish`, `stream`, `merge --into`, `doctor`, `status`). Keys never go in the URL; put the token in
-`ATLAS_TOKEN` (or the first line of the file named by `ATLAS_TOKEN_FILE`).
+`ATLAS_TOKEN` (or the first line of the file named by `ATLAS_TOKEN_FILE`). **A token belongs to one server.** With
+one server in `ATLAS_STORE`, `ATLAS_TOKEN` is its token; with several, name each (`lab=https://lab.example.com`) and give
+it `ATLAS_TOKEN_LAB`, because `ATLAS_TOKEN` is then sent to none of them. A token is never sent over plain `http://`
+beyond this machine (`ATLAS_TRUST_NETWORK=1` says the network is yours).
 
 ### Streaming a run as it happens
 
@@ -204,7 +194,7 @@ there (`409`), so nothing half-uploaded is ever shown.
 | `hello` | `{ version, ready, time }` | Sent first. The report's current version. |
 | `report` | `{ version, totalLayers, added: [{ id, producer, environment, branch, sha, recordedAtMs, counts }], addedTotal }` | Layers arrived. Enough to say who sent what, without asking. |
 | `atlas:change` | `{ scope: "specs" \| "runs", files, runIds }` | New specs or runs. |
-| `: ping` | | A comment every 15 s, so proxies keep the connection. |
+| `ping` | `{}` | Every 15 s, so proxies keep the connection and the viewer can tell a quiet server from a dead connection. |
 
 Events say *that* something changed; the state is always fetched. A viewer that missed some (a dropped
 connection, a laptop that slept) loses nothing: it reads again when it reconnects, and the viewer also reads on a
@@ -222,33 +212,25 @@ takes as it always did. A result streamed into a 100 000-check report costs a vi
 
 ## API reference
 
-| Method and path | Role | |
-| --- | --- | --- |
-| `GET /healthz` | none | The process is up. |
-| `GET /readyz` | none | `200` once the backends were read and one answers; `503` otherwise. Route traffic on this. |
-| `GET /api/server` | read | What it is: `role` of the caller, `write` backend, backends and whether each is reachable, counts, capabilities. `atlas report doctor` and the viewer use it. |
-| `GET /api/events` | read | Server-sent events, above. |
-| `GET /api/reports/evidence/effective[?since=]` | read | The report, or what changed since a version. ETag, gzip. |
-| `GET /api/reports/evidence`, `/evidence/rows/<backend>/<id>`, `/evidence/detail/<backend>/<id>`, `/outline`, `/outline/spec?path=` | read | History; one layer's checks; everything one result carries; the specs. |
-| `GET /api/reports/layers/<id>/blobs/<key>` | read | A file a layer carries (screenshot, video, trace…): served as untrusted bytes, with ranges, cached for good. |
-| `GET /api/status[?branch=&ignoreModified=1&requireEnvironments=a,b&requireAllSpecs=1]` | read | The gate: the [`report status` document](report-contract.md), computed on the server and remembered per version. `X-Atlas-Ok: true` or `false`. |
-| `GET /api/data/specs/…`, `/api/data/runs/…`, `/api/data/sources.json` | read | The specs (from the newest committed spec set) and runs, the way the viewer reads a static host. |
-| `GET\|HEAD /api/store/<key>`, `GET /api/store?prefix=&after=&limit=` | read | The store protocol: an object, or a page of keys. Only `layers/` is listed. |
-| `PUT /api/store/<key>` | publish | Upload an object; `201` if new, `200` if the same bytes were there. |
-| `DELETE /api/store/<key>` | publish | Only scratch objects (`layers/doctor-…`). Layers, specs and runs are never removed. |
-| `POST /api/checks` | publish | Upload one layer of checks as JSON. |
-| `/` and every other path | read | The viewer. An unknown `/api/…` path is a JSON `404`, never the page. |
+<!-- generated:server-operations -->
+<!-- /generated:server-operations -->
 
-Errors are always `{ "error": "…" }` with a status that says what to do: `401` send a token, `403` that token may
-not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not
-valid, `503` still starting.
+Errors are always [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`: `type`,
+`title`, `status`, and a `detail` that says what to do; `error` repeats `detail` for older clients) with a status that says
+what to do: `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing
+something immutable, `413` too large, `422` not valid, `503` still starting (see `Retry-After`).
+
+**For agents:** a server describes itself. `GET /api/openapi.json` is the OpenAPI 3.1 description of everything above (also
+shipped as `@crvouga/atlas/openapi.json`) and `GET /llms.txt` is a guide for an agent that was handed only the server's address;
+neither needs a token. See [Atlas for AI agents](agents.md).
 
 ## What the server refuses
 
 What is checked is what would otherwise corrupt the report for everyone, and it is checked from the bytes in hand:
 
-- **A layer is named by its content.** A manifest whose content does not hash to its id (it was edited, or written
-  by something that does not follow the format) is refused, as is one that is not a valid layer.
+- **Everything is named by its content.** A manifest whose content does not hash to its id (it was edited, or written
+  by something that does not follow the format) is refused, as is one that is not a valid layer; so is a blob
+  (the digest of what is in it) or a spec file that is not what its name says.
 - **Dependencies come first.** A manifest needs its blobs; a catalog entry needs its manifest; a spec set needs its
   files; a run's catalog entry needs its manifest.
 - **Layers are immutable.** The same bytes again are fine (a retry); other bytes under the same key are a `409`.

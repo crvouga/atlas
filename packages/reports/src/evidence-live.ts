@@ -1,3 +1,12 @@
+/**
+ * @module Live evidence from running suites
+ *
+ * Shows results the moment each test finishes, before its package has been collected into an archived layer. A
+ * running suite announces itself with a record under `active/` in the local store (see {@link LiveRunRecord});
+ * this module reads the test reports that suite has written so far into a temporary layer (id `live-<source>`,
+ * `live: true`) and drops it once the archived layer arrives or after a short linger. Live layers are a viewing
+ * aid only (this module writes nothing), and an unreadable or half-written report is skipped, not guessed at.
+ */
 import type { Clock } from './clock';
 import { eachLimited } from './completion-order';
 import type { ActiveRun, LayerEvidence, LayerHeader } from './evidence-types';
@@ -17,12 +26,17 @@ import { suiteStatus } from './status';
 
 /** What a running spec suite announces under `active/` in the local store. */
 export type LiveRunRecord = {
+  /** The package directory the suite runs in, relative to the repository (`libs/chess`); with `bucket`, it names the source. */
   readonly packageDir: string;
+  /** The suite's bucket within the package (`part-2`); where the run writes each finished test. */
   readonly bucket: string;
+  /** When the run started, epoch milliseconds. A new value for the same source means a new run: tracking restarts. */
   readonly startedAtMs: number;
+  /** How many checks the run expects to execute, when known. */
   readonly plannedChecks?: number;
   /** The client this suite is checking. A different client does not replace it. */
   readonly environment?: string;
+  /** Other string choices that make the results their own slot; non-string or empty values are dropped on reading. */
   readonly parameters?: LayerParameters;
 };
 
@@ -33,7 +47,11 @@ function readParameters(value: unknown): LayerParameters {
   return parameters;
 }
 
-/** A run announcement with the fields the live layer can trust. Null when it cannot be a run. */
+/**
+ * Validates a parsed `active/` announcement and keeps only the fields the live layer can trust (the environment is
+ * normalised to its slug, parameters are string-to-string). Null when `packageDir`, `bucket` or a numeric
+ * `startedAtMs` is missing, so garbage in `active/` is ignored rather than shown.
+ */
 export function liveRunRecord(value: unknown): LiveRunRecord | null {
   if (!value || typeof value !== 'object') return null;
   const run = value as Partial<LiveRunRecord>;
@@ -52,11 +70,11 @@ export function liveRunRecord(value: unknown): LiveRunRecord | null {
 
 /** How the host reaches the results a spec run has written so far. */
 export type LiveSource = {
-  /** The bucket the run writes each finished test into, or null when it cannot be read. */
+  /** The bucket the run writes each finished test into, or null when it cannot be read (the run is then not tracked). */
   readonly bucket: (run: LiveRunRecord) => ObjectStore | null;
-  /** The checkout the runs execute. */
+  /** The checkout the runs execute: its commit and branch, stamped on every live layer. Asked once per refresh pass. */
   readonly origin?: () => Promise<{ readonly sha: string | null; readonly branch: string | null }>;
-  /** The stylesheet the runs' snapshots render with. */
+  /** The stylesheet the runs' snapshots render with (served as `frame.css`). */
   readonly frameCss?: () => Promise<string | null>;
 };
 
@@ -72,6 +90,7 @@ type Tracked = {
   goneAt: number | null;
 };
 
+/** The id of the temporary layer for a source: `live-<source>`. Not a content hash, unlike an archived layer's id. */
 export function liveLayerId(source: string): string {
   return `live-${source}`;
 }
@@ -85,8 +104,19 @@ function sourceOf(run: LiveRunRecord): string | null {
 }
 
 /**
- * Finished tests of runs that have not been collected into a layer yet, so a
+ * Creates the tracker of finished tests of runs that have not been collected into a layer yet, so a
  * result appears the moment its test ends instead of when its package does.
+ *
+ * The tracker is stateful and meant to live as long as the server: call `refresh` on each poll with the current
+ * `active/` records and the newest archived layers. It returns the live layers (only those with at least one result)
+ * and the runs still in progress with their completed and failed counts. A run that disappears is read one last
+ * time and kept for 30 seconds, or until an archived (non-live) layer of the same producer and environment recorded
+ * at or after its start appears. `find(id)` returns a live layer by `live-<source>` id, and `store(source)` the
+ * bucket its files are read from. A bucket that is being replaced or a report still being written is skipped until
+ * the next pass; `refresh` does not throw for those.
+ *
+ * @param args.live How the host reaches the buckets; without it nothing is tracked.
+ * @param args.backend The backend id stamped on live layers.
  */
 export function createLiveEvidence(args: { readonly live: LiveSource | undefined; readonly clock: Clock; readonly backend: string }) {
   const tracked = new Map<string, Tracked>();

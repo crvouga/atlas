@@ -1,3 +1,13 @@
+/**
+ * @module Playwright driver
+ *
+ * `playwrightDriver()` is the core `Driver` that runs a statechart's paths against a web app (or a React Native app
+ * on the web) in Chromium. Each path attempt gets its own browser context and page; the `PlaywrightContext` it passes
+ * to event and state implementations carries the page and paced user actions. Screens are recognised by signals
+ * (`signals.ts`), and screenshots, clips and touch overlay come from `media.ts`.
+ *
+ * @see docs/statecharts.md
+ */
 import type { Driver } from '../../core/src/index';
 import type { SignalContext } from '../../core/src/signals';
 import type { Browser, BrowserContext, BrowserContextOptions, LaunchOptions, Page } from 'playwright';
@@ -19,11 +29,13 @@ export type PlaywrightContext = SignalContext & {
   user: UserActions;
 };
 
+/** Options of `playwrightDriver`; every field is optional. */
 export type PlaywrightDriverOptions = {
   /** Where `goto` paths resolve; the implementation's setup decides where to open. */
   baseUrl?: string | (() => string | Promise<string>);
   /** Browser context options; a 390×844 phone at device scale factor 3 with touch by default. */
   device?: BrowserContextOptions;
+  /** Options for `chromium.launch`. */
   launch?: LaunchOptions;
   /** Override the pacing used in showcase mode. */
   pacing?: Partial<Pacing>;
@@ -43,9 +55,33 @@ export type PlaywrightDriverOptions = {
 };
 
 /**
- * Drive a web app (or a React Native app on the web) with Playwright. Screenshots are taken at the
- * device's physical resolution; clips are recorded at that resolution too and encoded with
- * FFmpeg as H.264 MP4 (FFmpeg on the PATH is needed for video and WebP thumbnails).
+ * Drives a web app (or a React Native app on the web) in Chromium with Playwright, for `atlas run`. Pass it in the
+ * config as `driver: () => playwrightDriver(options)`. The browser launches on first use (and again if it was
+ * disconnected) and is shared by every context; each path attempt opens a fresh context from `options.device`
+ * (default `PHONE`). Screenshots are taken at the device's physical resolution; clips are recorded at that
+ * resolution too and encoded with FFmpeg as H.264 MP4. FFmpeg must be on the PATH: each screenshot also writes a
+ * WebP thumbnail with it, so without FFmpeg no screenshot is recorded (the run goes on). A Playwright trace is
+ * kept only for a failed attempt that was traced (see `trace`), and `dispose` closes the browser.
+ *
+ * @see docs/statecharts.md
+ *
+ * @example
+ * ```ts
+ * import { defineConfig } from '@crvouga/atlas';
+ * import { playwrightDriver, screen, text } from '@crvouga/atlas/playwright';
+ *
+ * export default defineConfig({
+ *   specs: './specs',
+ *   driver: () => playwrightDriver({ clock: true }),
+ *   implementation: {
+ *     async setup({ page }) { await page.goto('http://127.0.0.1:4317'); },
+ *     events: {
+ *       // one entry per event of the spec
+ *     },
+ *     states: { 'No todos': screen({ all: [text('Nothing to do yet')] }) }
+ *   }
+ * });
+ * ```
  */
 export function playwrightDriver(options: PlaywrightDriverOptions = {}): Driver<PlaywrightContext> {
   let browser: Promise<Browser> | null = null;

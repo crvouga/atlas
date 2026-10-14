@@ -53,7 +53,10 @@
     "./schema": "./packages/schema/src/index.ts",
     "./server": "./packages/server/src/index.ts",
     "./reports/*": "./packages/reports/src/*.ts",
-    "./schemas/*": "./packages/schema/schemas/*"
+    "./schemas/*": "./packages/schema/schemas/*",
+    "./openapi.json": "./packages/server/openapi.json",
+    "./llms.txt": "./llms.txt",
+    "./llms-full.txt": "./llms-full.txt"
   },
   "publishConfig": {
     "access": "public",
@@ -107,13 +110,21 @@
         "types": "./dist/reports/src/*.d.ts",
         "default": "./dist/reports/src/*.js"
       },
-      "./schemas/*": "./packages/schema/schemas/*"
+      "./schemas/*": "./packages/schema/schemas/*",
+      "./openapi.json": "./packages/server/openapi.json",
+      "./llms.txt": "./llms.txt",
+      "./llms-full.txt": "./llms-full.txt"
     }
   },
   "files": [
     "dist",
     "packages/core/bin",
     "packages/schema/schemas",
+    "packages/server/openapi.json",
+    "llms.txt",
+    "llms-full.txt",
+    "docs/agents.md",
+    "docs/reference",
     "packages/visualizer/bin",
     "packages/visualizer/example",
     "packages/visualizer/fixtures",
@@ -138,8 +149,9 @@
   "scripts": {
     "build": "bun scripts/build-package.ts",
     "test": "bun test && bun test --cwd packages/visualizer --preload ./tests/preload.ts tests",
-    "type-check": "for dir in packages/* scripts examples/todo; do tsc --noEmit -p \"$dir\" || exit 1; done",
+    "type-check": "for dir in packages/* scripts scripts/docs examples/todo; do tsc --noEmit -p \"$dir\" || exit 1; done",
     "schemas": "bun packages/schema/scripts/emit-json-schemas.ts",
+    "docs": "bun scripts/docs/generate.ts",
     "dev": "bun packages/core/bin/atlas.mjs dev --data .atlas-data",
     "viz:dev": "bun packages/visualizer/bin/atlas-visualizer.mjs dev --specs \"$(pwd)/packages/visualizer/fixtures/full/specs\" --runs \"$(pwd)/packages/visualizer/fixtures/full/runs\"",
     "viz:build": "cd packages/visualizer && INIT_CWD=\"$OLDPWD\" bun --bun vite build --configLoader runner",

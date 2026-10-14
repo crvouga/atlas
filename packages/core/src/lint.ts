@@ -1,20 +1,40 @@
+/**
+ * @module Spec linter
+ *
+ * Decides whether a spec bundle is executable before anything runs: pure structure, reachable states,
+ * no silent dead ends, journeys that replay, and (optionally) an implementation for everything in scope.
+ * It reports problems as findings rather than throwing, except when the charts cannot be composed at
+ * all. The `rule` of a finding is a stable short name (`pure`, `naming`, `meta`, `reachable`,
+ * `dead-end`, `journey`, `implemented`). `runConfig` refuses to run when any finding other than
+ * `implemented` exists.
+ *
+ * @see docs/statecharts.md
+ */
 import type { SpecBundle, StateConfig } from './spec/types';
 import { ChartGraph } from './graph';
 import { composeCharts } from './spec/compose';
 import { invokesOf, walkStates } from './spec/types';
 
-export type LintFinding = { rule: string; message: string };
+/** One problem found by `lintBundle`. */
+export type LintFinding = {
+  /** Which check found it: `pure`, `naming`, `meta`, `reachable`, `dead-end`, `journey` or `implemented`. */
+  rule: string;
+  /** A sentence for a person, naming the state, event or journey concerned. */
+  message: string;
+};
 
 const STATE_KEYS = new Set(['id', 'initial', 'type', 'meta', 'states', 'on', 'invoke', 'description']);
 const INVOKE_KEYS = new Set(['src', 'id', 'onDone']);
 const REQUIRED_META = ['description'] as const;
 const FORBIDDEN = ['entry', 'exit', 'actions', 'assign', 'after', 'always', 'context', 'guard', 'cond', 'delay', 'output', 'onError'];
 
+/** Options for `lintBundle`. */
 export type LintOptions = {
   /** Meta fields every state must carry; `description` by default. */
   requiredMeta?: readonly string[];
   /** Only these states and events need implementations (a chart being brought up). */
   scope?: { states: ReadonlySet<string>; events: ReadonlySet<string> };
+  /** The event and state names the implementation provides. When given, anything in scope without one is an `implemented` finding. */
   implementations?: { events: ReadonlySet<string>; states: ReadonlySet<string> };
 };
 
@@ -65,6 +85,19 @@ function sanitized(bundle: SpecBundle): SpecBundle {
  * Checks a spec bundle is executable: pure (no guards, actions, context or delays), every state
  * reachable, no dead ends without `meta.deadEnd`, every journey replays to its `endsIn` states, and
  * (when implementations are given) every event and state in scope has one.
+ *
+ * Findings are returned, never thrown. Each leaf state counts as having an exit when it or any
+ * ancestor handles an event; final states are exempt from the dead-end rule. `requiredMeta` applies
+ * to states, not to the chart's root. Only leaf states need recognisers.
+ *
+ * @returns `findings`; the `composition` and `graph` it built (reuse them rather than composing
+ *   again); each journey with its `replay`; and the names in `unimplemented`.
+ * @throws Error when the charts cannot be composed (a missing or cyclic child chart, a child final
+ *   with nowhere to go); the message lists the findings gathered so far.
+ *
+ * @example
+ * const { findings } = lintBundle(loadSpecDirectory('./specs'));
+ * if (findings.length) throw new Error(findings.map((f) => f.message).join('\n'));
  */
 export function lintBundle(bundle: SpecBundle, options: LintOptions = {}) {
   const findings: LintFinding[] = [];

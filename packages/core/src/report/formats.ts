@@ -1,3 +1,13 @@
+/**
+ * @module Run report formats
+ *
+ * Pure converters from a run's manifest (or a chart) to the formats other tools read: JUnit XML, CTRF
+ * JSON, WebVTT captions and a Mermaid state diagram. They take plain data, do no I/O and are
+ * deterministic. The manifest is read through a minimal structural type, so only the fields named
+ * there are required of it.
+ *
+ * @see docs/statecharts.md
+ */
 import type { MachineConfig } from '../spec/types';
 import type { TimelineEntry } from '../run/types';
 import { targetOf } from '../spec/types';
@@ -16,7 +26,12 @@ type ManifestLike = {
 
 const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** JUnit XML (the format every CI system reads): one test case per path. */
+/**
+ * Renders the manifest as JUnit XML (the format every CI system reads): one test case per path,
+ * with `classname` the path kind (`journey` or `generated`). A failed path is a `failure` carrying
+ * the last attempt's error, a `not-reached` path is `skipped` (with the blocking reason when there is
+ * one), and a flaky path passes with a note in `system-out`. The suite time is the run duration in seconds.
+ */
 export function toJUnit(manifest: ManifestLike) {
   const cases = manifest.paths.map((p) => {
     const body =
@@ -42,7 +57,12 @@ export function toJUnit(manifest: ManifestLike) {
   ].join('\n');
 }
 
-/** CTRF (Common Test Report Format, https://ctrf.io) JSON. */
+/**
+ * Renders the manifest as CTRF (Common Test Report Format, https://ctrf.io) JSON: one test per
+ * path, its steps as `steps`. `flaky` paths are `passed` with `flaky: true`, `not-reached` is
+ * `skipped`, and the failed path's trace (if any) is attached. Per-test `duration` is always 0:
+ * only the run's start and stop times are recorded.
+ */
 export function toCtrf(manifest: ManifestLike) {
   const status = (s: string) => (s === 'passed' ? 'passed' : s === 'failed' ? 'failed' : s === 'flaky' ? 'passed' : 'skipped');
   const tests = manifest.paths.map((p) => ({
@@ -82,7 +102,13 @@ function vttTime(ms: number) {
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}.${pad(d.getUTCMilliseconds(), 3)}`;
 }
 
-/** WebVTT captions for a clip, one cue per timeline entry. */
+/**
+ * Renders WebVTT captions for a clip, one cue per timeline entry. A cue lasts until the next entry
+ * (or the clip's end), at least 500 ms and at most 4 s.
+ *
+ * @param timeline the step's entries, with `atMs` relative to the start of the clip.
+ * @param durationMs the clip's length in milliseconds.
+ */
 export function toWebVtt(timeline: TimelineEntry[], durationMs: number) {
   const cues = timeline.map((e, i) => {
     const end = Math.min(timeline[i + 1]?.atMs ?? durationMs, e.atMs + 4_000);
@@ -92,7 +118,11 @@ export function toWebVtt(timeline: TimelineEntry[], durationMs: number) {
   return `WEBVTT\n\n${cues.join('\n\n')}\n`;
 }
 
-/** A Mermaid `stateDiagram-v2` of a machine, with nested and parallel states. */
+/**
+ * Renders a machine as a Mermaid `stateDiagram-v2` with nested and parallel states. States get
+ * short ids (`s0`, `s1`, ... in order of first use) and keep their names as labels; `:` and `;` in event
+ * names are replaced by spaces because Mermaid reads them as syntax. Written as `chart.mmd` in every run.
+ */
 export function toMermaid(machine: MachineConfig) {
   const ids = new Map<string, string>();
   const id = (name: string) => {

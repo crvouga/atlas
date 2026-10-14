@@ -1,3 +1,13 @@
+/**
+ * @module Reading the files attachments name
+ *
+ * Turns an attachment that names a file on disk (`path`) into one that carries its bytes (`data`), just before a
+ * layer is published. It owns the safety rules for doing so: a path that came from a test report may only name
+ * files inside the allowed roots, never a hidden file, and never a link that leads out; a path the person running
+ * the command typed is trusted. It does not upload anything. Node-only (reads the file system).
+ *
+ * @see docs/report-contract.md (evidence rule 7: paths inside a report are data from a test run)
+ */
 import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -5,14 +15,29 @@ import { contentTypeOf } from './media-types';
 
 type Loose = Record<string, unknown>;
 
-export type AttachmentFileResult = { readonly value: Loose; readonly attached: number; readonly bytes: number; readonly warnings: readonly string[] };
+/** What {@link readAttachmentFiles} found. */
+export type AttachmentFileResult = {
+  /** A copy of the holder in which every readable `path` attachment became a `data` attachment (and `path` is gone). The input is not mutated. */
+  readonly value: Loose;
+  /** How many files were read. */
+  readonly attached: number;
+  /** The total size of those files, in bytes. */
+  readonly bytes: number;
+  /** One line per attachment that was left out (missing, not allowed, too large, over budget), prefixed with its name. */
+  readonly warnings: readonly string[];
+};
 
 /** A budget shared by every call of one publish, so many files cannot add up to more than can be held. */
-export type AttachmentBudget = { remaining: number };
+export type AttachmentBudget = {
+  /** Bytes still available; each file read subtracts its size. A file larger than this is left out, not truncated. */
+  remaining: number;
+};
 
+/** Options of {@link readAttachmentFiles}. */
 export type ReadOptions = {
-  /** Largest single file, in bytes. */
+  /** Largest single file, in bytes. Default 512 MiB. */
   readonly maxBytes?: number;
+  /** Shared total-size budget; mutated as files are read. Omit for no total limit. */
   readonly budget?: AttachmentBudget;
   /**
    * A path the person running the command typed (`--attach`) is theirs to choose. A path inside a *report* is
@@ -23,9 +48,16 @@ export type ReadOptions = {
 };
 
 /**
- * Read the files that attachments name (`path`), at every level, and hand their bytes over as `data`.
+ * Reads the files that attachments name (`path`), at every level (the holder, its `steps` and its `attempts`,
+ * recursively), and hands their bytes over as `data` with a `contentType` guessed from the file name when the
+ * attachment gave none.
+ *
  * A file that is missing, not allowed or too large is left out with a warning: evidence that could not be
- * found never stops the results from being published.
+ * found never stops the results from being published. Attachments without a `path` are kept untouched.
+ *
+ * @param holder A check, step, attempt or any object that may have `attachments`, `steps` and `attempts`.
+ * @param roots Folders a relative path is resolved against (in order), and the only folders an untrusted path may name.
+ * @returns The rewritten copy, counts and warnings; never throws for a bad file.
  */
 export async function readAttachmentFiles(holder: Loose, roots: readonly string[], options: ReadOptions = {}): Promise<AttachmentFileResult> {
   const warnings: string[] = [];
@@ -64,6 +96,8 @@ function inside(file: string, root: string): boolean {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
+// Resolves a named file to a real path, or says why not. A trusted path may also be relative to the working
+// directory; an untrusted one must land, after resolving links, inside a root and under no dot-named part.
 async function locate(file: string, roots: readonly string[], trusted: boolean): Promise<{ file?: string; problem?: string }> {
   const candidates = path.isAbsolute(file) ? [file] : [...roots.map(root => path.resolve(root, file)), ...(trusted ? [path.resolve(file)] : [])];
   let outside = false;

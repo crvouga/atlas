@@ -1,6 +1,13 @@
+/**
+ * @module Reading and writing whole objects
+ *
+ * Small helpers over `ObjectStore` for the common case of an object read or written whole: draining a stream,
+ * decoding UTF-8, and encoding text for `put`. They hold the object in memory, so they are for manifests, catalog
+ * entries and bounded blobs, not for large files. Errors from the store are not caught.
+ */
 import type { ObjectStore } from './object-store';
 
-/** Drain a {@link ReadableStream} into a single byte array. */
+/** Drains a stream into one byte array (it reads the stream to its end; it holds every chunk in memory). */
 export async function readBytes(
   stream: ReadableStream<Uint8Array>
 ): Promise<Uint8Array> {
@@ -24,7 +31,7 @@ export async function readBytes(
   return out;
 }
 
-/** Read object bytes as UTF-8 text, or `null` when the key is missing. */
+/** Reads an object as UTF-8 text, or `null` when the key is missing. Invalid UTF-8 is decoded leniently (replacement characters), not rejected. Transport errors throw. */
 export async function readUtf8(
   store: ObjectStore,
   key: string
@@ -35,7 +42,7 @@ export async function readUtf8(
   return new TextDecoder().decode(bytes);
 }
 
-/** Write UTF-8 text under `key` with the given content type (default text/plain). */
+/** Writes UTF-8 text under `key` with the given content type (default `text/plain; charset=utf-8`). Overwrites; transport errors throw. */
 export async function writeUtf8(
   store: ObjectStore,
   key: string,
@@ -45,7 +52,7 @@ export async function writeUtf8(
   await store.put(key, new TextEncoder().encode(text), contentType);
 }
 
-/** Read object bytes, or `null` when the key is missing. */
+/** Reads an object's bytes whole, or `null` when the key is missing. Transport errors throw. */
 export async function readObjectBytes(
   store: ObjectStore,
   key: string

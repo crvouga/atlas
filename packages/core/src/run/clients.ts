@@ -1,7 +1,19 @@
+/**
+ * @module Multi-client composition
+ *
+ * Lets one run drive several clients at once (a phone, a desktop browser, an API) by combining their
+ * drivers into one driver whose context is a record keyed by client name, and their implementations
+ * into one implementation. Each event and state records which client it acts on, which decides whose
+ * screen is photographed and recorded. Owns no driver behaviour of its own; it only routes to the
+ * drivers it is given.
+ *
+ * @see docs/statecharts.md
+ */
 import path from 'node:path';
 
 import type { Driver, EventImplementation, Focus, Image, Implementation, StateImplementation, StepTools } from './types';
 
+/** Options for `combineDrivers`. */
 export type CombineDriversOptions = {
   /**
    * `focused` (default) screenshots the client a state is recognised on; `all` also screenshots
@@ -19,7 +31,21 @@ const inClientDirectory = (file: string, client: string) => path.join(path.dirna
  * act on (`onClient`, `combineImplementations`), so screenshots and clips come from that client's
  * screen. Timeline entries are tagged with the client that made them.
  *
- *   combineDrivers({ member: webdriverDriver(appiumIos), operator: playwrightDriver(), api: httpDriver(url) })
+ * The combined driver's `concurrency` is the smallest of the drivers' (1 for any that give none),
+ * its `pacing` is the first driver's that has one, and its name lists `<client>:<driver name>`.
+ * If any client fails to open, the ones that did open are closed and the open throws naming that client.
+ * Closing returns the first client's trace as `trace` and every client's in `traces`. Without
+ * a `focus`, `screenshot` and `record` use the first driver that supports them and `text` joins every
+ * client's text.
+ *
+ * @throws Error when `drivers` is empty.
+ * @see docs/statecharts.md
+ *
+ * @example
+ * const driver = combineDrivers<{ member: Page; api: HttpClient }>({
+ *   member: playwrightDriver(),
+ *   api: httpDriver('http://127.0.0.1:4000')
+ * });
  */
 export function combineDrivers<M extends Record<string, unknown>>(
   drivers: { [K in keyof M]: Driver<M[K]> },
@@ -117,10 +143,17 @@ export function combineDrivers<M extends Record<string, unknown>>(
 
 const scoped = (tools: StepTools, client: string): StepTools => ({ ...tools, timeline: tools.timeline.for(client) });
 
-/** A state implementation written for one client's context, lifted to a multi-client context. */
+/**
+ * Lifts a state implementation written against one client's context to the combined context and
+ * sets its `client`, so its screenshot comes from that client's screen.
+ */
 export function onClient<K extends string, C>(client: K, impl: StateImplementation<C>): StateImplementation<Record<K, C>>;
-/** An event implementation written for one client's context, lifted to a multi-client context. */
+/**
+ * Lifts an event implementation written against one client's context to the combined context and
+ * sets its `client`, so its clip comes from that client's screen and its timeline entries are tagged with it.
+ */
 export function onClient<K extends string, C>(client: K, impl: EventImplementation<C>): EventImplementation<Record<K, C>>;
+/** Lifts a state or an event implementation to a client of a multi-client context (see the overloads above); a value with `recognize` is a state. */
 export function onClient<K extends string, C>(
   client: K,
   impl: StateImplementation<C> | EventImplementation<C>
@@ -145,7 +178,7 @@ export function onClient<K extends string, C>(
   };
 }
 
-/** Part of an implementation: what one client does and shows, or what spans clients. */
+/** Part of an implementation (any subset of its fields): what one client does and shows, or what spans clients. */
 export type ImplementationPart<C> = Partial<Implementation<C>>;
 
 /**
@@ -154,6 +187,21 @@ export type ImplementationPart<C> = Partial<Implementation<C>>;
  * driver work unchanged; `shared` holds what needs several clients at once (read an id on one
  * screen, act on it on another). `shared.setup` runs first (seed data), then each client's setup
  * in the order the clients are listed. An event or state implemented twice is an error.
+ *
+ * A seed with the same name in several parts runs `shared`'s first, then each client's; the combined
+ * seed's `at` is the first one's and its `how` joins all of them. Correlation ids are pooled,
+ * and `canStart` returns the first reason any part gives.
+ *
+ * @param parts the implementation of each client, against that client's own context.
+ * @param shared events, states, seeds and setup that need several clients at once, against the combined context.
+ * @throws Error when an event or state is implemented by more than one part (including `shared`).
+ * @see docs/statecharts.md
+ *
+ * @example
+ * const implementation = combineImplementations<{ member: SignalContext; api: HttpClient }>(
+ *   { member: { events: {}, states: {} }, api: { events: {}, states: {} } },
+ *   { setup: async ({ api }) => void (await api.post('/test/reset')) }
+ * );
  */
 export function combineImplementations<M extends Record<string, unknown>>(
   parts: { [K in keyof M]?: ImplementationPart<M[K]> },
@@ -232,7 +280,10 @@ export function combineImplementations<M extends Record<string, unknown>>(
 /**
  * Merge parts of one implementation written against the same context, such as one file per area
  * of a large chart (sign-up, checkout, results). Events, states and seeds must each be
- * implemented once; setups run in order, and correlation ids are pooled.
+ * implemented once; setups run in order, `canStart` returns the first reason any part gives, and
+ * correlation ids are pooled without duplicates.
+ *
+ * @throws Error when an event, state or seed appears in more than one part.
  */
 export function mergeImplementations<C>(...parts: ImplementationPart<C>[]): Implementation<C> {
   const events: Implementation<C>['events'] = {};

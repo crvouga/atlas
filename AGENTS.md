@@ -79,6 +79,26 @@ clients, viewers and servers meet over its HTTP API, so treat that API like the 
   loading, run `ATLAS_BENCH_DIR=/tmp/atlas-bench bun packages/server/bench/bench.ts 2000 100` and do not make
   the numbers worse. Speed never buys a weaker guarantee: keep the code as simple as the numbers allow.
 
+## Documentation lives in the code, and is generated from it
+
+An agent integrating Atlas reads generated documentation, so it must not be able to disagree with the code. The rule is
+colocation: say it once, next to what it describes, and generate everything else from there.
+
+- Every library module (`packages/*/src`) starts with a `/** @module Title … */` comment and every exported declaration
+  has a doc comment (summary, parameters, failure behaviour, `@example` on entry points). `bun scripts/docs/coverage.ts`
+  lists gaps; a test fails on any. Write the comment when you write the code.
+- Generated, never edited by hand: `docs/reference/*.md` (from those comments, the usage text and the operation table),
+  `packages/server/openapi.json`, `llms.txt`, `llms-full.txt`, the JSON Schemas (`bun run schemas`), and the blocks between
+  `<!-- generated:NAME -->` markers in the guides. After changing a comment, a route, a setting, a schema or a command's
+  usage, run `bun run docs` (and `bun run schemas`) and commit the result; `bun run docs -- --check` and the tests fail when
+  anything is stale.
+- A new HTTP route needs an operation in `packages/server/src/openapi.ts` (a test fails if a route is undescribed). A new
+  server setting needs a row in `SERVER_SETTINGS` with an example that a test proves. A new command output document needs a
+  Zod schema in `packages/schema/src/cli-results.ts` and a line in `docs/agents.md`. Every command that prints a result
+  supports `--format json`.
+- Guides in `docs/` are written by hand and listed in `scripts/docs/generate.ts` (`GUIDES`) so they reach `llms.txt`; a test
+  checks every relative link and anchor.
+
 ## The S3 store is tested against a real server
 
 `packages/reports/tests/s3-store.integration.test.ts` and `s3-flow.integration.test.ts` run only when

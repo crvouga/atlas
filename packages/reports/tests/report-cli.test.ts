@@ -381,3 +381,40 @@ describe('a store named by the environment may have spaces in it', () => {
     expect(JSON.parse((await run(['status', '--format', 'json'], two)).output).backends.length).toBe(2);
   });
 });
+
+describe('atlas report --format json: every command answers in a document an agent can parse', () => {
+  test('publish, merge, doctor and stream print documents that match their schemas', async () => {
+    const { PublishResultSchema, MergeResultSchema, DoctorResultSchema, StreamResultSchema, CommandErrorSchema } = await import('../../schema/src/cli-results');
+    await file('j1.json', ctrf([{ name: 'a', status: 'passed', filePath: 'specs/j.feature' }, { name: 'b', status: 'failed', filePath: 'specs/j.feature' }, { name: 'c', status: 'skipped' }]));
+    const published = await run(['publish', '--store', 'jstore', '--producer', 'bdd', '--ctrf', 'j1.json', '--environment', 'ios', '--format', 'json']);
+    expect(published.code).toBe(0);
+    const result = PublishResultSchema.parse(JSON.parse(published.output));
+    expect(result.layer).toMatchObject({ producer: 'bdd', environment: 'ios', checks: 3, passed: 1, failed: 1, notRun: 1 });
+    expect(result.layer.id).toMatch(/^[0-9a-f]{64}$/);
+    // Same input, same layer: a retry is invisible.
+    expect(PublishResultSchema.parse(JSON.parse((await run(['publish', '--store', 'jstore', '--producer', 'bdd', '--ctrf', 'j1.json', '--environment', 'ios', '--json'])).output)).layer.id).toBe(result.layer.id);
+
+    const merged = MergeResultSchema.parse(JSON.parse((await run(['merge', '--store', 'jstore', '--into', 'jall', '--format', 'json'])).output));
+    expect(merged.copied).toBeGreaterThan(0);
+    const doctor = await run(['doctor', '--store', 'jall', '--format', 'json']);
+    expect(DoctorResultSchema.parse(JSON.parse(doctor.output)).ok).toBe(true);
+
+    let said = '';
+    const streamed = await reportMain(['stream', '--store', 'jstream', '--producer', 'live', '--format', 'json', '--flush-ms', '0'], { out: text => { said += text; }, env: {}, cwd: root, git: () => null, stdin: (async function* () { yield '{"id":"a","title":"a","status":"passed"}\nnot json\n'; })() });
+    expect(streamed).toBe(0);
+    expect(StreamResultSchema.parse(JSON.parse(said))).toMatchObject({ ok: true, checks: 1, lost: 0, warnings: [expect.stringContaining('line 2 skipped')] });
+  });
+
+  test('a command that is wrong is a document on standard error, and exit code 2', async () => {
+    const { CommandErrorSchema } = await import('../../schema/src/cli-results');
+    let err = '';
+    const original = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((text: string) => { err += text; return true; }) as typeof process.stderr.write;
+    try {
+      expect(await runReportCommand(['publish', '--format', 'json'])).toBe(2);
+    } finally {
+      process.stderr.write = original;
+    }
+    expect(CommandErrorSchema.parse(JSON.parse(err))).toMatchObject({ ok: false, error: { code: 'usage' } });
+  });
+});

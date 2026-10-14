@@ -1,7 +1,12 @@
 /**
- * Read side of the shared reports store: what a reports API serves. Pure over
- * an injected {@link ObjectStore}, {@link Clock} and {@link Timers}; nothing
- * here imports a runtime or an HTTP framework.
+ * @module Reading commit-keyed recordings
+ *
+ * The read side of the older, commit-keyed shared store: what the reports API serves for a commit (its record, its
+ * sources, each test's timeline and frame files) and the event streams that deliver them. Pure over an injected
+ * `ObjectStore`, `Clock` and `Timers`; nothing here imports a runtime or an HTTP framework. Every read goes through
+ * `reportStore`, so a commit published by an attempt (`publicationId`) is read from that attempt's records.
+ *
+ * @see docs/report-backends.md
  */
 
 import type { Clock, Timers } from './clock';
@@ -54,6 +59,7 @@ async function readJson<T>(store: ObjectStore, key: string): Promise<T | null> {
   }
 }
 
+/** Reads a commit's record, or `null` when it is missing or not valid JSON. */
 export async function readCommit(
   store: ObjectStore,
   sha: string
@@ -61,6 +67,7 @@ export async function readCommit(
   return readJson<CommitRecord>(await reportStore(store, sha), commitKey(sha));
 }
 
+/** Reads the stylesheet a commit's snapshots render with, or `null` when the commit has none. */
 export async function readFrameCss(
   store: ObjectStore,
   sha: string
@@ -69,8 +76,12 @@ export async function readFrameCss(
 }
 
 /**
- * Newest commits first, `limit` per page. A commit published twice (a rerun)
- * has two index entries; only the newer one is ever listed, on any page.
+ * Lists commits newest first, `limit` per page (at least 1).
+ *
+ * A commit published twice (a rerun) has two index entries; only the newer one is ever listed, on any page.
+ * `cursor` is the previous page's `cursor`; `null` starts at the newest. The returned `cursor` is `null` on the last
+ * page. An index entry whose commit record is missing or unreadable is left out, so a page may hold fewer than
+ * `limit` commits. Store errors reject.
  */
 export async function listCommits(
   store: ObjectStore,
@@ -96,14 +107,17 @@ export async function listCommits(
   };
 }
 
+/** How `commitEvents` tails a running commit. */
 export type CommitEventsOptions = {
+  /** Time source for `tailMs`. */
   readonly clock: Clock;
+  /** Timer functions used to wait `pollMs` between listings. */
   readonly timers: Timers;
   /** Sources the client already holds (a reconnect): never sent again. */
   readonly have?: ReadonlySet<string>;
-  /** How often a running commit is re-listed for new sources. */
+  /** How often, in milliseconds, a running commit is re-listed for new sources. */
   readonly pollMs: number;
-  /** A running commit's stream ends after this long; the client reconnects. */
+  /** A running commit's stream ends after this many milliseconds; the client reconnects. */
   readonly tailMs: number;
 };
 
@@ -132,11 +146,15 @@ async function* newSources(
 }
 
 /**
- * The commit, then every source in the order its read finishes. While the
- * commit is running, its sources are re-listed every `pollMs` and each new
- * one is sent as it lands, until the commit completes or `tailMs` passes.
- * The state is read before each listing, so a listing after `complete` is
- * the final one.
+ * Streams a commit as events: the commit record, then every source in the order its read finishes. While the
+ * commit is running, its sources are re-listed every `pollMs` and each new one is sent as it lands, until the commit
+ * completes or `tailMs` passes. The state is read before each listing, so a listing after `complete` is the final
+ * one. A `commit` event is sent again when the commit's state changes.
+ *
+ * Ends with `{ type: 'end', state }`: `missing` when there is no commit record and no source, `complete` when the
+ * commit closed, `running` when `tailMs` passed first (reconnect with `have` to continue). A source is never sent
+ * twice in one stream, nor one listed in `options.have`. Trap: a source is counted as sent as soon as it is listed,
+ * so one whose record cannot be read at that moment is not retried in the same stream.
  */
 export async function* commitEvents(
   store: ObjectStore,
@@ -202,7 +220,11 @@ function frameBlob(obj: BundleEntry, media: SnapshotMedia): HtmlReportBlob {
     : { contentType: obj.contentType, base64: bytesToBase64(obj.bytes) };
 }
 
-/** One test's timeline, without its frame files. */
+/**
+ * Reads one test's timeline (`RunReport`) without its frame files, or `null` when the source or test is not in the
+ * commit. A timeline stored as a reusable source is parsed leniently (`null` if not JSON); one in the commit's bundle
+ * throws if its bytes are not JSON.
+ */
 export async function readTestReport(
   store: ObjectStore,
   args: {
@@ -223,12 +245,15 @@ export async function readTestReport(
     : (JSON.parse(new TextDecoder().decode(obj.bytes)) as RunReport);
 }
 
+/** One frame file's content. */
 export type FrameBody = {
+  /** The file's bytes. */
   readonly bytes: Uint8Array;
+  /** The media type the file was stored with. */
   readonly contentType: string;
 };
 
-/** One frame file's bytes, or null when the test never wrote it. */
+/** Reads one frame file of a test, or `null` when the test never wrote it. Throws `Invalid report frame` when `file` is not a safe relative frame path. */
 export async function readFrameBody(
   store: ObjectStore,
   args: {
@@ -252,7 +277,7 @@ export async function readFrameBody(
     : { bytes: obj.bytes, contentType: obj.contentType };
 }
 
-/** Every source record of a commit, in the order each read finishes. */
+/** Lists every source record of a commit, in the order each read finishes. A source whose record cannot be read is left out. */
 export async function listSourceRecords(
   store: ObjectStore,
   sha: string
@@ -264,7 +289,12 @@ export async function listSourceRecords(
   return out;
 }
 
-/** A test's report, then each of its frame files as its read finishes. */
+/**
+ * Streams a test as events: its report, then each frame file the report names as its read finishes, then
+ * `{ type: 'end', found: true }`. A test that is not in the commit yields only `{ type: 'end', found: false }`. A frame
+ * the report names but the store lacks is skipped. Text media (`html`, `json`, `text`) arrive as inline text, the rest
+ * as base64.
+ */
 export async function* testEvents(
   store: ObjectStore,
   args: {

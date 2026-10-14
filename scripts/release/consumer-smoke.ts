@@ -90,6 +90,9 @@ export function exportSpecifiers(name: string, manifest: Manifest, files: string
   for (const [subpath, target] of Object.entries(manifest.exports ?? {})) {
     if (subpath === './package.json') continue;
     if (!subpath.includes('*')) {
+      // A data file (`./openapi.json`, `./llms.txt`) is not importable as a module: the tarball check covers that it ships.
+      const file = typeof target === 'string' ? target : (target as { default?: string } | null)?.default;
+      if (file && /\.(json|txt)$/.test(file)) continue;
       specifiers.push(subpath === '.' ? name : `${name}/${subpath.slice(2)}`);
       continue;
     }
@@ -124,6 +127,10 @@ async function probeNode(runtime: string, args: string[], cwd: string): Promise<
     const effective = (await (await fetch(`${url}/api/reports/evidence/effective`)).json()) as { layers: unknown[] };
     if (effective.layers.length < 1) throw new Error('the server served no layers from its data');
     if (!(await fetch(`${url}/readyz`)).ok) throw new Error('/readyz is not ok');
+    // The server describes itself, without a token: the description for tools and the guide for agents.
+    const described = (await (await fetch(`${url}/api/openapi.json`)).json()) as { openapi?: string; paths?: object };
+    if (described.openapi !== '3.1.0' || !described.paths) throw new Error('/api/openapi.json is not an OpenAPI 3.1 document');
+    if (!(await (await fetch(`${url}/llms.txt`)).text()).includes(`# Atlas server at ${url}`)) throw new Error('/llms.txt does not describe this server');
     // Results go in over the API and come out on the stream, through the same host.
     const events = await fetch(`${url}/api/events`);
     const reader = events.body!.getReader();
@@ -283,6 +290,9 @@ async function main(): Promise<void> {
         const status = JSON.parse(gated) as { ok: boolean; checks: { passed: number } };
         if (!status.ok || status.checks.passed !== 2) throw new Error(`atlas report status under ${runtime} did not combine both nodes:\n${gated}`);
         await must(runtime, [...args, atlas, 'report', 'merge', '--store', store('1'), '--store', store('2'), '--into', store('all')], { cwd: app });
+        // An agent's first command: it reads the project and prints a plan as JSON, under both runtimes.
+        const planned = JSON.parse(await must(runtime, [...args, atlas, 'init', '--server', 'https://atlas.example.com', '--format', 'json'], { cwd: app })) as { ok: boolean; server: { url: string }; files: { path: string }[]; suites: unknown[] };
+        if (!planned.ok || planned.server.url !== 'https://atlas.example.com' || !planned.files.some(file => file.path === 'AGENTS.md')) throw new Error(`atlas init under ${runtime} did not plan:\n${JSON.stringify(planned)}`);
       }
     }
 

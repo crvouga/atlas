@@ -1,3 +1,10 @@
+/**
+ * @module Linking checks to specs
+ *
+ * Decides which spec each imported check belongs to, so results from a JUnit or CTRF file land under the right spec in
+ * the report. It reads only the specs directory and the one spec file the caller names explicitly; a report is data and
+ * does not choose which files Atlas opens. Uses Node's `fs`.
+ */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -10,11 +17,13 @@ const words = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ')
 /** A file's name without the extension of a spec: `user.profile.feature` is `user.profile`, `cart.openslo.yaml` is `cart`. */
 const stem = (file: string) => path.posix.basename(file).replace(/(\.openslo|\.machine)?\.(feature|qnt|dmn|als|ya?ml|json|scxml|md|txt|xml)$/i, '');
 
+/** Where specs are and how to resolve them for `linkChecksToSpecs`. */
 export type SpecLinks = {
-  /** Every file under this directory is a spec named `specs/<its path>`. */
+  /** Every file under this directory is a spec named `specs/<its path>`. Relative to `base`. */
   readonly specsDirectory?: string;
-  /** Every check in the report belongs to this spec. */
+  /** Every check in the report belongs to this spec. A path relative to `base`. */
   readonly spec?: string;
+  /** The directory that relative paths (`specsDirectory`, `spec`) resolve against, usually the repository root. */
   readonly base: string;
 };
 

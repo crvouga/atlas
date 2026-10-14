@@ -1,3 +1,11 @@
+/**
+ * @module Finding the viewer
+ *
+ * Locates the built viewer a server serves: the folder named by `--site`, `./atlas-site`, or one built once into the user's
+ * cache from the viewer source shipped in the package (`atlas-visualizer build --no-data`). The build is the same for every
+ * project because the server writes its own address book into the page, so it is built at most once per installed version.
+ */
+
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import os from 'node:os';

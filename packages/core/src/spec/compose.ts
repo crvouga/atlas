@@ -1,9 +1,22 @@
+/**
+ * @module Static chart composition
+ *
+ * Flattens a bundle of charts into one machine by inlining each child chart into the state that
+ * invokes it, so a plain graph traversal sees the whole product. Pure and deterministic; the input
+ * bundle is not modified. State names are global across the composed product (nothing is renamed or
+ * namespaced), which is why they must be unique across charts.
+ *
+ * @see docs/statecharts.md
+ */
 import type { InvokeConfig, MachineConfig, SpecBundle, StateConfig, TransitionConfig } from './types';
 import { invokesOf, targetOf, walkStates } from './types';
 
+/** A child chart's final state and the event it passes to the parent, which the planner and replay insert automatically. */
 export type HandOff = { finalState: string; event: string; parentState: string; childChart: string };
 
+/** The result of composing a bundle. */
 export type Composition = {
+  /** The single flattened machine (a deep copy; the bundle is untouched). */
   machine: MachineConfig;
   /** Which chart each state came from. */
   chartOf: Map<string, string>;
@@ -19,7 +32,7 @@ function asTransition(t: TransitionConfig | string | undefined): TransitionConfi
 }
 
 /**
- * Inline every child chart where its parent invokes it, so XState's graph traversal (which cannot
+ * Inlines every child chart where its parent invokes it, so XState's graph traversal (which cannot
  * enter an invoked actor) walks straight through. Supports:
  *
  * - XState `invoke: { src, id, onDone }` and SCXML `<invoke>` + `done.invoke.<id>`;
@@ -28,6 +41,15 @@ function asTransition(t: TransitionConfig | string | undefined): TransitionConfi
  *
  * A child's final states stay as states (they keep their screenshots and checks) but stop being
  * final: each takes the parent's transition for its hand-off event.
+ *
+ * Every state without an `id` gets its own name as `id`. A child's `initial` replaces the host
+ * state's `initial`, and the host's transitions that consumed a hand-off event are removed from it.
+ *
+ * @throws Error when the root chart is not loaded, an invoked chart is not loaded, charts invoke
+ *   each other in a cycle, or a child's final state has no matching transition (or `onDone`) in the parent.
+ *
+ * @example
+ * const { machine, handOffs } = composeCharts(loadSpecDirectory('./specs'));
  */
 export function composeCharts(bundle: SpecBundle): Composition {
   const byId = new Map(bundle.charts.map((c) => [c.machine.id, c.machine]));

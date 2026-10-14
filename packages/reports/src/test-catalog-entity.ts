@@ -1,3 +1,8 @@
+/**
+ * @module Test as a catalog row
+ *
+ * Maps a recorded test to the flat row the viewer's searchable, groupable list draws.
+ */
 import type { HtmlReportTest } from './recording-bundle';
 import type { CatalogEntity } from './catalog';
 import { fileLabel } from './format';
@@ -9,6 +14,12 @@ function packageOf(testId: string): string {
   return name.length > 0 ? name : 'report';
 }
 
+/**
+ * Flattens a recorded test into a `CatalogEntity`: its id, title, status and duration; the base name of its source
+ * file; the package (the part of the viewer test id's source before `--`, or `report`); its runtime; and the first
+ * line of its error as the detail. `search` joins the title, ids, paths, system, runtime, package and error for text
+ * matching. `href` is `null`; the caller sets where a row links to.
+ */
 export function testCatalogEntity(test: HtmlReportTest): CatalogEntity {
   const meta = test.report.meta;
   const file = fileLabel(meta.sourceFile);

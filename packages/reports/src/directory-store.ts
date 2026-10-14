@@ -1,3 +1,14 @@
+/**
+ * @module Directory-backed object store
+ *
+ * The {@link ObjectStore} implementation for a local folder: a CI workspace, a downloaded artifact, a mount or a
+ * laptop. Each key is a file under the root; its content type is kept in a sidecar `<key>.content-type`. Writes go
+ * to a temporary `.tmp-*` file and are renamed into place so a reader sees all of an object or none of it. Keys
+ * that could escape the root (`..`, absolute, backslash, empty segments) or collide with the sidecar or temporary
+ * names are rejected with an error. Node/Bun only.
+ *
+ * @see docs/report-contract.md (backends)
+ */
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -44,10 +55,22 @@ async function writeAtomically(file: string, bytes: Uint8Array | string): Promis
 }
 
 /**
- * An {@link ObjectStore} on a directory: one file per key, its content type in a sidecar file. The
+ * Creates an {@link ObjectStore} on a directory: one file per key, its content type in a sidecar file. The
  * backend for a CI workspace, a downloaded artifact or a laptop. Writes are atomic, listing reads
  * only the directories a prefix can reach, and two stores over copies of the same layers can be
  * merged with `cp -R` because layers are immutable and addressed by content.
+ *
+ * The directory need not exist yet: `put` creates it, and `get`/`head`/`listKeys` on a missing one answer
+ * null/false/`[]`. A missing sidecar reads as `application/octet-stream`. `put` writes the content type before
+ * the bytes, so an object is never visible without its type. `listKeys` returns keys in code-unit order, skips
+ * temporary and sidecar files, and throws on a prefix that is absolute, contains a backslash or `..`. `getUri`
+ * is a `file://` URL. Also implements `listPage` (`after` is exclusive, `limit` defaults to 1000, `next` is the
+ * last returned key while more remain).
+ *
+ * @example
+ * const store = directoryStore('./atlas-reports');
+ * await store.put('layers/blobs/x', new TextEncoder().encode('hi'), 'text/plain');
+ * await store.listKeys('layers/'); // ['layers/blobs/x']
  */
 export function directoryStore(root: string): ObjectStore & PagedListing {
   const store: ObjectStore & PagedListing = {

@@ -1,11 +1,14 @@
-import { z } from 'zod/v4';
-
 /**
- * The layer: the one unit of evidence every producer writes and every reader combines.
+ * @module Layer document and report status schemas
+ *
+ * The stable evidence format. A layer is the one unit of evidence every producer writes and every reader combines;
+ * this module also holds the input a producer hands to the publisher (`PublishChecksSchema`), the spec set a report is
+ * laid over (`SpecSetSchema`) and the JSON `atlas report status` prints (`ReportStatusSchema`). Reports are never
+ * stored
+ * as a whole; they are computed by layering.
  *
  * A layer is one focused recording: the checks one producer ran, on one environment, from one
- * version and branch. It is immutable and addressed by its content. Reports are never stored as a
- * whole; they are computed by layering. See docs/report-contract.md for the normative rules.
+ * version and branch. It is immutable and addressed by its content.
  *
  * Compatibility, which is the point of this file:
  * - Within a schema major version a change only adds optional fields. Readers ignore fields they
@@ -24,16 +27,42 @@ import { z } from 'zod/v4';
  *   (`com.example.coverage`). Readers keep it and never fail on it.
  * - Evidence never decides a result. A reader that cannot read a piece of evidence drops that piece and
  *   keeps the check, its status and its place in the report.
+ *
+ * @see docs/report-contract.md
+ * @see docs/extending.md
+ */
+import { z } from 'zod/v4';
+
+/**
+ * The major version of the layer format, written as `schemaVersion` in every layer. `parseLayerDocument` reads a
+ * layer without the field as this version and refuses any other.
  */
 export const LAYER_SCHEMA_VERSION = 1;
 
 /** Outcomes of a check. Anything not `passed` is not evidence of success. */
 export const CHECK_STATUSES = ['passed', 'failed', 'running', 'not-run'] as const;
+/**
+ * Zod enum over `CHECK_STATUSES`, the closed vocabulary of a check's and an attempt's `status`. It changes only with
+ * a new `schemaVersion`.
+ */
 export const CheckStatusSchema = z.enum(CHECK_STATUSES);
+/**
+ * One of `CHECK_STATUSES`: `passed` and `failed` are completed results; `running` and `not-run` are unfinished and
+ * never count as a pass.
+ */
 export type CheckStatus = z.infer<typeof CheckStatusSchema>;
 
+/**
+ * Why a layer's origin is advisory: `modified` (recorded from a checkout with uncommitted changes) or `unknown`
+ * (origin not captured). Absent on a layer from a clean commit. It never changes a status. A closed vocabulary: it
+ * changes only with a new `schemaVersion`.
+ */
 export const FRESHNESS = ['unknown', 'modified'] as const;
 
+/**
+ * A number a check measured, such as a latency or a size, with its unit and an optional allowance. A measurement over
+ * its `limit` is reported and never changes the check's status.
+ */
 export const MeasurementSchema = z.looseObject({
   name: z.string().min(1),
   value: z.number().describe('A finite number'),
@@ -47,6 +76,7 @@ export const MeasurementSchema = z.looseObject({
  */
 export const ExtensionsSchema = z.record(z.string().min(1), z.unknown());
 
+/** A link attached to a layer, part, check or annotation: a URL, an optional name and why it is linked. */
 export const LinkSchema = z.looseObject({
   url: z.string().min(1),
   name: z.string().optional(),
@@ -85,6 +115,7 @@ export const AttachmentSchema = z.looseObject({
   captions: z.array(z.string()).optional().describe('The `id`s of attachments (WebVTT, SRT) that caption this one'),
   extensions: ExtensionsSchema.optional()
 });
+/** An attachment as stored in a layer, parsed from `AttachmentSchema`. */
 export type Attachment = z.output<typeof AttachmentSchema>;
 
 /** A note about a result: a warning, a deprecation, a coverage figure, an accessibility finding, anything. */
@@ -97,6 +128,7 @@ export const AnnotationSchema = z.looseObject({
   links: z.array(LinkSchema).optional(),
   extensions: ExtensionsSchema.optional()
 });
+/** An annotation as stored in a layer, parsed from `AnnotationSchema`. */
 export type Annotation = z.output<typeof AnnotationSchema>;
 
 /**
@@ -116,6 +148,7 @@ export const StepSchema = z.looseObject({
   annotations: z.array(AnnotationSchema).optional(),
   extensions: ExtensionsSchema.optional()
 });
+/** A timeline step as stored in a layer, parsed from `StepSchema`. */
 export type Step = z.output<typeof StepSchema>;
 
 /** One try of a check that was retried. The check's own status is the last one. */
@@ -130,6 +163,7 @@ export const AttemptSchema = z.looseObject({
   annotations: z.array(AnnotationSchema).optional(),
   extensions: ExtensionsSchema.optional()
 });
+/** A retry attempt as stored in a layer, parsed from `AttemptSchema`. */
 export type Attempt = z.output<typeof AttemptSchema>;
 
 /** What may be attached at any level: a layer, a part, a check. Every field is optional and open. */
@@ -142,6 +176,13 @@ const evidenceShape = {
   extensions: ExtensionsSchema.optional()
 };
 
+/**
+ * One check: the unit that has a status, such as a Gherkin scenario, a test case or a lint rule. Its `id` is stable
+ * across layers; with the layer's producer, the part's kind, the spec, the environment and the parameters it names
+ * the slot a result fills, and the newest completed result of a slot wins. It carries the outcome (`status`,
+ * `detail`, `measurements`) and, optionally, evidence (tags, labels, links, attachments, annotations, steps,
+ * attempts, extensions) that never decides the result.
+ */
 export const CheckSchema = z.looseObject({
   id: z.string().min(1).describe("The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another"),
   title: z.string(),
@@ -154,8 +195,13 @@ export const CheckSchema = z.looseObject({
   steps: z.array(StepSchema).optional().describe("The check's timeline"),
   attempts: z.array(AttemptSchema).optional().describe('Every try, when the check was retried')
 });
+/** A check as stored in a layer, parsed from `CheckSchema`. */
 export type Check = z.output<typeof CheckSchema>;
 
+/**
+ * A spec a layer was recorded against: its path, domain, kind and title, and an advisory fingerprint of its text so a
+ * reader can warn when the spec changed since.
+ */
 export const SpecEntrySchema = z.looseObject({
   path: z.string().min(1),
   domain: z.string(),
@@ -164,6 +210,10 @@ export const SpecEntrySchema = z.looseObject({
   fingerprint: z.string().optional().describe('Identity of the spec text the layer was recorded against, to warn when the spec changed since')
 });
 
+/**
+ * A group of checks inside a layer, with an open `kind` (`behavior`, `performance`, `accessibility`…) that is part of
+ * the slot a check fills. `publishChecks` writes a layer with one part. Parts may carry evidence of their own.
+ */
 export const ReportPartSchema = z.looseObject({
   freshness: z.enum(FRESHNESS).optional(),
   parameters: z.record(z.string(), z.string()).optional(),
@@ -199,11 +249,20 @@ export const LayerSourceSchema = z.looseObject({
   tests: z.array(RecordedTestSchema)
 });
 
+/**
+ * Where the recorded tests of a suite live in the store: in the layer's own bundle (`layer`), or at the older address
+ * of a commit and a source name (`commit`).
+ */
 export const RecordingAddressSchema = z.union([
   z.looseObject({ type: z.literal('layer') }),
   z.looseObject({ type: z.literal('commit'), sha: z.string().min(1), source: z.string().min(1) })
 ]);
 
+/**
+ * The captured files of a layer by file key (`attachments/<sha256>` for attachments): each file's media type and the
+ * byte ranges (`blob` store key, `offset` and `size` in the decompressed blob) whose concatenation is the file.
+ * Written last when a layer is published.
+ */
 export const BundleIndexSchema = z.record(
   z.string(),
   z.looseObject({
@@ -212,6 +271,7 @@ export const BundleIndexSchema = z.record(
   })
 );
 
+/** Pattern of a layer id, a spec-set id or a content digest: 64 lowercase hexadecimal digits (a SHA-256). */
 export const LAYER_ID = /^[0-9a-f]{64}$/;
 
 /**
@@ -236,6 +296,7 @@ export const LayerDocumentSchema = z.looseObject({
   bundle: BundleIndexSchema.default({}),
   ...evidenceShape
 });
+/** A layer as a reader holds it: the output of `LayerDocumentSchema`, with defaults applied. */
 export type LayerDocument = z.output<typeof LayerDocumentSchema>;
 
 /**
@@ -282,11 +343,27 @@ function lenientLayer(raw: Record<string, unknown>): Record<string, unknown> {
   return layer;
 }
 
+/** The outcome of `parseLayerDocument`: the layer, or the reason it could not be read. */
 export type ParsedLayer = { readonly ok: true; readonly layer: LayerDocument } | { readonly ok: false; readonly reason: string };
 
 /**
- * Read a layer manifest of any age. Layers written before `schemaVersion` existed are version 1.
- * A layer of a newer major version is refused by name rather than half understood.
+ * Reads a layer manifest of any age and returns it, or the reason it cannot be read; it never throws. Layers written
+ * before `schemaVersion` existed are version 1. A layer of a newer major version is refused by name ("Upgrade
+ * @crvouga/atlas to read it") rather than half understood. Evidence the reader cannot read (a malformed attachment,
+ * step, annotation, link, tag, label or extension) is dropped and the check keeps its status and place; anything
+ * else that fails the schema refuses the whole layer, naming the first problem by its path. Callers treat a refused
+ * layer as unknown, never as passed.
+ *
+ * @see docs/report-contract.md
+ *
+ * @example
+ * ```ts
+ * import { parseLayerDocument } from '@crvouga/atlas/schema';
+ *
+ * const parsed = parseLayerDocument(JSON.parse(text));
+ * if (!parsed.ok) throw new Error(parsed.reason);
+ * for (const part of parsed.layer.parts) console.log(part.kind, part.checks.length);
+ * ```
  */
 export function parseLayerDocument(raw: unknown): ParsedLayer {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ok: false, reason: 'A layer is a JSON object' };
@@ -306,10 +383,6 @@ export function parseLayerDocument(raw: unknown): ParsedLayer {
 }
 
 /**
- * The checks of a layer given to the publisher, before the publisher fills in the rest. This is
- * the whole integration surface of a producer that has no timelines to record.
- */
-/**
  * An attachment as a producer hands it over, before the publisher stores its bytes. Give the bytes as
  * `path` (a file, read by the CLI), `base64`, `data` (from code), or `text`; the publisher stores them in
  * the layer, fills in `bundleKey`, `bytes` and `sha256`, and removes these four.
@@ -327,6 +400,13 @@ const CheckInputSchema = CheckSchema.extend({
   attempts: z.array(AttemptInputSchema).optional()
 });
 
+/**
+ * The checks of a layer as a producer hands them to the publisher (`publishChecks`, `atlas report publish --checks`),
+ * before the publisher fills in the rest: `id`, `schemaVersion`, the part around the checks and the bundle of
+ * attachment bytes. It is the whole integration surface of a producer that has no timelines to record. `kind` names
+ * the part and defaults to `checks`. Attachments may carry their bytes (`AttachmentInputSchema`). Emitted as
+ * `publish-checks.schema.json`.
+ */
 export const PublishChecksSchema = z.looseObject({
   producer: z.string().min(1),
   checks: z.array(CheckInputSchema),
@@ -347,6 +427,7 @@ export const PublishChecksSchema = z.looseObject({
   annotations: evidenceShape.annotations,
   extensions: evidenceShape.extensions
 });
+/** What a caller passes to `publishChecks`: the input type of `PublishChecksSchema`, before defaults. */
 export type PublishChecksInput = z.input<typeof PublishChecksSchema>;
 
 const CountsSchema = z.object({
@@ -357,6 +438,7 @@ const CountsSchema = z.object({
   total: z.number().int().nonnegative()
 });
 
+/** The `schemaVersion` of the `ReportStatus` JSON, currently 1. */
 export const REPORT_STATUS_SCHEMA_VERSION = 1;
 
 /**
@@ -400,6 +482,7 @@ export const ReportStatusSchema = z.looseObject({
     })
   ).describe('Each slot whose newest completed result failed, or that is still running')
 });
+/** A parsed `ReportStatusSchema` value. */
 export type ReportStatus = z.output<typeof ReportStatusSchema>;
 
 /**
@@ -426,4 +509,5 @@ export const SpecSetSchema = z.looseObject({
     })
   )
 });
+/** A parsed `SpecSetSchema` value. */
 export type SpecSet = z.output<typeof SpecSetSchema>;

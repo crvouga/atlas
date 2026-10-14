@@ -1,3 +1,14 @@
+/**
+ * @module Run planner
+ *
+ * Decides, from the charts alone, which paths a run executes: the curated journeys (cut at seeded
+ * configurations), plus the shortest generated path to every transition the journeys leave uncovered.
+ * It also computes the scope of a run (all of the product, one chart, or one state). Pure and
+ * deterministic: the same bundle, scope, seeds and blocked events give the same paths, ids and keys on
+ * any machine, which is what lets shards and reruns be composed. It never runs the product.
+ *
+ * @see docs/statecharts.md
+ */
 import { createHash } from 'node:crypto';
 
 import type { Config, StateValue } from './graph';
@@ -7,26 +18,45 @@ import type { Composition } from './spec/compose';
 import type { SpecBundle } from './spec/types';
 import { splitTransitionId, transitionId, walkStates } from './spec/types';
 
+/** The part of the composed product one run covers, as computed by `chartScope`. */
 export type ChartScope = {
+  /** The id of the chart being run. */
   chart: string;
   /** Set when the run covers one state of the chart and what is inside it. */
   state?: string;
   /** The configuration each generated path starts from. */
   start: StateValue;
+  /** A phrase describing the start for reports. */
   startLabel: string;
+  /** Names of the states in scope. */
   states: Set<string>;
+  /** Ids of the transitions in scope (see `transitionId`): the ones the run must cover. */
   transitions: Set<string>;
+  /** Names of the events of those transitions. */
   events: Set<string>;
   /** Transitions that enter the chart from outside it. */
   entries: Set<string>;
 };
 
-export type PlannedStep = { event: string; transitions: string[]; handOff: boolean; from: string[]; to: string[] };
+/** One event of a planned path, with the transitions it fires and the active states before and after. A hand-off step is inserted automatically and is not driven by the implementation's events. */
+export type PlannedStep = {
+  event: string;
+  /** Ids of the transitions the event fires (see `transitionId`). */
+  transitions: string[];
+  handOff: boolean;
+  /** Names of the active states before the step. */
+  from: string[];
+  /** Names of the active states after the step. */
+  to: string[];
+};
 
+/** One sequence of events to run against the product from a start point. */
 export type PlannedPath = {
+  /** `journey-<n>` or `generated-<n>`, numbered in plan order. Stable for a given plan; use `key` to match across plans. */
   id: string;
   /** The same start and events give the same key on any machine and in any run. */
   key: string;
+  /** The journey's name, or `Covers: <state> → <event>` for a generated path. */
   name: string;
   kind: 'journey' | 'generated';
   description: string;
@@ -37,16 +67,19 @@ export type PlannedPath = {
   seed?: string;
   /** The journeys this stretch belongs to: a stretch several journeys share is run once. */
   journeys?: string[];
+  /** Why the path cannot fully run: `Start: <reason>` when its start cannot be set up, then the blocked events on it. Empty when it can run in full. */
   blockedBy: string[];
   /** A blocked path whose runnable part other paths already cover: reported, not run. */
   skipRun?: boolean;
 };
 
+/** What to narrow a run to; all fields are optional and combine in `chartScope`. */
 export type ScopeOptions = {
   /** The chart to run; the root chart (the whole product) when omitted. */
   chart?: string;
   /** Where generated paths start; the root's initial configuration when omitted. */
   start?: StateValue;
+  /** A phrase describing the start for reports; `The start of the chart` when omitted. */
   startLabel?: string;
   /** Only these events enter the chart from outside it; every entering transition when omitted. */
   entryEvents?: string[];
@@ -59,7 +92,10 @@ export type ScopeOptions = {
 
 /**
  * The part of the composed product a run covers: every state of `chart`, the transitions that
- * enter it from outside, and the hand-offs back to its parent.
+ * enter it from outside, and the hand-offs back to its parent. With `options.state`, the scope is
+ * that state, everything inside it, and the transitions into and out of it.
+ *
+ * @throws Error when `options.state` names a state that does not exist.
  */
 export function chartScope(bundle: SpecBundle, composition: Composition, graph: ChartGraph, options: ScopeOptions = {}): ChartScope {
   const chart = options.chart ?? bundle.root;
@@ -145,11 +181,27 @@ function withoutAutomaticHandOffs(graph: ChartGraph, start: Config, events: stri
 }
 
 /** A named seed: a configuration the implementation can put the system in directly. */
-export type SeedPoint = { name: string; at: StateValue; blocked?: string; for?: string[]; shows?: string };
+export type SeedPoint = {
+  name: string;
+  /** The configuration the seed produces, as a state name or a full state value. */
+  at: StateValue;
+  /** The reason the seed cannot be used yet. A blocked seed starts no path. */
+  blocked?: string;
+  /** Events this seed is a variant for: it starts only paths that take one of them, and they start only from it. */
+  for?: string[];
+  /** The state the seed leaves on screen; in a parallel state it picks the region the first event must act in. */
+  shows?: string;
+};
 
 /** A journey as the paths it is cut into, one per seeded stretch, in order. */
-export type PlannedJourney = { name: string; description: string; paths: string[] };
+export type PlannedJourney = {
+  name: string;
+  description: string;
+  /** Ids of the paths the journey is cut into, in order. */
+  paths: string[];
+};
 
+/** Inputs to `planChart` that come from the implementation rather than the charts. */
 export type PlanOptions = {
   /** Events that cannot run yet; paths stop before them. */
   isBlocked?: (event: string) => boolean;
@@ -170,6 +222,10 @@ export function runnableSteps(steps: PlannedStep[], isBlocked: (event: string) =
   return stop < 0 ? steps : steps.slice(0, stop);
 }
 
+/**
+ * A 16-hex-character key for a path: a SHA-256 of its seed name, start configuration and event names.
+ * Identical on every machine and run; it is how reruns, merges and layers match a path across runs.
+ */
 export function pathKey(seed: string | undefined, start: Config, events: string[]) {
   return createHash('sha256')
     .update(JSON.stringify([seed ?? null, configKey(start.value), events]))
@@ -186,6 +242,15 @@ const leaves = (graph: ChartGraph, active: string[]) => active.filter((n) => gra
  * journeys become one path. Then the shortest extra path from the nearest start point is added
  * for every transition still uncovered, and extra paths that are a prefix of another path are
  * dropped. Everything is ordered by the chart and the journeys, so the plan is deterministic.
+ *
+ * Paths stop before blocked events. A path whose start cannot be set up gets a `Start:` entry in
+ * `blockedBy`, and a blocked path whose runnable steps add no coverage gets `skipRun`. The generated
+ * paths are searched first avoiding blocked events, then (for what remains) allowing them.
+ *
+ * @returns `paths` (journey paths first, then generated, with ids assigned), `unreachable` (ids of
+ *   in-scope transitions no startable path takes), `journeys` (the paths each journey is cut into),
+ *   and `seeds` (each seed's name and active states, with `blocked` when it cannot be seeded yet).
+ * @see docs/statecharts.md
  */
 export function planChart(bundle: SpecBundle, graph: ChartGraph, scope: ChartScope, options: PlanOptions = {}) {
   const isBlocked = options.isBlocked ?? (() => false);

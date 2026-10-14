@@ -1,3 +1,17 @@
+/**
+ * @module Incremental report index
+ *
+ * `ReportIndex` is the report, maintained as layers arrive. Each immutable layer is read once and folded into the winning
+ * result of every slot it fills, then dropped unless it still holds a winner, so memory follows the number of checks and not
+ * the age of the project. The winner rule is a total order, so folding is exact in any order and equals combining every layer
+ * from scratch (a test proves it over random partial runs). It also keeps what each layer sends (rows, JSON, a digest) until
+ * that layer changes, so taking in a result costs one layer, answers viewers a version hash, a cached JSON text and a delta,
+ * and tells listeners what arrived.
+ *
+ * @see docs/report-contract.md
+ * @see docs/server.md#performance
+ */
+
 import { createHash } from 'node:crypto';
 
 import { eachLimited } from './completion-order';
@@ -145,11 +159,13 @@ export class ReportIndex {
     (this.#timer as { unref?: () => void }).unref?.();
   }
 
+/** Stops the background refresh started by `start`. Safe to call twice. */
   stop(): void {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = null;
   }
 
+/** True once a first pass over the backends has finished, so `snapshot` is a report and not an empty guess. */
   get ready(): boolean {
     return this.#refreshedAt > 0;
   }

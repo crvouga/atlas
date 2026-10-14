@@ -1,0 +1,60 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/doctor-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "description": "True when every check of every store passed (otherwise the exit code is 1)",
+      "type": "boolean"
+    },
+    "stores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "description": "`store`, `list`, `contents`, `write`, …",
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "fix": {
+                  "description": "What to change, when `ok` is false",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "ok",
+                "detail"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "id",
+          "checks"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "stores"
+  ],
+  "additionalProperties": {}
+}

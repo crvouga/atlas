@@ -1,3 +1,14 @@
+/**
+ * @module Combining backends into one report
+ *
+ * The entry point that turns stores of layers into a report: it reads every layer from every {@link BackendInput},
+ * lays them over the specs, and counts the outcome. It owns reading and failure reporting (an unreadable backend or
+ * layer becomes a notice, never a pass); the rule for which result wins a slot lives in `layer-merge.ts`. A report
+ * is computed, never stored, and is a function of the set of layers: the order and split of backends does not
+ * change it.
+ *
+ * @see docs/report-contract.md (how layers compose, guarantees)
+ */
 import { eachLimited } from './completion-order';
 import type { BackendInfo, LayerEvidence, LayerHeader, StatusCounts } from './evidence-types';
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
@@ -10,39 +21,55 @@ import type { ObjectStore } from './object-store';
 export type BackendInput = {
   /** Stable and unique: lowercase letters, digits and hyphens. It names where a result came from. */
   readonly id: string;
+  /** What a person sees in notices and in the viewer. Defaults to `id`. */
   readonly label?: string;
+  /** Where the layers are. Only read from. */
   readonly store: ObjectStore;
 };
 
+/** Options of {@link combineBackends}. */
 export type CombineOptions = {
   /** The specs the report is laid out against. When omitted, the specs the layers recorded. */
   readonly outline?: ReportOutline;
-  /** Layers read at once, across all backends. */
+  /** Layers read at once, across all backends. Default 16. */
   readonly concurrency?: number;
-  /** Leave layers out, to see what earlier ones said. */
+  /**
+   * Leave layers out, to see what earlier ones said (a layer for which this returns false takes no part: not in the
+   * results, the layer list, the counts, or the recorded specs). Layers are still read; this filters after reading.
+   */
   readonly include?: (layer: LayerHeader) => boolean;
 };
 
 /** What a report says in numbers. Timings that only qualify a check are not counted as checks. */
 export type ReportSummary = {
+  /** Counts of the winning results by status, and their total. */
   readonly checks: StatusCounts & { readonly total: number };
+  /** The same counts per environment slug, keys sorted; results with no environment are under `unspecified`. */
   readonly byEnvironment: Readonly<Record<string, StatusCounts & { readonly total: number }>>;
   /** Specs in the outline with no result at all. */
   readonly specsWithoutEvidence: readonly string[];
 };
 
+/** A report: the results laid over the specs, with what was read and what could not be. */
 export type CombinedReport = {
+  /** Every spec in the outline with the winning result of each of its slots, plus results that belong to no spec in the outline. */
   readonly combined: CombinedEvidence;
   /** Every distinct layer that was read, newest first. A layer several backends hold is one layer. */
   readonly layers: readonly LayerHeader[];
+  /** Every backend given, sorted by id, with whether it could be read. */
   readonly backends: readonly BackendInfo[];
   /** What could not be read. A gate treats any of these as unknown, never as a pass. */
   readonly notices: readonly string[];
+  /** The numbers of `combined`, computed once for the gate and the viewer. */
   readonly summary: ReportSummary;
 };
 
 const BACKEND_ID = /^[a-z0-9-]+$/;
 
+/**
+ * Counts results by status. Diagnostic results (parts of kind `performance`, which only qualify a check) are left out
+ * whenever any other result is present; if only diagnostics exist, they are counted so the report is not empty.
+ */
 export function countResults(results: readonly EvidenceResult[]): StatusCounts & { total: number } {
   const outcomes = results.some(result => !isDiagnosticKind(result.row.kind)) ? results.filter(result => !isDiagnosticKind(result.row.kind)) : results;
   const counts: Record<EvidenceStatus, number> = emptyCounts();
@@ -50,6 +77,7 @@ export function countResults(results: readonly EvidenceResult[]): StatusCounts &
   return { ...counts, total: outcomes.length };
 }
 
+/** Counts a combined report's winning results in total and per environment, and lists the specs that have no result at all. */
 export function summarize(combined: CombinedEvidence): ReportSummary {
   const results = [...combined.specs.flatMap(entry => entry.results), ...combined.unassigned];
   const environments = new Map<string, EvidenceResult[]>();
@@ -67,12 +95,23 @@ export function summarize(combined: CombinedEvidence): ReportSummary {
 }
 
 /**
- * Read every layer of every backend and lay them over the specs. Layers are the only input:
+ * Reads every layer of every backend and lays them over the specs. Layers are the only input:
  * a report is a function of the set of layers, so the order of backends and layers, and how they
  * were split across machines, branches and runs, does not change it.
  *
  * A backend that cannot be read, or a layer that cannot be understood, is named in `notices` and
- * leaves everything else usable.
+ * leaves everything else usable; a gate must treat any notice as unknown, never as a pass. A layer held by
+ * several backends is one layer. Only an invalid backend `id` (not lowercase letters, digits and hyphens, or
+ * repeated) throws, before anything is read. Backends are only read from.
+ *
+ * When `options.outline` is omitted, the specs are the ones the included layers recorded (the newest
+ * recording of each spec path wins), with no commit sha.
+ *
+ * @example
+ * const outline = await loadDirectoryOutline('./specs'); // optional: without it the layers' own specs are used
+ * const report = await combineBackends([{ id: 'ci', store: directoryStore('./atlas-reports') }], { outline });
+ * report.summary.checks.failed; // number of slots whose winner failed
+ * report.notices; // non-empty means something could not be read
  */
 export async function combineBackends(backends: readonly BackendInput[], options: CombineOptions = {}): Promise<CombinedReport> {
   const seen = new Set<string>();

@@ -1,3 +1,14 @@
+/**
+ * @module Run bundles
+ *
+ * Uploads a finished statechart run directory (manifest, screenshots, clips) to a store under `layers/runs/<run>/` and
+ * lists and reads them back for the viewer. A run is shared only once its privacy scan passed. The manifest is written
+ * after its files and the catalog entry (`layers/runs/index/<inverted-time>-<run>.json`) after the manifest, so a
+ * half-uploaded run is never listed, and uploading again finishes the job. Uses Node's `fs`, so it is not for
+ * browsers.
+ *
+ * @see docs/report-contract.md#where-bytes-go
+ */
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -18,7 +29,15 @@ const count = (value: unknown): Count | undefined => {
   return { total: n('total'), passed: n('passed'), failed: n('failed'), flaky: n('flaky'), notReached: n('notReached') };
 };
 
-/** The row the viewer lists for a finished run (a `RunSummary`). */
+/**
+ * Builds the row the viewer lists for a finished run (a `RunSummary`) from its `manifest.json`, which may be any JSON:
+ * every field is read defensively and a missing one takes a default.
+ *
+ * `startedAt` is `run.startedAt`, else the time in the run id (`2026-10-09T12-00-00-000Z-...`), else the epoch;
+ * `mode` is `run.mode`, else `showcase` for an id ending in `showcase`, else `fast`. `journeys` counts the manifest's
+ * `journeys` (or the `paths` of kind `journey`) by status `passed`, `failed`, `flaky`, with any other status counted
+ * as `notReached`. `progress` is always `complete`.
+ */
 export function summarizeManifest(id: string, manifest: unknown) {
   const root = object(manifest);
   const run = object(root.run);
@@ -56,13 +75,20 @@ async function walk(dir: string, root = dir): Promise<string[]> {
   return nested.flat();
 }
 
-/** A run is safe to share only once its privacy scan passed: the same rule the static viewer applies. */
+/** Thrown by `publishRunBundle` when a run's privacy scan did not pass (or never ran), so the run is not uploaded. The same rule the static viewer applies. */
 export class RunNotShareableError extends Error {}
 
 /**
- * Upload a finished run directory so the viewer can browse it from the store. Files go first and
+ * Uploads a finished run directory so the viewer can browse it from the store. Files go first and
  * `manifest.json` after them, then the catalog entry, so a half-uploaded run is never listed. Running it
  * again after a failure finishes the job; a run that is already complete is left alone.
+ *
+ * The run id is the directory's name (letters, digits, `_`, `.`, `-`; not starting with a dot). Files are written to
+ * `layers/runs/<id>/<relative path>` with a media type from their extension; dot-files, dot-folders and symbolic links
+ * are skipped. Resolves to the file and byte counts uploaded (both 0 with `alreadyPublished: true` when the manifest
+ * was already in the store; a missing catalog entry is then written). Throws `RunNotShareableError` when
+ * `manifest.privacy.passed` is not `true`, and an `Error` for a badly named directory or a missing or unreadable
+ * `manifest.json`.
  */
 export async function publishRunBundle(store: ObjectStore, directory: string): Promise<{ readonly id: string; readonly files: number; readonly bytes: number; readonly alreadyPublished: boolean }> {
   const id = path.basename(path.resolve(directory));
@@ -97,8 +123,9 @@ export async function publishRunBundle(store: ObjectStore, directory: string): P
 }
 
 /**
- * The newest runs in the store. The catalog is newest first, so one page of it is enough; entries never
- * change, so `cache` (key to summary) lets a long-lived reader open each only once.
+ * Lists the newest `limit` (default 100) runs in the store, newest first by `startedAt` (ties by id). The catalog is
+ * newest first, so one page of it is enough; entries never change, so `cache` (catalog key to summary) lets a
+ * long-lived reader open each only once. A catalog entry that is empty or not JSON is skipped.
  */
 export async function listRunSummaries(store: ObjectStore, limit = 100, cache: Map<string, ReturnType<typeof summarizeManifest>> = new Map()): Promise<ReturnType<typeof summarizeManifest>[]> {
   const keys = isPaged(store) ? (await store.listPage(INDEX_PREFIX, { limit })).keys : (await store.listKeys(INDEX_PREFIX)).slice(0, limit);
@@ -117,7 +144,7 @@ export async function listRunSummaries(store: ObjectStore, limit = 100, cache: M
   return rows.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt) || (a.id < b.id ? -1 : 1));
 }
 
-/** One file of a run, or null. The path may not leave the run. */
+/** Reads one file of a run, or `null` when it is missing. Also `null`, without reading, for an `id` that is not a plain run name or a `relative` path with an empty, `.`, `..` or backslash segment, so a path can never leave the run. */
 export async function readRunFile(store: ObjectStore, id: string, relative: string): Promise<StoredObject | null> {
   const parts = relative.split('/');
   if (!/^[\w.-]+$/.test(id) || id.startsWith('.') || parts.some(part => !part || part === '.' || part === '..' || part.includes('\\'))) return null;

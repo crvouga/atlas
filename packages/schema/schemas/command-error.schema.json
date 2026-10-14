@@ -1,0 +1,35 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/command-error.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": false
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "description": "What is wrong, and usually what to do about it",
+          "type": "string"
+        },
+        "code": {
+          "description": "`usage`: the command or its inputs were wrong. Nothing was written",
+          "type": "string",
+          "const": "usage"
+        }
+      },
+      "required": [
+        "message",
+        "code"
+      ],
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "ok",
+    "error"
+  ],
+  "additionalProperties": {}
+}

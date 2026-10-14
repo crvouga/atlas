@@ -1,0 +1,26 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/checks-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true
+    },
+    "id": {
+      "description": "The layer id",
+      "type": "string"
+    },
+    "checks": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "ok",
+    "id",
+    "checks"
+  ],
+  "additionalProperties": {}
+}

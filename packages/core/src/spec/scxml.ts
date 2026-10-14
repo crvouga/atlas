@@ -1,10 +1,23 @@
+/**
+ * @module SCXML reader and writer
+ *
+ * Converts W3C SCXML to and from the XState-shaped `MachineConfig` the rest of Atlas uses, for the
+ * pure subset Atlas executes. Business names travel in an `atlas:name` attribute next to a token id,
+ * and metadata in the `atlas` namespace, so reading what `machineToScxml` wrote gives the same chart
+ * back. Browser-safe (no Node built-ins). Reading is synchronous and keeps its id-to-name table in
+ * module state for the duration of one `scxmlToMachine` call, so do not call it re-entrantly.
+ *
+ * @see docs/statecharts.md
+ */
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 
 import type { InvokeConfig, MachineConfig, StateConfig, StateMeta } from './types';
 import { invokesOf, targetOf } from './types';
 
 /**
- * W3C SCXML ↔ XState config, for the pure subset Atlas executes.
+ * The XML namespace of Atlas's SCXML extensions (`atlas:name`, `<atlas:meta>`, `atlas:done-event`).
+ *
+ * The SCXML conventions Atlas reads and writes:
  *
  * - `<state>`, `<parallel>`, `<final>`, `initial`, `<transition event target>`.
  * - `<invoke type="scxml" src="other.scxml" id>` composes another chart; a transition on
@@ -75,7 +88,12 @@ function readMeta(node: XmlNode): StateMeta {
   return meta;
 }
 
-/** SCXML ids are XML IDs and event attributes are token lists, so names travel in `atlas:name`. */
+/**
+ * Turns a business name into a valid SCXML id/event token: ASCII lowercase letters, digits and `-`,
+ * starting with a letter or `_` (`s-` is prefixed otherwise). Lossy, so the original name is kept in `atlas:name`.
+ *
+ * @example scxmlToken('Adds a todo') // 'adds-a-todo'
+ */
 export function scxmlToken(name: string) {
   const token = name
     .normalize('NFKD')
@@ -149,7 +167,17 @@ function readState(node: XmlNode, invokeIds: Map<string, InvokeConfig>): [string
   return [name, state];
 }
 
-/** Read an SCXML document into an XState machine config. */
+/**
+ * Reads an SCXML document into an XState machine config, restoring business names from `atlas:name`.
+ *
+ * The machine id is the `name` attribute of `<scxml>`, else `fallbackId`. `initial` is the attribute
+ * when given, else the first child state. A state's `initial` defaults to its first child state
+ * (none for `<parallel>`). Transitions without both an event and a target are skipped.
+ *
+ * @param xml the document text.
+ * @param fallbackId the machine id when the document has no `name`.
+ * @throws Error when there is no `<scxml>` root element.
+ */
 export function scxmlToMachine(xml: string, fallbackId = 'machine'): MachineConfig {
   const doc = parser.parse(xml) as XmlNode[];
   const root = doc.find((n) => local(tagOf(n)) === 'scxml');
@@ -211,7 +239,11 @@ function stateToXml(name: string, node: StateConfig): XmlNode {
   return { [tag]: kids, ':@': at };
 }
 
-/** Write an XState machine config as an SCXML document. */
+/**
+ * Writes a machine config as an SCXML document with Atlas's `atlas:` extensions, so that
+ * `scxmlToMachine(machineToScxml(m))` gives the same chart. Ids are `scxmlToken` forms of the names;
+ * the names are kept in `atlas:name`. Only the pure subset is written: `on`, `invoke`, `meta`, nesting.
+ */
 export function machineToScxml(machine: MachineConfig): string {
   const kids: XmlNode[] = [...metaToXml(machine.meta)];
   for (const [k, v] of Object.entries(machine.states ?? {})) kids.push(stateToXml(k, v));

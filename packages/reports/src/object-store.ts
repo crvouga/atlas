@@ -1,43 +1,36 @@
 /**
- * Content-addressed binary object storage.
+ * @module ObjectStore interface
  *
- * Tiny, async, transport-agnostic surface — exactly what a "blob keyed by id"
- * cache needs (TTS audio, exported files, derived avatars, etc.). Implementations
- * live in sibling `impl-*.ts` files (S3/R2, in-memory, file-system).
+ * The one interface a backend implements: seven async methods over keys and bytes, with no transactions, renames,
+ * locks or conditional writes. That is what lets a directory, an S3-compatible bucket, an HTTP server and a device
+ * lab hold the same report. Implementations here are `directoryStore`, `s3Store` and `httpStore`; `verifyObjectStore`
+ * proves a new one. This interface is part of the stable report contract.
  *
- * Mirrors the {@link ../sql-client/interface.ts SqlClient} shape: one interface,
- * multiple `impl-*.ts` siblings, plus a conformance suite in `interface.test.ts`.
+ * Read semantics: `get` returns `null` when the key is missing; transport and parse errors throw. `head` returns
+ * `false` for a missing key and never throws on "not found".
  *
- * Read semantics:
- *   - {@link ObjectStore.get} returns `null` when the key is missing. Transport /
- *     parse errors throw.
- *   - {@link ObjectStore.head} returns `false` for a missing key (never throws on
- *     "not found"). Transport errors throw.
+ * Write semantics: `put` is idempotent (writing a key twice overwrites without error) and the stored `contentType`
+ * round-trips through `get`. `delete` and `deleteMany` on a missing key are no-ops.
  *
- * Write semantics:
- *   - {@link ObjectStore.put} MUST be idempotent: writing the same key twice
- *     overwrites without error. Stored `contentType` MUST round-trip through
- *     {@link ObjectStore.get}.
- *   - {@link ObjectStore.delete} on a missing key is a no-op (does not throw).
+ * URI semantics: `getUri` returns a URL the host can load directly (a `file://` URL for a directory, a presigned URL
+ * for S3), or `null` for a missing key or a store with no addressable URL.
  *
- * URI semantics:
- *   - {@link ObjectStore.getUri} returns a URL the host runtime can load
- *     directly (`file://` on native, `blob:` on web). Stores that don't expose
- *     direct URLs (e.g. remote R2 — bytes must be streamed through HTTP)
- *     return `null`. Returns `null` when the key is missing.
+ * Listing: `listKeys` returns keys in sorted code-unit order, optionally only those starting with `prefix`.
  *
- * Listing:
- *   - {@link ObjectStore.listKeys} returns keys in sorted code-unit order
- *     (deterministic). Optional `prefix` filters to keys that start with it.
+ * @see docs/report-contract.md#backends
  */
 
+/** An object read from a store: a one-shot byte stream with its media type and length. */
 export interface StoredObject {
   /** Stream of stored bytes. Single-use; consume or discard before issuing more I/O on the same store. */
   readonly body: ReadableStream<Uint8Array>;
+  /** The media type the object was written with. */
   readonly contentType: string;
+  /** The length of the object in bytes. */
   readonly size: number;
 }
 
+/** A place that holds objects by key: the backend interface of the report contract. Keys are `/`-separated strings; see each method for its rules. */
 export interface ObjectStore {
   /** Returns the stored object, or `null` if no value exists for `key`. */
   get(key: string): Promise<StoredObject | null>;
@@ -84,6 +77,7 @@ export interface PagedListing {
   listPage(prefix: string, options?: { readonly after?: string; readonly limit?: number }): Promise<{ readonly keys: readonly string[]; /** The `after` for the next page, or null on the last. */ readonly next: string | null }>;
 }
 
+/** Whether a store also implements `PagedListing`. */
 export function isPaged(store: ObjectStore): store is ObjectStore & PagedListing {
   return typeof (store as Partial<PagedListing>).listPage === 'function';
 }

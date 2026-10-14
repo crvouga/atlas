@@ -1,6 +1,18 @@
+/**
+ * @module Atlas server as an ObjectStore
+ *
+ * `httpStore` speaks the server's store protocol (`/api/store`) as an `ObjectStore`, so everything that publishes to a store
+ * (`publishChecks`, spec sets, run uploads, `copyStore`, `createReporter`) publishes to a server unchanged. It retries what a
+ * retry can fix (network errors, 5xx, 429, 408) with jittered backoff, never what it cannot (401, 403, 409, 413, 422), and
+ * every refusal says what to do about it.
+ *
+ * @see docs/server.md#the-store-protocol
+ */
+
 import type { ObjectStore, PagedListing, StoredObject } from './object-store';
 import { ObjectStoreWithPrefix } from './store-prefix';
 
+/** How to reach a server: its `url`, the `token` to send (never in the URL), and, for tests and special runtimes, `fetch`, the retry count, the per-attempt timeout and `sleep`. */
 export type HttpStoreOptions = {
   /** The Atlas server, such as `https://atlas.example.com`. A path on it (`/atlas`) is kept. */
   readonly url: string;
@@ -22,6 +34,7 @@ export class AtlasHttpError extends Error {
   }
 }
 
+/** An `ObjectStore` (with paged listing) over an Atlas server, plus what only a server can answer: `ping` (is it there, and what may this token do) and `status` (the gate, worked out by the server). */
 export type HttpStore = ObjectStore & PagedListing & {
   /** `https://atlas.example.com`, with no secrets. */
   readonly label: string;

@@ -1,16 +1,39 @@
+/**
+ * @module ObjectStore conformance check
+ *
+ * Runs the `ObjectStore` contract against any implementation, so a new backend (GCS, an HTTP service, a device lab) can
+ * prove it composes with the others before it holds evidence. It is a plain async function with no test-runner
+ * dependency. It writes only under a scratch prefix and removes what it wrote.
+ *
+ * @see docs/report-contract.md#backends
+ */
 import { readBytes } from './object-io';
 import type { ObjectStore } from './object-store';
 
+/** The outcome of `verifyObjectStore`: `ok` is true exactly when `failures` is empty. */
 export type StoreVerification = { readonly ok: boolean; readonly failures: readonly string[] };
 
 const text = (value: string) => new TextEncoder().encode(value);
 
 /**
- * Check a backend against the {@link ObjectStore} contract before trusting it with evidence. It
+ * Checks a backend against the {@link ObjectStore} contract before trusting it with evidence. It
  * writes a few objects under a scratch prefix and removes them. Use it in the test suite of an S3,
  * GCS, R2 or HTTP adapter; an adapter that passes composes with every other backend.
  *
- * It is a plain async function, so it runs under any test runner and from a script.
+ * It is a plain async function, so it runs under any test runner and from a script. It checks: a missing key reads
+ * `null` (`get`, `getUri`) and `false` (`head`); `put` overwrites and round-trips bytes, size and content type;
+ * `listKeys` is in code-unit order, filters by any string prefix and is empty for an unused one; `withPrefix` scopes
+ * reads and writes; `delete` and `deleteMany` accept missing keys. A failed expectation is reported in `failures`;
+ * an exception from the store is reported as one `threw: ...` failure rather than thrown. It does not check
+ * `listPage`.
+ *
+ * @param store the backend to verify.
+ * @param scratch the key prefix to write under; defaults to a random `atlas-conformance-<id>/`. If you pass one,
+ * nothing else may live under it: the check asserts that `listKeys(scratch)` returns exactly the four objects it wrote.
+ *
+ * @example
+ * const { ok, failures } = await verifyObjectStore(myStore);
+ * if (!ok) throw new Error(failures.join('\n'));
  */
 export async function verifyObjectStore(store: ObjectStore, scratch = `atlas-conformance-${Math.random().toString(36).slice(2, 10)}/`): Promise<StoreVerification> {
   const failures: string[] = [];

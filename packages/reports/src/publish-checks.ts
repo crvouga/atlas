@@ -1,3 +1,15 @@
+/**
+ * @module Publishing checks as a layer
+ *
+ * `publishChecks` turns the checks of one producer into one immutable layer in any store: the whole integration for a suite
+ * that has no timeline to record. Attachments of any kind are stored by content (the same screenshot attached ten times is
+ * stored once). Nothing here reads a clock or the environment, so the same input is always the same layer and a retried CI
+ * step changes nothing.
+ *
+ * @see docs/integrating.md
+ * @see docs/extending.md
+ */
+
 import { PublishChecksSchema, type Attachment, type PublishChecksInput } from '../../schema/src/layer';
 import { writeBundle, type BundleEntry } from './bundle';
 import type { ReportPart } from './explorer-types';
@@ -9,6 +21,7 @@ import type { ObjectStore } from './object-store';
 import { parseWith } from './parse-with';
 import { sha256Hex } from './sigv4';
 
+/** Limits that protect the machine publishing: the largest single attachment, and the most attachment bytes in one layer (they are held in memory while stored). */
 export type PublishChecksOptions = {
   /** Refuse a single attachment larger than this many bytes. Default 512 MiB. */
   readonly maxAttachmentBytes?: number;

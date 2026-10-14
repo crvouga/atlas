@@ -1,22 +1,24 @@
+/**
+ * @module Snapshot surface
+ *
+ * Paints recorded page snapshots (HTML captured at each step of a test) into a phone-sized surface in the viewer and
+ * draws the press target of a gesture on top. One long-lived surface per client panel: frames are painted by swapping
+ * the parsed snapshot DOM into that surface synchronously, so scrubbing never re-parses `frameCss` or refetches fonts.
+ * The press target is resolved against the painted DOM with the driver's chained first-match semantics and drawn as a
+ * single overlay from real layout.
+ *
+ * The phone paints into an open shadow tree, not an iframe: embedded browsers drop iframe documents, and a shadow tree
+ * stays in the page. Snapshot styles sit on the shadow root, and the host is the 390x844 viewport the app shell fills.
+ * Browser-only: needs `document`, `DOMParser` and shadow DOM. Snapshot HTML comes from a test run and is untrusted;
+ * `<script>` elements are removed (`cleanSnapshotHtml`) but nothing else is sanitised, so show it only in a context you
+ * would show that run's pages in.
+ */
 import {
   cleanSnapshotHtml,
   PHONE_H,
   PHONE_W,
 } from './phone';
 import type { ReportStepHit } from './report-types';
-
-/**
- * One long-lived snapshot surface per client panel. Frames are painted by
- * swapping the parsed snapshot DOM into that surface synchronously, so
- * scrubbing never re-parses `frameCss` or refetches fonts. The press target
- * is resolved against the painted DOM with the driver's chained first-match
- * semantics and drawn as a single overlay from real layout.
- *
- * The phone paints into an open shadow tree, not an iframe: embedded
- * browsers drop iframe documents, and a shadow tree stays in the page.
- * Snapshot styles sit on the shadow root, and the host is the 390×844
- * viewport the app shell fills.
- */
 
 const FRAME_CSS_ID = 'sr-frame-css';
 const OVERLAY_ID = 'sr-press';
@@ -25,6 +27,7 @@ const PARSE_CACHE_MAX = 256;
 
 const OVERLAY_CSS = `#${OVERLAY_ID}{position:absolute;display:none;pointer-events:none;z-index:2147483647;box-sizing:border-box;border:2px solid #ff5a8a;border-radius:6px;box-shadow:0 0 0 4px rgba(255,90,138,.35)}#${OVERLAY_ID} i{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#ff5a8a;box-shadow:0 0 0 4px rgba(255,90,138,.35)}`;
 
+/** What drawing a press target found: `none` (no target to draw), `found` (target located, overlay drawn) or `missing` (the path does not resolve in the painted snapshot, overlay hidden). */
 export type HitResult = 'none' | 'found' | 'missing';
 
 type SnapRoot = {
@@ -59,8 +62,9 @@ type LocalBox = {
 const parseCache = new Map<string, ParsedSnapshot>();
 
 /**
- * Point `html` / `body` / `:root` at the phone viewport, and turn a full
- * browser viewport unit into a percentage of that box.
+ * Rewrites snapshot CSS so it applies inside the phone surface: the selectors `html` and `:root` become `.sr-snap-doc`,
+ * `body` becomes `.sr-snap-body`, and the viewport units `100vh`, `100vw` (and their `d`, `s`, `l` variants) become
+ * `100%` of that box. A regex rewrite, so it is approximate for unusual selectors.
  */
 export function scopeSnapshotCss(css: string): string {
   const scoped = css.replace(
@@ -106,7 +110,7 @@ function shellHtml(frameCss: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style id="${FRAME_CSS_ID}">${frameCss}${base}</style></head><body></body></html>`;
 }
 
-/** Make sure `doc` is our standards-mode shell with `frameCss` installed. */
+/** Makes `doc` the standards-mode shell with `frameCss` installed, replacing its content, unless it already is one. Does nothing when the shell's stylesheet is present, so a later different `frameCss` is not applied. */
 export function ensureShell(doc: Document, frameCss: string): void {
   if (doc.getElementById(FRAME_CSS_ID)) return;
   doc.open();
@@ -200,7 +204,11 @@ function testIdSelector(id: string): string {
   return `[data-testid="${id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`;
 }
 
-/** Chained first match — mirrors how the UI driver resolves `get(a).get(b)`. */
+/**
+ * Finds the element a gesture targeted: the first `[data-testid]` match of `path[0]` inside `scope`, then the first
+ * match of `path[1]` inside that, and so on. Returns `null` as soon as a step has no match, and for an empty path
+ * returns `null` too. Mirrors how the UI driver resolves `get(a).get(b)`.
+ */
 export function resolveHitTarget(
   scope: ParentNode,
   path: readonly string[]
@@ -288,7 +296,7 @@ function drawOn(root: SnapRoot, hit: ReportStepHit | null): HitResult {
   return 'found';
 }
 
-/** Draw the one press overlay on `hit`'s target. */
+/** Draws the one press overlay (a box and a dot at `hit.point`, default the centre) on `hit`'s target in a document, scrolling the target into view if it is outside the viewport. Returns what it found; with no hit it hides the overlay. */
 export function drawHit(doc: Document, hit: ReportStepHit | null): HitResult {
   if (!doc.getElementById('sr-overlay-css')) {
     const style = doc.createElement('style');
@@ -318,8 +326,9 @@ function paintRoot(
 }
 
 /**
- * Paint one snapshot into `doc` (already a shell) and draw `hit`. `key`
- * identifies the snapshot for parse caching.
+ * Paints one snapshot into `doc` (already a shell, see `ensureShell`) and draws `hit`. `key` identifies the snapshot for
+ * parse caching (256 entries, oldest dropped first): it must change whenever `html` does, or the earlier parse is
+ * reused.
  */
 export function paintSnapshot(
   doc: Document,
@@ -350,7 +359,7 @@ const HOST_LAYOUT = [
   `{${HOST_FILL}}`,
 ].join('');
 
-/** In-page snapshot surface. No iframe. */
+/** Creates the in-page snapshot surface: a `div.sr-snap` with an open shadow tree, sized to the phone viewport, ready for `paintSnapshotHost`. No iframe. */
 export function createSnapshotHost(): HTMLDivElement {
   const host = document.createElement('div');
   host.className = 'sr-snap';
@@ -402,7 +411,11 @@ function installHostCss(root: SnapRoot, frameCss: string): void {
   if (style.textContent !== next) style.textContent = next;
 }
 
-/** Paint one snapshot into the shadow tree `createSnapshotHost` built. */
+/**
+ * Paints one snapshot into the shadow tree `createSnapshotHost` built, installs `snap.css` (the frame stylesheet) and
+ * draws `hit`. Painting is skipped, and only the overlay redrawn, when the same `key` and `html` were painted last.
+ * Returns `none` when `host` was not built by `createSnapshotHost`.
+ */
 export function paintSnapshotHost(
   host: HTMLElement,
   snap: { readonly key: string; readonly html: string; readonly css: string },

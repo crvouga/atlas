@@ -1,3 +1,14 @@
+/**
+ * @module AWS credential lookup
+ *
+ * Finds S3 credentials the way an AWS SDK does, without depending on one: environment variables, web identity
+ * (EKS), ECS container credentials, the shared credentials file, the AWS CLI (SSO, assumed roles) and EC2 instance
+ * metadata. It owns the lookup order, the caching and the early refresh before expiry; it does not sign requests
+ * (that is `sigv4.ts`) or know about buckets (`s3-store.ts`). Credentials are never put in a store URL: they
+ * come from here. Node-only (reads files, spawns `aws`). Nothing runs at import time.
+ *
+ * @see docs/report-contract.md (backends)
+ */
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -9,6 +20,10 @@ import type { Credentials } from './sigv4';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
+/**
+ * An async function returning currently valid credentials, with cache control. Concurrent calls share one lookup;
+ * cached credentials are reused until shortly before they expire (never, when they carry no expiry).
+ */
 export type CredentialProvider = (() => Promise<Credentials>) & {
   /** Drop what is cached, so the next call asks again. Used when a store says the credentials expired. */
   invalidate(): void;
@@ -16,15 +31,21 @@ export type CredentialProvider = (() => Promise<Credentials>) & {
   source(): string | null;
 };
 
+/** Options of {@link credentialChain}; every one exists so a test can replace a piece of the machine. */
 export type ChainOptions = {
+  /** The environment variables to read. Default `process.env`. */
   readonly env?: Env;
+  /** The HTTP client for STS, container and instance-metadata calls. Default global `fetch`. */
   readonly fetch?: typeof fetch;
+  /** Reads a UTF-8 file. Default `fs.readFile`. */
   readonly readFile?: (file: string) => Promise<string>;
-  /** Run a command and return its stdout, or null when it is not installed or fails. */
+  /** Run a command and return its stdout, or null when it is not installed or fails. Default spawns it with a 20 s timeout. */
   readonly run?: (command: string, args: readonly string[]) => Promise<string | null>;
+  /** The clock, epoch milliseconds. Default `Date.now`. */
   readonly now?: () => number;
+  /** The home directory that holds `.aws/credentials`. Default `$HOME`, then the OS home. */
   readonly home?: string;
-  /** Refresh this long before credentials expire. */
+  /** Refresh this long before credentials expire, in milliseconds. Default 5 minutes. */
   readonly skewMs?: number;
 };
 
@@ -67,10 +88,19 @@ function expiry(value: unknown): number | undefined {
 }
 
 /**
- * The credentials an AWS SDK would find, in the same order, with no SDK: environment, web identity
- * (EKS), container (ECS), shared credentials file, the AWS CLI (which covers SSO and assumed roles),
- * and EC2 instance metadata. `ATLAS_S3_*` variables come first so one store can use keys that are
- * not the machine's AWS keys, such as Cloudflare R2 tokens.
+ * Creates a provider for the credentials an AWS SDK would find, in the same order, with no SDK: environment, web
+ * identity (EKS), container (ECS), shared credentials file, the AWS CLI (which covers SSO and assumed roles),
+ * and EC2 instance metadata. `ATLAS_S3_ACCESS_KEY_ID` / `ATLAS_S3_SECRET_ACCESS_KEY` (and `ATLAS_S3_SESSION_TOKEN`)
+ * come first so one store can use keys that are not the machine's AWS keys, such as Cloudflare R2 tokens.
+ *
+ * Nothing is looked up until the provider is first called. The first source that yields credentials wins and
+ * is cached; a source that throws (for example an STS error) is skipped and reported if no later source works.
+ * When none works the provider rejects with an error that lists every source tried and how to fix it. Set
+ * `ATLAS_NO_AWS_CLI` to skip the `aws` CLI step and `AWS_EC2_METADATA_DISABLED=true` to skip instance metadata.
+ *
+ * @example
+ * const credentials = await credentialChain()();
+ * credentials.accessKeyId;
  */
 export function credentialChain(options: ChainOptions = {}): CredentialProvider {
   const env = options.env ?? process.env;
@@ -205,7 +235,7 @@ export function credentialChain(options: ChainOptions = {}): CredentialProvider 
   return provider;
 }
 
-/** A provider for keys that are already known. */
+/** Wraps keys that are already known in a {@link CredentialProvider} that never refreshes (its `invalidate` does nothing). */
 export function staticCredentials(credentials: Credentials): CredentialProvider {
   const provider = (async () => credentials) as CredentialProvider;
   provider.invalidate = () => {};

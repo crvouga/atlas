@@ -36,4 +36,8 @@ to viewers, `server.close()` stops both.
 | `config` | `loadServerConfig`: the file, then the environment, then the flags; every mistake said in words. |
 | `main`, `dev` | `atlas serve` and `atlas dev`. |
 
+The server describes itself: `GET /api/openapi.json` is an OpenAPI 3.1 document of every route (also `@crvouga/atlas/openapi.json`),
+`GET /llms.txt` a guide for an agent given only the address, and every error is an RFC 9457 problem document. See
+[Atlas for AI agents](../../docs/agents.md) and the [generated reference](../../docs/reference/server.md).
+
 `bun packages/server/bench/bench.ts [layers] [checks]` measures the server on a long history.

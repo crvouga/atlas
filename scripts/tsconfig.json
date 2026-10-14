@@ -5,5 +5,10 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["**/*.ts"]
+  "include": [
+    "**/*.ts"
+  ],
+  "exclude": [
+    "docs"
+  ]
 }

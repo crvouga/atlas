@@ -40,6 +40,23 @@ backends, and tells you in one command whether the product still does what it wa
 > [using Atlas from another project](docs/dogfooding.md) and [reporting issues](docs/reporting-issues.md).
 > Releases are automatic: see [releasing](https://github.com/crvouga/atlas/blob/main/docs/releasing.md).
 
+## For AI agents
+
+Atlas is built to be integrated and operated by agents, with nothing to click and nothing to guess.
+
+- **`atlas init`** detects a project's test runners, specs and CI and prints a plan (`--format json`) of the exact commands to
+  run each suite and send its results; `--write` creates the CI workflow and an `AGENTS.md` section. Running it twice
+  changes nothing.
+- **Every command prints JSON on request** (`--format json`), every document has a published JSON Schema, exit codes mean the
+  same everywhere (`0` worked, `1` the answer is no, `2` the command was wrong), and every operation is safe to repeat.
+- **The server describes itself:** `GET /api/openapi.json` (OpenAPI 3.1) and `GET /llms.txt` (a guide for an agent given only
+  the address) need no token; errors are RFC 9457 problem documents that say what to do.
+- **Documentation is generated from the code beside it:** `llms.txt` / `llms-full.txt` (also in the package), the TypeScript
+  reference in [`docs/reference/`](docs/reference/server.md), the CLI and HTTP references, and the settings tables; tests fail when
+  any of it drifts.
+
+Start with **[Atlas for AI agents](docs/agents.md)**.
+
 ## Integrate in five minutes
 
 ```sh

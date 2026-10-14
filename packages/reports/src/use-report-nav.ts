@@ -1,3 +1,11 @@
+/**
+ * @module Report viewer navigation state
+ *
+ * The Solid state behind the report viewer's navigation: the current route (kept in the URL hash), help and command
+ * palette visibility, frame stepping and auto-play, keyboard shortcuts and the document title. Everything outside the
+ * reactive state (the location, the keyboard, timers) is injected, so it runs the same in a browser and in tests. It
+ * creates signals and effects, so it must be called inside a Solid root, which also owns its cleanup.
+ */
 import type { Timers } from './clock';
 import type { FlatFrame } from './frames';
 import { selectedFrame, testFrames } from './frames';
@@ -9,22 +17,37 @@ import type { Accessor } from 'solid-js';
 import { createEffect, createSignal, onCleanup } from 'solid-js';
 import type { ReportNavigation } from './navigation';
 
+/** What the viewer's views read and call to move around a report. */
 export type ReportNav = {
+  /** The current route: the list, or one test with its params. Updates at once, before the URL is written. */
   route: Accessor<Route>;
+  /** Whether the keyboard help is open. */
   showHelp: Accessor<boolean>;
+  /** Whether the command palette is open. */
   showPalette: Accessor<boolean>;
+  /** Whether frames are advancing on a timer. */
   playing: Accessor<boolean>;
+  /** Goes to `route`. A normal navigation adds a history entry and writes the URL now; with `replace` true it updates the route at once and writes the URL, replacing the entry, 200 ms after the last such call. */
   navigate: (route: Route, replace?: boolean) => void;
   /** Write the in-memory route to the URL now (end of a scrub drag). */
   commitHash: () => void;
+  /** Sets one param of the current test route (replacing history); does nothing on the list route. */
   setParam: (key: string, value: string) => void;
+  /** Selects a frame of the current test (its 1-based position goes into the `frame` param), or clears the selection with `null`; `node` also sets the `node` param. Does nothing on the list route. */
   goFrame: (frame: FlatFrame | null, node?: string | undefined) => void;
+  /** Moves the selected frame by `delta` (negative goes back); does nothing at either end or off a test route. */
   stepFrame: (delta: number) => void;
+  /** Opens the help if closed, else closes it. */
   toggleHelp: () => void;
+  /** Closes the help. */
   closeHelp: () => void;
+  /** Opens the palette if closed, else closes it. */
   togglePalette: () => void;
+  /** Closes the palette. */
   closePalette: () => void;
+  /** Starts advancing one frame every 700 ms, or stops if playing. Stops by itself at the last frame, or when the route stops being a test. */
   togglePlay: () => void;
+  /** Stops playback. */
   stopPlay: () => void;
 };
 
@@ -177,6 +200,18 @@ function createHashRoute(navigation: ReportNavigation, timers: Timers) {
   return { route, setRoute, commitHash, navigate, cancelHashWrite };
 }
 
+/**
+ * Creates the navigation state for a report: the route from the URL hash (and kept in sync when it changes), help and
+ * palette state, playback, keyboard shortcuts and the page title (`<test title> · <report title>`).
+ *
+ * Reading the hash is the only way in: an unrecognised hash is the list route, and `parseHash` throws `URIError` on a
+ * malformed percent-escape. Subscriptions and timers are released when the surrounding Solid root is disposed. Must be
+ * called inside a Solid root.
+ *
+ * @param data the report whose tests the routes name.
+ * @param navigation where the hash, keys and title live (the browser, or a fake).
+ * @param timers timer functions for the hash-write debounce and playback.
+ */
 export function useReportNav(
   data: ReportData,
   navigation: ReportNavigation,

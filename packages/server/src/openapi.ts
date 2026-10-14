@@ -1,0 +1,409 @@
+/**
+ * @module OpenAPI document of the Atlas server
+ *
+ * The server's HTTP API described as an OpenAPI 3.1 document (JSON Schema 2020-12 inside), generated from the
+ * operation table below and the Zod schemas of `packages/schema/src/api.ts`. It is served at `GET /api/openapi.json`,
+ * shipped as `@crvouga/atlas/openapi.json`, and committed as `packages/server/openapi.json` (`bun run docs` rewrites
+ * it; a test fails when it differs). Any OpenAPI tool can generate a client, a mock or a test suite from it.
+ *
+ * The table is held to the code by a test: every route the server registers must have an operation here and every
+ * operation here must be a route the server registers. Adding a route without describing it fails the build.
+ *
+ * Stability: this API only grows within `API_VERSION`: optional parameters, optional response fields, new
+ * operations and new events. See AGENTS.md ("The server is a living application").
+ */
+import { z } from 'zod/v4';
+
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema } from '../../schema/src/api';
+import { AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
+
+/** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
+export const API_VERSION = '1.0.0';
+
+/** Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`). */
+export type Role = 'none' | 'read' | 'publish' | 'admin';
+
+type JsonSchema = Record<string, unknown>;
+type Param = { readonly name: string; readonly in: 'path' | 'query' | 'header'; readonly description: string; readonly required?: boolean; readonly schema?: JsonSchema; readonly example?: unknown };
+type Body = { readonly description: string; readonly contentType: string; readonly schema: JsonSchema; readonly required?: boolean };
+type Response = { readonly description: string; readonly contentType?: string; readonly schema?: JsonSchema; readonly headers?: Record<string, { description: string; schema: JsonSchema }> };
+
+/** One operation of the API, and the route the server registers for it. */
+export type Operation = {
+  /** The route as Hono registers it, `METHOD /path` (`:name` for a parameter, `*` for the rest of the path). */
+  readonly route: string;
+  /** The same route as OpenAPI writes it, `/path/{name}`. */
+  readonly path: string;
+  readonly operationId: string;
+  readonly tag: string;
+  readonly summary: string;
+  /** What it does and how to use it, written for a client that has read nothing else (Markdown). */
+  readonly description: string;
+  readonly role: Role;
+  readonly parameters?: readonly Param[];
+  readonly body?: Body;
+  readonly responses: Readonly<Record<string, Response>>;
+};
+
+/** The JSON Schema of a Zod schema, as OpenAPI 3.1 embeds it. `output` for what the server sends, `input` for what it accepts. */
+function schemaOf(schema: z.ZodType, io: 'input' | 'output' = 'output'): JsonSchema {
+  const { $schema: _dialect, ...json } = z.toJSONSchema(schema, { target: 'draft-2020-12', unrepresentable: 'any', io }) as JsonSchema;
+  return json;
+}
+
+/**
+ * The named schemas of the document (`components.schemas`), each written once and referred to by `$ref`. `output` is
+ * the shape the server sends, `input` the shape it accepts.
+ */
+const COMPONENTS = {
+  Problem: [ProblemSchema, 'output'], Health: [HealthSchema, 'output'], Ready: [ReadySchema, 'output'], ServerInfo: [ServerInfoSchema, 'output'],
+  EffectiveEvidence: [EffectiveEvidenceSchema, 'output'], EffectiveDelta: [EffectiveDeltaSchema, 'output'], ReportStatus: [ReportStatusSchema, 'output'],
+  PublishChecks: [PublishChecksSchema.partial({ recordedAtMs: true }), 'input'], ChecksResult: [ChecksResultSchema, 'output'],
+  StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
+  Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
+  SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
+  HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
+} as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
+type ComponentName = keyof typeof COMPONENTS;
+const ref = (name: ComponentName): JsonSchema => ({ $ref: `#/components/schemas/${name}` });
+
+const str = { type: 'string' } as const;
+const problem = (description: string): Response => ({ description, contentType: 'application/problem+json', schema: ref('Problem') });
+const json = (description: string, name: ComponentName): Response => ({ description, contentType: 'application/json', schema: ref(name) });
+const NOT_READY = problem('The server is still reading its backends. Retry after the number of seconds in `Retry-After`.');
+const UNAUTHORIZED = problem('No token, or an unknown one. Send `Authorization: Bearer <token>`.');
+const FORBIDDEN = problem('The token is known but its role may not do this.');
+const KEY: Param = { name: 'key', in: 'path', required: true, description: 'An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.', schema: str, example: 'layers/index/9007199254740985-0f3a….json' };
+const BACKEND: Param = { name: 'backend', in: 'path', required: true, description: 'A backend id from `/api/server`.', schema: str };
+const LAYER_ID: Param = { name: 'id', in: 'path', required: true, description: 'A layer id: 64 lowercase hex digits.', schema: { type: 'string', pattern: '^[0-9a-f]{64}$' } };
+
+/**
+ * Every operation of the API. The order is the order of the document. The descriptions are the documentation an
+ * agent reads, so they say what to send, what comes back, and what to do when it does not work.
+ */
+export const OPERATIONS: readonly Operation[] = [
+  {
+    route: 'GET /healthz', path: '/healthz', operationId: 'getHealth', tag: 'Operations', role: 'none',
+    summary: 'Is the process up',
+    description: 'Answers `200` as long as the process runs, whatever its backends are doing. Use it as a liveness probe. It needs no token and is not logged.',
+    responses: { '200': json('The process is up.', 'Health') }
+  },
+  {
+    route: 'GET /readyz', path: '/readyz', operationId: 'getReady', tag: 'Operations', role: 'none',
+    summary: 'Has the server read its backends',
+    description: 'Answers `200` once the first pass over the backends is done and at least one backend answers, `503` before that. Route traffic on it. The body counts what the report holds. No token needed.',
+    responses: { '200': json('Ready.', 'Ready'), '503': json('Not ready yet; the body is the same shape with `ready: false`.', 'Ready') }
+  },
+  {
+    route: 'GET /api/openapi.json', path: '/api/openapi.json', operationId: 'getOpenApi', tag: 'Operations', role: 'none',
+    summary: 'This document',
+    description: 'The OpenAPI 3.1 description of this API. No token needed, so a client that has only the server\'s address can learn how to use it.',
+    responses: { '200': { description: 'The OpenAPI document.', contentType: 'application/json', schema: { type: 'object' } } }
+  },
+  {
+    route: 'GET /llms.txt', path: '/llms.txt', operationId: 'getLlmsTxt', tag: 'Operations', role: 'none',
+    summary: 'How to use this server, for an agent',
+    description: 'A plain-text guide ([llms.txt](https://llmstxt.org)) written for an AI agent that was handed only this server\'s address: what it is, how to authenticate, the five commands that integrate a project, and where the machine-readable description is. No token needed.',
+    responses: { '200': { description: 'The guide, Markdown.', contentType: 'text/plain', schema: str } }
+  },
+  {
+    route: 'GET /api/server', path: '/api/server', operationId: 'getServer', tag: 'Operations', role: 'read',
+    summary: 'What this server is and who is asking',
+    description: 'The role of the token of this request, which backend takes uploads, whether each backend is reachable, counts, and `capabilities`: check a capability by name before using the feature it names. `atlas report doctor` and the viewer use it.',
+    responses: { '200': json('The server.', 'ServerInfo'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'GET /api/events', path: '/api/events', operationId: 'streamEvents', tag: 'Live', role: 'read',
+    summary: 'Server-sent events: results arrived, specs or runs changed',
+    description: [
+      'A `text/event-stream` that stays open. Events say *that* something changed; the state is always fetched, so a client that missed events (a dropped connection) loses nothing: read again on reconnect.',
+      '',
+      '| event | data |',
+      '| --- | --- |',
+      '| `hello` | `{ version, ready, time }`, sent first |',
+      '| `report` | `{ version, totalLayers, added: [{ id, producer, environment, branch, sha, recordedAtMs, counts }], addedTotal }`: layers arrived |',
+      '| `atlas:change` | `{ scope: "specs" \\| "runs", files, runIds }`: new specs or runs |',
+      '| `ping` | `{}` every `heartbeatSeconds`, so a quiet server is told apart from a dead connection |',
+      '',
+      'Past `limits.maxStreams` viewers the answer is `503` with `Retry-After`: poll `/api/reports/evidence/effective` instead. A browser needs no code beyond `new EventSource("/api/events")`; other clients send the token as `Authorization: Bearer`.'
+    ].join('\n'),
+    responses: {
+      '200': { description: 'The stream.', contentType: 'text/event-stream', schema: str },
+      '401': UNAUTHORIZED,
+      '503': problem('Too many viewers are connected; poll instead.')
+    }
+  },
+  {
+    route: 'GET /api/reports/evidence/effective', path: '/api/reports/evidence/effective', operationId: 'getReport', tag: 'Report', role: 'read',
+    summary: 'The whole report, or only what changed since a version',
+    description: [
+      'The report as it stands: only the layers that win at least one check, each with only the rows that win. Whatever the history behind it, this is one request.',
+      '',
+      '`version` changes exactly when the report does, so it works as an ETag: send `If-None-Match` and get `304`. Better, send `?since=<version>` of the report you hold and get **only what changed** (`delta: true`): replace the layers of the same id, drop `removed`, keep the rest. If the server does not remember that version it answers with the whole report (no `delta` key), so a client always handles both.',
+      '',
+      'To combine layers yourself, a check\'s *slot* is `(producer, kind, specPath, check id, environment, parameters)`; the newest completed result wins it. See `docs/report-contract.md`.'
+    ].join('\n'),
+    parameters: [{ name: 'since', in: 'query', description: 'The `version` of the report you hold.', schema: str }, { name: 'if-none-match', in: 'header', description: 'The ETag (the quoted version) of the report you hold.', schema: str }],
+    responses: {
+      '200': { description: 'The whole report, or a delta when `since` was given and remembered.', contentType: 'application/json', schema: { oneOf: [ref('EffectiveEvidence'), ref('EffectiveDelta')] }, headers: { ETag: { description: 'The quoted `version`.', schema: str } } },
+      '304': { description: 'You already hold this version.' },
+      '401': UNAUTHORIZED,
+      '503': NOT_READY
+    }
+  },
+  {
+    route: 'GET /api/status', path: '/api/status', operationId: 'getStatus', tag: 'Report', role: 'read',
+    summary: 'The gate: does the report pass',
+    description: [
+      'The `atlas report status --format json` document, worked out by the server from the layers it holds and remembered for each version of the report. It passes (`ok: true`) only if some check completed, none failed, none is still running, every layer and backend could be read, and every required environment has results. **Unknown is never a pass.**',
+      '',
+      'The header `X-Atlas-Ok: true|false` carries the verdict, so a shell can test it without parsing. Narrow it by choice, per request: `branch` (repeatable) and `ignoreModified` read only matching layers.'
+    ].join('\n'),
+    parameters: [
+      { name: 'branch', in: 'query', description: 'Only layers recorded on this branch. Repeatable.', schema: str },
+      { name: 'ignoreModified', in: 'query', description: '`1`: leave out layers from modified checkouts and unknown origins.', schema: { type: 'string', enum: ['1'] } },
+      { name: 'requireEnvironments', in: 'query', description: 'Comma-separated environments that must have results.', schema: str, example: 'desktop-web,ios' },
+      { name: 'requireAllSpecs', in: 'query', description: '`1`: fail while any spec of the outline has no results.', schema: { type: 'string', enum: ['1'] } }
+    ],
+    responses: { '200': { ...json('The verdict, whether or not it passes.', 'ReportStatus'), headers: { 'X-Atlas-Ok': { description: '`true` or `false`.', schema: { type: 'string', enum: ['true', 'false'] } } } }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'POST /api/checks', path: '/api/checks', operationId: 'postChecks', tag: 'Upload', role: 'publish',
+    summary: 'Upload one layer of checks as JSON',
+    description: [
+      'The simplest way in: anything that can make an HTTP request can report. The body is the checks file (`packages/schema/schemas/publish-checks.schema.json`); `recordedAtMs` defaults to now. Binary evidence goes in as `base64`. The server writes the layer and it is in every viewer\'s report before this answers.',
+      '',
+      'Send the token as `Authorization: Bearer <token>` (a `publish` or `admin` token). A browser\'s sign-in box is refused for uploads on purpose. A check id appearing twice in one body is `422`.'
+    ].join('\n'),
+    body: { description: 'The checks of one producer.', contentType: 'application/json', schema: ref('PublishChecks'), required: true },
+    responses: { '201': json('The layer was written.', 'ChecksResult'), '401': UNAUTHORIZED, '403': FORBIDDEN, '413': problem('The body is over `limits.maxJsonMiB`.'), '422': problem('The body is not valid: the detail says which field.') }
+  },
+  {
+    route: 'GET /api/store', path: '/api/store', operationId: 'listStore', tag: 'Store protocol', role: 'read',
+    summary: 'List keys under layers/',
+    description: 'One page of the keys of `layers/…` (never anything else), in code-unit order. Page with `after` = the `next` of the previous page. This is the `listPage` of the `ObjectStore` interface; `atlas report merge` and `httpStore` use it.',
+    parameters: [
+      { name: 'prefix', in: 'query', description: 'Only keys starting with this. Default `layers/`.', schema: str },
+      { name: 'after', in: 'query', description: 'Only keys after this one (exclusive).', schema: str },
+      { name: 'limit', in: 'query', description: 'Page size, 1 to 1000. Default 1000.', schema: { type: 'integer', minimum: 1, maximum: 1000 } }
+    ],
+    responses: { '200': json('A page.', 'StoreListing'), '401': UNAUTHORIZED, '422': problem('The prefix is not one Atlas holds.') }
+  },
+  {
+    route: 'GET /api/store/*', path: '/api/store/{key}', operationId: 'getObject', tag: 'Store protocol', role: 'read',
+    summary: 'Read an object',
+    description: 'The bytes of one object, with the content type it was stored with. Everything under `layers/` is immutable, so the answer is cacheable for good. The bytes came from a test run and are untrusted: they are served with `nosniff` and a sandboxing Content-Security-Policy, whatever type their uploader gave them.',
+    parameters: [KEY],
+    responses: { '200': { description: 'The object.', contentType: 'application/octet-stream', schema: { type: 'string', format: 'binary' } }, '401': UNAUTHORIZED, '404': problem('No such object.'), '422': problem('Not a key Atlas holds.') }
+  },
+  {
+    route: 'HEAD /api/store/*', path: '/api/store/{key}', operationId: 'headObject', tag: 'Store protocol', role: 'read',
+    summary: 'Does an object exist',
+    description: '`200` when the object exists, `404` when not. No body.',
+    parameters: [KEY],
+    responses: { '200': { description: 'It exists.' }, '401': UNAUTHORIZED, '404': problem('No such object.') }
+  },
+  {
+    route: 'PUT /api/store/*', path: '/api/store/{key}', operationId: 'putObject', tag: 'Store protocol', role: 'publish',
+    summary: 'Upload an object',
+    description: [
+      'The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:',
+      '',
+      '- a **layer manifest** (`layers/manifests/<id>.json`) must be a valid layer whose content hashes to `<id>`, and its blobs must already be there (`409` otherwise);',
+      '- a **blob** (`layers/blobs/<sha256>.gz`) must be gzip of content whose SHA-256 is its name; a **spec file** likewise;',
+      '- a **catalog entry** (`…/index/…`) must name something already uploaded (`409` otherwise): it is what makes a layer visible, so it is written last;',
+      '- a **run manifest** must have passed its privacy scan;',
+      '- keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.',
+      '',
+      'Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser\'s sign-in box is refused.'
+    ].join('\n'),
+    parameters: [KEY, { name: 'content-type', in: 'header', description: 'Stored with the object and returned when it is read.', schema: str }],
+    body: { description: 'The object\'s bytes.', contentType: 'application/octet-stream', schema: { type: 'string', format: 'binary' }, required: true },
+    responses: {
+      '200': json('Already there with the same bytes.', 'StoreWriteResult'), '201': json('Stored.', 'StoreWriteResult'),
+      '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('A dependency has not been uploaded yet, or other bytes are already stored under this key.'),
+      '413': problem('Over `limits.maxObjectMiB`.'), '422': problem('Not a key Atlas writes, or the content is not what its name says.')
+    }
+  },
+  {
+    route: 'DELETE /api/store/*', path: '/api/store/{key}', operationId: 'deleteObject', tag: 'Store protocol', role: 'publish',
+    summary: 'Remove a scratch object',
+    description: 'Only the scratch objects `atlas report doctor` writes (`layers/doctor-…`) can be removed. Layers, specs and runs are never removed through the API.',
+    parameters: [KEY],
+    responses: { '204': { description: 'Removed (or it was not there).' }, '401': UNAUTHORIZED, '403': problem('Not a scratch object, or the token may not.') }
+  },
+  {
+    route: 'GET /api/reports/outline', path: '/api/reports/outline', operationId: 'getOutline', tag: 'Report', role: 'read',
+    summary: 'The specs a report is laid over',
+    description: 'The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. A spec here with no result shows as having none.',
+    responses: { '200': json('The outline.', 'Outline'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'GET /api/reports/outline/spec', path: '/api/reports/outline/spec', operationId: 'getOutlineSpec', tag: 'Report', role: 'read',
+    summary: 'The text of one spec',
+    description: 'The text of a spec file of the outline, by its path.',
+    parameters: [{ name: 'path', in: 'query', required: true, description: 'The spec\'s path, `specs/<path>`.', schema: str }],
+    responses: { '200': { description: 'The spec text.', contentType: 'text/plain', schema: str }, '401': UNAUTHORIZED, '404': problem('No such spec in the outline.') }
+  },
+  {
+    route: 'GET /api/reports/evidence', path: '/api/reports/evidence', operationId: 'listLayers', tag: 'Report', role: 'read',
+    summary: 'Page through every layer header',
+    description: 'The history: layer headers newest first, merged from every backend. Prefer `/api/reports/evidence/effective`, which is one request and holds only what wins. Use this to audit what was recorded.',
+    parameters: [{ name: 'cursor', in: 'query', description: 'The `cursor` of the previous page.', schema: str }],
+    responses: { '200': json('A page of headers.', 'EvidencePage'), '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/evidence/rows/:backend/:id', path: '/api/reports/evidence/rows/{backend}/{id}', operationId: 'getLayerRows', tag: 'Report', role: 'read',
+    summary: 'The checks of one layer',
+    description: 'Every check of one layer (not only those that win), with the spec fingerprints it recorded.',
+    parameters: [BACKEND, LAYER_ID],
+    responses: { '200': json('The rows.', 'LayerRows'), '401': UNAUTHORIZED, '404': problem('No such layer in that backend.') }
+  },
+  {
+    route: 'GET /api/reports/evidence/detail/:backend/:id', path: '/api/reports/evidence/detail/{backend}/{id}', operationId: 'getCheckDetail', tag: 'Report', role: 'read',
+    summary: 'Everything one result carries',
+    description: 'The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run\'s. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.',
+    parameters: [BACKEND, LAYER_ID, { name: 'check', in: 'query', description: 'The check id.', schema: str }, { name: 'kind', in: 'query', description: 'The kind of the part, when the same id is in several.', schema: str }],
+    responses: { '200': json('The detail.', 'CheckDetail'), '401': UNAUTHORIZED, '404': problem('No such layer or check.') }
+  },
+  {
+    route: 'GET /api/reports/layers/:id/blobs/*', path: '/api/reports/layers/{id}/blobs/{bundleKey}', operationId: 'getAttachment', tag: 'Report', role: 'read',
+    summary: 'A file a layer carries',
+    description: 'A screenshot, video, trace, log or any attachment of a layer, by the `bundleKey` its attachment names (`attachments/<sha256>`). Served as untrusted bytes: never sniffed, never run, sandboxed; immutable, cacheable for good; videos can be sought with `Range`.',
+    parameters: [LAYER_ID, { name: 'bundleKey', in: 'path', required: true, description: 'The attachment\'s `bundleKey`, which contains a slash.', schema: str }, { name: 'range', in: 'header', description: 'A byte range, `bytes=0-1023`.', schema: str }],
+    responses: { '200': { description: 'The bytes, with the type the producer gave (or `application/octet-stream`).', contentType: 'application/octet-stream', schema: { type: 'string', format: 'binary' } }, '206': { description: 'The requested range.' }, '304': { description: 'Not modified.' }, '401': UNAUTHORIZED, '404': problem('No such layer or file.') }
+  },
+  {
+    route: 'GET /api/reports/layers/:id/*', path: '/api/reports/layers/{id}/{path}', operationId: 'getRecordedFile', tag: 'Report', role: 'read',
+    summary: 'A recorded test of a statechart run',
+    description: 'The `report.json`, captured files and frame stylesheet of a recorded statechart test of a layer (`tests/<testId>/report.json`, `tests/<testId>/files/…`, `frame.css`). Untrusted bytes, served like attachments.',
+    parameters: [LAYER_ID, { name: 'path', in: 'path', required: true, description: 'The path under the layer.', schema: str }],
+    responses: { '200': { description: 'The file.', contentType: 'application/octet-stream', schema: { type: 'string', format: 'binary' } }, '401': UNAUTHORIZED, '404': problem('No such file.') }
+  },
+  {
+    route: 'GET /api/reports/live/:source/frame.css', path: '/api/reports/live/{source}/frame.css', operationId: 'getLiveFrameCss', tag: 'Report', role: 'read',
+    summary: 'Frame stylesheet of a live spec run (development only)',
+    description: 'For spec runs writing on the same machine as a development host (`atlas-visualizer dev`). A server has none: it answers `404`.',
+    parameters: [{ name: 'source', in: 'path', required: true, description: 'The live source id.', schema: str }],
+    responses: { '200': { description: 'The stylesheet.', contentType: 'text/css', schema: str }, '404': problem('Not a live source.') }
+  },
+  {
+    route: 'GET /api/reports/live/:source/tests/:testId/*', path: '/api/reports/live/{source}/tests/{testId}/{path}', operationId: 'getLiveTestFile', tag: 'Report', role: 'read',
+    summary: 'A file of a test in a live spec run (development only)',
+    description: 'For spec runs writing on the same machine as a development host. A server has none: it answers `404`.',
+    parameters: [{ name: 'source', in: 'path', required: true, description: 'The live source id.', schema: str }, { name: 'testId', in: 'path', required: true, description: 'The test id.', schema: str }, { name: 'path', in: 'path', required: true, description: 'The path under the test.', schema: str }],
+    responses: { '200': { description: 'The file.', contentType: 'application/octet-stream', schema: { type: 'string', format: 'binary' } }, '404': problem('Not a live source.') }
+  },
+  {
+    route: 'GET /api/data/sources.json', path: '/api/data/sources.json', operationId: 'getSources', tag: 'Viewer data', role: 'read',
+    summary: 'The sources the viewer reads',
+    description: 'The viewer\'s address book of data sources, in the shape a static host serves. A server has one source, itself.',
+    responses: { '200': json('The sources file.', 'ReportSources'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'GET /api/data/specs/index.json', path: '/api/data/specs/index.json', operationId: 'getSpecIndex', tag: 'Viewer data', role: 'read',
+    summary: 'The spec files',
+    description: 'The files of the newest committed spec set, relative to `specs/`.',
+    responses: { '200': json('The index.', 'SpecIndex'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'GET /api/data/specs/*', path: '/api/data/specs/{file}', operationId: 'getSpecFile', tag: 'Viewer data', role: 'read',
+    summary: 'One spec file',
+    description: 'The text of a spec file, with the digest of its content as `ETag`.',
+    parameters: [{ name: 'file', in: 'path', required: true, description: 'The file\'s path relative to `specs/`.', schema: str }],
+    responses: { '200': { description: 'The text.', contentType: 'text/plain', schema: str }, '304': { description: 'Not modified.' }, '401': UNAUTHORIZED, '404': problem('No such spec.') }
+  },
+  {
+    route: 'GET /api/data/runs/index.json', path: '/api/data/runs/index.json', operationId: 'getRunsIndex', tag: 'Viewer data', role: 'read',
+    summary: 'The statechart runs',
+    description: 'The newest uploaded statechart runs (`atlas report publish --manifest … --upload-run`), newest first.',
+    responses: { '200': json('The index.', 'RunsIndex'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'GET /api/data/runs/:id/*', path: '/api/data/runs/{id}/{path}', operationId: 'getRunFile', tag: 'Viewer data', role: 'read',
+    summary: 'A file of an uploaded run',
+    description: 'A file of an uploaded run: its manifest, timelines, screenshots, clips. Untrusted bytes, served sandboxed; immutable.',
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The run id.', schema: str }, { name: 'path', in: 'path', required: true, description: 'The path inside the run.', schema: str }],
+    responses: { '200': { description: 'The file.', contentType: 'application/octet-stream', schema: { type: 'string', format: 'binary' } }, '401': UNAUTHORIZED, '404': problem('No such run or file.') }
+  }
+];
+
+/**
+ * Routes the server registers that are not operations of this API, each with the reason. The coverage test skips
+ * these and only these.
+ */
+export const NOT_OPERATIONS: ReadonlyMap<string, string> = new Map([
+  ['ALL /*', 'Middleware: authentication and request logging for every route.'],
+  ['POST /api/*', 'Every other path under /api answers 405 to a write, never the page.'],
+  ['PUT /api/*', 'Every other path under /api answers 405 to a write, never the page.'],
+  ['PATCH /api/*', 'Every other path under /api answers 405 to a write, never the page.'],
+  ['DELETE /api/*', 'Every other path under /api answers 405 to a write, never the page.'],
+  ['GET /*', 'The viewer (a single-page app); an unknown /api path is a 404 problem document, never the page.']
+]);
+
+const SECURITY: Record<Role, readonly Record<string, string[]>[]> = {
+  none: [],
+  read: [{ bearer: [] }, { basic: [] }],
+  publish: [{ bearer: [] }],
+  admin: [{ bearer: [] }]
+};
+
+/** The OpenAPI 3.1 document of the API. `serverUrl` (such as `https://atlas.example.com`) is written into `servers` when given. */
+export function openApiDocument(options: { readonly serverUrl?: string } = {}): Record<string, unknown> {
+  const paths: Record<string, Record<string, unknown>> = {};
+  for (const op of OPERATIONS) {
+    const method = op.route.split(' ')[0]!.toLowerCase();
+    (paths[op.path] ??= {})[method] = {
+      operationId: op.operationId,
+      tags: [op.tag],
+      summary: op.summary,
+      description: `${op.description}${op.role === 'none' ? '' : `\n\nRole needed: \`${op.role}\`.`}`,
+      'x-atlas-role': op.role,
+      security: SECURITY[op.role],
+      ...(op.parameters?.length ? { parameters: op.parameters.map(({ schema, ...rest }) => ({ required: rest.in === 'path' ? true : false, ...rest, schema: schema ?? str })) } : {}),
+      ...(op.body ? { requestBody: { required: op.body.required ?? false, description: op.body.description, content: { [op.body.contentType]: { schema: op.body.schema } } } } : {}),
+      responses: Object.fromEntries(Object.entries(op.responses).map(([status, response]) => [status, {
+        description: response.description,
+        ...(response.headers ? { headers: Object.fromEntries(Object.entries(response.headers).map(([name, header]) => [name, header])) } : {}),
+        ...(response.contentType ? { content: { [response.contentType]: { schema: response.schema ?? {} } } } : {})
+      }]))
+    };
+  }
+  return {
+    openapi: '3.1.0',
+    info: {
+      title: 'Atlas server API',
+      version: API_VERSION,
+      summary: 'Take in test results from every environment, keep them, and show everyone the combined report, live.',
+      description: [
+        'One Atlas server per project. Clients upload layers of results (`POST /api/checks`, or the store protocol under `/api/store`); viewers read the combined report (`/api/reports/evidence/effective`) and are told when it changes (`/api/events`). A report is layered, never partitioned: the newest completed result of every check wins its slot, whoever sent it.',
+        '',
+        '**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `publish` < `admin`. Uploading needs a Bearer token; a browser\'s HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.',
+        '',
+        '**Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`) with a `detail` that says what to do. `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not valid, `503` still starting (retry after `Retry-After`).',
+        '',
+        '**Compatibility.** Within `/api` the API only grows: optional parameters, optional response fields, new events. Ignore what you do not know.',
+        '',
+        'Guides: `/llms.txt`. Source: https://github.com/crvouga/atlas.'
+      ].join('\n'),
+      license: { name: 'MIT', identifier: 'MIT' }
+    },
+    servers: [{ url: options.serverUrl ?? '/' }],
+    tags: [
+      { name: 'Operations', description: 'Health, readiness, identity, and this description.' },
+      { name: 'Report', description: 'The combined report, and the gate.' },
+      { name: 'Live', description: 'Server-sent events.' },
+      { name: 'Upload', description: 'The simplest way in: one JSON request.' },
+      { name: 'Store protocol', description: 'The `ObjectStore` interface over HTTP: what `atlas report publish`, `stream`, `merge` and `httpStore` use.' },
+      { name: 'Viewer data', description: 'Specs and runs, laid out the way the viewer reads a static host.' }
+    ],
+    paths,
+    components: {
+      securitySchemes: {
+        bearer: { type: 'http', scheme: 'bearer', description: 'A token of the server: `Authorization: Bearer <token>`. Needed to upload.' },
+        basic: { type: 'http', scheme: 'basic', description: 'Any user name, the token as the password. For reading only: the browser\'s sign-in box.' }
+      },
+      schemas: Object.fromEntries(Object.entries(COMPONENTS).map(([name, [schema, io]]) => [name, schemaOf(schema, io)]))
+    }
+  };
+}

@@ -1,7 +1,17 @@
+/**
+ * @module HTTP host for a fetch handler
+ *
+ * `listen` serves any `(Request) => Promise<Response>` over HTTP: with `Bun.serve` when running on Bun, with a `node:http`
+ * bridge (streaming bodies in and out, so server-sent events work) everywhere else. The server's behaviour is the same on
+ * both; `bun run release:smoke` proves it under each. Bodies over `maxBodyBytes` are refused by the runtime before the
+ * handler sees them.
+ */
+
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
 
+/** A server that is listening: the `port` it got (useful when asked for `0`), its `url`, and `close`. */
 export type RunningServer = {
   readonly port: number;
   readonly url: string;
@@ -9,6 +19,7 @@ export type RunningServer = {
   close(graceMs?: number): Promise<void>;
 };
 
+/** Where to listen (`port`, `host`) and the largest request body the runtime will accept. */
 export type ListenOptions = {
   readonly port: number;
   readonly host: string;

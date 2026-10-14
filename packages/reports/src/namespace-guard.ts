@@ -1,7 +1,17 @@
 /**
+ * @module Object key guards
+ *
+ * Throws on object-store keys that could escape their prefix. The checks are lexical only (empty, leading `/`, `..`,
+ * missing namespace); they do not normalise a key or decide whether an object exists.
+ */
+
+/**
  * Validates a wire key before any remote object-store I/O. Every S3 command
  * for the shared bucket must pass this gate so projects cannot clobber
  * each other's prefixes.
+ *
+ * Throws `Error` when `key` is empty, starts with `/`, contains `..` anywhere, is exactly `namespace` (with or without
+ * a trailing `/`), or does not start with `namespace`. Returns nothing when the key is acceptable.
  */
 export function assertRemoteObjectKey(key: string, namespace: string): void {
   if (key.length === 0) {
@@ -28,7 +38,7 @@ export function assertRemoteObjectKey(key: string, namespace: string): void {
 
 /**
  * Validates a logical key before {@link ObjectStoreWithPrefix} scopes it under
- * a namespace or feature prefix.
+ * a namespace or feature prefix. Throws `Error` when `key` is empty, starts with `/`, or contains `..` anywhere.
  */
 export function assertLogicalObjectKey(key: string): void {
   if (key.length === 0) {

@@ -1,3 +1,14 @@
+/**
+ * @module Evidence of one result
+ *
+ * Reads the evidence (attachments, steps, annotations, attempts, tags, labels, links, extensions) that a layer, a
+ * part or a check carries beyond its outcome: the short summary that rides in every report row, one result's full
+ * detail, and the bundle keys its files live under. It only reads; evidence never decides a status, a slot or a
+ * winner, so nothing here affects who wins.
+ *
+ * @see docs/extending.md
+ * @see docs/report-contract.md (evidence)
+ */
 import type { Annotation, Attachment, Attempt, Check, Step } from '../../schema/src/layer';
 import type { EvidenceSummary } from './evidence-types';
 import { contentTypeOf } from './media-types';
@@ -22,6 +33,11 @@ function count(holder: EvidenceHolder): number {
  * What a result carries beyond its outcome, as counts and short facts. It rides in every row of the
  * report so a list can show "3 attachments, 12 steps" without opening anything; the evidence itself is
  * read when someone asks for it. Undefined when there is none.
+ *
+ * Several holders (for example a check and its layer) are summed: `attachments` also counts those on steps and
+ * attempts, `steps` counts only each holder's own top-level steps, tags are de-duplicated, and for a repeated
+ * label the later holder wins. `roles` are the attachments' roles (or, without one, what their media type or file
+ * name implies), sorted and distinct.
  */
 export function summarizeEvidence(...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined {
   if (!holders.some(holder => count(holder) > 0)) return undefined;
@@ -45,7 +61,7 @@ export function summarizeEvidence(...holders: readonly EvidenceHolder[]): Eviden
   return { attachments, steps, annotations, attempts, links, tags: [...tags], labels, roles: [...roles].sort() };
 }
 
-/** A role to show when a producer gave none: what the media type says it is. */
+/** A role to show when a producer gave none, from the media type: `image`, `video`, `audio`, `snapshot` (text/html), `text` (text, JSON, XML) or `file`. Roles are an open vocabulary; a producer's own role always wins. */
 export function roleOfType(contentType: string | undefined): string {
   const type = (contentType ?? '').toLowerCase();
   if (type.startsWith('image/')) return 'image';
@@ -58,14 +74,17 @@ export function roleOfType(contentType: string | undefined): string {
 
 /** All of one result's evidence, read when someone opens it. */
 export type CheckDetail = {
+  /** The id of the layer the check was read from. */
   readonly layer: string;
+  /** The kind of the part that holds the check. */
   readonly kind: string;
+  /** The check as recorded, with all of its evidence. */
   readonly check: Check;
   /** What the run as a whole carries: its logs, its links, its labels. */
   readonly run: EvidenceHolder;
 };
 
-/** One result's evidence, from a layer. Null when the layer holds no such check. */
+/** One result's evidence, from a layer: the first check with id `checkId` (in a part of kind `kind`, when given) plus the layer's own evidence. Null when the layer holds no such check. */
 export function checkDetailOf(layer: { readonly id: string; readonly parts: readonly { readonly kind: string; readonly checks: readonly Check[] }[] } & EvidenceHolder, checkId: string, kind?: string): CheckDetail | null {
   for (const part of layer.parts) {
     if (kind !== undefined && part.kind !== kind) continue;
@@ -75,13 +94,13 @@ export function checkDetailOf(layer: { readonly id: string; readonly parts: read
   return null;
 }
 
-/** What a layer carries as a whole. */
+/** What a layer carries as a whole (its tags, labels, links, attachments, annotations and extensions; not its parts' checks). Absent fields stay absent. */
 export function runEvidence(layer: EvidenceHolder): EvidenceHolder {
   const { tags, labels, links, attachments, annotations, extensions } = layer;
   return { ...(tags ? { tags } : {}), ...(labels ? { labels } : {}), ...(links ? { links } : {}), ...(attachments ? { attachments } : {}), ...(annotations ? { annotations } : {}), ...(extensions ? { extensions } : {}) };
 }
 
-/** Every bundle key a result's evidence points to, for copying a layer's files somewhere. */
+/** Every distinct bundle key (`bundleKey`) that the attachments of a holder, its steps and its attempts point to, so a layer's files can be copied. Attachments held by `uri` or inline `text` have none. */
 export function bundleKeysOf(holder: EvidenceHolder): string[] {
   const keys = new Set<string>();
   const take = (list: readonly Attachment[] | undefined) => { for (const item of list ?? []) if (item.bundleKey) keys.add(item.bundleKey); };

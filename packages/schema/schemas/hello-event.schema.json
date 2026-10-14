@@ -1,0 +1,22 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/hello-event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "time": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "version",
+    "ready",
+    "time"
+  ],
+  "additionalProperties": {}
+}

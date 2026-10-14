@@ -1,3 +1,13 @@
+/**
+ * @module Layer catalog of one backend
+ *
+ * Lists what one backend holds as catalog entries (immutable layers under `layers/index/`, and commit-keyed
+ * recordings written before layers existed) and turns one entry into the layer summaries it stands for. It only
+ * reads: opening Atlas never rewrites a store. Whether a backend can be read at all, and how entries from several
+ * backends combine, is decided by the callers (`compose.ts`, `layers-route.ts`).
+ *
+ * @see docs/report-contract.md
+ */
 import type { ObjectStore } from './object-store';
 import type { LayerSummary } from './layer-types';
 import { readUtf8 } from './object-io';
@@ -10,12 +20,30 @@ import { sourceParts } from './source-part';
 import { LAYER_INDEX, readLayer, layerSummary } from './layer-store';
 import { eachLimited } from './completion-order';
 
-/** Read existing recordings in place; opening Atlas never rewrites the evidence store. */
+/**
+ * Lists one backend's catalog entries as opaque strings to pass to `catalogLayers`.
+ *
+ * An entry is `layer:<key>` for each key under `layers/index/` (listed newest first, in the store's own key order),
+ * followed by `commit:<sha>` for every 40-hex commit named by a key under `versions/` or `index/` (a store written
+ * before layers existed, sorted by sha). Only lists keys; reads no layer. A store that cannot be listed throws.
+ * Existing recordings are read in place and never rewritten.
+ */
 export async function catalogEntries(store: ObjectStore): Promise<readonly string[]> {
   const [layers, versions, commits] = await Promise.all([store.listKeys(LAYER_INDEX), store.listKeys('versions/'), store.listKeys('index/')]);
   const shas = new Set([...versions, ...commits].flatMap(key => /([0-9a-f]{40})\.json$/.exec(key)?.[1] ?? []));
   return [...layers.map(key => `layer:${key}`), ...[...shas].sort().map(sha => `commit:${sha}`)];
 }
+
+/**
+ * Reads the layer summaries one catalog entry from `catalogEntries` stands for.
+ *
+ * A `layer:` entry yields exactly one summary (the layer the catalog entry names, without its bundle) and throws
+ * when the entry is not JSON, names no layer, the layer is missing, or the layer cannot be parsed, so the caller can
+ * report it as a notice instead of counting it as a pass. A `commit:` entry yields the older commit-keyed
+ * recordings of that sha: one summary per stored part (`part-<sha>-<id>`) and one per stored source
+ * (`source-<sha>-<id>`); a part whose checks a source already carries, and that has no parameters, is dropped so the
+ * same evidence is not counted twice. Those ids are mutable addresses, not content digests.
+ */
 export async function catalogLayers(store: ObjectStore, entry: string): Promise<readonly LayerSummary[]> {
   if (entry.startsWith('layer:')) {
     const raw = await readUtf8(store, entry.slice(6));

@@ -1,0 +1,168 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/publish-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true
+    },
+    "store": {
+      "description": "Where it was written: a folder, `s3://…` or a server URL",
+      "type": "string"
+    },
+    "layer": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The layer id: 64 hex digits, the SHA-256 of its content. Publishing the same input again gives the same id",
+          "type": "string"
+        },
+        "producer": {
+          "type": "string"
+        },
+        "environment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "notRun": {
+          "description": "Skipped, pending or otherwise not run",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "linkedToSpec": {
+          "description": "Checks that were matched to a spec file. The rest still count, but belong to no spec",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "freshness": {
+          "description": "Set when the checkout had uncommitted changes (`modified`) or no git origin (`unknown`)",
+          "type": "string",
+          "enum": [
+            "modified",
+            "unknown"
+          ]
+        },
+        "attachmentFiles": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "attachmentBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "producer",
+        "environment",
+        "checks",
+        "passed",
+        "failed",
+        "notRun",
+        "linkedToSpec",
+        "attachmentFiles",
+        "attachmentBytes"
+      ],
+      "additionalProperties": {}
+    },
+    "specSet": {
+      "description": "Present when `--specs` was given",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "files": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "files",
+        "branch"
+      ],
+      "additionalProperties": {}
+    },
+    "run": {
+      "description": "Present with `--upload-run`",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "files": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "alreadyPublished": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "files",
+        "bytes",
+        "alreadyPublished"
+      ],
+      "additionalProperties": {}
+    },
+    "warnings": {
+      "description": "What was skipped and why, such as an attachment file that could not be read. Never fatal",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "store",
+    "layer",
+    "warnings"
+  ],
+  "additionalProperties": {}
+}

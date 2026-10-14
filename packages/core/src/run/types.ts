@@ -1,22 +1,59 @@
+/**
+ * @module Run types and function driver
+ *
+ * The contracts between a run and the things it drives: `Driver` (owns the system under test for one
+ * path attempt), `Implementation` (how each event is made to happen and each state recognised), `Seed`,
+ * event sources and privacy rules, plus the status vocabulary and `Timeline`. These shapes are what
+ * integrators write against, so they change only by adding optional fields. Also holds
+ * `functionDriver`, the simplest complete driver.
+ *
+ * @see docs/statecharts.md
+ */
 import type { CloudEvent } from '../events/cloudevents';
 import type { StateValue } from '../graph';
 import type { PlannedPath } from '../plan';
 
+/** `fast` runs without pacing and takes screenshots only; `showcase` paces steps like a person and records a clip of every transition. */
 export type RunMode = 'fast' | 'showcase';
+/** The result of a path, state, transition or journey: `flaky` passed only on the retry; `not-reached` was never run, was blocked, or has no covering path. */
 export type Status = 'passed' | 'failed' | 'flaky' | 'not-reached';
+/** Who or what makes an event happen: a `user` action, a `system` call, the passing of `time`, or a `hand-off` from a child chart (inserted by the planner, usually a no-op). */
 export type EventKind = 'user' | 'system' | 'time' | 'hand-off';
 
 /** `client` names which client's screen it is in a multi-client run; `also` holds the other clients' screens at the same moment. */
-export type Image = { png: string; webp?: string; client?: string; also?: Image[] };
-export type Clip = { video: string; poster?: string; durationMs: number; client?: string };
+export type Image = {
+  /** Path to the PNG. A driver returns an absolute path; in a manifest it is relative to the run directory. */
+  png: string;
+  /** Path to a WebP thumbnail, when one was made. */
+  webp?: string;
+  client?: string;
+  also?: Image[];
+};
+/** A recorded video of one transition. */
+export type Clip = {
+  /** Path to the MP4 (relative to the run directory in a manifest). */
+  video: string;
+  /** Path to a poster image, when one was made. */
+  poster?: string;
+  durationMs: number;
+  /** The client whose screen was recorded, in a multi-client run. */
+  client?: string;
+};
 
+/** One thing that happened during a step, which becomes a caption on the step's clip. */
 export type TimelineEntry = {
+  /** Milliseconds since the step began (see `Timeline.restart`). */
   atMs: number;
+  /** What kind of thing happened. */
   kind: 'tap' | 'type' | 'system' | 'screen' | 'toast' | 'note' | 'time' | 'notification';
+  /** The caption. */
   label: string;
+  /** For a tap, where it landed (page pixels for the Playwright driver). */
   x?: number;
   y?: number;
+  /** For typing, what was typed; shown in the caption. */
   text?: string;
+  /** For a system call, what it was (never bodies). */
   system?: { source?: string; endpoint?: string; eventType?: string; payload?: unknown; responseStatus?: number };
   /** The client that did it, in a multi-client run. */
   client?: string;
@@ -26,10 +63,12 @@ type TimelineState = { origin: number; entries: TimelineEntry[] };
 
 /**
  * What a step records while it runs: taps, typing, system calls, the screen change. `for(client)`
- * returns a view onto the same timeline that tags every entry with that client.
+ * returns a view onto the same timeline that tags every entry with that client. The runner restarts
+ * it at the start of every step, so entries are relative to the step they belong to.
  */
 export class Timeline {
   private readonly state: TimelineState;
+  /** The client this view tags entries with; `undefined` on the root timeline. */
   readonly client: string | undefined;
 
   constructor(state: TimelineState = { origin: Date.now(), entries: [] }, client?: string) {
@@ -37,30 +76,44 @@ export class Timeline {
     this.client = client;
   }
 
+  /** Every entry added since the last `restart`, in order, shared by all views of the timeline. */
   get entries() {
     return this.state.entries;
   }
 
+  /** Clears the entries and makes now the origin for `atMs`. */
   restart() {
     this.state.origin = Date.now();
     this.state.entries = [];
   }
 
+  /** Appends an entry stamped with the time since the origin, and with this view's client when it has one. */
   add(entry: Omit<TimelineEntry, 'atMs'>) {
     this.state.entries.push({ atMs: Date.now() - this.state.origin, ...(this.client ? { client: this.client } : {}), ...entry });
   }
 
+  /** A view of the same timeline that tags what it adds with `client`. */
   for(client: string) {
     return new Timeline(this.state, client);
   }
 }
 
+/** What a state recogniser found. */
 export type RecognizerResult = {
+  /** Whether the state is showing. */
   matched: boolean;
+  /** What was looked at, shown to explain a failure. `expected` is `visible` or `hidden`. */
   signals: { signal: string; expected: 'visible' | 'hidden' | string; visible: boolean }[];
 };
 
-export type CheckResult = { check: string; passed: boolean; expected?: string; actual?: string };
+/** The result of one of a state's `meta.checks`; a failed check fails the state. */
+export type CheckResult = {
+  /** The check statement, quoted from the spec. */
+  check: string;
+  passed: boolean;
+  expected?: string;
+  actual?: string;
+};
 
 /** Per-attempt tools handed to every implementation. */
 export type StepTools = {
@@ -84,8 +137,17 @@ export type Focus = { client?: string };
  * required; media hooks are used when present. `combineDrivers` runs several at once.
  */
 export type Driver<C> = {
+  /** Shown in reports as the driver the run used. */
   name: string;
+  /**
+   * Creates a fresh context for one attempt of one path. `attempt` is 1, or 2 for the retry;
+   * `directory` is a scratch directory for this attempt; the driver should log what it does to `timeline`.
+   */
   open(input: { path: PlannedPath; attempt: number; mode: RunMode; directory: string; timeline: Timeline }): Promise<C>;
+  /**
+   * Releases the context. `traceFile` is where a trace may be written when `failed`; return the path
+   * actually written as `trace` (or one per client as `traces`) to attach it to the report.
+   */
   close(ctx: C, input: { failed: boolean; traceFile: string }): Promise<{ trace?: string; traces?: Record<string, string> } | void>;
   /** A settled, deterministic screenshot of the current screen. */
   screenshot?(ctx: C, file: string, focus?: Focus): Promise<Image | null>;
@@ -104,11 +166,13 @@ export type Driver<C> = {
    * single device is not). Runs use at most this many workers; 1 when omitted.
    */
   concurrency?: number;
+  /** Releases what is shared by all contexts (a browser, a server); called once after the last path. */
   dispose?(): Promise<void>;
 };
 
 /** How one event is made to happen. Keyed by the event's exact name in the spec. */
 export type EventImplementation<C> = {
+  /** Who makes the event happen; recorded with the event in the manifest. */
   kind: EventKind;
   /** The client that does it, in a multi-client run: its screen is recorded for the clip. */
   client?: string;
@@ -116,6 +180,7 @@ export type EventImplementation<C> = {
   how: string;
   /** Test data the event needs before the path starts (a condition modelled as an event). */
   prepare?(ctx: C, tools: StepTools): Promise<void>;
+  /** Makes the event happen. The runner then waits for the target state to be recognised, so `run` does not need to wait for it; it should throw only when the event cannot be done. */
   run(ctx: C, tools: StepTools): Promise<void>;
   /** Set when the event cannot be triggered reliably yet: the path stops before it. */
   blocked?: string;
@@ -123,6 +188,7 @@ export type EventImplementation<C> = {
 
 /** How one state is recognised from the outside, and what is checked there. */
 export type StateImplementation<C> = {
+  /** Looks at the system from the outside and says whether the state is showing. Called repeatedly (with growing pauses, until `stepTimeoutMs`) while the runner waits for the state, so it must be cheap and side-effect free. */
   recognize(ctx: C): Promise<RecognizerResult>;
   /** The client whose screen shows it, in a multi-client run: that screen is the screenshot. */
   client?: string;
@@ -134,6 +200,7 @@ export type StateImplementation<C> = {
   lookIn?(ctx: C): Promise<void>;
   /** Within-state actions after the screenshot (dismiss a success message). */
   settle?(ctx: C): Promise<void>;
+  /** Results for the state's `meta.checks`, evaluated once the state is recognised. */
   checks?(ctx: C): Promise<CheckResult[]>;
 };
 
@@ -165,8 +232,15 @@ export type Seed<C> = {
   blocked?: string;
 };
 
+/**
+ * How a driver makes each event of the spec happen and recognises each state: everything the charts
+ * do not say. Events and states are keyed by their exact names in the spec; only leaf states need a
+ * recogniser.
+ */
 export type Implementation<C> = {
+  /** By event name; an event with no entry is reported as blocked. */
   events: Record<string, EventImplementation<C>>;
+  /** By state name; only leaf states need one. */
   states: Record<string, StateImplementation<C>>;
   /**
    * Named seeds: configurations paths can start from. Journeys are cut at every seeded
@@ -186,16 +260,20 @@ export type Implementation<C> = {
 
 /** Where business events come from: a CloudEvents endpoint, a log, a message queue. */
 export type EventSource = {
+  /** Identifies the source; a name starting with `log:` marks a log file, anything else counts as a CloudEvents source. */
   name: string;
   /** Where "now" is in the source; `collect` returns what arrived after this mark. */
   mark(): unknown;
+  /** Returns what arrived since `mark` (everything when omitted): CloudEvents and/or raw log text. */
   collect(mark?: unknown): Promise<{ events: CloudEvent[]; text?: string }>;
+  /** Releases the source; called when the run ends. */
   close?(): Promise<void>;
 };
 
 /** How a business event named in `meta.events` is recognised in what a source collected. */
 export type EventMatcher = { type: string } | { pattern: RegExp } | ((events: CloudEvent[], text: string) => boolean);
 
+/** Rules for what may appear on screen and in a manifest. They extend the defaults (see `DEFAULT_PRIVACY`) except `allowHosts`, which replaces them. */
 export type PrivacyRules = {
   /** Patterns that must never appear on screen or in a manifest. */
   deny?: { name: string; pattern: RegExp }[];
@@ -206,8 +284,18 @@ export type PrivacyRules = {
 };
 
 /**
- * A driver for anything you can reach from Node: a domain model, an API client, a CLI. `create`
- * returns a fresh context per path attempt; recognisers and events work on it directly.
+ * A driver for anything you can reach from code: a domain model, an API client, a CLI. `create`
+ * returns a fresh context per path attempt; recognisers and events work on it directly. It takes
+ * no screenshots or clips, and any number of attempts can run side by side unless `concurrency` says otherwise.
+ *
+ * @param create builds the context for one attempt; it may be async.
+ * @param options.name the driver's name in reports; `function` when omitted.
+ * @param options.dispose called with the context when the attempt ends.
+ * @param options.concurrency how many contexts may be open at once; unlimited when omitted.
+ * @see docs/statecharts.md
+ *
+ * @example
+ * const driver = functionDriver(() => new TodoModel());
  */
 export function functionDriver<C>(
   create: (input: { path: PlannedPath; timeline: Timeline }) => C | Promise<C>,

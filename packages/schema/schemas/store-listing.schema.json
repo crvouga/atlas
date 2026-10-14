@@ -1,0 +1,29 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/store-listing.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "keys": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next": {
+      "description": "Pass as `?after=` for the next page; null when there are no more",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "keys",
+    "next"
+  ],
+  "additionalProperties": {}
+}

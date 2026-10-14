@@ -1,3 +1,13 @@
+/**
+ * @module Stores named on a command line
+ *
+ * Turns `--store`, `--backends` and `ATLAS_STORE` into opened backends for the `atlas report` commands, and reads the
+ * small flag grammar those commands share (`--name value`, repeatable). A mistyped directory is an error here, never
+ * an empty store: a gate that read nothing must not read as a pass.
+ *
+ * @see docs/deploying.md
+ */
+
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -6,11 +16,14 @@ import type { BackendInput } from './compose';
 import { openBackends, openStore, storeSpecs, type OpenedStore } from './store-url';
 
 type Env = Readonly<Record<string, string | undefined>>;
+/** A backend of a command: what `combineBackends` reads, plus, when it came from a URL, how it was opened (`location`, `server`, `s3`). */
 export type CliBackend = BackendInput & Partial<OpenedStore>;
 
+/** Every value given for `--<name>`, in order. `--name` with nothing after it is ignored. */
 export function values(argv: readonly string[], name: string): string[] {
   return argv.flatMap((token, i) => (token === `--${name}` && argv[i + 1] !== undefined ? [argv[i + 1]!] : []));
 }
+/** The first value given for `--<name>`, or `undefined`. */
 export function value(argv: readonly string[], name: string): string | undefined {
   return values(argv, name)[0];
 }

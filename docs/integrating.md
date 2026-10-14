@@ -9,6 +9,10 @@ structures, OpenSLO objectives, unit and end-to-end tests, linters, and statecha
 itself. Anything that ends in "this check passed or failed" can publish a **layer**. Atlas lays the
 layers over your specs, whatever produced them, whichever machine or branch they came from.
 
+**The fast path:** `bunx @crvouga/atlas init --server <url>` detects your test runners, specs and CI and prints the exact
+commands of this guide for your project (`--write` applies them; `--format json` is for agents). See
+[Atlas for AI agents](agents.md). The rest of this guide explains what those commands do.
+
 Read [the report contract](report-contract.md) once if you want the exact rules. You do not need it to
 integrate. To run it for a whole team, with a bucket and one node everyone looks at, see
 [running Atlas for a project](deploying.md). This guide ships with the package, matching your version, at

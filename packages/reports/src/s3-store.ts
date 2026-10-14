@@ -1,3 +1,17 @@
+/**
+ * @module S3 object store
+ *
+ * An `ObjectStore` on AWS S3 or anything that speaks its protocol (Cloudflare R2, MinIO, SeaweedFS, GCS interoperability,
+ * Backblaze B2, Wasabi), written without an SDK: requests are signed with Signature Version 4 and sent with `fetch`, so
+ * it runs on Bun and Node. Built for many writers and a long-lived reader: connections are reused, requests in flight
+ * are capped, throttling and server errors are retried with jittered backoff, a bucket in another region is followed,
+ * and expired credentials are refreshed once. Credentials never come from a URL; they come from options or the
+ * environment the way an AWS SDK finds them. Importing the module does no work. Change it only with the S3 integration
+ * tests passing against a real server: a fake `fetch` cannot tell you S3 accepts your signature.
+ *
+ * @see docs/report-contract.md#backends
+ * @see docs/deploying.md
+ */
 import { XMLParser } from 'fast-xml-parser';
 
 import { credentialChain, staticCredentials, type CredentialProvider } from './aws-credentials';
@@ -5,7 +19,9 @@ import type { ObjectStore, PagedListing, StoredObject } from './object-store';
 import { amzDate, presignUrl, sha256Hex, signRequest, uriEncode, type Credentials } from './sigv4';
 import { ObjectStoreWithPrefix } from './store-prefix';
 
+/** How to reach a bucket. Only `bucket` is required. */
 export type S3StoreOptions = {
+  /** The bucket name. A name containing `.` is addressed path-style. */
   readonly bucket: string;
   /** A folder inside the bucket that holds everything: `atlas/my-project`. */
   readonly prefix?: string;
@@ -17,7 +33,9 @@ export type S3StoreOptions = {
   readonly forcePathStyle?: boolean;
   /** Keys, or a provider. Default: the same lookup an AWS SDK does ({@link credentialChain}). */
   readonly credentials?: Credentials | CredentialProvider;
+  /** The environment variables to read (`AWS_REGION`, `AWS_ENDPOINT_URL_S3`, credentials, ...). Default: `process.env`. */
   readonly env?: Readonly<Record<string, string | undefined>>;
+  /** The `fetch` to send requests with. Default: the global one; inject a fake in tests. */
   readonly fetch?: typeof fetch;
   /** Attempts after the first for a request that failed in a way worth retrying. Default 4. */
   readonly retries?: number;
@@ -25,11 +43,17 @@ export type S3StoreOptions = {
   readonly timeoutMs?: number;
   /** Requests in flight at once. Default 64: S3 answers in tens of milliseconds, so parallelism is what makes a cold start fast. */
   readonly concurrency?: number;
+  /** The clock used to sign requests. Default: the system clock; inject in tests. */
   readonly now?: () => Date;
+  /** The wait between retries, in milliseconds. Default: a real timer; inject in tests. */
   readonly sleep?: (ms: number) => Promise<void>;
 };
 
-/** An error from the store, with the status and code the service gave and what to do about it. */
+/**
+ * An error from the store. The message names the bucket and what to do about it (for example the missing IAM
+ * permission); `status` and `code` are what the service answered, `null` when it was never reached.
+ * `retryable` says whether trying again can help; the store already retried before throwing.
+ */
 export class S3Error extends Error {
   constructor(message: string, readonly status: number | null, readonly code: string | null, readonly retryable = false) {
     super(message);
@@ -89,6 +113,7 @@ class Gate {
   }
 }
 
+/** An `ObjectStore` on S3 with paged listing, a secret-free label, and diagnostics. */
 export type S3Store = ObjectStore & PagedListing & {
   /** A description with no secrets: `s3://bucket/prefix (us-east-1)`. */
   readonly label: string;
@@ -102,11 +127,23 @@ export type S3Store = ObjectStore & PagedListing & {
  * An {@link ObjectStore} on S3, or anything that speaks its protocol: Cloudflare R2, MinIO, Google
  * Cloud Storage (interoperability), Backblaze B2, Wasabi, SeaweedFS. No SDK: requests are signed with
  * Signature Version 4 and sent with `fetch`, so it runs on Bun and Node and adds nothing
- * to the install. Runs on Bun and Node.
+ * to the install.
  *
  * Made for many writers and a long-lived reader: connections are reused, requests in flight are
  * capped, throttling and server errors are retried with jittered backoff, a bucket in another region
  * is followed, and expired credentials are refreshed once.
+ *
+ * Behaviour to know: a missing key reads as `null`/`false` only when S3 answers 404. For an account without
+ * `s3:ListBucket`, S3 answers 403 for a missing key, which throws `S3Error` with a hint: the publishing credentials
+ * need `s3:GetObject`, `s3:PutObject` and `s3:ListBucket` (`atlas report policy` prints a least-privilege policy).
+ * `getUri` returns a presigned URL valid for one hour. `deleteMany` sends one request per key, 16 at a time.
+ * `listKeys` pages through the whole listing and sorts it; use `listPage` to read part of a large catalog. Nothing is
+ * checked or created at construction: the first request is the first contact.
+ *
+ * @example
+ * const store = s3Store({ bucket: 'my-evidence', prefix: 'atlas/my-project', region: 'eu-west-1' });
+ * await store.put('layers/manifests/x.json', bytes, 'application/json');
+ * const { ok, error } = await store.ping();
  */
 export function s3Store(options: S3StoreOptions): S3Store {
   const env = options.env ?? process.env;

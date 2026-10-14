@@ -1,0 +1,347 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/init-plan.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "description": "False when `verification` was asked for and failed (the exit code is then 1)",
+      "type": "boolean"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packageManager": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "bun",
+                "pnpm",
+                "yarn",
+                "npm"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "packageManager",
+        "languages"
+      ],
+      "additionalProperties": {}
+    },
+    "git": {
+      "type": "object",
+      "properties": {
+        "branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "defaultBranch": {
+          "description": "`main` unless the repository says otherwise",
+          "type": "string"
+        }
+      },
+      "required": [
+        "branch",
+        "defaultBranch"
+      ],
+      "additionalProperties": {}
+    },
+    "ci": {
+      "type": "string",
+      "enum": [
+        "github-actions",
+        "gitlab-ci",
+        "circleci",
+        "none"
+      ]
+    },
+    "server": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tokenEnv": {
+          "type": "string",
+          "const": "ATLAS_TOKEN"
+        }
+      },
+      "required": [
+        "url",
+        "tokenEnv"
+      ],
+      "additionalProperties": {}
+    },
+    "specs": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "description": "The folder to pass as `--specs`, relative to the project; null when no spec files were found",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kinds": {
+          "description": "Spec files by kind: `gherkin`, `quint`, `dmn`, `alloy`, `openslo`, `scxml`, …",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "required": [
+        "directory",
+        "kinds"
+      ],
+      "additionalProperties": {}
+    },
+    "suites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "A stable name for the suite, lowercase: `vitest`, `playwright`, `pytest`, … Used as the default `--producer`",
+            "type": "string"
+          },
+          "runner": {
+            "description": "What runs it: `vitest`, `jest`, `playwright`, `bun-test`, `mocha`, `cypress`, `cucumber`, `pytest`, `go-test`, `atlas-statecharts`",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Where the detection came from, such as `package.json devDependencies: vitest`",
+            "type": "string"
+          },
+          "run": {
+            "description": "A command that runs the suite and writes its results to `output`. Its exit code is the suite's; publish regardless",
+            "type": "string"
+          },
+          "output": {
+            "description": "The file the results are written to",
+            "type": "string"
+          },
+          "format": {
+            "description": "How `publish` should read `output`: `--junit`, `--ctrf` or `--manifest`",
+            "type": "string",
+            "enum": [
+              "junit",
+              "ctrf",
+              "manifest"
+            ]
+          },
+          "environment": {
+            "description": "The client the suite checks (`desktop-web`, `ios`, …) when that is known; null when it should be chosen",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publish": {
+            "description": "The command that sends `output` to the server",
+            "type": "string"
+          },
+          "stream": {
+            "description": "The command that streams checks as they finish, when the runner can print them as JSON lines; else null",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prerequisites": {
+            "description": "What must be installed or configured first, as commands (`bun add -d jest-junit`)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "runner",
+          "evidence",
+          "run",
+          "output",
+          "format",
+          "environment",
+          "publish",
+          "stream",
+          "prerequisites"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "Relative to the project directory",
+            "type": "string"
+          },
+          "action": {
+            "description": "`unchanged`: already what it would write, so applying changes nothing",
+            "type": "string",
+            "enum": [
+              "create",
+              "update",
+              "unchanged"
+            ]
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "content": {
+            "description": "The whole file as it would be written",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "action",
+          "purpose",
+          "content"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "written": {
+      "description": "The files `--write` wrote; empty without it",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verification": {
+      "description": "Present with `--verify` (and a server): whether the server answers, and what the token in `ATLAS_TOKEN` may do",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "reachable": {
+              "type": "boolean"
+            },
+            "role": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "canPublish": {
+              "type": "boolean"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "reachable",
+            "role",
+            "canPublish",
+            "error"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nextSteps": {
+      "description": "What to do next, in order, as plain instructions an agent can follow",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "directory",
+    "project",
+    "git",
+    "ci",
+    "server",
+    "specs",
+    "suites",
+    "files",
+    "written",
+    "verification",
+    "nextSteps",
+    "warnings"
+  ],
+  "additionalProperties": {}
+}

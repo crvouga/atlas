@@ -314,7 +314,7 @@ describe('streaming the report down', () => {
     const data = JSON.parse(/event: report\ndata: (.*)\n/.exec(text)![1]!) as { version: string; added: { producer: string; environment: string; counts: { failed: number } }[]; totalLayers: number };
     expect(data.added[0]).toMatchObject({ producer: 'e2e', environment: 'ios', counts: { failed: 1 } });
     expect(data.totalLayers).toBe(1);
-    expect(await stream.next(value => value.includes(': ping'))).toContain(': ping');
+    expect(await stream.next(value => value.includes('event: ping'))).toContain('event: ping');
     await stream.close();
   });
 
@@ -324,6 +324,20 @@ describe('streaming the report down', () => {
     await stream.next(text => text.includes('event: hello'));
     await publishSpecSet(httpStore({ url }), { files: [{ path: 'specs/a.feature', text: 'Feature: A' }], branch: 'main', sha: null, recordedAtMs: 1 });
     expect(await stream.next(text => text.includes('event: atlas:change'))).toContain('"scope":"specs"');
+    await stream.close();
+  });
+
+  test('told that specs changed, a viewer that asks at once is answered with the new ones', async () => {
+    const { url } = await start();
+    const client = httpStore({ url });
+    // Something already asked, so the old answer is held.
+    await fetch(`${url}/api/data/specs/index.json`);
+    const stream = await listenTo(url);
+    await stream.next(text => text.includes('event: hello'));
+    await publishSpecSet(client, { files: [{ path: 'specs/new.feature', text: 'Feature: New' }], branch: 'main', sha: null, recordedAtMs: 1 });
+    await stream.next(text => text.includes('event: atlas:change'));
+    const index = await (await fetch(`${url}/api/data/specs/index.json`)).json() as { files: string[] };
+    expect(index.files).toEqual(['new.feature']);
     await stream.close();
   });
 
@@ -371,6 +385,25 @@ describe('the gate, from the server', () => {
     expect(strict.reasons.join(' ')).toContain('"android"');
     const response = await fetch(`${url}/api/status?branch=main`);
     expect(response.headers.get('x-atlas-ok')).toBe('true');
+  });
+});
+
+describe('the gate and what the server shows agree', () => {
+  test('a server told to leave layers out leaves them out of a gate narrowed by a branch too', async () => {
+    const store = memoryStore();
+    const server = createAtlasServer({ backends: [{ id: 'data', store }], write: 'data', refreshMs: 60_000, include: layer => layer.branch === 'main' });
+    const http = await listen(server.fetch, { port: 0, host: '127.0.0.1', maxBodyBytes: 1 << 20 });
+    running.push({ server, http });
+    await server.ready;
+    const url = `http://127.0.0.1:${http.port}`;
+    await publishChecks(store, { producer: 'e2e', branch: 'main', recordedAtMs: 1, checks: [check('a')] });
+    await publishChecks(store, { producer: 'e2e', branch: 'feat/x', recordedAtMs: 2, checks: [check('a', 'failed')] });
+    await server.index.refresh();
+    const status = async (query: string) => (await (await fetch(`${url}/api/status${query}`)).json()) as { ok: boolean; checks: { total: number } };
+    expect(await status('')).toMatchObject({ ok: true, checks: { total: 1 } });
+    expect(await status('?ignoreModified=1')).toMatchObject({ ok: true });
+    expect(await status('?branch=feat/x')).toMatchObject({ checks: { total: 0 } });
+    expect(await status('?branch=main')).toMatchObject({ ok: true, checks: { total: 1 } });
   });
 });
 

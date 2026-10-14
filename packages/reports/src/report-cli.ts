@@ -1,3 +1,18 @@
+/**
+ * @module The `atlas report` command
+ *
+ * `reportMain` is `atlas report publish | stream | status | merge | doctor | policy`, written so it can be called from code and
+ * tests as well as a terminal: it takes its arguments, environment, working directory, clock, git and standard input as
+ * parameters and returns the exit code. Every command can print a JSON document (`--format json`) instead of prose, and a
+ * command that is wrong throws, which `runReportCommand` turns into a message (or a JSON error) and exit code 2.
+ *
+ * Exit codes: 0 it worked, 1 it ran and the answer is no (a report that does not pass, a store that needs attention, checks
+ * that could not be sent), 2 the command itself was wrong.
+ *
+ * @see docs/integrating.md
+ * @see docs/agents.md
+ */
+
 import { spawnSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -21,6 +36,7 @@ import { collectSpecFiles, latestSpecSet, publishSpecSet } from './spec-set';
 import { linkChecksToSpecs } from './spec-link';
 import { openStore, storeSpecs } from './store-url';
 
+/** The text `atlas report --help` prints: every subcommand, its flags, what each does and the exit codes. Also the source of the command reference in `docs/reference/cli.md`. */
 export const REPORT_USAGE = `atlas report — layered evidence for any kind of spec
 
   atlas report publish [--store <dir|s3://bucket/prefix>] [--producer <name>]
@@ -78,11 +94,17 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
                        { id, label?, store } (or a function returning it): a device lab, anything
                        that implements ObjectStore.
 
+  --format json (alias --json)   publish, stream, merge, doctor and status print one JSON document instead of prose
+                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status). A command
+                       that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
+  A store may be an Atlas server (https://…): ATLAS_STORE=https://atlas.example.com, with ATLAS_TOKEN.
+
   Exit codes: 0 ok, 1 the report does not pass (or a check failed), 2 the command was wrong.
 `;
 
 type Env = Readonly<Record<string, string | undefined>>;
 type Git = (args: readonly string[]) => string | null;
+/** What `reportMain` is given besides arguments: where output goes (`out`), and, for tests and embedding, the environment, working directory, git, clock and standard input (`stdin`, where `stream` reads checks from). Defaults are the real ones. */
 export type ReportIo = { readonly out: (text: string) => void; /** Where `stream` reads checks from. Default: standard input. */ readonly stdin?: AsyncIterable<string | Uint8Array>; readonly env?: Env; readonly cwd?: string; readonly git?: Git; readonly clock?: () => number };
 
 function gitOutput(args: readonly string[]): string | null {
@@ -168,9 +190,16 @@ export async function runReportCommand(argv: readonly string[]): Promise<number>
   try {
     return await reportMain(argv);
   } catch (error) {
-    process.stderr.write(`atlas report: ${error instanceof Error ? error.message : String(error)}\n`);
+    const message = error instanceof Error ? error.message : String(error);
+    // With --format json the mistake is a document too, so a caller never has to read prose.
+    process.stderr.write(wantsJson(argv) ? `${JSON.stringify({ ok: false, error: { message, code: 'usage' } })}\n` : `atlas report: ${message}\n`);
     return 2;
   }
+}
+
+/** Does the command ask for a JSON document (`--format json` or `--json`) instead of prose? */
+function wantsJson(argv: readonly string[]): boolean {
+  return value(argv, 'format') === 'json' || argv.includes('--json');
 }
 
 function printChecks(out: (text: string) => void, label: string, checks: readonly Check[]): boolean {
@@ -247,8 +276,14 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
     for (const check of ingested.checks) counts[check.status === 'passed' ? 'passed' : check.status === 'failed' ? 'failed' : 'other'] += 1;
     const linkedCount = linked.checks.filter(check => check.specPath).length;
     const hint = linkedCount < linked.checks.length && !value(rest, 'spec') && !specsDirectory ? ' (pass --specs <dir> or --spec <path> to link checks to their specs)' : '';
-    io.out(`Published layer ${layer.id.slice(0, 12)}: ${ingested.checks.length} checks (${counts.passed} passed, ${counts.failed} failed, ${counts.other} not run) as "${producer}"${layer.environment ? ` on ${layer.environment}` : ''}${freshness === 'modified' ? ' [from a modified checkout]' : ''}; ${linkedCount} of ${linked.checks.length} linked to a spec${hint}${attachedFiles ? `; ${attachedFiles} attachment file${attachedFiles === 1 ? '' : 's'} (${(attachedBytes / 1024 / 1024).toFixed(1)} MiB)` : ''}\n`);
-    for (const warning of warnings) io.out(`! attachment skipped: ${warning}\n`);
+    const json = wantsJson(rest);
+    const result: { ok: true; store: string; layer: object; specSet?: object; run?: object; warnings: string[] } = {
+      ok: true, store: target.label,
+      layer: { id: layer.id, producer, environment: layer.environment ?? null, checks: ingested.checks.length, passed: counts.passed, failed: counts.failed, notRun: counts.other, linkedToSpec: linkedCount, ...(freshness ? { freshness } : {}), attachmentFiles: attachedFiles, attachmentBytes: attachedBytes },
+      warnings: warnings.map(warning => `attachment skipped: ${warning}`)
+    };
+    if (!json) io.out(`Published layer ${layer.id.slice(0, 12)}: ${ingested.checks.length} checks (${counts.passed} passed, ${counts.failed} failed, ${counts.other} not run) as "${producer}"${layer.environment ? ` on ${layer.environment}` : ''}${freshness === 'modified' ? ' [from a modified checkout]' : ''}; ${linkedCount} of ${linked.checks.length} linked to a spec${hint}${attachedFiles ? `; ${attachedFiles} attachment file${attachedFiles === 1 ? '' : 's'} (${(attachedBytes / 1024 / 1024).toFixed(1)} MiB)` : ''}\n`);
+    if (!json) for (const warning of warnings) io.out(`! attachment skipped: ${warning}\n`);
 
     if (specsDirectory) {
       const files = await collectSpecFiles(path.resolve(base, specsDirectory));
@@ -261,12 +296,15 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
       // The commit's own time for a clean checkout, so publishing the same commit twice is one set.
       const committed = !freshness && sha ? Number((io.git ?? gitOutput)(['show', '-s', '--format=%ct', sha])) * 1000 : NaN;
       const set = await publishSpecSet(target.store, { files, branch, sha, recordedAtMs: Number.isFinite(committed) && committed > 0 ? committed : clock(), ...(freshness ? { freshness } : {}), domain: path.basename(base) || 'product' });
-      io.out(`Published spec set ${set.id.slice(0, 12)}: ${set.files.length} specs${branch ? ` from ${branch}` : ''}\n`);
+      result.specSet = { id: set.id, files: set.files.length, branch };
+      if (!json) io.out(`Published spec set ${set.id.slice(0, 12)}: ${set.files.length} specs${branch ? ` from ${branch}` : ''}\n`);
     }
     if (rest.includes('--upload-run')) {
       const run = await publishRunBundle(target.store, path.dirname(manifestFile!));
-      io.out(run.alreadyPublished ? `Run ${run.id} was already in the store\n` : `Uploaded run ${run.id}: ${run.files} files, ${(run.bytes / 1024 / 1024).toFixed(1)} MiB\n`);
+      result.run = { id: run.id, files: run.files, bytes: run.bytes, alreadyPublished: run.alreadyPublished };
+      if (!json) io.out(run.alreadyPublished ? `Run ${run.id} was already in the store\n` : `Uploaded run ${run.id}: ${run.files} files, ${(run.bytes / 1024 / 1024).toFixed(1)} MiB\n`);
     }
+    if (json) io.out(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
   }
 
@@ -294,7 +332,7 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
       flushMs: Number(value(rest, 'flush-ms') ?? 1000),
       batchSize: Number(value(rest, 'batch') ?? 100),
       now: clock,
-      onError: (error, willRetry) => io.out(`! could not send${willRetry ? ' (will try again)' : ''}: ${error.message}\n`)
+      onError: (error, willRetry) => { const line = `could not send${willRetry ? ' (will try again)' : ''}: ${error.message}`; if (wantsJson(rest)) warnings.push(line); else io.out(`! ${line}\n`); }
     });
     let lines = 0;
     let buffered = '';
@@ -315,6 +353,10 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
     }
     take(buffered);
     const result = await reporter.close();
+    if (wantsJson(rest)) {
+      io.out(`${JSON.stringify({ ok: result.lost === 0, producer, environment: environment ?? null, layers: result.layers, checks: result.checks, lost: result.lost, warnings }, null, 2)}\n`);
+      return result.lost ? 1 : 0;
+    }
     for (const warning of warnings) io.out(`! ${warning}\n`);
     io.out(`Streamed ${result.checks} checks in ${result.layers} layer${result.layers === 1 ? '' : 's'} as "${producer}"${environment ? ` on ${environment}` : ''}${result.lost ? `; ${result.lost} could not be sent` : ''}\n`);
     return result.lost ? 1 : 0;
@@ -370,6 +412,7 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
       skipped += result.skipped;
       ignored += result.ignored;
     }
+    if (wantsJson(rest)) { io.out(`${JSON.stringify({ ok: true, into, copied, skipped, ignored }, null, 2)}\n`); return 0; }
     io.out(`Merged into ${into}: ${copied} objects copied, ${skipped} already there${ignored ? `; ${ignored} objects outside layers/ were not copied (only layers are merged)` : ''}\n`);
     return 0;
   }
@@ -378,8 +421,15 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
     const role = (value(rest, 'role') ?? 'both') as Role;
     if (!['publisher', 'reader', 'both'].includes(role)) throw new Error(`--role takes publisher|reader|both (got "${role}")`);
     let healthy = true;
-    for (const backend of await backendsOf(rest, base, env)) healthy = printChecks(io.out, backend.id, await inspectStore(backend, { role })) && healthy;
-    io.out(healthy ? 'All good.\n' : 'Something needs attention (see →).\n');
+    const stores: { id: string; checks: readonly Check[] }[] = [];
+    for (const backend of await backendsOf(rest, base, env)) {
+      const checks = await inspectStore(backend, { role });
+      stores.push({ id: backend.id, checks });
+      if (wantsJson(rest)) healthy = checks.every(check => check.ok) && healthy;
+      else healthy = printChecks(io.out, backend.id, checks) && healthy;
+    }
+    if (wantsJson(rest)) io.out(`${JSON.stringify({ ok: healthy, stores }, null, 2)}\n`);
+    else io.out(healthy ? 'All good.\n' : 'Something needs attention (see →).\n');
     return healthy ? 0 : 1;
   }
 

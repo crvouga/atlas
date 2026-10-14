@@ -1,14 +1,20 @@
+/**
+ * @module Publishing commit-keyed recordings
+ *
+ * The write side of the older, commit-keyed shared store: what CI runs after a spec suite recorded timelines with
+ * screenshots. `openCommit` starts a commit, `publishSource` copies one package bucket's recorded tests into the store
+ * (and also archives it as an immutable layer, so it composes with every other layer), and `closeCommit` finishes the
+ * commit. Pure over two injected `ObjectStore`s, the local report bucket a test run wrote and the shared store, so it
+ * runs the same against a directory, S3 or memory. Writes go content first, then the record that names it, so a
+ * reader that sees a record can read everything it names. Plain checks from JUnit, CTRF or a checks file do not go
+ * through here: they use `publishChecks`.
+ *
+ * @see docs/report-backends.md
+ */
 import { archiveSourceLayer } from './layer-source';
 import { normalizeEnvironment } from './layer-axes';
 import type { LayerParameters } from './layer-types';
 import { performancePart } from './performance-part';
-/**
- * Write side of the shared reports store: what CI runs after a spec suite.
- * Pure over two injected {@link ObjectStore}s — the local report bucket a
- * `bun test` run wrote (`runs/<runId>/tests/<testId>/…`) and the shared
- * store — so it runs the same against R2, Mockingbird S3 or memory.
- */
-
 import type { HtmlReportTest } from './recording-bundle';
 import {
   applyJunitOutcomes,
@@ -59,20 +65,28 @@ export const SPEC_RUN_ID = 'latest';
 const WRITE_WIDTH = 32;
 const JSON_TYPE = 'application/json; charset=utf-8';
 
+/** What `openCommit` needs to start a commit's run. */
 export type OpenCommitArgs = {
+  /** The full 40-hex commit sha. */
   readonly sha: string;
   readonly branch: string;
+  /** The CI run publishing this commit, or `null`. */
   readonly runUrl: string | null;
+  /** When the run started, epoch milliseconds; it also orders the commit list (newest first). */
   readonly startedAtMs: number;
   /** Stylesheet the commit's HTML snapshots render with. */
   readonly frameCss: string;
-  /** Concurrent CI attempts own independent commit-local files. */
+  /** Concurrent CI attempts own independent commit-local files. Letters, digits, `.`, `_`, `:` and `-`; see `publicationStore`. */
   readonly publicationId?: string;
 };
 
 /**
- * Mark a commit's run as started and list it (newest first). Its snapshot
- * stylesheet goes up first, so a test is viewable the moment it lands.
+ * Marks a commit's run as started and lists it (newest first), returning the `running` record.
+ *
+ * Writes the snapshot stylesheet first, so a test is viewable the moment it lands, then `commit.json`, then the
+ * `index/` entry that lists the commit, and, only when `publicationId` is given, last the pointer that tells readers
+ * to look under that attempt. With a `publicationId` the stylesheet and record are written in the attempt's scope, not
+ * the shared one. Calling it again for the same sha and attempt rewrites the same keys. Store errors reject.
  */
 export async function openCommit(
   store: ObjectStore,
@@ -149,21 +163,29 @@ async function readTests(
   ];
 }
 
+/** What `publishSource` needs to publish one package bucket of recorded tests. */
 export type PublishSourceArgs = {
-  /** Execution completion time, separate from a virtual timeline clock. */
+  /** Execution completion time, separate from a virtual timeline clock. Epoch milliseconds. Default: the latest test's `endedAtMs`. */
   readonly recordedAtMs?: number;
+  /** Recorded on the layer: `modified` when the run was from a checkout with uncommitted changes, `unknown` when its origin is unknown. */
   readonly freshness?: 'unknown' | 'modified';
   /** The client this run checked: desktop web, mobile web, iOS, Android, or another recorded name. */
   readonly environment?: string;
+  /** Choices other than the client that make this its own slot (see `LayerParameters`). */
   readonly parameters?: LayerParameters;
+  /** The full 40-hex commit sha the run is for. */
   readonly sha: string;
+  /** Repo-relative package dir; with `bucket` it forms the source id (`libs-chess--part-2`). */
   readonly packageDir: string;
+  /** The bucket under the package's report dir (`part-2`, `all`). */
   readonly bucket: string;
   /** The package's local report bucket (`.cache/harness-report/<bucket>`). */
   readonly local: ObjectStore;
+  /** The run id the tests were written under in `local`. Default: `latest` (`SPEC_RUN_ID`). */
   readonly runId?: string;
   /** Only a passing execution is reusable under its exact task hash. */
   readonly identity?: SourceIdentity;
+  /** Forces the source's status to `failed`; any other value is ignored and the status is computed from the tests. */
   readonly status?: ReportTestStatus;
 };
 
@@ -187,10 +209,17 @@ async function publishSnapshots(
 }
 
 /**
- * Copy one package bucket into the store: every test (runner outcomes
- * applied) and its frame files, then the source record, last, so a reader
- * that sees the record can read every test it names. Null when the bucket
- * recorded no test.
+ * Copies one package bucket into the store: every test (runner outcomes from the bucket's `junit.xml` applied) and its
+ * frame files, then the source record last, so a reader that sees the record can read every test it names; finally it
+ * archives the source as an immutable layer. Returns the record, or `null` when the bucket recorded no test and
+ * neither `identity` nor `status` was given.
+ *
+ * The source's status is `failed` when `args.status` is `failed`, else `failed` if any test failed, `skipped` if all
+ * were skipped, else `passed`. A passing source with an `identity` is stored once, content-addressed by its task
+ * hash, and referenced from the commit; any other source gets its files in the commit's bundle. When the bucket has no
+ * `ui-quality` or `performance` part of its own, a `performance` part with a 50 ms allowance is derived from the
+ * tests. Throws on a source id that is not a valid key segment, a part that fails `validatePart`, or a store error;
+ * a failure part-way leaves unreferenced content, never a record that names missing content.
  */
 export async function publishSource(
   store: ObjectStore,
@@ -290,14 +319,24 @@ async function sourceEvidence(
   return { evidence };
 }
 
+/** What `closeCommit` needs to finish a commit's run. */
 export type CloseCommitArgs = {
+  /** The full 40-hex commit sha. */
   readonly sha: string;
+  /** When the run ended, epoch milliseconds. */
   readonly endedAtMs: number;
+  /** The attempt given to `openCommit`, when it was given one. */
   readonly publicationId?: string;
+  /** `failed` forces the commit's status to `failed`; any other value is ignored. */
   readonly status?: ReportTestStatus;
 };
 
-/** Mark a commit's run complete, with the worst status of its sources. */
+/**
+ * Marks a commit's run `complete` and returns the record, with the worst status of its sources: `failed` if
+ * `args.status` is `failed` or any source failed, `skipped` when there are no sources or all were skipped, else
+ * `passed`. Throws `no open report for <sha>; openCommit runs first` when the commit was never opened. Calling it
+ * again rewrites the record with the sources present at that time.
+ */
 export async function closeCommit(
   store: ObjectStore,
   args: CloseCommitArgs

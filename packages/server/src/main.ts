@@ -1,14 +1,26 @@
+/**
+ * @module `atlas serve`
+ *
+ * Starts the Atlas server from its configuration: opens every backend (creating the data folder), proves the upload
+ * backend can be written to before listening, finds or builds the viewer, listens at once (so a liveness probe finds the
+ * process while a large backend is still being read), and stops cleanly on SIGTERM or SIGINT. `serverOptionsOf` is shared
+ * with `atlas dev`, so the two run the same server.
+ *
+ * @see docs/server.md#run-it
+ */
+
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { openStore } from '../../reports/src/store-url';
 import type { BackendInput } from '../../reports/src/compose';
-import { createAtlasServer } from './app';
+import { createAtlasServer, type AtlasServerOptions } from './app';
 import { ConfigError, loadServerConfig, SERVER_USAGE, type ResolvedServerConfig } from './config';
 import { listen } from './host';
 import { findSite } from './site';
 
 type Env = Readonly<Record<string, string | undefined>>;
+/** What `serveMain` and `devMain` are given besides arguments: where output goes, and, for tests and embedding, the environment, working directory and an `AbortSignal` that stops the server (otherwise SIGTERM and SIGINT do). */
 export type ServeIo = { readonly out: (text: string) => void; readonly env?: Env; readonly cwd?: string; readonly signal?: AbortSignal };
 
 /** Open every backend of a configuration. The data folder is made if it is not there. */
@@ -33,6 +45,20 @@ async function probeWritable(backend: BackendInput): Promise<string | null> {
   }
 }
 
+/** What `createAtlasServer` is given for a configuration: `atlas serve` and `atlas dev` run the same server. */
+export function serverOptionsOf(config: ResolvedServerConfig, backends: ReturnType<typeof openConfiguredBackends>, log?: (line: Record<string, unknown>) => void): AtlasServerOptions {
+  const branches = config.include.branches;
+  const include = branches?.length || config.include.ignoreModified
+    ? (layer: { readonly branch: string | null; readonly freshness?: 'unknown' | 'modified' }) => (!branches?.length || (layer.branch !== null && branches.includes(layer.branch))) && (!config.include.ignoreModified || layer.freshness === undefined)
+    : undefined;
+  return {
+    backends, write: config.writeId, tokens: config.tokens, anonymousRead: config.anonymousRead,
+    ...(config.outlineBranch ? { outlineBranch: config.outlineBranch } : {}), ...(include ? { include } : {}),
+    refreshMs: config.refreshSeconds * 1000, limits: config.limits, heartbeatMs: config.heartbeatSeconds * 1000,
+    ...(config.log && log ? { log } : {})
+  };
+}
+
 /** `atlas serve`. Runs until it is told to stop; returns the exit code. */
 export async function serveMain(argv: readonly string[], io: ServeIo): Promise<number> {
   const cwd = io.cwd ?? process.cwd();
@@ -55,16 +81,7 @@ export async function serveMain(argv: readonly string[], io: ServeIo): Promise<n
   const site = await findSite(config.site, cwd, io.out);
   if (!site) io.out('No viewer to serve: build one with `atlas-visualizer build --no-data --out atlas-site`. The API is served meanwhile.\n');
 
-  const branches = config.include.branches;
-  const include = branches?.length || config.include.ignoreModified
-    ? (layer: { readonly branch: string | null; readonly freshness?: 'unknown' | 'modified' }) => (!branches?.length || (layer.branch !== null && branches.includes(layer.branch))) && (!config.include.ignoreModified || layer.freshness === undefined)
-    : undefined;
-  const server = createAtlasServer({
-    backends, write: config.writeId, tokens: config.tokens, anonymousRead: config.anonymousRead,
-    ...(site ? { site } : {}), ...(config.outlineBranch ? { outlineBranch: config.outlineBranch } : {}), ...(include ? { include } : {}),
-    refreshMs: config.refreshSeconds * 1000, limits: config.limits, heartbeatMs: config.heartbeatSeconds * 1000,
-    ...(config.log ? { log: line => io.out(`${JSON.stringify(line)}\n`) } : {})
-  });
+  const server = createAtlasServer({ ...serverOptionsOf(config, backends, line => io.out(`${JSON.stringify(line)}\n`)), ...(site ? { site } : {}) });
   // Listen at once: the first pass over a large backend can take a while, and a liveness probe must find the
   // process meanwhile. /readyz is 503 until there is a report to show.
   const running = await listen(server.fetch, { port: config.port, host: config.host, maxBodyBytes: Math.max(config.limits.maxObjectMiB, config.limits.maxJsonMiB) * 1024 * 1024 });

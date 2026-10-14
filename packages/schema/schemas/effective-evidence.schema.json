@@ -1,0 +1,471 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/effective-evidence.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "description": "Changes exactly when the report does",
+      "type": "string"
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "description": "The kind of the part holding the check. Part of the slot",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "The check id. Part of the slot",
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "specPath": {
+                  "description": "The spec the check belongs to, `specs/<path>`, or null",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "detail": {
+                  "description": "Why it has this status; empty when there is nothing to add",
+                  "type": "string"
+                },
+                "measurements": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "number"
+                      },
+                      "unit": {
+                        "type": "string"
+                      },
+                      "limit": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "value",
+                      "unit"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "testId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "variant": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "durationMs": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "evidence": {
+                  "type": "object",
+                  "properties": {
+                    "attachments": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "steps": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "annotations": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "links": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "labels": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "attachments",
+                    "steps",
+                    "annotations",
+                    "attempts",
+                    "links",
+                    "tags",
+                    "labels",
+                    "roles"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "kind",
+                "id",
+                "title",
+                "status",
+                "specPath",
+                "detail",
+                "measurements",
+                "testId",
+                "variant",
+                "durationMs"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "fingerprints": {
+            "description": "Spec path to the fingerprint the layer recorded for it",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "layer": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content",
+                "type": "string"
+              },
+              "backend": {
+                "description": "The backend it was read from; the one that sorts first when several hold it",
+                "type": "string"
+              },
+              "producer": {
+                "description": "The suite or tool that made it. Part of the slot",
+                "type": "string"
+              },
+              "packageDir": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "recordedAtMs": {
+                "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot",
+                "type": "number"
+              },
+              "sha": {
+                "description": "The commit it was recorded at. Provenance only",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "branch": {
+                "description": "The branch it was recorded on. Provenance only",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "environment": {
+                "description": "The client it checked, such as `ios`. Part of the slot",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "runUrl": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "parameters": {
+                "description": "Other choices that make a result its own slot",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "freshness": {
+                "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent: clean",
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "modified"
+                ]
+              },
+              "recording": {
+                "description": "Where recorded timelines are read from, or null",
+                "anyOf": [
+                  {},
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "live": {
+                "type": "boolean"
+              },
+              "counts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "execution": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "object",
+                "properties": {
+                  "attachments": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "steps": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "annotations": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "attempts": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "links": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "labels": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "attachments",
+                  "steps",
+                  "annotations",
+                  "attempts",
+                  "links",
+                  "tags",
+                  "labels",
+                  "roles"
+                ],
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "id",
+              "backend",
+              "producer",
+              "packageDir",
+              "recordedAtMs",
+              "sha",
+              "branch",
+              "environment",
+              "runUrl",
+              "parameters",
+              "recording",
+              "live",
+              "counts",
+              "execution"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "rows",
+          "fingerprints",
+          "layer"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "backends": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "live": {
+            "description": "Always false on a server",
+            "type": "boolean"
+          },
+          "available": {
+            "description": "False when the backend could not be read; its results are then unknown, never passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "live",
+          "available"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "notices": {
+      "description": "What could not be read. A gate treats any notice as unknown, never as passed",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "totalLayers": {
+      "description": "Every layer read, whether or not it still wins anything",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "active": {
+      "description": "Always empty on a server; kept for viewers written for live spec runs",
+      "type": "array",
+      "items": {}
+    }
+  },
+  "required": [
+    "version",
+    "layers",
+    "backends",
+    "notices",
+    "totalLayers",
+    "active"
+  ],
+  "additionalProperties": {}
+}

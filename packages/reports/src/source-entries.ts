@@ -1,3 +1,10 @@
+/**
+ * @module Source file entries
+ *
+ * Streams the files of a recorded source (each test's timeline and its captured frame files) as bundle entries ready to
+ * be packed into blobs. Entries come in a fixed order (tests by id, files by name) so the same source always packs into
+ * the same blobs.
+ */
 import type { HtmlReportTest } from './recording-bundle';
 import { testFrameKey } from './recording-keys';
 import { capturedFiles } from './frames';
@@ -7,6 +14,12 @@ import type { PublishSourceArgs } from './publish';
 
 const JSON_TYPE = 'application/json; charset=utf-8';
 
+/**
+ * Yields, for each test of `tests` in `testId` order, its `report.json` and then each file the report names (sorted by
+ * name), keyed by the commit-relative layout `commits/<sha>/tests/<source>/<testId>/...`. Frame files are read from
+ * `args.local` under `runId` as the generator is consumed, one at a time. Throws `Missing report snapshot: <file>` when
+ * a named file is absent locally, and a `not a ...` error for an unsafe source, test id or file name.
+ */
 export async function* sourceEntries(
   args: PublishSourceArgs,
   source: string,

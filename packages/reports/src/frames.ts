@@ -1,3 +1,11 @@
+/**
+ * @module Frames of a recorded test
+ *
+ * Pure helpers over a recorded test's step tree: flattening it into time-ordered frames (captured snapshots),
+ * choosing the frame and actor a route selects, stepping to neighbouring frames or failures, and listing the files
+ * a report names. Results of `testFrames` and the per-actor orderings are cached per test, keyed by the identity of
+ * `test.report.steps`, so treat a loaded report as immutable. Nothing here reads a store.
+ */
 import type { HtmlReportTest } from './recording-bundle';
 import type {
   ReportFrame,
@@ -8,13 +16,17 @@ import type {
 
 import type { Route } from './hash';
 
+/** A frame placed in its step, in the flattened timeline. */
 export type FlatFrame = {
   step: ReportStep;
   frame: ReportFrame;
+  /** How deeply the step is nested (0 for a top-level step). */
   depth: number;
+  /** Position in the flattened list this frame came from; `testFrames` renumbers it by capture time. Route `frame=N` is `index + 1`. */
   index: number;
 };
 
+/** A UI snapshot slot for one client (actor) of a frame. */
 export type OrderedUiBlob = {
   readonly nodeId: string;
   /** This frame's snapshot, or the client's latest earlier one when stale. */
@@ -50,13 +62,16 @@ function carriedUiBlobs(
   return out;
 }
 
+/** A step placed in the flattened (depth-first) step list. */
 export type FlatStep = {
   step: ReportStep;
   depth: number;
+  /** The enclosing step, or null for a top-level step. */
   parent: FlatStep | null;
   index: number;
 };
 
+/** Flattens the frames of a step tree depth first (a step's own frames, then its children's), in step order, not capture-time order. Appends to `out`. */
 export function flattenFrames(
   steps: readonly ReportStep[],
   out: FlatFrame[] = [],
@@ -71,6 +86,7 @@ export function flattenFrames(
   return out;
 }
 
+/** Flattens a step tree depth first into rows that know their depth and parent. Appends to `out`. */
 export function flattenSteps(
   steps: readonly ReportStep[],
   out: FlatStep[] = [],
@@ -85,6 +101,7 @@ export function flattenSteps(
   return out;
 }
 
+/** The first frame of `step`, or failing that of its first descendant that has one; null when none of them has a frame. */
 export function firstFrameFor(
   step: ReportStep,
   frames: readonly FlatFrame[]
@@ -99,6 +116,7 @@ export function firstFrameFor(
   return null;
 }
 
+/** The last frame (in list order, which should be capture-time order) captured at or before the step ended; null when none was. */
 export function lastFrameBefore(
   step: ReportStep,
   frames: readonly FlatFrame[]
@@ -110,6 +128,7 @@ export function lastFrameBefore(
   return best;
 }
 
+/** All frames of a test in capture-time order (ties keep step order), each numbered by its position. Cached per report. */
 export function testFrames(test: HtmlReportTest): FlatFrame[] {
   const cached = frameCache.get(test.report.steps);
   if (cached) return cached;
@@ -157,7 +176,12 @@ function allUiActorIds(test: HtmlReportTest): string[] {
   return ordered;
 }
 
-/** Return UI snapshots in one stable actor order, including empty slots. */
+/**
+ * Returns a frame's UI snapshots (html or png) in one stable actor order, including empty slots, so each client
+ * stays in the same column from frame to frame. The order is the report's `meta.actorIds`, then any other client in
+ * the order first seen. A client with no snapshot at this frame carries its latest earlier one (`stale: true`), or
+ * `null` blob if it has none yet. Snapshots with no `nodeId` follow, named `snapshot-N`.
+ */
 export function orderedUiBlobs(
   frame: FlatFrame | null,
   test: HtmlReportTest
@@ -187,6 +211,7 @@ export function orderedUiBlobs(
   return ordered;
 }
 
+/** The frame a route selects: the 1-based `frame` param when in range, otherwise the first frame of a failed step, otherwise the last frame; null with no frames. */
 export function selectedFrame(
   frames: readonly FlatFrame[],
   route: Route
@@ -201,7 +226,7 @@ export function selectedFrame(
   return frames[frames.length - 1] ?? null;
 }
 
-/** Every file a report names: step snapshots, and files attached to the test as a whole. */
+/** Every distinct file a report names, relative to the test's folder: step snapshots, and files attached to the test as a whole (artifacts with their poster and captions). Used to know what to copy or prefetch. */
 export function capturedFiles(report: Pick<RunReport, 'steps' | 'artifacts'>): string[] {
   const files = new Set<string>();
   const visit = (steps: readonly ReportStep[]) => {
@@ -219,18 +244,22 @@ export function capturedFiles(report: Pick<RunReport, 'steps' | 'artifacts'>): s
   return [...files];
 }
 
+/** Whether a snapshot is a rendered user interface (`html` or `png`), as opposed to data such as JSON or text. */
 export function isUi(b: ReportSnapshotBlob): boolean {
   return b.media === 'html' || b.media === 'png';
 }
 
+/** The UI snapshots (html or png) of a frame; empty for no frame. */
 export function uiBlobs(frame: FlatFrame | null): ReportSnapshotBlob[] {
   return frame ? frame.frame.snapshots.filter(isUi) : [];
 }
 
+/** All snapshots of a frame of any media; empty for no frame. */
 export function stageBlobs(frame: FlatFrame | null): ReportSnapshotBlob[] {
   return frame ? [...frame.frame.snapshots] : [];
 }
 
+/** Whether a frame has at least one UI snapshot. */
 export function frameHasUi(frame: FlatFrame | null): boolean {
   return uiBlobs(frame).length > 0;
 }
@@ -242,7 +271,7 @@ const PREFETCH_MEDIA: ReadonlySet<string> = new Set([
   'text',
 ]);
 
-/** Frame files around `index` (the visible one, plus neighbors) to fetch ahead. */
+/** The distinct html, png, json and text files of the frames within `radius` of `index` (the visible one plus neighbors, clamped to the list), to fetch ahead. */
 export function frameFilesNear(
   frames: readonly FlatFrame[],
   index: number,
@@ -262,6 +291,7 @@ export function frameFilesNear(
   return files;
 }
 
+/** The clients (actors) to show for a frame: those with a UI snapshot, else those with any snapshot, else the report's declared `meta.actorIds`. */
 export function actorIds(
   frame: FlatFrame | null,
   test: HtmlReportTest
@@ -283,6 +313,7 @@ export function actorIds(
   return ids;
 }
 
+/** The client a route selects: the `node` param when it is one of the frame's actors, else the frame's step actor, else the first actor; null with none. */
 export function selectedNode(
   frame: FlatFrame | null,
   route: Route,
@@ -297,6 +328,7 @@ export function selectedNode(
   return ids[0] ?? null;
 }
 
+/** The text of a blob the test holds as text, or null when it is missing or held as bytes. */
 export function blobText(
   test: HtmlReportTest,
   blob: ReportSnapshotBlob
@@ -305,6 +337,7 @@ export function blobText(
   return b && typeof b.text === 'string' ? b.text : null;
 }
 
+/** A `data:` URL for a blob the test holds as base64 bytes, or null when it is missing or held as text. */
 export function blobDataUrl(
   test: HtmlReportTest,
   blob: ReportSnapshotBlob

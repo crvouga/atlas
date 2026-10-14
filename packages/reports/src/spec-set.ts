@@ -1,3 +1,14 @@
+/**
+ * @module Spec sets
+ *
+ * Publishes and finds spec sets: the specs of one commit, stored in the store itself so a viewer needs no checkout. Bodies
+ * are content-addressed in `layers/specs/blobs/<sha256>.txt`, the set is `layers/specs/sets/<id>.json`, and the catalog
+ * entry `layers/specs/index/<inverted-time>-<branch>-<flag>-<id>.json` is written last. `latestSpecSet` picks the outline
+ * a report is laid over: the newest set of `main` (then `master`, then any branch), preferring a set from a clean
+ * commit over one from a modified checkout.
+ *
+ * @see docs/report-contract.md#where-bytes-go
+ */
 import { SpecSetSchema, type SpecSet } from '../../schema/src/layer';
 import { eachLimited } from './completion-order';
 import { collectSpecFiles, isSpecFile, specKindOf, specTitleOf, type SpecFileText } from './directory-outline';
@@ -16,19 +27,30 @@ const BLOB_PREFIX = 'layers/specs/blobs/';
 const branchSlug = (branch: string | null) => branch?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || '_';
 const flagOf = (freshness: SpecSet['freshness']) => (freshness === undefined ? 'c' : freshness === 'modified' ? 'm' : 'u');
 
+/** What to publish as one spec set. */
 export type PublishSpecSetInput = {
+  /** The spec files and their text; see `collectSpecFiles`. */
   readonly files: readonly SpecFileText[];
+  /** The branch the specs are from, or `null`. Part of the set's identity and of its catalog key. */
   readonly branch: string | null;
+  /** The commit the specs are from, or `null`. Part of the set's identity. */
   readonly sha: string | null;
+  /** When the specs were recorded, epoch milliseconds; orders the catalog (newest first). */
   readonly recordedAtMs: number;
+  /** `modified` for a checkout with uncommitted edits, `unknown` outside git; absent for a clean checkout. Part of the set's identity. */
   readonly freshness?: 'unknown' | 'modified';
+  /** The group shown in the viewer for every file. Default `product`. */
   readonly domain?: string;
 };
 
 /**
- * Publish the specs of one version. Bodies are stored by content, so a spec that did not change costs
- * nothing, and the set is named by what it holds: publishing the same specs from the same commit twice
+ * Publishes the specs of one version and returns the set. Bodies are stored by content, so a spec that did not change
+ * costs nothing, and the set is named by what it holds: publishing the same specs from the same commit twice
  * writes the same set. The catalog entry is written last.
+ *
+ * The set's `id` is the SHA-256 of the branch, sha, freshness and each file's path and digest, so the same specs from a
+ * developer's edited worktree and from CI are different sets. Store errors reject; a failure part-way leaves bodies
+ * no set names, never a set whose bodies are missing.
  */
 export async function publishSpecSet(store: ObjectStore, input: PublishSpecSetInput): Promise<SpecSet> {
   const files = await Promise.all([...input.files].sort((a, b) => (a.path < b.path ? -1 : 1)).map(async file => {
@@ -53,6 +75,7 @@ export async function publishSpecSet(store: ObjectStore, input: PublishSpecSetIn
   return set;
 }
 
+/** Reads and validates a spec set by id, or `null` when it is missing. Throws `Spec set <id> is not valid: ...` when it fails the schema, and a `SyntaxError` when it is not JSON. */
 export async function readSpecSet(store: ObjectStore, id: string): Promise<SpecSet | null> {
   const raw = await readUtf8(store, `${SET_PREFIX}${id}.json`);
   if (raw === null) return null;
@@ -61,6 +84,7 @@ export async function readSpecSet(store: ObjectStore, id: string): Promise<SpecS
   return parsed.data;
 }
 
+/** Reads the text of a spec body by its SHA-256 digest, or `null` when it is missing or `digest` is not 64 lowercase hex digits. */
 export async function readSpecBody(store: ObjectStore, digest: string): Promise<string | null> {
   return /^[0-9a-f]{64}$/.test(digest) ? readUtf8(store, `${BLOB_PREFIX}${digest}.txt`) : null;
 }
@@ -98,6 +122,10 @@ async function* catalog(store: ObjectStore): AsyncGenerator<{ slug: string; flag
  * commit exists: the shared view does not follow anyone's work in progress. The branch and cleanliness
  * are read from the catalog's keys, so choosing costs a listing and a read or two, however many sets
  * other branches have published. `cache` keeps sets already read: they never change.
+ *
+ * Resolves to the set and the store it was found in, or `null` when no store has a fitting set (with an explicit
+ * `branch`, only that branch counts). A store that fails is skipped; the first error is thrown only when every store
+ * failed. A set that cannot be read is skipped.
  */
 export async function latestSpecSet(stores: readonly ObjectStore[], branch?: string, cache: Map<string, SpecSet> = new Map()): Promise<Found | null> {
   const wanted = new Set((branch ? [branch] : DEFAULT_BRANCHES).map(name => branchSlug(name)));

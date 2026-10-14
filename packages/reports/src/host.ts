@@ -1,3 +1,14 @@
+/**
+ * @module Reports host for a project's own stores
+ *
+ * Mounts the reports API (outline of a specs directory, layers from one or more stores) as a plain
+ * `(request, repoRoot) => Response` function, for a dev server or a project's own server to call at
+ * `/api/reports`. It owns opening the stores and lazily building the app once per repository root; the report
+ * logic itself is in `reports-route.ts` and `compose.ts`. Node/Bun only. It forwards only the method, URL and
+ * headers of a request (not the body), so it serves reads.
+ *
+ * @see docs/dogfooding.md
+ */
 import path from 'node:path';
 
 import { openStore, storeId, storeSpecs } from './store-url';
@@ -6,6 +17,7 @@ import type { BackendInput } from './compose';
 import { loadDirectoryOutline } from './directory-outline';
 import { createReportsApp } from './reports-route';
 
+/** Options of {@link reportsHost}. */
 export type ReportsHostOptions = {
   /** The specs directory, relative to the project. Its files are the outline every layer fills. */
   readonly specs: string;
@@ -14,7 +26,7 @@ export type ReportsHostOptions = {
    * from all of them are laid over the same specs. Default: `ATLAS_STORE`.
    */
   readonly stores?: readonly (string | BackendInput)[];
-  /** Groups the specs in the viewer. */
+  /** Groups the specs in the viewer. Default: the repository folder's name, or `product`. */
   readonly domain?: string;
 };
 
@@ -28,6 +40,12 @@ const PREFIX = '/api/reports';
  * import { reportsHost } from '@crvouga/atlas/reports/host';
  * export const reportsDevFetch = reportsHost({ specs: './specs', stores: ['./atlas-reports'] });
  * ```
+ *
+ * The returned function takes the incoming `Request` and the repository root (relative store paths and `specs`
+ * resolve against it); a path starting `/api/reports` has that prefix removed before routing. The app is built
+ * on first use and rebuilt if the root changes. A store given as a string is opened with `openStore` and gets an
+ * id derived from its location; a failure while answering (for example a wrong `specs` path) is a 500 whose JSON
+ * body names the `specs` directory and the store ids.
  */
 export function reportsHost(options: ReportsHostOptions): (request: Request, repoRoot: string) => Promise<Response> {
   let app: ReturnType<typeof createReportsApp> | undefined;

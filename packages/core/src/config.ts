@@ -1,3 +1,14 @@
+/**
+ * @module Config and programmatic API
+ *
+ * The user-facing entry point: `defineConfig` types a project's `atlas.config.ts`, and `prepare`,
+ * `runConfig` and `mergeConfigRuns` are the programmatic equivalents of `atlas lint`/`plan`, `atlas
+ * run` and `atlas merge`. They wire the pieces together (load specs, lint, scope, plan, run) and add
+ * no behaviour of their own beyond validating the config against the spec. Relative paths in a config
+ * resolve against the `baseDirectory` argument (the config file's directory when called by the CLI).
+ *
+ * @see docs/statecharts.md
+ */
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
 
@@ -10,6 +21,10 @@ import { assertAllowedTarget, mergePrivacy } from './privacy';
 import { latestRun, mergeRuns, readOutcomes, runPaths, shardPaths } from './run/execute';
 import { loadSpecDirectory } from './spec/load';
 
+/**
+ * Everything a project says about running its specs. `C` is the type of the driver's context
+ * (a Playwright `Page`, a model, ...), which events and states receive.
+ */
 export type AtlasConfig<C = unknown> = {
   /** The directory holding the charts (`*.scxml`, `*.machine.{json,yaml}`) and `journeys.yaml`. */
   specs: string;
@@ -17,6 +32,7 @@ export type AtlasConfig<C = unknown> = {
   chart?: string;
   /** Where generated paths start (an XState state value); the initial state when omitted. */
   start?: StateValue;
+  /** A phrase describing `start` in reports; `The start of the chart` when omitted. */
   startLabel?: string;
   /** Only these events enter the chart from outside it. */
   entryEvents?: string[];
@@ -26,32 +42,66 @@ export type AtlasConfig<C = unknown> = {
   workers?: number;
   /** Runs once before any path: prepare what every seed relies on (reference data, config). */
   beforeRun?: () => Promise<void> | void;
+  /** The driver, or a function that creates it (called once per run, after `beforeRun`). */
   driver: Driver<C> | (() => Driver<C> | Promise<Driver<C>>);
+  /** How to make each event happen and recognise each state. */
   implementation: Implementation<C>;
   /** Where runs are written; `atlas-runs` beside the config when omitted. */
   output?: string;
+  /** Creates the business event sources for a run (called once per run; the run closes them). */
   eventSources?: () => EventSource[] | Promise<EventSource[]>;
+  /** How each business event name from `meta.events` is recognised; by default a CloudEvent whose `type` equals the name. */
   eventMatchers?: Record<string, EventMatcher>;
+  /** Extra privacy rules on top of the defaults. */
   privacy?: PrivacyRules;
   /** URLs the run will reach; checked against `privacy.allowHosts` (loopback by default). */
   targets?: string[];
+  /** Recorded in the manifest as the run's environment (`run.environment`), beside the driver name. */
   environment?: Record<string, unknown>;
+  /** How long to wait for a state to be recognised after an event, in milliseconds; 45 000 when omitted. */
   stepTimeoutMs?: number;
   /** Meta fields every state must carry (default: description). */
   requiredMeta?: string[];
 };
 
+/**
+ * Declares an Atlas config with types, returning it unchanged. Put it as the default export of
+ * `atlas.config.ts`; the CLI loads the file with `tsx` and defaults to `atlas.config.ts` in the
+ * current directory.
+ *
+ * @see docs/statecharts.md
+ *
+ * @example
+ * export default defineConfig({
+ *   specs: './specs',
+ *   driver: () => functionDriver(() => new TodoModel()),
+ *   implementation: {
+ *     events: { 'Adds a todo': { kind: 'user', how: 'Calls add().', run: async (model) => model.add('x') } },
+ *     states: { 'No todos': { recognize: async (model) => ({ matched: model.count === 0, signals: [] }) } }
+ *   }
+ * });
+ */
 export function defineConfig<C>(config: AtlasConfig<C>) {
   return config;
 }
 
-/** Narrow what a config runs from the command line. */
+/** Overrides of a config that the command line can give. */
 export type PrepareOptions = {
   /** Scope the run to this state instead of the config's. */
   state?: string;
 };
 
-/** Load, lint and plan a config without running anything. */
+/**
+ * Loads, lints and plans a config without running anything (what `atlas lint` and `atlas plan` do).
+ *
+ * @param baseDirectory what a relative `config.specs` resolves against.
+ * @returns the loaded `bundle`; `lint` (findings, composition and graph, including `implemented`
+ *   findings for what the implementation lacks); the run's `scope`; the `plan` (paths, journeys, seeds,
+ *   `unreachable`); and the resolved `specs` directory.
+ * @throws Error when the specs cannot be loaded or composed, when a seed's `shows` is not active where
+ *   it starts, or when a seed's `for` names an event no state handles. Lint findings are returned,
+ *   not thrown.
+ */
 export function prepare<C>(config: AtlasConfig<C>, baseDirectory = process.cwd(), options: PrepareOptions = {}) {
   const specs = path.resolve(baseDirectory, config.specs);
   const bundle = loadSpecDirectory(specs);
@@ -102,23 +152,42 @@ const contextOf = <C>(config: AtlasConfig<C>, prepared: ReturnType<typeof prepar
   ...(config.environment ? { environment: config.environment } : {})
 });
 
+/** The options of `atlas run` that `runConfig` accepts; each overrides the config's own setting. */
 export type RunCommandOptions = PrepareOptions & {
+  /** `fast` when omitted. */
   mode?: RunMode;
   /** Only these paths, by id. */
   paths?: string[];
   /** Only paths that start from these seeds ("start" for paths that `setup` starts). */
   seeds?: string[];
+  /** Whether a failed path runs again to tell flaky from broken; true unless `false`. */
   retry?: boolean;
+  /** Where the run is written; the config's `output`, else `atlas-runs`. */
   output?: string;
+  /** Path attempts at once; the config's `workers`, else one per CPU, always capped by the driver. */
   workers?: number;
   /** Run one shard of the plan; `atlas merge` composes the shards. */
   shard?: Shard;
   /** Keep the passed paths of this run (or the newest run, with "latest") and run the rest. */
   reuse?: string;
+  /** Receives progress lines; stdout when omitted. */
   log?: (line: string) => void;
 };
 
-/** Run a config end to end and write its manifest and reports. */
+/**
+ * Runs a config end to end and writes the run (manifest, reports, media) under its output
+ * directory, like `atlas run`.
+ *
+ * Refuses to start (throws) when the spec has any structural lint finding (everything but missing
+ * implementations, which just block paths) or when a `targets` URL is not on the privacy allow-list.
+ * Then it calls `beforeRun`, creates the driver and runs the planned paths (filtered by
+ * `options.paths`/`seeds`/`shard`, reusing earlier passes when `options.reuse` is set).
+ *
+ * @returns what `runPaths` returns: the run directory, the manifest and `ok` (false if any path
+ *   failed or the privacy scan found something).
+ * @throws Error also when `reuse` names a run with no outcomes or there is no earlier run for `latest`.
+ * @see docs/statecharts.md
+ */
 export async function runConfig<C>(config: AtlasConfig<C>, options: RunCommandOptions = {}, baseDirectory = process.cwd()) {
   const prepared = prepare(config, baseDirectory, options);
   const structural = prepared.lint.findings.filter((f) => f.rule !== 'implemented');
@@ -152,7 +221,15 @@ export async function runConfig<C>(config: AtlasConfig<C>, options: RunCommandOp
   });
 }
 
-/** Compose runs of a config (its shards, or a rerun and the run before it) into one run. */
+/**
+ * Composes runs of a config (its shards, or a rerun and the run before it) into one new run
+ * under the output directory, like `atlas merge`. The plan is recomputed from the config, so the runs
+ * must come from the same specs, implementation and seeds.
+ *
+ * @param runDirs the run directories to compose; later ones win when two ran the same path.
+ * @returns what `mergeRuns` returns: the new run directory, its manifest and `ok`.
+ * @throws Error when a run directory has no `outcomes.json`.
+ */
 export function mergeConfigRuns<C>(config: AtlasConfig<C>, runDirs: string[], options: PrepareOptions & { output?: string } = {}, baseDirectory = process.cwd()) {
   const prepared = prepare(config, baseDirectory, options);
   return mergeRuns(

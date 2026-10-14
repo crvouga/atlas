@@ -8,6 +8,8 @@ import {
   ReportStatusSchema,
   SpecSetSchema,
   ServerConfigSchema,
+  InitPlanSchema, PublishResultSchema, StreamResultSchema, MergeResultSchema, DoctorResultSchema, CommandErrorSchema,
+  ProblemSchema, ServerInfoSchema, ReadySchema, EffectiveEvidenceSchema, EffectiveDeltaSchema, OutlineSchema, EvidencePageSchema, LayerRowsSchema, CheckDetailSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema,
   PublishChecksSchema,
   ManifestEnvelopeSchema,
   PathRecordSchema,
@@ -42,7 +44,29 @@ export const SCHEMAS: Record<string, z.ZodType> = {
   'publish-checks': PublishChecksSchema,
   'report-status': ReportStatusSchema,
   'spec-set': SpecSetSchema,
-  'server-config': ServerConfigSchema
+  'server-config': ServerConfigSchema,
+  // What the server answers (docs/server.md); the OpenAPI document refers to the same schemas.
+  problem: ProblemSchema,
+  'server-info': ServerInfoSchema,
+  ready: ReadySchema,
+  'effective-evidence': EffectiveEvidenceSchema,
+  'effective-delta': EffectiveDeltaSchema,
+  outline: OutlineSchema,
+  'evidence-page': EvidencePageSchema,
+  'layer-rows': LayerRowsSchema,
+  'check-detail': CheckDetailSchema,
+  'store-listing': StoreListingSchema,
+  'store-write-result': StoreWriteResultSchema,
+  'checks-result': ChecksResultSchema,
+  'hello-event': HelloEventSchema,
+  'report-event': ReportEventSchema,
+  // What `atlas report … --format json` prints (docs/agents.md).
+  'publish-result': PublishResultSchema,
+  'stream-result': StreamResultSchema,
+  'merge-result': MergeResultSchema,
+  'doctor-result': DoctorResultSchema,
+  'command-error': CommandErrorSchema,
+  'init-plan': InitPlanSchema
 };
 
 

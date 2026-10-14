@@ -1,6 +1,15 @@
+/**
+ * @module Test-runner adapter
+ *
+ * Runs an Atlas config as a test suite in Vitest, `bun test` or any Jest-style runner. The runner's own
+ * `describe`, `it`, `beforeAll` and `expect` are passed in, so this module imports no test framework
+ * and never touches global test state. It owns the mapping from planned paths to tests; the run itself
+ * is `runConfig` from the core.
+ */
 import type { AtlasConfig, RunCommandOptions } from '../../core/src/index';
 import { prepare, runConfig } from '../../core/src/index';
 
+/** The subset of a Vitest/Jest-style runner's API that `describeAtlas` calls. */
 type Suite = {
   describe: (name: string, fn: () => void) => void;
   it: (name: string, fn: () => void | Promise<void>, timeout?: number) => void;
@@ -9,12 +18,25 @@ type Suite = {
 };
 
 /**
- * Turn an Atlas config into a test suite: one test per planned path, so any Vitest/Jest-style
- * runner reports each journey and generated path on its own. The whole plan runs once in
- * `beforeAll` (paths share one manifest); each test then reads its path's outcome.
+ * Registers a test suite for an Atlas config: one test that the charts are executable (no structural
+ * lint finding), then one test per planned path, so any Vitest/Jest-style runner reports each journey
+ * and generated path on its own. The whole plan runs once in `beforeAll` (paths share one manifest);
+ * each test then reads its path's outcome. A failed path fails its test with the last attempt's error;
+ * `passed` and `flaky` paths pass; a path that was `not-reached` (blocked by an event with no
+ * implementation) or was not part of the run passes quietly.
  *
- *   import { describe, it, beforeAll, expect } from 'bun:test';
- *   describeAtlas(config, { describe, it, beforeAll, expect });
+ * `prepare` runs synchronously when `describeAtlas` is called, so specs that cannot be loaded throw at
+ * collection time. The run writes its output like `atlas run` does.
+ *
+ * @param config the Atlas config to run.
+ * @param suite the runner's `describe`, `it`, `beforeAll` and `expect`.
+ * @param options the `atlas run` options (`mode`, `paths`, `retry`, `output`, `log`, ...);
+ *   `baseDirectory` resolves relative config paths (the current directory when omitted) and `timeoutMs`
+ *   bounds the `beforeAll` (30 minutes by default). Progress lines are discarded unless `log` is given.
+ *
+ * @example
+ * import { beforeAll, describe, expect, it } from 'bun:test';
+ * describeAtlas(config, { describe, it, beforeAll, expect });
  */
 export function describeAtlas<C>(config: AtlasConfig<C>, suite: Suite, options: RunCommandOptions & { baseDirectory?: string; timeoutMs?: number } = {}) {
   const prepared = prepare(config, options.baseDirectory);

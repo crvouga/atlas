@@ -1,3 +1,15 @@
+/**
+ * @module The Atlas server application
+ *
+ * `createAtlasServer` is the whole of a project's Atlas as one `fetch` handler: the API results are uploaded to, the live
+ * report every viewer is shown, the gate, the server-sent event stream, the specs and runs the viewer reads, the viewer
+ * itself, and the server's own description (`/api/openapi.json`, `/llms.txt`). What it knows lives in its backends (by
+ * default a folder on its own disk), so replacing it loses nothing. Every error leaves as an RFC 9457 problem document; every
+ * route is described in `openapi.ts` (a test holds the two together).
+ *
+ * @see docs/server.md
+ */
+
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -18,6 +30,9 @@ import { reportStatus } from '../../reports/src/report-status';
 import { ReportIndex, type IndexChange } from '../../reports/src/report-index';
 import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
+import { llmsTxt } from './llms';
+import { openApiDocument } from './openapi';
+import { asProblem, problemResponse } from './problem';
 import { Refusal } from './validate';
 import { createAuth, type Auth } from './auth';
 import type { ResolvedToken } from './config';
@@ -27,6 +42,7 @@ import { readLimited, storeApi } from './store-api';
 const gzipAsync = promisify(gzip);
 const brotliAsync = promisify(brotliCompress);
 
+/** What the server is built from: its `backends` (read together) and which one takes uploads (`write`), `tokens`, the built `site`, the report's filters (`include`, `outlineBranch`), `limits`, timings, `log`, and `now` for tests. */
 export type AtlasServerOptions = {
   /** Every backend, read together. */
   readonly backends: readonly BackendInput[];
@@ -48,10 +64,13 @@ export type AtlasServerOptions = {
   readonly page?: Record<string, unknown>;
 };
 
+/** A running server application: `fetch` (serve requests), `index` (the live report), `events` (the viewers), `routes` (what it answers), `ready` (the first pass over the backends is done) and `close`. */
 export type AtlasServer = {
   readonly fetch: (request: Request) => Promise<Response>;
   readonly index: ReportIndex;
   readonly events: EventHub;
+  /** The routes the server answers, as registered: what the OpenAPI document must describe (a test holds the two together). */
+  readonly routes: readonly { readonly method: string; readonly path: string }[];
   /** Resolves when the first pass over the backends is done. */
   readonly ready: Promise<void>;
   /** Stop refreshing and end every live connection. */
@@ -66,7 +85,7 @@ const typeOf = (file: string) => TYPES[file.split('.').at(-1)?.toLowerCase() ?? 
 const COMPRESSIBLE = /^(text\/|application\/(json|javascript|xml)|image\/svg)/;
 const MiB = 1024 * 1024;
 
-type Cached<T> = { (): Promise<T>; invalidate(): void };
+type Cached<T> = { (): Promise<T>; invalidate(): Promise<void> };
 
 /**
  * The whole of a project's Atlas on one process: the API that results are uploaded to, the live report every
@@ -83,32 +102,39 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
   const limits = { object: (options.limits?.maxObjectMiB ?? 256) * MiB, json: (options.limits?.maxJsonMiB ?? 32) * MiB };
   const index = new ReportIndex(backends, { now, ...(options.include ? { include: options.include } : {}) });
   const events = new EventHub({ maxSubscribers: options.limits?.maxStreams ?? 500, heartbeatMs: options.heartbeatMs ?? 15_000 });
-  const compressed = new Map<string, Uint8Array>();
+  const compressed = new Map<string, Promise<Uint8Array>>();
+  const assets = new Map<string, Promise<Uint8Array>>();
 
   // Spec sets and runs change rarely: answer from memory, look again in the background, and look at once when
-  // something that could change them was uploaded.
+  // something that could change them was uploaded. `invalidate()` resolves when the fresh answer is in place, so
+  // viewers are told to read again only when there is something new to read.
   function cached<T>(load: () => Promise<T>, ttlMs = 10_000): Cached<T> {
     let value: Promise<T> | undefined;
     let at = 0;
-    let refreshing = false;
+    let started = 0;
+    let applied = 0;
+    const reload = async (): Promise<void> => {
+      const mine = ++started;
+      at = now();
+      try {
+        const result = await load();
+        // Loads can finish out of order: only the newest one started may replace what is held.
+        if (mine > applied) { applied = mine; value = Promise.resolve(result); }
+      } catch { /* what is held stays */ }
+    };
     const read = (() => {
       if (!value) {
+        const mine = ++started;
         at = now();
         value = load();
-        value.catch(() => { value = undefined; });
-      } else if (now() - at > ttlMs && !refreshing) {
-        refreshing = true;
+        value.then(() => { applied = Math.max(applied, mine); }, () => { value = undefined; });
+      } else if (now() - at > ttlMs) {
         at = now();
-        load().then(result => { value = Promise.resolve(result); }, () => {}).finally(() => { refreshing = false; });
+        void reload();
       }
       return value!;
     }) as Cached<T>;
-    read.invalidate = () => {
-      if (!value || refreshing) { at = -Infinity; return; }
-      refreshing = true;
-      at = now();
-      load().then(result => { value = Promise.resolve(result); }, () => {}).finally(() => { refreshing = false; });
-    };
+    read.invalidate = reload;
     return read;
   }
   const specSets = new Map<string, import('../../schema/src/layer').SpecSet>();
@@ -157,8 +183,9 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
 
   /**
    * A response, compressed when the client accepts it and it is worth it. What is the same for everyone (a page,
-   * a script, one version of the report) is compressed once and kept; `slow` asks for the smallest form, which
-   * is worth waiting for only when it is made once and sent to every visitor: the viewer's own files.
+   * a script, one version of the report) is compressed once, however many ask at the same moment, and kept; `slow`
+   * asks for the smallest form, which is worth waiting for only when it is made once and sent to every visitor:
+   * the viewer's own files, which are kept for as long as the server runs.
    */
   async function body(c: Context, data: string | Uint8Array, contentType: string, headers: Record<string, string>, cacheKey?: string, slow = false): Promise<Response> {
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
@@ -167,31 +194,53 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
     let out: Uint8Array = bytes;
     if (encoding) {
       const key = cacheKey ? `${encoding}|${cacheKey}|${bytes.length}` : null;
-      out = (key && compressed.get(key)) || new Uint8Array(encoding === 'br'
-        ? await brotliAsync(bytes, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: bytes.length } })
-        : await gzipAsync(bytes));
-      if (key) { if (compressed.size > 64) compressed.delete(compressed.keys().next().value!); compressed.set(key, out); }
+      const kept = slow ? assets : compressed;
+      let packing = key ? kept.get(key) : undefined;
+      if (!packing) {
+        packing = (encoding === 'br'
+          ? brotliAsync(bytes, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: bytes.length } })
+          : gzipAsync(bytes)).then(packed => new Uint8Array(packed));
+        if (key) {
+          if (kept.size >= (slow ? 512 : 64)) kept.delete(kept.keys().next().value!);
+          kept.set(key, packing);
+          packing.catch(() => kept.delete(key));
+        }
+      }
+      out = await packing;
     }
     return new Response(out as BodyInit, { headers: { 'content-type': contentType, vary: 'accept-encoding', ...(encoding ? { 'content-encoding': encoding } : {}), ...headers } });
   }
 
   const app = new Hono();
   const unauthorized = (verdict: Extract<ReturnType<Auth['check']>, { ok: false }>) =>
-    new Response(JSON.stringify({ error: verdict.message }), { status: verdict.status, headers: { 'content-type': 'application/json', ...(verdict.status === 401 ? { 'www-authenticate': 'Basic realm="Atlas", charset="UTF-8"' } : {}) } });
+    problemResponse(verdict.status, verdict.message, verdict.status === 401 ? { 'www-authenticate': 'Basic realm="Atlas", charset="UTF-8"' } : {});
 
   // Everything but the probes and the store protocol (which checks for itself) needs at least a reader.
   app.use('*', async (c, next) => {
     const started = now();
     const pathname = new URL(c.req.url).pathname;
-    const open = pathname === '/healthz' || pathname === '/readyz' || pathname.startsWith('/api/store');
+    const open = pathname === '/healthz' || pathname === '/readyz' || pathname === '/llms.txt' || pathname === '/api/openapi.json' || pathname.startsWith('/api/store');
     if (!open) {
       const verdict = auth.check(c.req.raw, 'read');
       if (!verdict.ok) { c.res = unauthorized(verdict); } else await next();
     } else await next();
+    // Every error, whichever handler made it, leaves as a problem document.
+    if (c.res.status >= 400) c.res = await asProblem(c.res);
     if (pathname !== '/healthz' && pathname !== '/readyz') options.log?.({ at: new Date(started).toISOString(), method: c.req.method, path: pathname, status: c.res.status, ms: now() - started });
   });
 
   app.get('/healthz', c => c.json({ ok: true }));
+  // What an agent handed only this server's address reads first: how to use it, and the machine-readable API.
+  app.get('/llms.txt', c => {
+    const forwarded = c.req.header('x-forwarded-host');
+    const origin = forwarded ? `${c.req.header('x-forwarded-proto') ?? 'https'}://${forwarded}` : new URL(c.req.url).origin;
+    return c.text(llmsTxt({ url: origin, open: auth.open, write: options.write }), 200, { 'cache-control': 'no-cache' });
+  });
+  app.get('/api/openapi.json', c => {
+    const forwarded = c.req.header('x-forwarded-host');
+    const serverUrl = forwarded ? `${c.req.header('x-forwarded-proto') ?? 'https'}://${forwarded}` : undefined;
+    return c.json(openApiDocument(serverUrl ? { serverUrl } : {}), 200, { 'cache-control': 'no-cache' });
+  });
   app.get('/readyz', c => {
     const snapshot = index.snapshot();
     const up = snapshot.backends.some(backend => backend.available);
@@ -233,8 +282,8 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
     store: writeBackend.store, auth, maxObjectBytes: limits.object,
     onStored: async (key, kind, layer) => {
       if (kind === 'layer-catalog') await index.accept(writeBackend.id, key, layer);
-      else if (kind === 'spec-catalog') { specs.invalidate(); events.publish('atlas:change', { scope: 'specs', files: [], runIds: [] }); }
-      else if (kind === 'run-catalog') { runs.invalidate(); events.publish('atlas:change', { scope: 'runs', files: [], runIds: [/-([\w.-]+)\.json$/.exec(key)?.[1] ?? ''].filter(Boolean) }); }
+      else if (kind === 'spec-catalog') { await specs.invalidate(); events.publish('atlas:change', { scope: 'specs', files: [], runIds: [] }); }
+      else if (kind === 'run-catalog') { await runs.invalidate(); events.publish('atlas:change', { scope: 'runs', files: [], runIds: [/-([\w.-]+)\.json$/.exec(key)?.[1] ?? ''].filter(Boolean) }); }
     }
   }));
   app.post('/api/checks', async c => {
@@ -280,7 +329,7 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
           const key = `${snapshot.version}|${[...branches].sort().join(',')}|${ignoreModified}`;
           if (!filtered.has(key)) {
             if (filtered.size >= 8) filtered.delete(filtered.keys().next().value!);
-            filtered.set(key, combineBackends(backends, { outline: found, include: layer => (!branches.length || (layer.branch !== null && branches.includes(layer.branch))) && (!ignoreModified || layer.freshness === undefined) }));
+            filtered.set(key, combineBackends(backends, { outline: found, include: layer => (options.include?.(layer) ?? true) && (!branches.length || (layer.branch !== null && branches.includes(layer.branch))) && (!ignoreModified || layer.freshness === undefined) }));
           }
           report = await filtered.get(key)!;
         }
@@ -350,6 +399,9 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
     });
   }
 
+  // An API path that nothing answered is an error a client can read, whether or not a viewer is served.
+  app.notFound(c => (new URL(c.req.url).pathname.startsWith('/api/') ? c.json({ error: 'Not found' }, 404) : c.text('404 Not Found', 404)));
+
   app.onError((error, c) => {
     options.log?.({ at: new Date(now()).toISOString(), level: 'error', path: new URL(c.req.url).pathname, error: error instanceof Error ? error.message : String(error) });
     return c.json({ error: 'Something went wrong on the server. It has been logged.' }, 500);
@@ -357,6 +409,7 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
 
   return {
     fetch: async request => app.fetch(request),
+    routes: app.routes.map(({ method, path }) => ({ method, path })),
     index,
     events,
     ready: index.start(options.refreshMs ?? 10_000),

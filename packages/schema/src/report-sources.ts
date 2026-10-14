@@ -1,3 +1,13 @@
+/**
+ * @module Report sources and change notices
+ *
+ * The files and events the viewer uses to find runs. `ReportSourcesSchema` validates the sources file named by
+ * `ATLAS_SOURCES_FILE`, which lists extra places to read runs from (a directory, or another host over HTTP).
+ * `AtlasChangeSchema` is the payload of the `atlas:change` event that tells a live viewer that specs or runs changed.
+ * Both are read by the visualizer; the server sends the change notice.
+ *
+ * @see docs/report-backends.md
+ */
 import { z } from 'zod/v4';
 
 const SourceIdentity = {
@@ -20,6 +30,11 @@ const HttpLocation = z
     }
   }, 'Use an HTTP URL without credentials.');
 
+/**
+ * A source reached over HTTP: `type` `http` or `api`, a base URL without credentials, an optional events URL for live
+ * updates, a polling interval in milliseconds (1 000 to 3 600 000) and a `live` flag. The id `workspace` is reserved
+ * for the local runs directory.
+ */
 export const RemoteReportSourceSchema = z.object({
   ...SourceIdentity,
   type: z.enum(['http', 'api']),
@@ -29,16 +44,24 @@ export const RemoteReportSourceSchema = z.object({
   live: z.boolean().optional()
 });
 
+/**
+ * A source that is a directory of runs on the machine running the viewer. A relative `runs` path is resolved against
+ * the sources file.
+ */
 export const DirectoryReportSourceSchema = z.object({
   ...SourceIdentity,
   type: z.literal('directory'),
   runs: z.string().min(1)
 });
 
+/** One source: a directory or a remote host. */
 export const ReportSourceSchema = z.union([DirectoryReportSourceSchema, RemoteReportSourceSchema]);
+/** A parsed `ReportSourceSchema` value. */
 export type ReportSource = z.infer<typeof ReportSourceSchema>;
+/** A parsed `RemoteReportSourceSchema` value. */
 export type RemoteReportSource = z.infer<typeof RemoteReportSourceSchema>;
 
+/** The sources file, `{ "schemaVersion": 1, "sources": [...] }`. Source ids must be unique. */
 export const ReportSourcesSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -52,10 +75,15 @@ export const ReportSourcesSchema = z
     });
   });
 
+/**
+ * The payload of the `atlas:change` event: which `scope` changed (`specs` or `runs`), the files and run ids concerned
+ * (empty lists when not known), and the source that changed. Unknown payloads are ignored by the viewer.
+ */
 export const AtlasChangeSchema = z.object({
   scope: z.enum(['specs', 'runs']),
   files: z.array(z.string()).default([]),
   runIds: z.array(z.string()).default([]),
   sourceId: z.string().optional()
 });
+/** A parsed `AtlasChangeSchema` value. */
 export type AtlasChange = z.infer<typeof AtlasChangeSchema>;

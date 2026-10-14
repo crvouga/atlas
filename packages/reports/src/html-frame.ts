@@ -1,11 +1,12 @@
+/**
+ * @module HTML cards for frames without a UI snapshot
+ *
+ * Builds a self-contained HTML document for a frame that has no UI snapshot: a Quint step's model state, or any
+ * spec step that only recorded text. It is painted in the same phone surface as a real snapshot. All text taken
+ * from the recording is HTML-escaped and the document carries only its own inline style, no script.
+ */
 import { fmtMs } from './format';
 import type { FlatFrame } from './frames';
-
-/**
- * A self-contained HTML document for a frame that has no UI snapshot: a
- * Quint step's model state, or any spec step that only recorded text.
- * Painted in the same phone surface as a real snapshot.
- */
 
 type Section = {
   readonly heading: string;
@@ -75,7 +76,11 @@ function sectionBlocks(sections: readonly Section[]): string {
     .join('');
 }
 
-/** HTML document of one frame's model or recorded state. */
+/**
+ * The HTML document of one frame's model or recorded state: the step's kind and timings, its title, its error,
+ * its `detail` (shown as a name/value table when every line reads `name = value`, otherwise as preformatted text)
+ * and then one block per extra `sections` entry. Everything from the recording is escaped.
+ */
 export function stateFrameHtml(
   frame: FlatFrame,
   sections: readonly Section[]

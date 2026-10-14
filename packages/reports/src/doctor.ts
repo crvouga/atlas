@@ -1,7 +1,19 @@
+/**
+ * @module Store doctor and IAM policy
+ *
+ * `inspectStore` checks that a store works end to end (credentials, listing, what it holds, writing and reading back a
+ * scratch object) and says what to fix when it does not; `iamPolicy` prints the least-privilege AWS policy for publishers
+ * and readers. Used by `atlas report doctor` and `atlas report policy`, for folders, S3-compatible buckets and Atlas
+ * servers alike.
+ *
+ * @see docs/deploying.md
+ */
+
 import { LAYER_INDEX } from './layer-store';
 import { verifyObjectStore } from './object-store-conformance';
 import type { CliBackend } from './cli-stores';
 
+/** One thing `inspectStore` checked: its `name` (`store`, `list`, `contents`, `write`, …), whether it is `ok`, what was seen, and, when it is not, what to `fix`. */
 export type Check = { readonly ok: boolean; readonly name: string; readonly detail: string; readonly fix?: string };
 
 /** The least an account needs, as an AWS IAM policy. R2, MinIO and the rest have their own policy languages: grant the same actions. */
@@ -30,6 +42,7 @@ const when = (inverted: string | undefined) => {
   return Number.isFinite(time) ? new Date(time).toISOString() : 'unknown';
 };
 
+/** What the account being checked is for: `publisher` (writes layers), `reader` (reads them) or `both`. It decides which checks run. */
 export type Role = 'publisher' | 'reader' | 'both';
 
 /** Is this store usable for Atlas, and if not, what exactly is wrong? Each step says what to do. */
