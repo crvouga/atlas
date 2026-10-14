@@ -42,7 +42,7 @@ try {
   }
   line(`seed ${LAYERS} layers × ${CHECKS} checks`, ms(started));
 
-  const server = createAtlasServer({ backends: [{ id: 'data', store }], write: 'data', refreshMs: 3_600_000, heartbeatMs: 3_600_000 });
+  const server = createAtlasServer({ backends: [{ id: 'data', store }], write: 'data', refreshMs: 3_600_000 });
   const http = await listen(server.fetch, { port: 0, host: '127.0.0.1', maxBodyBytes: 64 << 20 });
   const url = `http://127.0.0.1:${http.port}`;
 
@@ -83,7 +83,7 @@ try {
   const snapshotTimes: number[] = [];
   for (let i = 0; i < 20; i++) {
     started = performance.now();
-    await publishChecks(client, { producer: 'p1', environment: 'e1', branch: 'main', recordedAtMs: 1_800_000_000_000 + i, checks: titles.slice(0, 10).map((title, k) => ({ id: `c${k}`, title, status: 'running' as const })) });
+    await publishChecks(client, { producer: 'p1', environment: 'e1', branch: 'main', recordedAtMs: Date.now() + i, checks: titles.slice(0, 10).map((title, k) => ({ id: `c${k}`, title, status: 'running' as const })) });
     times.push(performance.now() - started);
     let seen = '';
     while (!seen.includes('event: report')) seen += new TextDecoder().decode((await reader.read()).value);
