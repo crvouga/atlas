@@ -54,8 +54,9 @@ export function directoryStore(root: string): ObjectStore & PagedListing {
     async get(key): Promise<StoredObject | null> {
       const file = fileOf(root, key);
       try {
-        const bytes = new Uint8Array(await readFile(file));
-        const contentType = await readFile(file + TYPE_SUFFIX, 'utf8').catch(() => 'application/octet-stream');
+        // The type is beside the object: both are asked for at once.
+        const [content, contentType] = await Promise.all([readFile(file), readFile(file + TYPE_SUFFIX, 'utf8').catch(() => 'application/octet-stream')]);
+        const bytes: Uint8Array = content;
         return {
           body: new ReadableStream({
             start(controller) {
