@@ -174,6 +174,10 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
     async poll() {
       await act(async () => client.refetchQueries({ queryKey: ['evidence-index'] }));
     },
+    /** The same for a page served by a node, which reads the whole report in one request. */
+    async pollReport() {
+      await act(async () => client.refetchQueries({ queryKey: ['evidence-effective'] }));
+    },
     async close() {
       (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = undefined;
       await act(async () => root.unmount());

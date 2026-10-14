@@ -43,3 +43,21 @@ test('leaving a source out needs the history, so the viewer then reads every lay
   await atlas.sees('1 passed');
   node.close();
 });
+
+test('holding a report, the viewer is sent only what changed since, and shows the result as if it had read it all', async () => {
+  const store = memoryStore();
+  await publishChecks(store, { producer: 'e2e', environment: 'ios', branch: 'main', recordedAtMs: 1, checks: [check('passed')] });
+  const node = createNode({ stores: [{ id: 'shared', store }], refreshMs: 60_000 });
+  await node.ready;
+  atlas = await openAtlas({ at: '/specs/gherkin', deps: {}, specs: { 'lists/add.feature': FEATURE }, node });
+  await atlas.sees('1 passed');
+  const held = atlas.requests.filter(request => request.startsWith('/evidence/effective'));
+  expect(held.every(request => !request.includes('since='))).toBe(true);
+
+  await publishChecks(store, { producer: 'e2e', environment: 'ios', branch: 'main', recordedAtMs: 2, checks: [check('failed')] });
+  await node.index.refresh();
+  await atlas.pollReport();
+  await atlas.sees('1 failed');
+  expect(atlas.requests.some(request => /^\/evidence\/effective\?since=[0-9a-f]{20}$/.test(request))).toBe(true);
+  node.close();
+});

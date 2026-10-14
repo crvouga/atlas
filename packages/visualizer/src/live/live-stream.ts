@@ -185,3 +185,20 @@ export function resetLiveStreams() {
   }
   streams.clear();
 }
+
+/**
+ * `act` at once, and then no more than once per `ms` however often it is called: a call made inside the wait
+ * runs when the wait ends. The last word is never lost.
+ */
+export function throttled(act: () => void, ms: number): (() => void) & { cancel: () => void } {
+  let last = -Infinity;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const call = () => {
+    if (timer) return;
+    const wait = last + ms - Date.now();
+    if (wait <= 0) { last = Date.now(); act(); return; }
+    timer = setTimeout(() => { timer = null; last = Date.now(); act(); }, wait);
+  };
+  call.cancel = () => { if (timer) clearTimeout(timer); timer = null; };
+  return call;
+}

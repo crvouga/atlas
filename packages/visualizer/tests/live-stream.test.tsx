@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-import { listenChanges, listenLive, resetLiveStreams, type LiveEvent } from '../src/live/live-stream';
+import { listenChanges, listenLive, resetLiveStreams, throttled, type LiveEvent } from '../src/live/live-stream';
 
 /** An EventSource the test drives by hand. */
 class FakeSource {
@@ -58,5 +58,25 @@ describe('hearing the server', () => {
     expect(FakeSource.all.length).toBe(1);
     await new Promise(resolve => setTimeout(resolve, 1_100));
     expect(FakeSource.all.length).toBe(2);
+  });
+});
+
+describe('reading again, not too often', () => {
+  test('the first call acts at once; calls in a burst are one more act, when the wait is over; cancelling drops it', async () => {
+    let acted = 0;
+    const act = throttled(() => { acted += 1; }, 40);
+    act();
+    expect(acted).toBe(1);
+    act(); act(); act();
+    expect(acted).toBe(1);
+    await new Promise(resolve => setTimeout(resolve, 80));
+    expect(acted).toBe(2);
+    await new Promise(resolve => setTimeout(resolve, 60));
+    act();
+    expect(acted).toBe(3);
+    act();
+    act.cancel();
+    await new Promise(resolve => setTimeout(resolve, 80));
+    expect(acted).toBe(3);
   });
 });

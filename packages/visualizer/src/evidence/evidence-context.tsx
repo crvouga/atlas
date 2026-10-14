@@ -1,4 +1,5 @@
 import type { ActiveRun, BackendInfo, EvidencePage, LayerEvidence, LayerHeader, LayerRows } from '@crvouga/atlas/reports/evidence-types';
+import { applyEffectiveDelta, isEffectiveDelta, type EffectiveDelta } from '@crvouga/atlas/reports/effective-delta';
 import type { EffectiveEvidence } from '@crvouga/atlas/reports/report-index';
 import { contributes, evidenceView, type EvidenceView, type SourceSelection } from '@crvouga/atlas/reports/evidence-view';
 import type { SpecEntry } from '@crvouga/atlas/reports/explorer-types';
@@ -9,7 +10,7 @@ import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstac
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { keys, specKey, useAdapter } from '../data/queries';
-import { eventsAddress, listenLive, useLiveStatus } from '../live/live-stream';
+import { eventsAddress, listenLive, throttled, useLiveStatus } from '../live/live-stream';
 import { fileName, folderOf, kindOfFile, outlinePath } from '../spec-kind';
 import { useUiStore } from '../state/ui-store';
 import { effectiveEvidence, reportJson, staticEvidence } from './api';
@@ -21,6 +22,8 @@ const IDLE_POLL_MS = 15_000;
 const EFFECTIVE_POLL_MS = 5_000;
 /** While the server's stream is open it says when to read again; this is only the safety net behind it. */
 const LIVE_SAFETY_POLL_MS = 60_000;
+/** At most this often is the report read again because the server said it changed. */
+const LIVE_REREAD_MS = 250;
 
 export type EvidenceState = {
   /** The layer list has been read at least once. */
@@ -88,17 +91,22 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const url = eventsAddress();
     if (!url) return;
-    return listenLive(url, (event) => {
-      if (event.type === 'change' && event.change.scope === 'specs') {
-        void client.invalidateQueries({ queryKey: ['evidence-outline'] });
-        void client.invalidateQueries({ queryKey: ['evidence-effective'] });
-        return;
-      }
-      if (event.type !== 'report' && event.type !== 'open') return;
+    // A burst of results (a CI run finishing, many shards at once) is read once, not once for each.
+    const reread = throttled(() => {
       void client.invalidateQueries({ queryKey: ['evidence-effective'] });
       void client.invalidateQueries({ queryKey: ['evidence-index'] });
-      if (event.type === 'open') void client.invalidateQueries({ queryKey: ['evidence-outline'] });
+    }, LIVE_REREAD_MS);
+    const reoutline = throttled(() => {
+      void client.invalidateQueries({ queryKey: ['evidence-outline'] });
+      void client.invalidateQueries({ queryKey: ['evidence-effective'] });
+    }, LIVE_REREAD_MS);
+    const stop = listenLive(url, (event) => {
+      if (event.type === 'change' && event.change.scope === 'specs') return reoutline();
+      if (event.type !== 'report' && event.type !== 'open') return;
+      reread();
+      if (event.type === 'open') reoutline();
     });
+    return () => { stop(); reread.cancel(); reoutline.cancel(); };
   }, [client]);
 
   const specIndex = useQuery({ queryKey: keys.specIndex(source), queryFn: adapter.specIndex, retry: false });
@@ -112,7 +120,13 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
   const effective = effectiveEvidence() && !staticEvidence && !hasExclusions(excluded);
   const overview = useQuery({
     queryKey: ['evidence-effective'],
-    queryFn: ({ signal }) => reportJson<EffectiveEvidence>('/evidence/effective', signal),
+    // Holding a report, ask only for what changed since it; the server answers with all of it when it cannot.
+    queryFn: async ({ signal }) => {
+      const held = client.getQueryData<EffectiveEvidence>(['evidence-effective']);
+      const answer = await reportJson<EffectiveEvidence | EffectiveDelta>(held ? `/evidence/effective?since=${encodeURIComponent(held.version)}` : '/evidence/effective', signal);
+      if (!isEffectiveDelta(answer)) return answer;
+      return (held && applyEffectiveDelta(held, answer)) ?? reportJson<EffectiveEvidence>('/evidence/effective', signal);
+    },
     enabled: effective,
     staleTime: 0,
     retry: false,
