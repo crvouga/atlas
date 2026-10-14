@@ -151,3 +151,10 @@ describe('linking checks by a dotted file name', () => {
     }
   });
 });
+
+test('a JUnit case that crashed (<error>) is a failed check, never a pass', async () => {
+  const { checksFromJunit } = await import('../src/ingest');
+  const { checks } = checksFromJunit('<testsuites><testsuite name="s"><testcase classname="C" name="boom"><error message="TypeError: x is undefined" type="TypeError">stack</error><system-err>noise</system-err></testcase><testcase classname="C" name="ok"/><testcase classname="C" name="bad"><failure message="expected 1"/></testcase></testsuite></testsuites>');
+  expect(checks.map(check => [check.title, check.status])).toEqual([['boom', 'failed'], ['ok', 'passed'], ['bad', 'failed']]);
+  expect(checks[0]!.detail).toContain('stack');
+});

@@ -1,12 +1,18 @@
 /**
- * Overlay test-runner outcomes (JUnit XML) onto a report bundle. A harness run
- * only sees failures raised inside its own steps; assertions in the test body
- * surface through the runner's report instead.
+ * @module JUnit XML parsing
+ *
+ * Reads the `<testcase>` elements of a JUnit XML document without an XML library, and overlays test-runner
+ * outcomes (JUnit XML) onto a report bundle. A harness run only sees failures raised inside its own steps;
+ * assertions in the test body surface through the runner's report instead. Parsing is tolerant by design
+ * (nested suites, self-closing elements, CDATA) and never drops a case silently, because a result that goes
+ * missing reads as a pass. `ingest.ts` turns the cases into checks.
  */
 
 import type { HtmlReportBundle, HtmlReportTest } from './recording-bundle';
 
+/** One `<testcase>` as read, with the suite it is in. */
 export type JunitCase = {
+  /** The case's `file` attribute, else its suite's, else empty. */
   readonly file: string;
   /** The `classname` attribute, which many runners use for the suite or the file. */
   readonly classname: string;
@@ -17,7 +23,9 @@ export type JunitCase = {
   readonly name: string;
   /** 1-based line of the test declaration, when the runner emits it. */
   readonly line: number | null;
+  /** `failed` when the case has a `<failure>` or an `<error>`, `skipped` when it has `<skipped>`, otherwise `passed`. */
   readonly status: 'passed' | 'failed' | 'skipped';
+  /** The failure's text (else its `message`, else `failed`), or null when the case did not fail. */
   readonly failure: string | null;
   /** The case's `<system-out>`, when it has one. */
   readonly stdout?: string;
@@ -50,10 +58,11 @@ function attr(tag: string, name: string): string | null {
 }
 
 function failureText(body: string): string | null {
-  const m = /<failure\b([^>]*)(?:\/>|>([\s\S]*?)<\/failure>)/.exec(body);
+  // `<failure>` is an assertion that did not hold, `<error>` an unexpected exception: both are a check that failed.
+  const m = /<(failure|error)\b([^>]*)(?:\/>|>([\s\S]*?)<\/\1>)/.exec(body);
   if (m === null) return null;
-  const message = attr(m[1] ?? '', 'message');
-  const inner = (m[2] ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+  const message = attr(m[2] ?? '', 'message');
+  const inner = (m[3] ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
   const text = decodeXml(inner).trim();
   return text.length > 0 ? text : (message ?? 'failed');
 }
@@ -139,7 +148,7 @@ function allCases(xml: string): JunitCase[] {
   return cases;
 }
 
-/** Parse the `<testcase>` elements of a JUnit XML document. */
+/** Parses every `<testcase>` of a JUnit XML document, in document order, whatever the nesting of its suites. Returns `[]` for text with none; never throws. */
 export function parseJunit(xml: string): JunitCase[] {
   return allCases(xml);
 }
@@ -152,7 +161,9 @@ function sameFile(a: string, b: string): boolean {
 
 /**
  * The test case whose declaration precedes `sourceLine` in the same file and
- * is the nearest one (bodies follow declarations).
+ * is the nearest one (bodies follow declarations). Files match when equal or when one path ends with the other
+ * (after normalising backslashes). With one case in the file, or no line, the first case in the file is used.
+ * Null when no case is in the file, or none declared at or before the line.
  */
 export function matchJunitCase(
   cases: readonly JunitCase[],
@@ -189,7 +200,12 @@ function overlayTest(test: HtmlReportTest, c: JunitCase): HtmlReportTest {
   };
 }
 
-/** Apply runner outcomes / titles to every test with a known source file. */
+/**
+ * Applies runner outcomes and titles to every test of a bundle that has a known source file and a matching case:
+ * the test takes the case's name as title, its failure as error (a harness error is kept), and fails if either the
+ * runner or the harness failed. The bundle fails if any test does. Tests without a match are returned unchanged;
+ * the input is not mutated.
+ */
 export function applyJunitOutcomes(
   bundle: HtmlReportBundle,
   cases: readonly JunitCase[]
