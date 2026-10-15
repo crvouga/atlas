@@ -1,6 +1,6 @@
 # The whole thing on one machine: the Atlas server, keeping its results on a volume.
 #
-#   docker compose up --build
+#   docker compose up --pull always
 #   # every environment sends its results to it (another terminal, a laptop, CI):
 #   export ATLAS_STORE=http://localhost:8080 ATLAS_TOKEN=demo-token-change-me-123
 #   bunx atlas report publish --producer unit --junit out.xml --specs ./specs
@@ -10,9 +10,7 @@
 # The token is for this demo only. Use a long random one: openssl rand -hex 24
 services:
   atlas:
-    build:
-      context: .
-      args: { ATLAS_PACKAGE: "${ATLAS_PACKAGE:-@crvouga/atlas}" }
+    image: ghcr.io/crvouga/atlas:latest
     environment:
       ATLAS_TOKEN: "${ATLAS_TOKEN:-demo-token-change-me-123}"
     ports:

@@ -157,6 +157,63 @@ jobs:
           name: atlas-runs-${{ matrix.script }}
           path: examples/todo/atlas-runs
 
+  # Build and exercise the exact image on PRs too, without registry credentials.
+  # This publishes every green main commit, including commits that need no npm release.
+  image:
+    name: Server image
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: atlas-image-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/crvouga/atlas
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: docker/setup-buildx-action@v4.0.0
+      - name: Build the server and viewer from this commit
+        uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: ATLAS_REVISION=${{ github.sha }}
+          load: true
+          tags: atlas-server:ci
+          cache-from: type=gha,scope=atlas-server
+          cache-to: type=gha,scope=atlas-server,mode=max
+      - name: Exercise the container as a Railway image service
+        run: bun scripts/container-smoke.ts atlas-server:ci
+      - name: Log in to personal GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: docker/login-action@v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the tested image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          docker tag atlas-server:ci "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:$GITHUB_SHA"
+          # Jobs are serialized, but GitHub does not guarantee queue order. An older run must
+          # never move latest backwards after a newer commit has reached main.
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$main_sha" = "$GITHUB_SHA" ]; then
+            docker tag atlas-server:ci "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          else
+            echo "Published $IMAGE:$GITHUB_SHA; a newer main commit owns latest."
+          fi
+
   release:
     name: Release
     needs: check

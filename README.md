@@ -187,6 +187,10 @@ unless you choose a bucket. `atlas dev` runs the same server with the client's d
 development is one host too. See [the server](docs/server.md) and
 [running Atlas for a project](docs/deploying.md).
 
+On Railway, deploy the image `ghcr.io/crvouga/atlas:latest` directly, with no project checkout or
+custom Dockerfile. Every green merge to `main` publishes it; enable Railway's image auto updates to follow it.
+The [deployment guide](docs/deploying.md#run-it) covers the token, persistent volume and healthcheck.
+
 ```sh
 atlas serve                                          # the project's server, at :8080 (ATLAS_TOKEN says who may upload)
 
