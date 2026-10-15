@@ -38,6 +38,7 @@ export const PACKAGES: Readonly<Record<string, string>> = {
   bun: 'The Bun WebView driver for statechart runs. Import path `@crvouga/atlas/bun`.',
   webdriver: 'The W3C WebDriver / Appium driver for statechart runs. Import path `@crvouga/atlas/webdriver`.',
   detox: 'The Detox driver for statechart runs of React Native apps. Import path `@crvouga/atlas/detox`.',
+  runners: 'Native reporters that upload to the project server. Import paths `@crvouga/atlas/codecept`, `@crvouga/atlas/mocha`, `@crvouga/atlas/jest`, `@crvouga/atlas/node-test`.',
   vitest: 'Run a statechart plan as Vitest tests. Import path `@crvouga/atlas/vitest`.'
 };
 
@@ -45,6 +46,7 @@ export const PACKAGES: Readonly<Record<string, string>> = {
 export const GUIDES: readonly { readonly file: string; readonly section: string }[] = [
   { file: 'docs/agents.md', section: 'Start here' },
   { file: 'docs/integrating.md', section: 'Start here' },
+  { file: 'docs/runners.md', section: 'Start here' },
   { file: 'docs/server.md', section: 'Run and use the server' },
   { file: 'docs/deploying.md', section: 'Run and use the server' },
   { file: 'docs/report-contract.md', section: 'Formats and rules' },

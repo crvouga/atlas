@@ -5,7 +5,7 @@ paths that cover every transition, run those paths against the real product thro
 browser, a phone, a plain function), and write a manifest of what happened, with screenshots, video
 clips, captions, business events and standard test reports. Each run publishes as a layer
 (`atlas report publish --manifest`), so it combines with every other suite's evidence. This page covers
-running them, from a runnable example to the visualizer.
+running them, from a runnable example to the Atlas client.
 
 ```
 specs/                     atlas lint      the charts are pure, reachable, free of silent dead ends,
@@ -35,7 +35,7 @@ served by a small Node server) specified as two charts:
 - `specs/getting-started.feature` and `specs/working-the-list.feature`, the same stories in Gherkin.
 - `specs/todo.qnt`, the list, its sync, and its actions as a Quint model.
 
-The visualizer lists the features under Gherkin and the model under Quint.
+The Atlas client lists the features under Gherkin and the model under Quint.
 
 It has every kind of event: user events (taps and typing), a **system** event ("Sync fails", which
 the test triggers through a real HTTP endpoint on the example server), a **time** event ("Retry
@@ -65,24 +65,26 @@ visualizer updates when a run finishes.
 
 ```sh
 bun run atlas:run   # example:clients, then example:run: every chart of the example, in showcase mode
-bun run atlas:viz   # the example's specs, chart runs, and layered reports
+bun atlas          # the example's specs, chart runs, and layered reports
 ```
 
-Each config writes its own run and the visualizer shows one run at a time: the latest is the
+Each config writes its own run and the Atlas client shows one run at a time: the latest is the
 single-browser run, and the run across clients is the one before it in the run picker.
 
-`bun run viz:dev` opens the full coffee example with a layered report, without waiting
-for a run. Gherkin, Quint, DMN, Alloy and OpenSLO documents sit beside the charts. The same scenarios
-are filled by separate layers across desktop web, mobile web, iOS and Android, and across versions,
-branches and backends (this machine, shared reports, and a device lab). A layer that repeated one
-scenario leaves the others as the last layer that ran them. One feature is left with no results.
-**Sources** in the header switches any of those off. The chart runs stay on the statechart map.
+Gherkin, Quint, DMN, Alloy and OpenSLO documents sit beside the charts. Results compose across
+environments, branches and backends within each project. **Sources** switches report sources on or off.
 
-`bun run atlas:viz` opens the todo example the same way. The Gherkin, Quint, DMN, Alloy and OpenSLO
-tabs already show five layers, so each environment is visible before a run. `example:run` adds one
-desktop web layer for the scenarios and traces it actually ran. That layer replaces only those
-desktop web results. The other environments stay. `ATLAS_REPORTS_MODULE` replaces this example API
-with a host's reports.
+`bun atlas` runs the singleton Atlas server and the client together at `http://localhost:5180`.
+It starts a project-agnostic node with no example data. Select a project using the top-right picker.
+In another terminal run `bun run example:run`: statecharts, Gherkin scenarios and Quint traces stream running checks, completed results and current steps
+to project `todo-app` on that server while testing. Producers renew a heartbeat every 5 seconds; 30 seconds of silence
+marks an invocation interrupted. Final specs and recordings upload when their privacy scan completes.
+Tests show inline running indicators and logs without waiting for the whole suite to finish. Report history
+is retained in `atlas-data/projects/todo-app`; local run artifacts remain in `atlas-runs` and
+`atlas-reports`. To upload a completed run again without rerunning tests,
+use `bun run example:publish`. Set `ATLAS_SERVER_URL` for a different upload destination (and
+`ATLAS_PUBLISH_TOKEN` when it requires one). Restart `bun atlas` when switching from the older
+file-based example client; a busy port is an error so publishers cannot silently target another server.
 
 A showcase run ends with:
 
@@ -92,7 +94,7 @@ Transitions 14/14 passed, 0 failed, 0 not reached
 Manifest: examples/todo/atlas-runs/<run-id>/manifest.json
 ```
 
-`example:run` then runs the Gherkin features in a browser and the Quint model, and publishes that desktop web layer beside the ones already in the report.
+`example:run` then runs the Gherkin features in a browser and the Quint model, and streams every scenario and trace as it runs, including sharing and renaming. The final recordings are uploaded alongside the completed statechart run.
 
 `bun test examples` runs [`model.test.ts`](https://github.com/crvouga/atlas/blob/main/examples/todo/model.test.ts): the same charts and journeys
 against `TodoModel`, a plain class, through `functionDriver` and `describeAtlas`. Only the driver
@@ -517,7 +519,7 @@ atlas report publish --producer statecharts --environment desktop-web \
   --manifest atlas-runs/<run>/manifest.json --specs ./specs --upload-run
 ```
 
-`--upload-run` also sends the run's screenshots and clips to the store (or the server) so the viewer can show them
+`--upload-run` also sends the run's screenshots and clips to the store (or the server) so the client can show them
 (only when the run's privacy scan passed).
 
 ## Config reference
@@ -627,7 +629,7 @@ Runs produce media and manifests that get shared, so Atlas refuses to leak real 
 
 ## Visualizer
 
-The [`atlas-visualizer`](../packages/visualizer) command renders the charts from the specs directory and
+The [`atlas client`](../packages/visualizer) command renders the charts from the specs directory and
 overlays runs from the runs directory: screenshots on states, clips on transitions, statuses and
 history. See its README for how to point it at a project.
 
@@ -638,4 +640,4 @@ and completed steps while paths are still running.
 
 Layered reports for any spec appear beside the charts: each Gherkin, Quint, DMN, Alloy and OpenSLO
 document shows the combined result of its checks per environment, with the layer behind each. Point
-the viewer at your stores with `reportsHost` ([integrating Atlas](integrating.md#6-browse-it)).
+the client at your stores with `reportsHost` ([integrating Atlas](integrating.md#6-browse-it)).

@@ -16,7 +16,7 @@ This guide is written for coding agents. Read it top to bottom once, then use
 
 `<part>` is the part of `@crvouga/atlas` the issue is about: `core` (the main import and the
 `atlas` command), or the import path after the package name: `playwright`, `bun`, `webdriver`,
-`detox`, `vitest`, `schema`, `reports`; `visualizer` for the `atlas-visualizer` command. Use `core`
+`detox`, `vitest`, `schema`, `reports`; `visualizer` for the `atlas client` command. Use `core`
 when you cannot tell.
 
 1. [Search for an existing issue](#1-search-first). Comment on it instead of opening a duplicate.
@@ -43,10 +43,10 @@ File when:
 
 - **bug**: Atlas throws or hangs; lint, plan or a run gives a result the spec does not support;
   a driver taps, types, waits or records differently from what its README says; the manifest or a
-  report does not match its JSON Schema; the visualizer shows something other than what the run
+  report does not match its JSON Schema; the Atlas client shows something other than what the run
   recorded; the package fails to install, import, build or type-check.
 - **feature**: you need something Atlas does not have: a spec construct, a config option, a driver
-  capability, a CLI flag, a field in the manifest, a view in the visualizer, an export format. Check
+  capability, a CLI flag, a field in the manifest, a view in the Atlas client, an export format. Check
   that part's README and `docs/` first.
 
 Do not file when:

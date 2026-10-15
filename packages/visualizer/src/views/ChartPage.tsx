@@ -5,6 +5,7 @@ import { mapFrame } from '../layout/graph';
 import { ChartMap } from '../map/ChartMap';
 import { SidePanel } from './SidePanel';
 import styles from './views.module.css';
+import { ChartTests } from './ChartTests';
 
 export function ChartPage() {
   const { chartId } = useParams({ from: '/chart/$chartId' });
@@ -47,6 +48,7 @@ export function ChartPage() {
       <div className={styles.mapArea}>
         <ChartMap key={`${chartId}:${search.group ?? ''}`} view={view} chartId={chartId} selection={selection} group={search.group} />
       </div>
+      <ChartTests view={view} chartId={chartId} compact />
     </div>
   );
 }

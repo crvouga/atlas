@@ -10,7 +10,8 @@
  * @see docs/server.md
  */
 
-import { readFile, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { brotliCompress, constants as zlibConstants, gzip } from 'node:zlib';
@@ -33,10 +34,15 @@ import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
 import { llmsTxt } from './llms';
 import { openApiDocument } from './openapi';
 import { asProblem, problemResponse } from './problem';
+import { LiveRunStartSchema, LiveRunUpdateSchema } from '../../schema/src/live-run';
+import { LiveRuns, LiveRunError } from './live-runs';
+import { ConfigError } from './config';
+import { renderSettingsPage, type ServerSettings } from './settings';
 import { Refusal } from './validate';
 import { createAuth, type Auth } from './auth';
 import type { ResolvedToken } from './config';
 import { EventHub } from './events';
+import { projectServer } from './projects';
 import { readLimited, storeApi } from './store-api';
 
 const gzipAsync = promisify(gzip);
@@ -48,6 +54,8 @@ export type AtlasServerOptions = {
   readonly backends: readonly BackendInput[];
   /** The id of the backend uploads go to. */
   readonly write: string;
+  /** Operational lease storage. Defaults to the write backend; HTTP relays use their own local store. */
+  readonly liveStore?: ObjectStore;
   readonly tokens?: readonly ResolvedToken[];
   readonly anonymousRead?: boolean;
   /** The built viewer. Without it, only the API is served. */
@@ -57,9 +65,15 @@ export type AtlasServerOptions = {
   readonly refreshMs?: number;
   readonly limits?: { readonly maxObjectMiB?: number; readonly maxJsonMiB?: number; readonly maxStreams?: number };
   readonly heartbeatMs?: number;
+  /** Producer lease timeout; default 30 seconds. */
+  readonly runTimeoutMs?: number;
+  /** Maximum time without progress; default 15 minutes, 0 disables. */
+  readonly runStallMs?: number;
   readonly log?: (line: Record<string, unknown>) => void;
   readonly now?: () => number;
   readonly version?: string;
+  /** Admin configuration persistence, supplied by atlas serve. Changes apply on restart. */
+  readonly settings?: ServerSettings;
   /** Extra runtime configuration written into the page. */
   readonly page?: Record<string, unknown>;
 };
@@ -93,6 +107,10 @@ type Cached<T> = { (): Promise<T>; invalidate(): Promise<void> };
  * What it knows lives in its backends (by default a folder on its own disk), so replacing it loses nothing.
  */
 export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
+  return projectServer(options, createProjectApplication);
+}
+
+function createProjectApplication(options: AtlasServerOptions): AtlasServer {
   const now = options.now ?? Date.now;
   const backends = options.backends;
   const writeBackend = backends.find(backend => backend.id === options.write);
@@ -102,6 +120,14 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
   const limits = { object: (options.limits?.maxObjectMiB ?? 256) * MiB, json: (options.limits?.maxJsonMiB ?? 32) * MiB };
   const index = new ReportIndex(backends, { now, ...(options.include ? { include: options.include } : {}) });
   const events = new EventHub({ maxSubscribers: options.limits?.maxStreams ?? 500, heartbeatMs: options.heartbeatMs ?? 15_000 });
+  const live = new LiveRuns({ store: options.liveStore ?? writeBackend.store, now, timeoutMs: options.runTimeoutMs ?? 30_000, stalledMs: options.runStallMs ?? 900_000,
+    onChange: run => {
+      events.publish('run', run);
+      events.publish('atlas:change', { scope: 'runs', files: [], runIds: [], liveRunId: run.id });
+    },
+    onLayer: (key, layer) => index.accept(writeBackend.id, key, layer) });
+  const leaseTimer = setInterval(() => { void live.sweep().catch(error => options.log?.({ level: 'error', error: String(error) })); }, Math.min(5000, options.runTimeoutMs ?? 30_000));
+  leaseTimer.unref?.();
   const compressed = new Map<string, Promise<Uint8Array>>();
   const assets = new Map<string, Promise<Uint8Array>>();
 
@@ -190,7 +216,15 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
   async function body(c: Context, data: string | Uint8Array, contentType: string, headers: Record<string, string>, cacheKey?: string, slow = false): Promise<Response> {
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
     const accepts = c.req.header('accept-encoding') ?? '';
-    const encoding = COMPRESSIBLE.test(contentType) && bytes.length > 1024 ? (slow && /\bbr\b/.test(accepts) ? 'br' : /\bgzip\b/.test(accepts) ? 'gzip' : null) : null;
+    const qualities = new Map(accepts.toLowerCase().split(',').map(part => {
+      const [name, ...parameters] = part.trim().split(';');
+      const q = parameters.map(parameter => /^\s*q\s*=\s*(0(?:\.\d+)?|1(?:\.0+)?)\s*$/.exec(parameter)).find(Boolean);
+      return [name!, q ? Number(q[1]) : parameters.some(parameter => /^\s*q\s*=/.test(parameter)) ? 0 : 1] as const;
+    }));
+    const quality = (name: string) => qualities.get(name) ?? qualities.get('*') ?? 0;
+    const encoding = COMPRESSIBLE.test(contentType) && bytes.length > 1024
+      ? slow && quality('br') > 0 && quality('br') >= quality('gzip') ? 'br' : quality('gzip') > 0 ? 'gzip' : null
+      : null;
     let out: Uint8Array = bytes;
     if (encoding) {
       const key = cacheKey ? `${encoding}|${cacheKey}|${bytes.length}` : null;
@@ -219,13 +253,20 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
   app.use('*', async (c, next) => {
     const started = now();
     const pathname = new URL(c.req.url).pathname;
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(c.req.method)) {
+      const origin = c.req.header('origin');
+      const site = c.req.header('sec-fetch-site');
+      // Browsers identify same-origin requests even when a TLS proxy forwards HTTP to Atlas.
+      if (site === 'cross-site' || (origin && origin !== new URL(c.req.url).origin && site !== 'same-origin')) return problemResponse(403, 'Changes must come from this server origin.');
+    }
     const open = pathname === '/healthz' || pathname === '/readyz' || pathname === '/llms.txt' || pathname === '/api/openapi.json' || pathname.startsWith('/api/store');
     if (!open) {
       const verdict = auth.check(c.req.raw, 'read');
       if (!verdict.ok) { c.res = unauthorized(verdict); } else await next();
     } else await next();
     // Every error, whichever handler made it, leaves as a problem document.
-    if (c.res.status >= 400) c.res = await asProblem(c.res);
+    if (c.res.status >= 400) { c.res = await asProblem(c.res); c.res.headers.set('cache-control', 'no-store'); }
+    if (!auth.open && c.res.headers.get('cache-control')?.startsWith('public')) c.res.headers.set('cache-control', c.res.headers.get('cache-control')!.replace(/^public/, 'private'));
     if (pathname !== '/healthz' && pathname !== '/readyz') options.log?.({ at: new Date(started).toISOString(), method: c.req.method, path: pathname, status: c.res.status, ms: now() - started });
   });
 
@@ -255,12 +296,68 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true }
     });
   });
 
+  app.get('/api/live', async c => c.json({ runs: await live.list() }, 200, { 'cache-control': 'no-store' }));
+  const writeLive = async (c: Context, action: 'start' | 'update' | 'heartbeat') => {
+    const verdict = auth.check(c.req.raw, 'publish');
+    if (!verdict.ok) return unauthorized(verdict);
+    const owner = createHash('sha256').update(c.req.header('authorization') ?? 'open').digest('hex');
+    const id = c.req.param('id')!;
+    if (!/^[a-f0-9-]{36}$/.test(id)) return problemResponse(422, 'Invalid live run id.');
+    try {
+      if (action === 'heartbeat') { await live.heartbeat(id, owner); return c.json({ ok: true }); }
+      const bytes = await readLimited(c.req.raw, Math.min(limits.json, 2 * MiB));
+      let input: unknown;
+      try { input = JSON.parse(new TextDecoder().decode(bytes)); } catch { return problemResponse(422, 'The body is not JSON.'); }
+      const schema = action === 'start' ? LiveRunStartSchema : LiveRunUpdateSchema;
+      const parsed = schema.safeParse(input);
+      if (!parsed.success) return problemResponse(422, parsed.error.message);
+      if (action === 'start') {
+        const start = LiveRunStartSchema.parse(parsed.data);
+        if (start.id !== id) return problemResponse(422, 'Run ids must match.');
+        return c.json(await live.start(start, owner), 201);
+      }
+      return c.json(await live.update(id, LiveRunUpdateSchema.parse(parsed.data), owner));
+    } catch (error) {
+      if (error instanceof LiveRunError) return problemResponse(error.status, error.message);
+      if (error instanceof Refusal) return problemResponse(error.status, error.message);
+      throw error;
+    }
+  };
+  app.post('/api/live/:id', c => writeLive(c, 'start'));
+  app.patch('/api/live/:id', c => writeLive(c, 'update'));
+  app.post('/api/live/:id/heartbeat', c => writeLive(c, 'heartbeat'));
+
+  app.get('/admin', async c => c.html(await renderSettingsPage(), 200, { 'cache-control': 'no-store', 'x-frame-options': 'DENY', 'x-content-type-options': 'nosniff' }));
+  app.get('/api/settings', async c => {
+    const verdict = auth.check(c.req.raw, 'admin');
+    if (!verdict.ok) return unauthorized(verdict);
+    if (!options.settings) return problemResponse(503, 'Settings are managed by the embedding application.');
+    return c.json(await options.settings.read(), 200, { 'cache-control': 'no-store' });
+  });
+  app.put('/api/settings', async c => {
+    const verdict = auth.check(c.req.raw, 'admin');
+    if (!verdict.ok) return unauthorized(verdict);
+    if (!options.settings) return problemResponse(503, 'Settings are managed by the embedding application.');
+    const revision = /^"([a-f0-9]{64})"$/.exec(c.req.header('if-match') ?? '')?.[1];
+    if (!revision) return problemResponse(428, 'Load settings first and send their revision in If-Match.');
+    try {
+      const bytes = await readLimited(c.req.raw, Math.min(limits.json, 64 * 1024));
+      let input: unknown;
+      try { input = JSON.parse(new TextDecoder().decode(bytes)); } catch { return problemResponse(422, 'The body is not JSON.'); }
+      return c.json(await options.settings.save(input, revision), 200, { 'cache-control': 'no-store' });
+    } catch (error) {
+      if (error instanceof ConfigError) return problemResponse(error.message.startsWith('Settings changed') ? 409 : 422, error.message);
+      if (error instanceof Refusal) return problemResponse(error.status, error.message);
+      throw error;
+    }
+  });
+
   // Live updates: told when the report changes, and when specs or runs do.
-  app.get('/api/events', c => events.stream(c.req.raw, () => ({ version: index.snapshot().version, ready: index.ready, time: now() })));
+  app.get('/api/events', c => events.stream(c.req.raw, () => ({ version: index.snapshot().version, ready: index.ready, time: now(), heartbeatMs: options.heartbeatMs ?? 15_000 })));
 
   // The report as it stands: one request, only what wins. Everything else about a layer is history.
   app.get('/api/reports/evidence/effective', async c => {
@@ -378,7 +475,9 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
   // The viewer, with this server's address book written into its page.
   if (options.site) {
     const root = path.resolve(options.site);
-    const config = JSON.stringify({ api: './api', reportsUrl: './api/reports', dataUrl: './api/data/', eventsUrl: './api/events', effective: true, ...(options.page ?? {}) });
+    const config = JSON.stringify({ api: './api', reportsUrl: './api/reports', dataUrl: './api/data/', eventsUrl: './api/events', projectsUrl: './api/projects', effective: true, ...(options.page ?? {}) }).replaceAll('<', '\\u003c');
+    const pageDigest = createHash('sha256').update(config).digest('hex').slice(0, 16);
+    const files = new Map<string, { stamp: string; bytes: Uint8Array }>();
     app.get('*', async c => {
       const pathname = new URL(c.req.url).pathname;
       // An API path that nothing answered is an error, not a page.
@@ -391,11 +490,25 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
       if (info?.isDirectory()) { file = path.join(file, 'index.html'); info = await stat(file).catch(() => null); }
       if (!info && !path.extname(relative)) { file = path.join(root, 'index.html'); info = await stat(file).catch(() => null); }
       if (!info?.isFile()) return c.notFound();
+      const resolved = await realpath(file);
+      const realRoot = await realpath(root);
+      if (!resolved.startsWith(`${realRoot}${path.sep}`)) return c.notFound();
       const isIndex = path.basename(file) === 'index.html';
-      let data: string | Uint8Array = new Uint8Array(await readFile(file));
-      if (isIndex) data = new TextDecoder().decode(data).replace('</head>', `<script>window.__ATLAS_CONFIG__=${config}</script></head>`);
+      const stamp = `${info.mtimeMs}|${info.size}`;
+      const etag = `"${info.mtimeMs}-${info.size}${isIndex ? `-${pageDigest}` : ''}"`;
       const hashed = /(^|\/)assets\//.test(relative);
-      return body(c, data, typeOf(file), { 'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache' }, `${file}|${info.mtimeMs}`, true);
+      const headers = { etag, 'x-content-type-options': 'nosniff', 'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache' };
+      if (c.req.header('if-none-match') === etag) return new Response(null, { status: 304, headers });
+      let kept = files.get(file);
+      if (!kept || kept.stamp !== stamp) {
+        kept = { stamp, bytes: new Uint8Array(await readFile(file)) };
+        if (files.size >= 128) files.delete(files.keys().next().value!);
+        // Keep only small assets; large downloads do not occupy the viewer cache.
+        if (kept.bytes.length <= 2 * MiB) files.set(file, kept);
+      }
+      let data: string | Uint8Array = kept.bytes;
+      if (isIndex) data = new TextDecoder().decode(data).replace('</head>', `<script>window.__ATLAS_CONFIG__=${config}</script></head>`);
+      return body(c, data, typeOf(file), headers, `${file}|${stamp}`, true);
     });
   }
 
@@ -413,6 +526,6 @@ export function createAtlasServer(options: AtlasServerOptions): AtlasServer {
     index,
     events,
     ready: index.start(options.refreshMs ?? 10_000),
-    close: () => { stopListening(); index.stop(); events.close(); }
+    close: () => { clearInterval(leaseTimer); stopListening(); index.stop(); events.close(); }
   };
 }

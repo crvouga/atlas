@@ -49,6 +49,8 @@ See docs/statecharts.md
 export type AtlasConfig<C = unknown> = {
   /** The directory holding the charts (`*.scxml`, `*.machine.{json,yaml}`) and `journeys.yaml`. */
   specs: string;
+  /** Live reporting endpoint. Defaults to ATLAS_SERVER_URL when set; false disables streaming. */
+  reporting?: LiveReporterOptions | false;
   /** The chart to run; the root chart when omitted. */
   chart?: string;
   /** Where generated paths start (an XState state value); the initial state when omitted. */
@@ -149,6 +151,8 @@ not thrown.
 export type RunCommandOptions = PrepareOptions & {
   /** `fast` when omitted. */
   mode?: RunMode;
+  /** Override live reporting. Defaults to config.reporting or ATLAS_SERVER_URL. */
+  reporting?: LiveReporterOptions | false;
   /** Only these paths, by id. */
   paths?: string[];
   /** Only paths that start from these seeds ("start" for paths that `setup` starts). */
@@ -1071,6 +1075,8 @@ export type RunOptions<C> = RunContext<C> & {
   reuse?: { runDir: string; outcomes: Record<string, PathOutcome> };
   /** Receives progress lines; writes to stdout when omitted. */
   log?: (line: string) => void;
+  /** Receives privacy-checked manifest snapshots as paths and steps change. */
+  onProgress?: (manifest: Manifest) => void;
 };
 ```
 

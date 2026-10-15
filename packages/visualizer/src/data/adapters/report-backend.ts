@@ -28,7 +28,7 @@ export function sourceRuns(backend: ReportBackend, runs: RunSummary[]): SourcedR
 
 export function createReportBackend(config: RemoteReportSource): ReportBackend {
   const adapter =
-    config.live && import.meta.hot
+    config.live && !config.eventsUrl && import.meta.hot
       ? createDevAdapter(config.baseUrl, config.label, config.id)
       : createHttpAdapter(config.baseUrl, config.type === 'api' ? 'api' : 'static', config.eventsUrl);
   return {

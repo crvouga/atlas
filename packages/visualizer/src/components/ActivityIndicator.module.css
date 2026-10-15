@@ -1,0 +1,4 @@
+.activity { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; flex: none; color: var(--place); }
+.ring { box-sizing: border-box; width: 10px; height: 10px; border: 1.5px solid currentColor; border-right-color: transparent; border-bottom-color: transparent; border-radius: 50%; opacity: .65; animation: turn 1.8s linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ring { animation: none; } }

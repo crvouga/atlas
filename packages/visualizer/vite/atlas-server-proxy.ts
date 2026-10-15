@@ -1,7 +1,7 @@
 import type { Plugin, ProxyOptions } from 'vite';
 
 /** What the viewer is told about the server it is served with: the same words `atlas serve` writes into its page. */
-export const serverPageConfig = { api: './api', reportsUrl: './api/reports', dataUrl: './api/data/', eventsUrl: './api/events', effective: true } as const;
+export const serverPageConfig = { api: './api', reportsUrl: './api/reports', dataUrl: './api/data/', eventsUrl: './api/events', projectsUrl: './api/projects', effective: true } as const;
 
 /**
  * Put the Atlas server behind the dev server. The browser talks to one host; `/api` goes to the server, so the
@@ -10,6 +10,7 @@ export const serverPageConfig = { api: './api', reportsUrl: './api/reports', dat
 export function atlasServerProxy(target: string): { readonly proxy: Record<string, ProxyOptions> } {
   return {
     proxy: {
+      '/admin': { target, changeOrigin: false },
       '/api': {
         target,
         changeOrigin: false,

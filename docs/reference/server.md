@@ -24,6 +24,8 @@ export type AtlasServerOptions = {
   readonly backends: readonly BackendInput[];
   /** The id of the backend uploads go to. */
   readonly write: string;
+  /** Operational lease storage. Defaults to the write backend; HTTP relays use their own local store. */
+  readonly liveStore?: ObjectStore;
   readonly tokens?: readonly ResolvedToken[];
   readonly anonymousRead?: boolean;
   /** The built viewer. Without it, only the API is served. */
@@ -33,9 +35,15 @@ export type AtlasServerOptions = {
   readonly refreshMs?: number;
   readonly limits?: { readonly maxObjectMiB?: number; readonly maxJsonMiB?: number; readonly maxStreams?: number };
   readonly heartbeatMs?: number;
+  /** Producer lease timeout; default 30 seconds. */
+  readonly runTimeoutMs?: number;
+  /** Maximum time without progress; default 15 minutes, 0 disables. */
+  readonly runStallMs?: number;
   readonly log?: (line: Record<string, unknown>) => void;
   readonly now?: () => number;
   readonly version?: string;
+  /** Admin configuration persistence, supplied by atlas serve. Changes apply on restart. */
+  readonly settings?: ServerSettings;
   /** Extra runtime configuration written into the page. */
   readonly page?: Record<string, unknown>;
 };
@@ -252,9 +260,9 @@ A server that anyone on the network can upload to must say who may.
 
 Source: `packages/server/src/dev.ts`
 
-Runs the same server as `atlas serve` on a port of its own, with the viewer's Vite dev server in front of it. Vite proxies
+Runs the same server as `atlas serve` on a port of its own, with the client's Vite dev server in front of it. Vite proxies
 `/api` (server-sent events included) to the server and writes the same address book into the page, so the browser, the
-uploaders and the viewer all use one host, exactly as in production, and a change to the viewer shows at once.
+uploaders and the client all use one host, exactly as in production, and a change to the client shows at once.
 
 #### `DEV_USAGE`
 
@@ -277,7 +285,7 @@ export async function devMain(argv: readonly string[], io: ServeIo): Promise<num
 Source: `packages/server/src/events.ts`
 
 What the server tells every connected viewer the moment it happens. A viewer that misses some (a dropped connection, a
-laptop that slept) loses nothing: events say "something changed", the state is always fetched, and a viewer reads again
+laptop that slept) loses nothing: report events announce changes, run events carry bounded progress snapshots, and a viewer reads authoritative state again
 when it reconnects. `EventHub` encodes each event once for all viewers, sends a named `ping` every heartbeat so proxies
 keep the connection and a quiet server is told apart from a dead one, refuses past a maximum number of viewers (they poll
 instead), and lets go of a viewer that has stopped reading rather than hold its backlog.
@@ -287,10 +295,10 @@ See docs/server.md#streaming
 #### `EventName`
 
 ```ts
-export type EventName = 'hello' | 'report' | 'atlas:change';
+export type EventName = 'hello' | 'report' | 'atlas:change' | 'run' | 'projects';
 ```
 
-The events the server publishes: `hello` (sent first to a new viewer), `report` (layers arrived) and `atlas:change` (specs or runs changed). `ping` is the heartbeat, sent by the hub itself.
+The events the server publishes: `hello` (sent first to a new viewer), `report` (layers arrived) `atlas:change` (specs or runs changed), `run` (a bounded live lease snapshot), and `projects` (project discovery changed). `ping` is the heartbeat, sent by the hub itself.
 
 #### `EventHub`
 
@@ -360,6 +368,44 @@ as one checked configuration), `serveMain` (what `atlas serve` runs), `EventHub`
 
 See docs/server.md
 
+### live-runs.ts
+
+Source: `packages/server/src/live-runs.ts`
+
+@module Live run leases
+Tracks producer heartbeats independently of progress, publishes completed checks incrementally, and persists
+bounded run summaries. A server restart interrupts outstanding leases rather than inventing continued progress.
+
+#### `LiveRunError`
+
+```ts
+export class LiveRunError extends Error
+```
+
+A refused run update: 403 another publisher, 404 unknown run, 409 stale/terminal run, or 429 capacity.
+
+#### `LiveRuns`
+
+```ts
+export class LiveRuns
+```
+
+One server's live feed. Heartbeats never create result layers. Persisted summaries contain at most 20 recent
+checks and 10 active checks; completed results live in ordinary immutable layers. Leases expire by server time.
+
+**Example**
+
+```ts
+const live = new LiveRuns({ store, timeoutMs: 30_000, stalledMs: 900_000, onChange: () => {}, onLayer: async () => {} });
+```
+
+- `readonly ready: Promise<void>;` — Resolves after restoring summaries and interrupting leases left by a previous server process.
+- `async list(): Promise<LiveRun[]>` — Read the most recent 50 summaries. Progress detail and counters are already bounded and cached.
+- `async start(input: Start, owner: string): Promise<LiveRun>` — Register one producer lease. Retrying an identical start is idempotent.
+- `async heartbeat(id: string, owner: string): Promise<void>` — Renew liveness by server receipt time, independently of whether a test made progress.
+- `async update(id: string, input: Update, owner: string): Promise<LiveRun>` — Apply one ordered progress batch and publish its completed checks before acknowledging it.
+- `async sweep(): Promise<void>` — Expire silent producers and optional progress stalls. Heartbeats cannot revive an expired run.
+
 ### llms.txt of a running server
 
 Source: `packages/server/src/llms.ts`
@@ -397,7 +443,7 @@ The guide for one server, Markdown. Stable in structure: an agent may read it by
 Source: `packages/server/src/main.ts`
 
 Starts the Atlas server from its configuration: opens every backend (creating the data folder), proves the upload
-backend can be written to before listening, finds or builds the viewer, listens at once (so a liveness probe finds the
+backend can be written to before listening, finds or builds the client, listens at once (so a liveness probe finds the
 process while a large backend is still being read), and stops cleanly on SIGTERM or SIGINT. `serverOptionsOf` is shared
 with `atlas dev`, so the two run the same server.
 
@@ -494,8 +540,7 @@ One operation of the API, and the route the server registers for it.
 export const OPERATIONS: readonly Operation[]
 ```
 
-Every operation of the API. The order is the order of the document. The descriptions are the documentation an
-agent reads, so they say what to send, what comes back, and what to do when it does not work.
+Every node operation and the same stable report protocol inside each project namespace.
 
 #### `NOT_OPERATIONS`
 
@@ -541,13 +586,108 @@ The response made into a problem document when it is an error (status 400 or mor
 `error`. Headers (`WWW-Authenticate`, `Retry-After`, `Allow`) and any other body fields are kept. Anything else,
 including every success, is returned as it is.
 
-### Finding the viewer
+### projects.ts
+
+Source: `packages/server/src/projects.ts`
+
+@module Project routing
+One node serves isolated project stores through the same authenticated API. Legacy unqualified requests address
+the default project; named projects use scoped stores without rewriting uploaded report documents.
+
+#### `projectServer`
+
+```ts
+export function projectServer(options: AtlasServerOptions, create: (options: AtlasServerOptions) => AtlasServer): AtlasServer
+```
+
+Wrap the single-project protocol in project selection. Auth, upload validation and composition stay identical.
+
+### settings-page.ts
+
+Source: `packages/server/src/settings-page.ts`
+
+@module Settings page
+A standalone administrator form, styled with the Atlas client's shared design tokens.
+Credentials remain in page memory; the settings API owns authorization and validation.
+
+#### `SETTINGS_PAGE`
+
+```ts
+export const SETTINGS_PAGE = …
+```
+
+The settings form and its browser controller, also usable without a built client.
+
+#### `renderSettingsPage`
+
+```ts
+export function renderSettingsPage(): Promise<string>
+```
+
+Render Settings using the exact design tokens shipped with the Atlas client. Loads and caches the stylesheet
+on first request, never at import time. Minimal neutral tokens keep embedded API-only servers usable too.
+
+**Example**
+
+```ts
+const html = await renderSettingsPage();
+```
+
+### settings.ts
+
+Source: `packages/server/src/settings.ts`
+
+@module Persisted server settings
+The admin UI edits storage and report configuration in atlas.server.json. Changes take effect on restart;
+environment variables and flags keep their documented precedence. Authentication is managed outside this UI.
+
+#### `SettingsSnapshot`
+
+```ts
+export type SettingsSnapshot = { readonly revision: string; readonly settings: Record<string, unknown>; readonly active: Record<string, unknown>; readonly restartRequired: boolean; readonly precedence: string };
+```
+
+The persisted editable settings, active settings and a revision for optimistic concurrency. Authentication token settings are excluded.
+
+#### `ServerSettings`
+
+```ts
+export type ServerSettings = { read(): Promise<SettingsSnapshot>; save(settings: unknown, revision: string): Promise<SettingsSnapshot> };
+```
+
+Storage for the admin API; saving is serialized and refuses a stale revision.
+
+#### `fileServerSettings`
+
+```ts
+export function fileServerSettings(config: ResolvedServerConfig, argv: readonly string[], env: Readonly<Record<string, string | undefined>>, cwd: string): ServerSettings
+```
+
+Manage the server's configuration file with atomic replacement, preserving authentication and unrelated fields.
+Validates both the file alone and the effective configuration before saving. Never migrates or deletes report data.
+Changes need a server restart; deployment environment variables and flags override the file.
+
+**Example**
+
+```ts
+const settings = fileServerSettings(config, argv, process.env, process.cwd());
+```
+
+### Finding the client
 
 Source: `packages/server/src/site.ts`
 
-Locates the built viewer a server serves: the folder named by `--site`, `./atlas-site`, or one built once into the user's
-cache from the viewer source shipped in the package (`atlas-visualizer build --no-data`). The build is the same for every
+Locates the built client a server serves: the folder named by `--site`, `./atlas-site`, or one built once into the user's
+cache from the client source shipped in the package (`atlas client build --no-data`). The build is the same for every
 project because the server writes its own address book into the page, so it is built at most once per installed version.
+
+#### `clientMain`
+
+```ts
+export async function clientMain(argv: readonly string[]): Promise<number>
+```
+
+Run the Atlas client build tools. Returns the child's exit code; throws when the client is missing.
 
 #### `visualizerRoot`
 
@@ -555,7 +695,7 @@ project because the server writes its own address book into the page, so it is b
 export function visualizerRoot(): string | null
 ```
 
-Where the viewer's source is, in this repository and in an installed package.
+Where the client's source is, in this repository and in an installed package.
 
 #### `buildSite`
 
@@ -563,7 +703,7 @@ Where the viewer's source is, in this repository and in an installed package.
 export async function buildSite(out: string, log: (text: string) => void): Promise<boolean>
 ```
 
-Build the viewer once into a folder, for a server that was not given a prebuilt one.
+Build the client once into a folder, for a server that was not given a prebuilt one.
 
 #### `findSite`
 
@@ -571,7 +711,7 @@ Build the viewer once into a folder, for a server that was not given a prebuilt 
 export async function findSite(named: string | undefined, cwd: string, log: (text: string) => void): Promise<string | null>
 ```
 
-The viewer to serve: the one named, a build beside the project, or one built into the user's cache.
+The client to serve: the one named, a build beside the project, or one built into the user's cache.
 
 ### Store protocol routes
 

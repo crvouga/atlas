@@ -23,6 +23,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { probeRunners } from './runner-smoke';
 import { must } from '../process.ts';
 import { restoreOriginals } from './files.ts';
 import { discoverPackages, type Manifest, missingEntryPoints, pack, packedFiles, packedManifest, publishManifest, unresolvablePins } from './lib.ts';
@@ -201,7 +202,7 @@ async function main(): Promise<void> {
           type: 'module',
           dependencies,
           // playwright is an optional peer: a project that imports `@crvouga/atlas/playwright` installs it.
-          devDependencies: { typescript: '5.9.3', '@types/node': '22.20.3', esbuild: '0.28.2', playwright: '1.60.0' }
+          devDependencies: { typescript: '5.9.3', '@types/node': '22.20.3', esbuild: '0.28.2', playwright: '1.60.0', mocha: '12.0.3', jest: '30.5.2', codeceptjs: '4.2.1' }
         },
         null,
         2
@@ -209,6 +210,8 @@ async function main(): Promise<void> {
     );
     console.log(`consumer-smoke: bun install ${packed.length} tarball(s) into ${app}`);
     await must('bun', ['install'], { cwd: app });
+
+    await probeRunners(app);
 
     const specifiers = packed.flatMap((p) => exportSpecifiers(p.name, p.manifest, p.files));
     const importAll = specifiers.map((s, i) => `import * as m${i} from ${JSON.stringify(s)};`).join('\n');
@@ -269,6 +272,8 @@ async function main(): Promise<void> {
       writeFileSync(path.join(app, 'specs/flow.machine.json'), JSON.stringify(SMOKE_CHART));
       writeFileSync(path.join(app, 'atlas.config.ts'), SMOKE_CONFIG);
       for (const [runtime, args] of RUNTIMES) {
+        await must(runtime, [...args, atlas, 'server', '--help'], { cwd: app });
+        await must(runtime, [...args, atlas, 'client', '--help'], { cwd: app });
         console.log(`consumer-smoke: ${runtime} atlas plan --config atlas.config.ts`);
         const planned = await must(runtime, [...args, atlas, 'plan', '--config', 'atlas.config.ts'], { cwd: app });
         if (!/\d+ paths \(/.test(planned)) throw new Error(`atlas plan printed no plan under ${runtime}:\n${planned}`);
@@ -312,9 +317,9 @@ async function main(): Promise<void> {
       // The server: one process that serves the viewer, the API and the stream, on its own data folder, on both runtimes.
       for (const [runtime, args] of RUNTIMES) {
         const site = `node-site-${runtime}`;
-        console.log(`consumer-smoke: ${runtime} atlas-visualizer build --no-data, then atlas serve`);
-        await must(runtime, [...args, visualizer, 'build', '--no-data', '--out', site], { cwd: app });
-        await probeNode(runtime, [...args, atlas, 'serve', '--data', `reports-${runtime}-all`, '--site', site, '--port', '0', '--host', '127.0.0.1', '--no-log'], app);
+        console.log(`consumer-smoke: ${runtime} atlas client build --no-data, then atlas server`);
+        await must(runtime, [...args, atlas, 'client', 'build', '--no-data', '--out', site], { cwd: app });
+        await probeNode(runtime, [...args, atlas, 'server', '--data', `reports-${runtime}-all`, '--site', site, '--port', '0', '--host', '127.0.0.1', '--no-log'], app);
       }
     }
 

@@ -124,7 +124,8 @@ describe('the site', () => {
     const { node } = await seeded();
     const page = await get(node, '/');
     const html = await page.text();
-    expect(html).toContain('window.__ATLAS_CONFIG__={"api":"./api","reportsUrl":"./api/reports","dataUrl":"./api/data/","eventsUrl":"./api/events","effective":true}');
+    const config = JSON.parse(/window.__ATLAS_CONFIG__=(\{[^<]*\})/.exec(html)![1]!);
+    expect(config).toMatchObject({ api: './api', reportsUrl: './api/reports', dataUrl: './api/data/', eventsUrl: './api/events', projectsUrl: './api/projects', effective: true });
     expect(page.headers.get('cache-control')).toBe('no-cache');
     const asset = await get(node, '/assets/app-abc123.js', { 'accept-encoding': 'gzip' });
     expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');

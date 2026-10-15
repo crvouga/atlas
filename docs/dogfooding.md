@@ -51,7 +51,7 @@ and nothing runs just because the package is installed.
 | `@crvouga/atlas/reports/<module>` | Publishing, storing, combining, gating and serving test evidence for specs of any kind. |
 
 It also installs two commands: `atlas` (report, lint, plan, run, merge, export) and
-`atlas-visualizer` (browse specs, runs and reports).
+`atlas client` (browse specs, runs and reports).
 
 `playwright` and `detox` are optional peers: install the one your driver uses, as above. The
 documentation ships in the package, matching the version you installed: the README of each part at
@@ -151,7 +151,7 @@ Do this once per project. Check first that the package is on npm:
    | `@crvouga/atlas-schema` | `@crvouga/atlas/schema` |
    | `@crvouga/atlas-schema/schemas/<file>` | `@crvouga/atlas/schemas/<file>` |
    | `@crvouga/atlas-reports/<module>` | `@crvouga/atlas/reports/<module>` |
-   | `@crvouga/atlas-visualizer` (the `atlas-visualizer` command) | installed with `@crvouga/atlas` |
+   | `@crvouga/atlas client` (the `atlas client` command) | installed with `@crvouga/atlas` |
 
    `@crvouga/atlas`, `@crvouga/atlas/spec` and `@crvouga/atlas/signals` are unchanged. One pass
    over a project's sources does the rest:

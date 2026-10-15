@@ -17,7 +17,7 @@ import * as ts from 'typescript';
 export const REPO = path.resolve(import.meta.dirname, '..', '..');
 
 /** The source folders whose documentation is the package's public documentation. */
-export const DOCUMENTED_ROOTS = ['core', 'reports', 'schema', 'server', 'playwright', 'bun', 'webdriver', 'detox', 'vitest'].map(name => path.join(REPO, 'packages', name, 'src'));
+export const DOCUMENTED_ROOTS = ['core', 'reports', 'schema', 'server', 'playwright', 'bun', 'webdriver', 'detox', 'vitest', 'runners'].map(name => path.join(REPO, 'packages', name, 'src'));
 
 /** One thing that should have a comment and does not. */
 export type Gap = { readonly file: string; readonly line: number; readonly what: string };

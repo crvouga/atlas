@@ -15,7 +15,8 @@
 
 .mark[data-status='running'] {
   color: var(--place);
-  animation: turn 0.9s linear infinite;
+  animation: turn 1.8s linear infinite;
+  opacity: .8;
 }
 
 @keyframes turn {
@@ -509,6 +510,11 @@
   transform: rotate(-135deg);
 }
 
+.excerpt[data-progress] {
+  color: var(--ink-3);
+  font-family: inherit;
+}
+
 .excerpt {
   margin: -4px 14px 10px 40px;
   overflow: hidden;
@@ -894,4 +900,8 @@ a.listRow:hover {
   .listTime {
     display: none;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark[data-status='running'] { animation: none; }
 }

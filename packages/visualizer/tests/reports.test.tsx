@@ -191,7 +191,7 @@ test('a running suite shows each finished test before its package is collected',
   await publishRun(localStore, { at: 20, checks: [ADD] });
   atlas = await openAtlas({ at: '/specs/gherkin', deps: { localStore, live: { bucket: () => bucket, origin: async () => ({ sha: 'b'.repeat(40), branch: 'feat/lists' }) } } });
   await atlas.sees('1 with results');
-  expect(atlas.text()).not.toContain('Running');
+  expect(atlas.host.querySelector('[aria-label="Running"]')).toBeNull();
   await writeUtf8(localStore, 'active/lists.json', JSON.stringify({ packageDir: 'libs/lists', bucket: 'all', startedAtMs: atlas.time.clock.at, plannedChecks: 2 }), 'application/json');
   await atlas.poll();
   await atlas.sees('Running lists · 0 results');

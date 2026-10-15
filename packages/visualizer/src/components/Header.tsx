@@ -1,18 +1,23 @@
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { useAtlas } from '../app/atlas-context';
-import { commandKey, setFinderOpen } from '../find/open';
+import { setFinderOpen } from '../find/open';
 import type { AtlasView } from '../data/model';
 import { LATEST } from '../data/queries';
 import { useEvidence } from '../evidence/evidence-context';
 import { plural } from '../evidence/format';
 import { excludedCount } from '../evidence/sources-panel';
-import { eventsAddress, listenLive, useLiveStatus, type ReportAnnouncement } from '../live/live-stream';
+import { useLiveStatus } from '../live/live-stream';
 import { kindOfAddress, outlinePath, SPEC_KINDS } from '../spec-kind';
+import { runtimeConfig } from '../runtime';
 import { useUiStore } from '../state/ui-store';
 import { DataIssues } from './DataIssues';
+import { ActivityIndicator } from './ActivityIndicator';
 import styles from './Header.module.css';
+import { ProjectPicker, ProjectNotice } from './ProjectPicker';
+import { isStatechartFile } from '@crvouga/atlas/schema';
+import { SearchIcon, ChevronDownIcon } from './icons';
 
 const dateTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -69,38 +74,15 @@ function LiveRuns() {
   );
 }
 
-/** Is this page being kept up to date by its server, and what arrived last. Nothing at all for a static site. */
+/** A fixed-size connection indicator; incoming results never change the header's width. */
 function ServerConnection() {
   const status = useLiveStatus();
-  const [arrival, setArrival] = useState<ReportAnnouncement | null>(null);
-  useEffect(() => {
-    const url = eventsAddress();
-    if (!url) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const stop = listenLive(url, (event) => {
-      if (event.type !== 'report' || !event.report.added.length) return;
-      setArrival(event.report);
-      clearTimeout(timer);
-      timer = setTimeout(() => setArrival(null), 8_000);
-    });
-    return () => {
-      clearTimeout(timer);
-      stop();
-    };
-  }, []);
   if (status === 'off') return null;
-  const first = arrival?.added[0];
-  const failed = arrival?.added.reduce((sum, layer) => sum + (layer.counts?.failed ?? 0), 0) ?? 0;
+  const label = status === 'live' ? 'Live updates connected' : status === 'connecting' ? 'Connecting to live updates' : 'Live updates disconnected; reconnecting';
   return (
-    <span className={styles.connection} data-status={status} role="status" title={status === 'live' ? 'This page updates as results reach the server.' : status === 'connecting' ? 'Connecting to the server.' : 'The connection to the server was lost. Trying again; the report on screen is the last one received.'}>
+    <span className={styles.connection} data-status={status} role="status" aria-label={label} title={label}>
       <span className={styles.connectionDot} aria-hidden="true" />
-      {arrival && first
-        ? `${first.producer}${first.environment ? ` · ${first.environment}` : ''}${arrival.addedTotal > 1 ? ` +${arrival.addedTotal - 1}` : ''}${failed ? ` · ${plural(failed, 'failure', 'failures')}` : ' · new results'}`
-        : status === 'live'
-          ? 'Live'
-          : status === 'connecting'
-            ? 'Connecting'
-            : 'Reconnecting'}
+      <span className="sr-only">{label}</span>
     </span>
   );
 }
@@ -124,6 +106,7 @@ export function Header() {
   const { pathname } = useLocation();
   const kind = kindOfAddress(pathname);
   const product = productName(view?.title);
+  const hasCharts = evidence.files.some(isStatechartFile);
   useEffect(() => {
     document.title = product;
   }, [product]);
@@ -131,37 +114,92 @@ export function Header() {
     () =>
       SPEC_KINDS.map((entry) => {
         const files = evidence.files.filter(entry.accepts);
-        return { kind: entry, files: files.length, failing: files.filter((file) => (evidence.view.specs.get(outlinePath(file))?.summary.counts.failed ?? 0) > 0).length };
+        return { kind: entry, files: files.length, running: files.some(file => (evidence.view.specs.get(outlinePath(file))?.summary.counts.running ?? 0) > 0), failing: files.filter((file) => (evidence.view.specs.get(outlinePath(file))?.summary.counts.failed ?? 0) > 0).length };
       }).filter((tab) => tab.files > 0 || tab.kind === kind),
     [evidence.files, evidence.view, kind]
   );
   return (
     <header className={styles.header}>
       <Link to="/" search={(prev) => runOnly(prev)} className={styles.home}>
-        {product}
+        Atlas
       </Link>
-      <nav className={styles.tabs} aria-label="Spec type">
+      <div className={styles.breadcrumbs}>
+      <HeaderMenu label="Spec type" working={tabs.some(tab => tab.running)} caption={kind?.label ?? (hasCharts ? 'Statecharts' : 'Specs')}>
+      <nav className={styles.tabs} aria-label="Spec type" onClick={event => event.currentTarget.closest('details')?.removeAttribute('open')}>
         <Link to="/" search={(prev) => runOnly(prev)} aria-current={pathname.startsWith('/specs/') ? undefined : 'page'}>
-          Statecharts
+          {hasCharts || !evidence.ready ? 'Statecharts' : 'Project reports'}
         </Link>
         {tabs.map((tab) => (
           <Link key={tab.kind.id} to="/specs/$kind" params={{ kind: tab.kind.id }} search={{}} aria-current={tab.kind === kind ? 'page' : undefined}>
             {tab.kind.label}
+            {tab.running && <ActivityIndicator label={`${tab.kind.label} tests running`} />}
             {tab.failing > 0 && <span className={styles.failing} aria-label={`${plural(tab.failing, tab.kind.one, tab.kind.many)} failing`}>{tab.failing}</span>}
           </Link>
         ))}
       </nav>
+      </HeaderMenu>
+      <SpecBreadcrumb />
+      </div>
       <div className={styles.tools}>
         <ServerConnection />
-        <LiveRuns />
-        {!kind && view && <RunPicker view={view} />}
-        {!kind && view && <DataIssues issues={view.issues} />}
-        <SourcesButton />
-        <button type="button" className={styles.search} aria-keyshortcuts="Meta+K Control+K" onClick={() => setFinderOpen(true)}>
-          Find a flow
-          <kbd>{commandKey()}</kbd>
+        <button type="button" className={styles.search} aria-label="Find a flow" title="Search (⌘K / Ctrl+K)" aria-keyshortcuts="Meta+K Control+K" onClick={() => setFinderOpen(true)}>
+          <SearchIcon size={16} />
         </button>
+        <HeaderMenu label="View options" caption="•••" tools>
+          <div className={styles.options}>
+            {!kind && view && <div className={styles.optionGroup}><span className={styles.optionLabel}>Run</span><RunPicker view={view} /></div>}
+            <LiveRuns />
+            <SourcesButton />
+            {!kind && view && <DataIssues issues={view.issues} />}
+            {runtimeConfig()?.api && <a href="/admin" className={styles.sources}>Settings</a>}
+            <ProjectNotice />
+          </div>
+        </HeaderMenu>
+        <ProjectPicker />
       </div>
     </header>
   );
+}
+
+function HeaderMenu({ label, caption, tools = false, working = false, children }: { label: string; caption: string; tools?: boolean; working?: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key === 'Escape' && ref.current?.open) { ref.current.open = false; ref.current.querySelector('summary')?.focus(); }
+      } else if (event.target instanceof Node && !ref.current?.contains(event.target) && ref.current) ref.current.open = false;
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
+  }, []);
+  return <details ref={ref} className={styles.menu} data-tools={tools || undefined} onToggle={event => {
+    if (event.currentTarget.open) for (const other of document.querySelectorAll<HTMLDetailsElement>('header details[open]')) if (other !== event.currentTarget) other.open = false;
+  }}>
+    <summary role="button" aria-label={label}>{working && <ActivityIndicator label="Specs running" />}{caption}{!tools && <ChevronDownIcon size={12} />}</summary>
+    <div className={styles.dropdown}>{children}</div>
+  </details>;
+}
+
+function SpecBreadcrumb() {
+  const evidence = useEvidence();
+  const { view } = useAtlas();
+  const { pathname } = useLocation();
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
+  const kind = kindOfAddress(pathname);
+  const chart = pathname.startsWith('/chart/') ? decodeURIComponent(pathname.split('/')[2] ?? '') : null;
+  const options = kind ? evidence.files.filter(kind.accepts).map(file => ({ id: file, name: evidence.titleOf(file), running: (evidence.view.specs.get(outlinePath(file))?.summary.counts.running ?? 0) > 0 }))
+    : [...(view?.charts.values() ?? [])].map(item => ({ id: item.id, name: item.name, running: (evidence.view.specs.get(outlinePath(item.file))?.summary.counts.running ?? 0) > 0 }));
+  if (!options.length) return null;
+  const running = options.some(option => option.running);
+  return <><span aria-hidden="true">›</span><label className={styles.picker} data-running={running || undefined}><span className="sr-only">Spec</span>
+    {running && <span className={styles.pickerActivity}><ActivityIndicator label="Specs running" /></span>}
+    <select aria-label="Spec" className={styles.select} value={kind ? search.spec ?? '' : chart ?? ''} onChange={event => {
+      const value = event.target.value;
+      if (kind) void navigate({ to: '/specs/$kind', params: { kind: kind.id }, search: value ? { spec: value } : {} });
+      else if (value) void navigate({ to: '/chart/$chartId', params: { chartId: value }, search: {} });
+      else void navigate({ to: '/', search: {} });
+    }}><option value="">All specs</option>{options.map(option => <option key={option.id} value={option.id}>{option.name}{option.running ? ' · Running' : ''}</option>)}</select>
+  </label></>;
 }

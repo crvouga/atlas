@@ -6,7 +6,7 @@ unit tests, linters, anything that ends in "this check passed or failed". If thi
 disagree, that is a bug: [file it](reporting-issues.md).
 
 The contract is small on purpose. It is one document (the **layer**), one rule (how layers compose),
-and one interface (the **backend** that stores them). Everything else, the viewer, the gate, the CLI,
+and one interface (the **backend** that stores them). Everything else, the client, the gate, the CLI,
 is built on those three and can be replaced.
 
 - [Concepts](#concepts)
@@ -289,7 +289,7 @@ import { verifyObjectStore } from '@crvouga/atlas/reports/object-store-conforman
 const { ok, failures } = await verifyObjectStore(myS3Store); // writes under a scratch prefix, cleans up
 ```
 
-Several backends are one report: pass them all to `combineBackends`, to the viewer
+Several backends are one report: pass them all to `combineBackends`, to the client
 (`reportsHost`), or to the CLI (`--store` for directories, `--backends <module>` for the rest). A
 backend that cannot be reached is named in the notices and leaves the others usable; asking again
 retries it.
@@ -302,7 +302,7 @@ entry whose content has not arrived:
 A layer's checks are the contract. Next to them the store holds the two other things a whole project
 needs, written the same way (content first, catalog entry last, nothing overwritten):
 
-- **Spec sets** (`layers/specs/…`): the specs of one commit, so a viewer needs no checkout. A spec set is
+- **Spec sets** (`layers/specs/…`): the specs of one commit, so a client needs no checkout. A spec set is
   `{ schemaVersion, id, branch, sha, recordedAtMs, freshness?, files: [{ path, digest, fingerprint, kind,
   title, domain, bytes }] }` ([`spec-set.schema.json`](../packages/schema/schemas/spec-set.schema.json)). Its
   id is the digest of the branch, commit and file digests, so one commit's specs are one set however many
@@ -310,7 +310,7 @@ needs, written the same way (content first, catalog entry last, nothing overwrit
   The outline a report is laid over is the **newest set from `main`** (then `master`, then the newest);
   a set from a modified checkout is used only if no committed set exists.
 - **Run bundles** (`layers/runs/<run>/…` and `layers/runs/index/…`): a finished statechart run with its
-  screenshots and clips, for the viewer. Uploaded only when the run's privacy scan passed; the manifest is
+  screenshots and clips, for the client. Uploaded only when the run's privacy scan passed; the manifest is
   written last, then the catalog entry.
 
 The keys of a layer, bottom up:
@@ -376,13 +376,13 @@ and composed with layers; Atlas never rewrites them. `copyStore` and `atlas repo
   the number of checks (plus a few bytes for each layer ever read), not the age of the project, and a refresh
   with nothing new is one request for the newest page of the catalog. Folding is exact in any order because the winner
   rule is a total order; a test proves the incremental report equals combining every layer from scratch.
-  The node sends the viewer only that: one request, only winning rows, with an ETag.
+  The node sends the client only that: one request, only winning rows, with an ETag.
 - Measured on a laptop with a directory backend: 300 layers of 50 checks in about 0.2 s; 1,000 layers
   of 100 checks, each recorded against 1,000 specs (100,000 results), in about 0.9 s. Composing two
   thousand layers of 100 checks (200,000 results) already in memory takes about 0.3 s.
   `performance.test.ts` holds budgets ten times looser, to catch an accidental quadratic step on a
   slow machine.
-- A directory backend lists only the directories a prefix can reach. The viewer polls a small index,
+- A directory backend lists only the directories a prefix can reach. The client polls a small index,
   reads an immutable layer once and caches it forever, and loads recordings only when opened.
 
 ## Other documents of the contract
@@ -394,7 +394,7 @@ and composed with layers; Atlas never rewrites them. `copyStore` and `atlas repo
 | Report status | `report-status.schema.json` | The output of `atlas report status --format json`. |
 | Spec set | `spec-set.schema.json` | The specs of one commit, as published beside the layers. |
 | Run manifest | `manifest.schema.json` | What `atlas run` writes for a statechart run. Publish it as a layer with `--manifest`. |
-| Runs index, sources, change notices | `runs-index`, `report-sources`, `atlas-change` | How the viewer finds runs. See [report backends](report-backends.md). |
+| Runs index, sources, change notices | `runs-index`, `report-sources`, `atlas-change` | How the client finds runs. See [report backends](report-backends.md). |
 | CloudEvents | `cloud-event.schema.json` | Business events a run observed. |
 
 All of them are JSON Schema 2020-12 and ship in the package at `@crvouga/atlas/schemas/<name>.schema.json`.

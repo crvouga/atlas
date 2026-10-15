@@ -16,8 +16,8 @@ type Exports = Readonly<Record<string, string>>;
 
 /** The package's `exports` map, source form: import path (`@crvouga/atlas/reports/*`) to source path. */
 function exportsMap(): Exports {
-  const pkg = JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8')) as { name: string; exports: Record<string, string> };
-  return Object.fromEntries(Object.entries(pkg.exports).map(([subpath, target]) => [path.posix.join(pkg.name, subpath), target.replace(/^\.\//, '')]));
+  const pkg = JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8')) as { name: string; exports: Record<string, string | { default: string }> };
+  return Object.fromEntries(Object.entries(pkg.exports).map(([subpath, target]) => [path.posix.join(pkg.name, subpath), (typeof target === 'string' ? target : target.default).replace(/^\.\//, '')]));
 }
 
 /** The import specifiers under which a source file can be imported (`@crvouga/atlas/reports/compose`), from the exports map. */

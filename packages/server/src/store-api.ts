@@ -35,13 +35,15 @@ export async function readLimited(request: Request, limit: number): Promise<Uint
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > limit) { await reader.cancel(); throw new Refusal(413, `The body is over the limit of ${limit} bytes`); }
-    chunks.push(value);
-  }
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) { await reader.cancel(); throw new Refusal(413, `The body is over the limit of ${limit} bytes`); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
   const out = new Uint8Array(size);
   let at = 0;
   for (const chunk of chunks) { out.set(chunk, at); at += chunk.byteLength; }
@@ -72,6 +74,14 @@ export function storeApi(options: StoreApiOptions) {
   const { store, auth } = options;
   // A layer's manifest is validated when it arrives and its catalog entry follows: what was read the first time serves the second.
   const recent = new Map<string, ReportLayer>();
+  // Serialize only competing writes to the same key. Other uploads retain their concurrency.
+  const writing = new Map<string, Promise<unknown>>();
+  async function exclusive<T>(key: string, action: () => Promise<T>): Promise<T> {
+    const previous = writing.get(key) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(action);
+    writing.set(key, next);
+    try { return await next; } finally { if (writing.get(key) === next) writing.delete(key); }
+  }
   const refuse = (c: Context, status: number, message: string) => c.json({ error: message }, status as 400);
 
   app.get('/', async c => {
@@ -119,15 +129,17 @@ export function storeApi(options: StoreApiOptions) {
     if (name === null || !validKey(name)) return refuse(c, 422, 'Not a key Atlas holds');
     try {
       const bytes = await readLimited(c.req.raw, options.maxObjectBytes);
-      const kind = await validateUpload(name, bytes, store, layer => { recent.set(layer.id, layer); if (recent.size > 8) recent.delete(recent.keys().next().value!); });
-      // A blob's name is the digest of what is in it, which was just checked: one that is there is this one, however it was compressed.
-      const present = kind === 'blob' && (await store.head(name)) ? 'same' : await sameBytes(store, name, bytes);
-      // Scratch objects may be overwritten (an object store's contract says writing a key twice is fine); layers may not.
-      if (present === 'different' && kind !== 'scratch') throw new Refusal(409, `${name} already exists with other content. Layers are immutable: publish a new one.`);
-      if (present !== 'same') await store.put(name, bytes, c.req.header('content-type') ?? 'application/octet-stream');
-      // Catalog entries make a layer, spec set or run visible, so everyone is told only once they are in.
-      if (present === 'absent' || isCatalog(kind)) await options.onStored(name, kind, kind === 'layer-catalog' ? recent.get(classify(name)?.id ?? '') : undefined);
-      return c.json({ ok: true, key: name, kind, created: present === 'absent' }, present === 'absent' ? 201 : 200);
+      return await exclusive(name, async () => {
+        const kind = await validateUpload(name, bytes, store, layer => { recent.set(layer.id, layer); if (recent.size > 8) recent.delete(recent.keys().next().value!); });
+        // A blob's name is the digest of what is in it, which was just checked: one that is there is this one, however it was compressed.
+        const present = kind === 'blob' && (await store.head(name)) ? 'same' : await sameBytes(store, name, bytes);
+        // Scratch objects may be overwritten (an object store's contract says writing a key twice is fine); layers may not.
+        if (present === 'different' && kind !== 'scratch') throw new Refusal(409, `${name} already exists with other content. Layers are immutable: publish a new one.`);
+        if (present !== 'same') await store.put(name, bytes, c.req.header('content-type') ?? 'application/octet-stream');
+        // Catalog entries make a layer, spec set or run visible, so everyone is told only once they are in.
+        if (present === 'absent' || isCatalog(kind)) await options.onStored(name, kind, kind === 'layer-catalog' ? recent.get(classify(name)?.id ?? '') : undefined);
+        return c.json({ ok: true, key: name, kind, created: present === 'absent' }, present === 'absent' ? 201 : 200);
+      });
     } catch (error) {
       if (error instanceof Refusal) return refuse(c, error.status, error.message);
       throw error;

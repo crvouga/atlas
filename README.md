@@ -7,7 +7,7 @@ backends, and tells you in one command whether the product still does what it wa
 
 - **Any spec, any runner.** Anything that ends in "this check passed or failed" publishes a *layer*:
   from a JUnit or CTRF file, a ten-line script, or code. No runner and no notation is privileged.
-- **Layered, never partitioned.** A report is computed from layers, not stored as "the run". Partial
+- **Layered within each project.** A report is computed from layers, not stored as "the run". Partial
   runs on separate nodes, branches and devices are how a report is built, and they compose without
   coordinating: the same layers give the same report in any order, split any way.
 - **Open evidence.** A result carries whatever your framework produces: screenshots, videos, traces, logs, DOM
@@ -16,9 +16,9 @@ backends, and tells you in one command whether the product still does what it wa
   Gherkin, Quint, DMN, Alloy, OpenSLO); evidence stays open.
 - **Open standards, stable schemas.** JUnit XML and CTRF in, JSON Schema 2020-12 contracts, a
   versioned layer format with a golden fixture, and an `ObjectStore` interface any bucket fits.
-- **One server, live.** A project runs one `atlas serve`: a Bun API that serves the viewer from the same host.
+- **One node, many projects.** `atlas server` runs a Bun API and serves the Atlas client from the same host. Reports, specs, recordings and live progress are partitioned by project slug.
   Every laptop and CI job sends results to it as they finish (`atlas report publish`, or `atlas report stream` while
-  a suite runs), it keeps them on its own disk (or in S3, R2, MinIO), and every viewer sees the combined report
+  a suite runs), it keeps them on its own disk (or in S3, R2, MinIO), and every client sees the combined report
   update live, receiving only what changed ([the server](docs/server.md), [deploying](docs/deploying.md)).
 - **Fast and fail-closed.** Publishing is two small writes. A thousand layers of a hundred checks
   combine in about a second. An unreadable layer, a downed backend or a check still running is never
@@ -28,7 +28,7 @@ backends, and tells you in one command whether the product still does what it wa
 
 ```
  any suite   ──▶ layer ─┐                              atlas report status   exit 1 unless it passes
- any node    ──▶ layer ─┼─▶ backends ─▶ combine ─▶     the visualizer        browse it beside the specs
+ any node    ──▶ layer ─┼─▶ backends ─▶ combine ─▶     the Atlas client        browse it beside the specs
  any branch  ──▶ layer ─┘   (directories, buckets, …)   combineBackends()     your own code
 ```
 
@@ -39,6 +39,23 @@ backends, and tells you in one command whether the product still does what it wa
 > uses it, read **[integrating Atlas](docs/integrating.md)**, then
 > [using Atlas from another project](docs/dogfooding.md) and [reporting issues](docs/reporting-issues.md).
 > Releases are automatic: see [releasing](https://github.com/crvouga/atlas/blob/main/docs/releasing.md).
+
+## Run this repository's example
+
+Use two terminals:
+
+```sh
+bun atlas          # starts the project-agnostic Atlas node at http://localhost:5180
+bun example:run    # runs tests and streams results, current steps and progress as they execute
+```
+
+The server starts independently with data in `./atlas-data`; it never loads example specs or reports. `bun example:run` publishes the Todo example under `todo-app`. Select a project using the top-right picker, then use the spec dropdown breadcrumbs to navigate. Other projects set `ATLAS_SERVER_URL`, `ATLAS_PROJECT` (for example `checkout-service`) and their publish token. Every uploader talks to the node; storage credentials stay on the server.
+
+Every Gherkin scenario runs, including sharing and renaming. Test reports show running spinners,
+live step logs and a Running status filter. Producers send heartbeats every
+5 seconds. A run becomes interrupted after 30 seconds without a heartbeat, or 15 minutes without progress;
+configure `ATLAS_RUN_TIMEOUT_SECONDS` and `ATLAS_RUN_STALL_SECONDS` (0 disables the progress timeout),
+or edit these settings in the client. An interruption never turns missing outcomes into passes.
 
 ## For AI agents
 
@@ -105,10 +122,10 @@ bun add -d @crvouga/atlas
 | [`@crvouga/atlas/webdriver`](packages/webdriver) | W3C WebDriver driver with no dependencies: Safari, Chrome, Firefox and Edge, and native iOS and Android apps through Appium. |
 | [`@crvouga/atlas/detox`](packages/detox) | Detox driver for iOS and Android apps, inside a Detox test run. |
 | [`@crvouga/atlas/vitest`](packages/vitest) | Run a config as a test suite in Vitest, `bun test` or any Jest-style runner, one test per planned path. |
-| [`atlas-visualizer`](packages/visualizer) (command) | Browse specs, charts and layered reports: every spec with its result per environment, every state with its screenshots, every transition with its clip. |
+| [`atlas client`](packages/visualizer) (command) | Browse specs, charts and layered reports: every spec with its result per environment, every state with its screenshots, every transition with its clip. |
 
 Two commands install with it: `atlas` (`report`, `lint`, `plan`, `run`, `merge`, `export`) and
-`atlas-visualizer`.
+`atlas client`.
 
 ## Reports for any spec
 
@@ -147,10 +164,10 @@ has results. `--format json` is a [stable schema](packages/schema/schemas/report
 means the report does not pass; 2 means the command itself was wrong (a missing store directory, a bad
 flag).
 
-**The server** is `atlas serve`: one process that serves the viewer, takes in results and streams the report to
-every viewer. Point `ATLAS_STORE` at it and every developer's laptop and every CI job sends results with the same
+**The server** is `atlas serve`: one process that serves the client, takes in results and streams the report to
+every client. Point `ATLAS_STORE` at it and every developer's laptop and every CI job sends results with the same
 commands that write to a folder; everyone then looks at one report, live. Results are kept in its data folder
-unless you choose a bucket. `atlas dev` runs the same server with the viewer's dev server in front, so
+unless you choose a bucket. `atlas dev` runs the same server with the client's dev server in front, so
 development is one host too. See [the server](docs/server.md) and
 [running Atlas for a project](docs/deploying.md).
 
@@ -163,7 +180,7 @@ my-suite --json | atlas report stream --producer e2e --environment ios  # or as 
 atlas report status --branch main --ignore-modified  # the gate, answered by the server
 ```
 
-**The viewer** shows each spec (Gherkin, Quint, DMN, Alloy, OpenSLO, and the rest by file type) with
+**The client** shows each spec (Gherkin, Quint, DMN, Alloy, OpenSLO, and the rest by file type) with
 its combined result per environment and the layer behind it. See
 [integrating Atlas](docs/integrating.md#6-browse-it).
 
@@ -190,7 +207,7 @@ understand, or a JSON Schema it publishes.
 | [JUnit XML](https://github.com/testmoapp/junitxml) | Read: any test runner's results become a layer. Written: `junit.xml`, one test case per statechart path. |
 | [CTRF](https://ctrf.io) | Read: any CTRF report becomes a layer. Written: `ctrf.json` for each statechart run. |
 | [JSON Schema 2020-12](https://json-schema.org/draft/2020-12) | The contract: layers, check files, report status, run manifests, journeys, state nodes, timelines and the runs index (`@crvouga/atlas/schemas/*.schema.json`) |
-| [Gherkin](https://cucumber.io/docs/gherkin/), [Quint](https://quint-lang.org), [DMN](https://www.omg.org/spec/DMN), [Alloy](https://alloytools.org), [OpenSLO](https://openslo.com) | Spec kinds the viewer lays results over, each in its own tab. Any other file is a spec of its own type. |
+| [Gherkin](https://cucumber.io/docs/gherkin/), [Quint](https://quint-lang.org), [DMN](https://www.omg.org/spec/DMN), [Alloy](https://alloytools.org), [OpenSLO](https://openslo.com) | Spec kinds the client lays results over, each in its own tab. Any other file is a spec of its own type. |
 | [W3C SCXML](https://www.w3.org/TR/scxml/) | Statecharts (`*.scxml`), with business metadata in an `atlas` XML namespace |
 | [XState v5](https://stately.ai/docs/machines) machine config | Statecharts (`*.machine.json`, `*.machine.yaml`): the JSON shape Stately Studio imports and exports |
 | [WebVTT](https://www.w3.org/TR/webvtt1/) | Captions for every clip: each tap, keystroke, system call and screen change |
@@ -228,3 +245,5 @@ in **[Executable statecharts](docs/statecharts.md)**, which starts with a runnab
 ## License
 
 [MIT](LICENSE)
+
+Native [CodeceptJS, Mocha, Jest and Node test reporters](docs/runners.md) upload directly to the project server. Open **Settings** in the client to configure storage and report settings for the next restart.

@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { publishChecks } from '../../reports/src/publish-checks';
 import { directoryStore } from '../../reports/src/directory-store';
+import { listen } from '../src/host';
 import { devMain } from '../src/dev';
 
 const cleanup: string[] = [];
@@ -25,7 +26,14 @@ describe('atlas dev', () => {
       page = await fetch(base).then(r => r.text(), () => '');
       if (!page) await new Promise(resolve => setTimeout(resolve, 100));
     }
-    expect(page).toContain('window.__ATLAS_CONFIG__={"api":"./api","reportsUrl":"./api/reports","dataUrl":"./api/data/","eventsUrl":"./api/events","effective":true}');
+    const config = JSON.parse(/window.__ATLAS_CONFIG__=(\{[^<]*\})/.exec(page)![1]!);
+    expect(config).toMatchObject({ api: './api', reportsUrl: './api/reports', dataUrl: './api/data/', eventsUrl: './api/events', projectsUrl: './api/projects', effective: true });
+    const admin = await fetch(`${base}/admin`);
+    expect(admin.status).toBe(200);
+    expect(await admin.text()).toContain('Atlas server settings');
+    const settings = await fetch(`${base}/api/settings`);
+    expect(settings.status).toBe(200);
+    expect((await settings.json()).active.data).toBe(dir);
     const effective = await (await fetch(`${base}/api/reports/evidence/effective`)).json() as { layers: unknown[] };
     expect(effective.layers.length).toBe(1);
 
@@ -44,5 +52,14 @@ describe('atlas dev', () => {
     controller.abort();
     expect(await done).toBe(0);
     expect(output).toContain('Data in');
+  }, 60_000);
+
+  test('a busy viewer port fails instead of silently sending publishers to another server', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'atlas-dev-busy-'));
+    cleanup.push(dir);
+    const occupied = await listen(() => Response.json({ other: true }), { host: '127.0.0.1', port: 0, maxBodyBytes: 1024 });
+    try {
+      await expect(devMain(['--port', String(occupied.port), '--data', dir], { cwd: dir, env: { HOME: dir }, out: () => {} })).rejects.toThrow('already in use');
+    } finally { await occupied.close(); }
   }, 60_000);
 });

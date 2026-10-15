@@ -3,7 +3,7 @@
 > [!NOTE]
 > Atlas has two kinds of backend, and this page is about the first.
 >
-> - **Run sources** (this page): where the viewer finds *statechart runs* (`manifest.json` per run)
+> - **Run sources** (this page): where the client finds *statechart runs* (`manifest.json` per run)
 >   and live snapshots of a run in progress: a directory, HTTP files, or an HTTP API.
 > - **Layer stores**: where *layers of evidence for any kind of spec* are kept, an `ObjectStore`
 >   such as a directory or a bucket. Any number of them are one report. See
@@ -14,7 +14,7 @@
 
 Atlas maps the product's areas, screens, events and journeys from a spec, then overlays evidence
 of what the product did. Specs and reports are independent. Local development, CI, device labs
-and hosted runners can supply reports to the same product atlas simultaneously. The viewer works
+and hosted runners can supply reports to the same product atlas simultaneously. The client works
 before the first report exists.
 
 ## Connect sources
@@ -33,9 +33,9 @@ The default source is the directory passed to `--runs`. Add sources with a JSON 
 ```
 
 ```sh
-atlas-visualizer dev --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json
-atlas-visualizer build --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json --out ./atlas-site
-atlas-visualizer publish-data --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json --out ./atlas-data
+atlas client dev --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json
+atlas client build --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json --out ./atlas-site
+atlas client publish-data --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json --out ./atlas-data
 ```
 
 Directory paths resolve against the configuration file. Source ids are unique, stable names
@@ -45,7 +45,7 @@ Credentials must not appear in this file or URLs: descriptors are sent to the br
 included in static output.
 
 Remote services must allow requests
-from the viewer's origin. For private services, use an authenticated same-origin gateway. Atlas
+from the client's origin. For private services, use an authenticated same-origin gateway. Atlas
 does not download private GitHub artifacts or sign object-storage requests itself: expose their
 published data over HTTP or implement a gateway using the contract below.
 
@@ -113,7 +113,7 @@ updates to keep a snapshot steady; manual Refresh still works. Resuming refreshe
 
 ## Identity, failures and publishing
 
-Viewer identities combine source ids and native run ids. Cache keys include the backend location
+Client identities combine source ids and native run ids. Cache keys include the backend location
 and transport. Matching run names cannot mix results or media. Shared links retain the qualified
 identity; old links containing only a run id still resolve to workspace reports.
 
@@ -136,7 +136,7 @@ URLs and never expose the directory paths.
 
 `src/data/adapters/report-backend.ts` defines `ReportBackend`: stable identity and cache key,
 report listing, snapshot loading, media resolution and optional change subscription. The query
-layer consumes this separately from the spec adapter. An embedded viewer can supply a backend
+layer consumes this separately from the spec adapter. An embedded client can supply a backend
 through `ReportSourcesContext`; a new built-in transport can add a factory alongside
 `createReportBackend`. Screens, maps and journeys require no transport-specific code.
 

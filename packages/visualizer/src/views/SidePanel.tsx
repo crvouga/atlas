@@ -12,6 +12,7 @@ import { Stage } from '../looks/Stage';
 import { mapScope } from '../layout/graph';
 import type { MapSelection } from '../map/ChartMap';
 import styles from './views.module.css';
+import { ChartTests } from './ChartTests';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -314,6 +315,7 @@ export function SidePanel({ view, chartId, selection }: { view: AtlasView; chart
   return (
     <article className={styles.plateScroll} aria-label={label}>
       {body}
+      <ChartTests view={view} chartId={chartId} />
       <Link
         to="/chart/$chartId"
         params={{ chartId }}

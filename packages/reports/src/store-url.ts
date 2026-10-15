@@ -99,7 +99,7 @@ export function openStore(spec: string, options: { readonly base: string; readon
     const env = options.env ?? {};
     const token = serverToken(env, options.role ?? { id: '', soleServer: true });
     if (token) refuseClearToken(location.url, env);
-    const server = httpStore({ url: location.url, ...(token ? { token } : {}), ...(options.fetch ? { fetch: options.fetch } : {}) });
+    const server = httpStore({ url: location.url, ...(env.ATLAS_PROJECT ? { project: env.ATLAS_PROJECT } : {}), ...(token ? { token } : {}), ...(options.fetch ? { fetch: options.fetch } : {}) });
     return { store: server, label: server.label, location, server };
   }
   const s3 = s3Store({

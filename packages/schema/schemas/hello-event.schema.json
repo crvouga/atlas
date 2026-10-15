@@ -11,6 +11,10 @@
     },
     "time": {
       "type": "number"
+    },
+    "heartbeatMs": {
+      "type": "number",
+      "exclusiveMinimum": 0
     }
   },
   "required": [

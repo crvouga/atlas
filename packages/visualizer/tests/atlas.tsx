@@ -4,6 +4,7 @@ import { textFingerprint } from '@crvouga/atlas/reports/layer-merge';
 import { publishLayer } from '@crvouga/atlas/reports/layer-store';
 import type { LayerSummary } from '@crvouga/atlas/reports/layer-types';
 import type { RunReport } from '@crvouga/atlas/reports/report-types';
+import type { LiveRun } from '@crvouga/atlas/schema';
 import { ALL_SOURCES } from '@crvouga/atlas/reports/evidence-view';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
@@ -90,7 +91,7 @@ export async function publishRun(store: ObjectStore, args: { producer?: string; 
 export type Atlas = Awaited<ReturnType<typeof openAtlas>>;
 
 /** The whole viewer at an address, reading specs from `specs` and reports from an in-memory reports API. */
-export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps>; specs?: Record<string, string>; down?: { value: boolean }; /** An Atlas node to answer `/evidence/effective`, as a deployed one does. */ node?: { fetch: (request: Request) => Promise<Response> } }) {
+export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps>; specs?: Record<string, string>; down?: { value: boolean }; live?: () => readonly LiveRun[] | Promise<readonly LiveRun[]>; projects?: () => Response; events?: boolean; /** An Atlas node to answer `/evidence/effective`, as a deployed one does. */ node?: { fetch: (request: Request) => Promise<Response> } }) {
   const specs = args.specs ?? SPECS;
   const time = testClock(1_000_000);
   const app = createReportsApp({
@@ -102,6 +103,8 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
   const requests: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
+    if (url === 'http://atlas.test/api/projects' && args.projects) return args.projects();
+    if (url === 'http://atlas.test/api/live' && args.live) return Response.json({ runs: await args.live() });
     if (!url.startsWith(REPORTS_URL)) return new Response('not found', { status: 404 });
     requests.push(url.slice(REPORTS_URL.length));
     if (args.down?.value) return new Response('{"error":"reports_unavailable"}', { status: 503 });
@@ -124,7 +127,7 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
     mediaUrl: (_, path) => path,
     subscribe: null
   };
-  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = args.node ? { reportsUrl: REPORTS_URL, effective: true } : undefined;
+  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = args.node || args.live || args.projects ? { reportsUrl: REPORTS_URL, effective: !!args.node, ...(args.live || args.projects ? { api: 'http://atlas.test/api' } : {}), ...(args.events ? { eventsUrl: 'http://atlas.test/api/events' } : {}), ...(args.projects ? { projectsUrl: 'http://atlas.test/api/projects' } : {}) } : undefined;
   useUiStore.setState({ excluded: ALL_SOURCES, resultFilter: 'all', sourcesOpen: false });
   const router = createAtlasRouter(createMemoryHistory({ initialEntries: [args.at] }));
   const client = createQueryClient();
@@ -177,6 +180,9 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
     /** The same for a page served by a node, which reads the whole report in one request. */
     async pollReport() {
       await act(async () => client.refetchQueries({ queryKey: ['evidence-effective'] }));
+    },
+    async pollLive() {
+      await act(async () => client.refetchQueries({ queryKey: ['live-runs'] }));
     },
     async close() {
       (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = undefined;

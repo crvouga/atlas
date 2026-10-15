@@ -2,7 +2,7 @@
  * @module Server-sent events
  *
  * What the server tells every connected viewer the moment it happens. A viewer that misses some (a dropped connection, a
- * laptop that slept) loses nothing: events say "something changed", the state is always fetched, and a viewer reads again
+ * laptop that slept) loses nothing: report events announce changes, run events carry bounded progress snapshots, and a viewer reads authoritative state again
  * when it reconnects. `EventHub` encodes each event once for all viewers, sends a named `ping` every heartbeat so proxies
  * keep the connection and a quiet server is told apart from a dead one, refuses past a maximum number of viewers (they poll
  * instead), and lets go of a viewer that has stopped reading rather than hold its backlog.
@@ -10,8 +10,8 @@
  * @see docs/server.md#streaming
  */
 
-/** The events the server publishes: `hello` (sent first to a new viewer), `report` (layers arrived) and `atlas:change` (specs or runs changed). `ping` is the heartbeat, sent by the hub itself. */
-export type EventName = 'hello' | 'report' | 'atlas:change';
+/** The events the server publishes: `hello` (sent first to a new viewer), `report` (layers arrived) `atlas:change` (specs or runs changed), `run` (a bounded live lease snapshot), and `projects` (project discovery changed). `ping` is the heartbeat, sent by the hub itself. */
+export type EventName = 'hello' | 'report' | 'atlas:change' | 'run' | 'projects';
 
 type Subscriber = { readonly send: (chunk: Uint8Array) => void; readonly close: () => void };
 

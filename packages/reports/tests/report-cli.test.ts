@@ -283,6 +283,8 @@ describe('a store given as a URL or by the environment', () => {
     const byId = Object.fromEntries(policy.Statement.map(statement => [statement.Sid, statement]));
     expect(byId.AtlasPublish!.Resource).toBe('arn:aws:s3:::my-bucket/atlas/shop/layers/*');
     expect(byId.AtlasPublish!.Action).toEqual(['s3:PutObject', 's3:GetObject']);
+    expect(byId.AtlasLiveRuns!.Resource).toBe('arn:aws:s3:::my-bucket/atlas/shop/server/live/*');
+    expect(byId.AtlasLiveRuns!.Action).toEqual(['s3:GetObject', 's3:PutObject']);
     expect(byId.AtlasList!.Resource).toBe('arn:aws:s3:::my-bucket');
     expect(JSON.stringify(byId.AtlasList!.Condition)).toContain('atlas/shop/');
     // A HEAD of a missing layer carries no prefix: the condition must not apply to it, or S3 answers 403 instead of 404.

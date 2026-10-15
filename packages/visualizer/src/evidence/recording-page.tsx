@@ -10,6 +10,7 @@ import styles from './evidence.module.css';
 import { duration, statusWord, useNow } from './format';
 import { Origin, StatusMark } from './marks';
 import { Timeline } from './recording';
+import { TestProgress, useTestProgress } from '../live/test-progress';
 
 type Props = {
   /** The check whose recording is open, once the combined report holds it. */
@@ -39,6 +40,7 @@ function needsStylesheet(report: RunReport | undefined): boolean {
 
 /** One recorded test, opened in place of its spec. */
 export function RecordingPage({ slot, layerId, label, back, moment, onMoment, onClose }: Props) {
+  const progress = useTestProgress(slot ?? null);
   const { evidence, backends, pending, ready, unavailable } = useEvidence();
   const now = useNow();
   const history = useMemo(() => (slot ? checkHistory(evidence, slot.specPath, slot.id) : []), [evidence, slot]);
@@ -64,8 +66,9 @@ export function RecordingPage({ slot, layerId, label, back, moment, onMoment, on
           </p>
         )}
       </header>
+      <TestProgress {...progress} />
       {waiting && <p className={styles.aside} role="status">Loading the recording…</p>}
-      {!chosen && !waiting && <p className={styles.notice}>{unavailable ?? 'This result is not in the combined report any more. A newer run may have replaced it, or its source is switched off.'}</p>}
+      {!chosen && !waiting && !progress.tests.length && <p className={styles.notice}>{unavailable ?? 'This result is not in the combined report any more. A newer run may have replaced it, or its source is switched off.'}</p>}
       {chosen && !paths && <p className={styles.notice}>This result has an outcome and no recorded timeline.</p>}
       {report.isLoading && <p className={styles.aside} role="status">Loading the recording…</p>}
       {report.isError && (

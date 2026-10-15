@@ -8,6 +8,7 @@ import { featureModel, scenarioLabel, slotsByScenario, type FeatureModel, type F
 import { Bounded } from './marks';
 import { SourceText, SpecHeader } from './spec-header';
 import { SpecSnapshot } from './spec-snapshot';
+import { TestFilter, useRunningFilter } from './test-filter';
 
 type Props = { file: string; text: string; kind: SpecKind; entry: SpecEvidence | undefined; selection: CheckSelection; select: SelectCheck };
 
@@ -23,6 +24,7 @@ function parse(text: string): { feature: FeatureModel | null; error: string | nu
 export function FeaturePage({ file, text, kind, entry, selection, select }: Props) {
   const { feature, error } = useMemo(() => parse(text), [text]);
   const slots = entry?.slots ?? [];
+  const runningOnly = useRunningFilter();
   const filed = useMemo(() => (feature ? slotsByScenario(feature, slots) : { byScenario: new Map<string, CheckSlot[]>(), leftOver: slots }), [feature, slots]);
   const scenarios = feature?.rules.flatMap((rule) => rule.scenarios.filter((scenario) => !scenario.background)) ?? [];
   const planned = scenarios.reduce((count, scenario) => count + Math.max(1, filed.byScenario.get(scenario.name)?.length ?? 0), 0) + filed.leftOver.length;
@@ -30,8 +32,9 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
 
   const rows = (scenario: FeatureScenario) => {
     const written = <PlainSteps steps={scenario.steps} examples={scenario.examples} />;
-    const recorded = filed.byScenario.get(scenario.name) ?? [];
+    const recorded = (filed.byScenario.get(scenario.name) ?? []).filter(slot => !runningOnly || slot.status === 'running');
     if (!recorded.length) {
+      if (runningOnly) return null;
       const id = `scenario:${scenario.name}`;
       return (
         <ResultRow key={id} label={scenario.name} slot={null} open={selection.check === id} onToggle={() => toggle(id)}>
@@ -53,6 +56,7 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
         {feature?.description && <p className={styles.lead}>{feature.description}</p>}
       </SpecHeader>
       <SpecSnapshot title={feature?.name || file.split('/').at(-1)!} text={text} kind={kind.one} />
+      <TestFilter slots={slots} />
       {error && <p role="alert" className={styles.notice}>This feature could not be parsed: {error}</p>}
       {feature?.rules.map((rule, index) => (
         <section key={index} className={styles.block}>
@@ -67,12 +71,12 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
           <ul className={styles.results}>{rule.scenarios.filter((scenario) => !scenario.background).map(rows)}</ul>
         </section>
       ))}
-      {filed.leftOver.length > 0 && (
+      {filed.leftOver.some(slot => !runningOnly || slot.status === 'running') && (
         <section className={styles.block}>
           <h2 className={styles.blockTitle}>{feature ? 'Other recorded results' : 'Recorded results'}</h2>
           {feature && <p className={styles.blockLead}>Recorded against this file under a name no scenario has now.</p>}
           <ul className={styles.results}>
-            <Bounded items={filed.leftOver} size={40} more="More results">
+            <Bounded items={filed.leftOver.filter(slot => !runningOnly || slot.status === 'running')} size={40} more="More results">
               {(slot) => (
                 <ResultRow key={slot.key} label={feature ? scenarioLabel(feature.name, slot.title) : slot.title} slot={slot} open={selection.check === slot.id} onToggle={() => toggle(slot.id)}>
                   <CheckDetail slot={slot} layerId={selection.check === slot.id ? selection.layer : undefined} select={(patch) => select({ check: slot.id, ...patch })} reads="steps" />

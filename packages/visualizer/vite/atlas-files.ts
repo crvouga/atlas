@@ -53,17 +53,13 @@ export function fixtureRoots(name: string): AtlasRoots {
  * (`ATLAS_FIXTURE`), explicit roots (`ATLAS_SPECS_ROOT`, `ATLAS_RUNS_ROOT`), then `specs/` and
  * `atlas-runs/` where the command was run. Relative paths resolve against `INIT_CWD` (where pnpm
  * was run) or the current directory. With nothing configured and no `specs/` there, the bundled
- * example fixture is shown.
+ * project stays empty. Bundled examples require an explicit fixture selection.
  */
 export function resolveRoots(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): AtlasRoots {
   if (env.ATLAS_FIXTURE) return fixtureRoots(env.ATLAS_FIXTURE);
   const base = env.INIT_CWD || cwd;
-  const specsSet = Boolean(env.ATLAS_SPECS_ROOT);
   const specs = path.resolve(base, env.ATLAS_SPECS_ROOT || DEFAULT_SPECS_DIR);
   const runs = path.resolve(base, env.ATLAS_RUNS_ROOT || DEFAULT_RUNS_DIR);
-  if (!specsSet && !env.ATLAS_RUNS_ROOT && !existsSync(specs)) {
-    return { ...fixtureRoots(DEFAULT_FIXTURE), label: `example (no ${DEFAULT_SPECS_DIR}/ in ${base}; set ATLAS_SPECS_ROOT)` };
-  }
   return { specs, runs, label: 'configured' };
 }
 

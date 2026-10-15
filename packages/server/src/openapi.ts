@@ -13,12 +13,13 @@
  * operations and new events. See AGENTS.md ("The server is a living application").
  */
 import { z } from 'zod/v4';
+import { ProjectsSchema } from '../../schema/src/project';
 
 import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema } from '../../schema/src/api';
-import { AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
+import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
-export const API_VERSION = '1.0.0';
+export const API_VERSION = '1.3.0';
 
 /** Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`). */
 export type Role = 'none' | 'read' | 'publish' | 'admin';
@@ -56,13 +57,15 @@ function schemaOf(schema: z.ZodType, io: 'input' | 'output' = 'output'): JsonSch
  * the shape the server sends, `input` the shape it accepts.
  */
 const COMPONENTS = {
+  LiveRun: [LiveRunSchema, 'output'], LiveRunStart: [LiveRunStartSchema, 'input'], LiveRunUpdate: [LiveRunUpdateSchema, 'input'],
+  ServerEditableSettings: [ServerEditableSettingsSchema, 'input'], ServerSettingsSnapshot: [ServerSettingsSnapshotSchema, 'output'],
   Problem: [ProblemSchema, 'output'], Health: [HealthSchema, 'output'], Ready: [ReadySchema, 'output'], ServerInfo: [ServerInfoSchema, 'output'],
   EffectiveEvidence: [EffectiveEvidenceSchema, 'output'], EffectiveDelta: [EffectiveDeltaSchema, 'output'], ReportStatus: [ReportStatusSchema, 'output'],
   PublishChecks: [PublishChecksSchema.partial({ recordedAtMs: true }), 'input'], ChecksResult: [ChecksResultSchema, 'output'],
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
-  HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
+  RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
 type ComponentName = keyof typeof COMPONENTS;
 const ref = (name: ComponentName): JsonSchema => ({ $ref: `#/components/schemas/${name}` });
@@ -81,7 +84,54 @@ const LAYER_ID: Param = { name: 'id', in: 'path', required: true, description: '
  * Every operation of the API. The order is the order of the document. The descriptions are the documentation an
  * agent reads, so they say what to send, what comes back, and what to do when it does not work.
  */
-export const OPERATIONS: readonly Operation[] = [
+const BASE_OPERATIONS: readonly Operation[] = [
+  {
+    route: 'GET /api/projects', path: '/api/projects', operationId: 'getProjects', tag: 'Projects', role: 'read',
+    summary: 'List projects on this Atlas node', description: 'Projects are created on their first authenticated upload. All report, spec, recording and live-run data is isolated by project. Unqualified API calls address the legacy default project. Tokens retain their node-wide role; project partitioning is not a tenant authorization boundary.',
+    responses: { '200': { description: 'Available project identities.', contentType: 'application/json', schema: schemaOf(ProjectsSchema) }, '401': UNAUTHORIZED, '503': problem('The project catalog is unavailable.') }
+  },
+  {
+    route: 'GET /api/live', path: '/api/live', operationId: 'listLiveRuns', tag: 'Live', role: 'read',
+    summary: 'Live test progress and recent invocations', description: 'Returns up to 50 recent producer leases, including running, completed and interrupted runs. Counters and recent check/step updates are bounded; authentication credentials are never returned. Consume run events for immediate bounded snapshots; re-fetch after reconnect or atlas:change with scope runs on older servers.',
+    responses: { '200': { description: 'Recent live run summaries.', contentType: 'application/json', schema: { type: 'object', properties: { runs: { type: 'array', items: ref('LiveRun') } }, required: ['runs'] } }, '401': UNAUTHORIZED }
+  },
+  {
+    route: 'POST /api/live/:id', path: '/api/live/{id}', operationId: 'startLiveRun', tag: 'Live', role: 'publish',
+    summary: 'Start a live producer lease', description: 'Register a UUID run id and fixed producer identity before tests begin. Retrying the same identity and token is idempotent. The server timestamps receipt. Send heartbeats every 5 seconds and progress as tests execute. The default heartbeat timeout is 30 seconds; a 15-minute progress stall is configurable separately.',
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'Producer-generated UUID, also given in the body.', schema: str }],
+    body: { description: 'Fixed invocation identity and optional planned test count.', contentType: 'application/json', required: true, schema: ref('LiveRunStart') },
+    responses: { '201': json('The registered lease.', 'LiveRun'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('The id already belongs to another invocation.'), '413': problem('Request too large.'), '422': problem('Invalid identity.'), '429': problem('Live run capacity reached.') }
+  },
+  {
+    route: 'PATCH /api/live/:id', path: '/api/live/{id}', operationId: 'updateLiveRun', tag: 'Live', role: 'publish',
+    summary: 'Publish progress or finish an invocation', description: 'Apply ordered check deltas, starting at sequence 1. Retry a sequence with identical content only. Completed results become immutable report layers immediately; running checks remain operational progress and do not replace historical winners. Finish as completed or interrupted. Stale updates cannot revive an expired lease; pending checks never become passes.',
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The UUID of a run started with this publisher token.', schema: str }],
+    body: { description: 'At most 1000 unique check updates; optional terminal state and reason.', contentType: 'application/json', required: true, schema: ref('LiveRunUpdate') },
+    responses: { '200': json('Updated progress.', 'LiveRun'), '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('Unknown run.'), '409': problem('Run ended or sequence is stale.'), '413': problem('Request too large.'), '422': problem('Invalid progress.'), '429': problem('Run check capacity reached.') }
+  },
+  {
+    route: 'POST /api/live/:id/heartbeat', path: '/api/live/{id}/heartbeat', operationId: 'heartbeatLiveRun', tag: 'Live', role: 'publish',
+    summary: 'Renew a producer heartbeat', description: 'Renew a running lease using server receipt time, independently of test progress. No result layers are created. Heartbeats cannot revive terminal runs or bypass the configured progress-stall timeout. The producer token must be the one that started this invocation.',
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The UUID of this producer invocation.', schema: str }],
+    responses: { '200': { description: 'Heartbeat received.', contentType: 'application/json', schema: { type: 'object', properties: { ok: { const: true } } } }, '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('Unknown run.'), '409': problem('Run ended or its lease expired.'), '422': problem('Invalid run id.') }
+  },
+  {
+    route: 'GET /admin', path: '/admin', operationId: 'getSettingsPage', tag: 'Operations', role: 'read',
+    summary: 'Server settings page', description: 'A standalone settings editor. Supply an admin Bearer token in the page to read or save configuration. The token is held only in memory.',
+    responses: { '200': { description: 'Settings editor.', contentType: 'text/html', schema: str }, '401': UNAUTHORIZED }
+  },
+  {
+    route: 'GET /api/settings', path: '/api/settings', operationId: 'getSettings', tag: 'Operations', role: 'admin',
+    summary: 'Read server settings', description: 'Returns editable persisted storage/report settings, active settings, a revision, and configuration precedence. Authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.',
+    responses: { '200': json('Settings and revision.', 'ServerSettingsSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '503': problem('Configuration is managed by the embedding application.') }
+  },
+  {
+    route: 'PUT /api/settings', path: '/api/settings', operationId: 'saveSettings', tag: 'Operations', role: 'admin',
+    summary: 'Save settings for the next restart', description: 'Replaces editable storage/report settings, preserving authentication and other file fields. Atomically persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.',
+    parameters: [{ name: 'If-Match', in: 'header', required: true, description: 'The quoted revision returned by GET /api/settings.', schema: str }],
+    body: { description: 'Editable fields from ServerConfig, excluding authentication, host, port and site. Maximum 64 KiB.', contentType: 'application/json', required: true, schema: ref('ServerEditableSettings') },
+    responses: { '200': json('Saved settings and new revision. Restart required.', 'ServerSettingsSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('Settings changed; reload before saving.'), '413': problem('Settings exceed the body limit.'), '422': problem('Invalid configuration.'), '428': problem('A quoted settings revision is required.'), '503': problem('Configuration is managed by the embedding application.') }
+  },
   {
     route: 'GET /healthz', path: '/healthz', operationId: 'getHealth', tag: 'Operations', role: 'none',
     summary: 'Is the process up',
@@ -116,13 +166,15 @@ export const OPERATIONS: readonly Operation[] = [
     route: 'GET /api/events', path: '/api/events', operationId: 'streamEvents', tag: 'Live', role: 'read',
     summary: 'Server-sent events: results arrived, specs or runs changed',
     description: [
-      'A `text/event-stream` that stays open. Events say *that* something changed; the state is always fetched, so a client that missed events (a dropped connection) loses nothing: read again on reconnect.',
+      'A `text/event-stream` that stays open. Report events announce changes, and run events carry bounded live progress snapshots; authoritative state can always be fetched, so a client that missed events (a dropped connection) loses nothing: read again on reconnect.',
       '',
       '| event | data |',
       '| --- | --- |',
-      '| `hello` | `{ version, ready, time }`, sent first |',
+      '| `hello` | `{ version, ready, time, heartbeatMs? }`, sent first |',
       '| `report` | `{ version, totalLayers, added: [{ id, producer, environment, branch, sha, recordedAtMs, counts }], addedTotal }`: layers arrived |',
       '| `atlas:change` | `{ scope: "specs" \\| "runs", files, runIds }`: new specs or runs |',
+      '| `run` | A LiveRun snapshot after start, progress, heartbeat, completion, or interruption; contains no producer credentials |',
+      '| `projects` | `{}` when the node discovers another project; refresh `/api/projects` |',
       '| `ping` | `{}` every `heartbeatSeconds`, so a quiet server is told apart from a dead connection |',
       '',
       'Past `limits.maxStreams` viewers the answer is `503` with `Retry-After`: poll `/api/reports/evidence/effective` instead. A browser needs no code beyond `new EventSource("/api/events")`; other clients send the token as `Authorization: Bearer`.'
@@ -328,6 +380,18 @@ export const OPERATIONS: readonly Operation[] = [
   }
 ];
 
+const NODE_OPERATIONS = new Set(['/api/projects', '/api/settings', '/api/server', '/api/openapi.json']);
+const PROJECT_PARAMETER: Param = { name: 'project', in: 'query', description: 'Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.', schema: { type: 'string', pattern: '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$', maxLength: 64 }, example: 'todo-app' };
+/** Every node operation and the same stable report protocol inside each project namespace. */
+export const OPERATIONS: readonly Operation[] = BASE_OPERATIONS.flatMap(operation => {
+  if (!operation.path.startsWith('/api/') || NODE_OPERATIONS.has(operation.path)) return [operation];
+  return [{ ...operation, parameters: [...(operation.parameters ?? []), PROJECT_PARAMETER] }, {
+    ...operation, route: operation.route.replace('/api/', '/api/projects/:project/'), path: operation.path.replace('/api/', '/api/projects/{project}/'),
+    operationId: `${operation.operationId}ForProject`, parameters: [{ ...PROJECT_PARAMETER, in: 'path', required: true }, ...(operation.parameters ?? [])],
+    description: `${operation.description}\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.`
+  }];
+});
+
 /**
  * Routes the server registers that are not operations of this API, each with the reason. The coverage test skips
  * these and only these.
@@ -376,7 +440,7 @@ export function openApiDocument(options: { readonly serverUrl?: string } = {}): 
       version: API_VERSION,
       summary: 'Take in test results from every environment, keep them, and show everyone the combined report, live.',
       description: [
-        'One Atlas server per project. Clients upload layers of results (`POST /api/checks`, or the store protocol under `/api/store`); viewers read the combined report (`/api/reports/evidence/effective`) and are told when it changes (`/api/events`). A report is layered, never partitioned: the newest completed result of every check wins its slot, whoever sent it.',
+        'One Atlas node serves multiple projects. Clients select a project using ?project=<slug>, X-Atlas-Project, or /api/projects/<slug>/… . Each project has independent specs, layers, recordings, status, and event streams. Within each project, the newest completed result of every check wins its slot. Unqualified requests address the legacy default project.',
         '',
         '**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `publish` < `admin`. Uploading needs a Bearer token; a browser\'s HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.',
         '',

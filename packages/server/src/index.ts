@@ -15,3 +15,7 @@ export { EventHub, type EventName } from './events';
 export { listen, type RunningServer } from './host';
 export { serveMain } from './main';
 export { classify, validateUpload, validKey, Refusal } from './validate';
+
+export { fileServerSettings, type ServerSettings, type SettingsSnapshot } from './settings';
+
+export { LiveRuns, LiveRunError } from './live-runs';

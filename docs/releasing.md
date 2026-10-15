@@ -72,18 +72,18 @@ root `package.json` maps each import path to it:
 - `publishConfig.exports` points at `dist`. The release copies it over `exports` in the manifest it
   packs, because `bun pm pack` packs the manifest as written.
 
-`bun run build` compiles every `packages/*/src` (except the visualizer, an app that ships as source)
+`bun run build` compiles every `packages/*/src` (except the Atlas client, an app that ships as source)
 into `dist/<folder>/src`, one JavaScript module per source module, with the `.js` extensions Node
 needs on relative imports ([scripts/build-package.ts](../scripts/build-package.ts)).
 
 Tree shaking depends on three things, and the consumer smoke checks the result with a real bundler:
 
 - The output is unbundled ES modules, so a bundler can drop a module nobody imports.
-- `sideEffects` in `package.json` declares everything side-effect free except the visualizer app
+- `sideEffects` in `package.json` declares everything side-effect free except the Atlas client app
   and stylesheets. A library module that does work at import time breaks that promise: do not add
   one, and never write `import './something'` for its effect in library code.
 - Each part has its own entry point, and none of them imports another part's: importing one driver
-  does not pull in the others, the reports or the visualizer.
+  does not pull in the others, the reports or the Atlas client.
 
 To add an entry point, add its source folder under `packages/`, then its path to both `exports`
 and `publishConfig.exports`. To ship a file that is not compiled, add it to `files`.

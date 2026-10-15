@@ -33,8 +33,9 @@ export const USAGE = `atlas — executable statecharts
                [--no-retry] [--output <dir>]
   atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
   atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
-  atlas serve  [--data <dir>] [--port 8080] [--store <url>]...   the Atlas server: results in, the live report out
-  atlas dev    [--port 5180]                                     the server and the viewer's dev server, on one host
+  atlas server [--data <dir>] [--port 8080] [--store <url>]...   one Atlas node: API, projects and client
+  atlas client build [--no-data] [--out <dir>]                    build the project-agnostic Atlas client
+  atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
   atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
 
@@ -95,9 +96,13 @@ async function loadConfig(file: string): Promise<{ config: AtlasConfig; base: st
 export async function main(argv = process.argv.slice(2)) {
   const [command] = argv;
   // Loaded on demand: lint, plan and run do not pay for the reports.
-  if (command === 'serve') {
+  if (command === 'serve' || command === 'server') {
     const { serveMain } = await import('../../server/src/main');
     return serveMain(argv.slice(1), { out: text => process.stdout.write(text) });
+  }
+  if (command === 'client') {
+    const { clientMain } = await import('../../server/src/site');
+    return clientMain(argv.slice(1));
   }
   if (command === 'dev') {
     const { devMain } = await import('../../server/src/dev');
