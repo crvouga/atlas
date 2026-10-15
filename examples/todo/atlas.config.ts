@@ -139,7 +139,9 @@ export default defineConfig<PlaywrightContext>({
   specs: fileURLToPath(new URL('./specs', import.meta.url)),
   driver: async () => {
     const { server } = await start();
-    const driver = playwrightDriver({ clock: true });
+    // Browser contexts share this server's list, reset endpoint and sync-failure counter.
+    // Cap the driver so even an explicit --workers override cannot overlap journeys.
+    const driver = playwrightDriver({ clock: true, concurrency: 1 });
     return {
       ...driver,
       async dispose() {
