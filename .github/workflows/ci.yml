@@ -229,6 +229,76 @@ jobs:
             echo "latest=superseded" >> "$GITHUB_OUTPUT"
           fi
 
+  insecure-image:
+    name: Insecure server image
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: atlas-insecure-image-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/crvouga/atlas-insecure
+    outputs:
+      built: ${{ steps.build.outcome }}
+      smoke: ${{ steps.smoke.outcome }}
+      published: ${{ steps.publish.outputs.published }}
+      digest: ${{ steps.publish.outputs.digest }}
+      latest: ${{ steps.publish.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: docker/setup-buildx-action@v4.0.0
+      - name: Build the server and viewer from this commit
+        id: build
+        uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          target: insecure
+          platforms: linux/amd64
+          build-args: ATLAS_REVISION=${{ github.sha }}
+          load: true
+          tags: atlas-insecure-server:ci
+          cache-from: type=gha,scope=atlas-insecure-server
+          cache-to: type=gha,scope=atlas-insecure-server,mode=max
+      - name: Exercise the container as a Railway image service
+        id: smoke
+        run: bun scripts/container-smoke.ts atlas-insecure-server:ci --insecure
+      - name: Log in to personal GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: docker/login-action@v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the tested image
+        id: publish
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          docker tag atlas-insecure-server:ci "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:$GITHUB_SHA"
+          echo "published=$IMAGE:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          digest=$(docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" --format '{{.Manifest.Digest}}')
+          echo "digest=$IMAGE@$digest" >> "$GITHUB_OUTPUT"
+          # Jobs are serialized, but GitHub does not guarantee queue order. An older run must
+          # never move latest backwards after a newer commit has reached main.
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$main_sha" = "$GITHUB_SHA" ]; then
+            docker tag atlas-insecure-server:ci "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+            echo "latest=updated" >> "$GITHUB_OUTPUT"
+          else
+            echo "Published $IMAGE:$GITHUB_SHA; a newer main commit owns latest."
+            echo "latest=superseded" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
     name: Release
     needs: check
@@ -280,7 +350,7 @@ jobs:
   summary:
     name: CI summary
     if: always()
-    needs: [commitlint, check, s3, example, image, release]
+    needs: [commitlint, check, s3, example, image, insecure-image, release]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

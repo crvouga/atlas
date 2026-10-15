@@ -1,20 +1,21 @@
-/** Prove a built image serves the viewer, enforces upload auth, honors PORT, and retains reports across replacement. */
+/** Prove a built image serves the viewer, applies its access mode, honors PORT, and retains reports across replacement. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { must, run, sleep } from './process';
 
 const image = process.argv[2] ?? '';
-if (!image) throw new Error('Usage: bun scripts/container-smoke.ts <image>');
+if (!image) throw new Error('Usage: bun scripts/container-smoke.ts <image> [--insecure]');
+const insecure = process.argv.includes('--insecure');
 const name = `atlas-smoke-${randomUUID()}`;
 const volume = `${name}-data`;
 const token = randomUUID();
 const port = 9137; // Different from EXPOSE and the server default: catches an image that masks Railway's PORT.
-const authorization = { authorization: `Bearer ${token}` };
+const authorization: Record<string, string> = insecure ? {} : { authorization: `Bearer ${token}` };
 let url = '';
 
 async function start(railway: boolean): Promise<void> {
   await must('docker', ['run', '-d', '--name', name, '-p', `127.0.0.1::${port}`, '-v', `${volume}:/data`,
-    ...(railway ? ['--user', '0'] : []), '-e', `PORT=${port}`, '-e', `ATLAS_TOKEN=${token}`, image]);
+    ...(railway ? ['--user', '0'] : []), '-e', `PORT=${port}`, ...(insecure ? [] : ['-e', `ATLAS_TOKEN=${token}`]), image]);
   const binding = (await must('docker', ['port', name, `${port}/tcp`])).trim();
   assert.match(binding, /^127\.0\.0\.1:\d+$/);
   url = `http://${binding}`;
@@ -35,6 +36,10 @@ try {
   // Normal Docker named volumes inherit the image's bun ownership.
   await must('docker', ['volume', 'create', volume]);
   await start(false);
+  assert.equal((await fetch(url)).status, insecure ? 200 : 401);
+  const info = await (await fetch(`${url}/api/server`, { headers: authorization })).json() as { open: boolean; role: string };
+  assert.equal(info.open, insecure);
+  assert.equal(info.role, 'admin');
   const page = await fetch(url, { headers: authorization });
   assert.equal(page.status, 200);
   const html = await page.text();
@@ -44,7 +49,7 @@ try {
   assert.equal((await fetch(new URL(asset, url), { headers: authorization })).status, 200);
   const body = JSON.stringify({ producer: 'container-smoke', checks: [{ id: 'image', title: 'Image works', status: 'passed' }] });
   const endpoint = '/api/checks?project=container-smoke';
-  assert.equal((await fetch(url + endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status, 401);
+  if (!insecure) assert.equal((await fetch(url + endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status, 401);
   assert.equal((await fetch(url + endpoint, { method: 'POST', headers: { ...authorization, 'content-type': 'application/json' }, body })).status, 201);
   const settings = await fetch(`${url}/api/settings`, { headers: authorization });
   assert.equal(settings.status, 200);
@@ -72,7 +77,7 @@ try {
   const restored = await (await fetch(`${url}/api/settings`, { headers: authorization })).json() as { active: { refreshSeconds: number } };
   assert.equal(restored.active.refreshSeconds, 17, 'Saved settings must survive replacement and take effect');
   await stop();
-  console.log('Container smoke passed: viewer and assets, admin settings and styles, auth, PORT, healthcheck, durable reports and settings, Railway volume permissions, SIGTERM.');
+  console.log(`Container smoke passed: viewer and assets, admin settings and styles, ${insecure ? 'anonymous read/publish/admin' : 'auth'}, PORT, healthcheck, durable reports and settings, Railway volume permissions, SIGTERM.`);
 } catch (error) {
   const logs = await run('docker', ['logs', name]);
   console.error(logs.stdout + logs.stderr);

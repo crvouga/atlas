@@ -247,7 +247,56 @@ your project's test results still needs the integration described there.
 For bucket storage instead, set `ATLAS_STORE=project=s3://my-bucket/atlas/my-project`, `ATLAS_WRITE=project`,
 and the bucket credentials. Keep the `/data` volume for server settings and local state.
 
-**Docker.** The same published image works anywhere Docker runs. It already contains the client (the same
+### Deploy without authentication
+
+Use `ghcr.io/crvouga/atlas-insecure:latest` for a server that requires no sign-in or API token. It is built
+from the same commit, server and viewer as `ghcr.io/crvouga/atlas:latest`, with `ATLAS_INSECURE=true`
+to allow listening on the network without tokens. Anonymous callers have full read, publish and admin access.
+Anyone who discovers an unlisted URL can read reports, upload results and change settings; the URL is
+not access control.
+
+In Railway, create a **Docker image** service with:
+
+```text
+ghcr.io/crvouga/atlas-insecure:latest
+```
+
+Leave the start command unset. Attach a persistent volume at `/data`, set `RAILWAY_RUN_UID=0`, keep one
+replica, set the healthcheck to `/readyz` and generate a public domain. Leave `ATLAS_PORT` unset so Railway's
+`PORT` is used. Enable **Settings → Source → Configure Auto Updates → Anytime** to follow `latest`.
+Do not set `ATLAS_TOKEN`, `ATLAS_PUBLISH_TOKEN` or `ATLAS_READ_TOKEN`, or add `auth.tokens` to
+`/data/atlas.server.json`: configured tokens still enable authentication. When reusing a volume from an
+authenticated deployment, remove its saved auth tokens first. Open the domain directly, including `/admin`
+for settings (leave the token field blank and choose **Load settings**).
+
+Verify anonymous reads and uploads without an Authorization header:
+
+```sh
+curl --fail https://YOUR-DOMAIN/readyz
+curl --fail https://YOUR-DOMAIN/api/server
+curl --fail 'https://YOUR-DOMAIN/api/checks?project=my-project' \
+  -H 'content-type: application/json' \
+  -d '{"producer":"smoke","checks":[{"id":"deployed","title":"Deployed","status":"passed"}]}'
+```
+
+Readiness returns HTTP 200, `/api/server` reports `"open":true` and `"role":"admin"`, and the upload returns
+HTTP 201. Configure a project with `ATLAS_STORE=https://YOUR-DOMAIN` and `ATLAS_PROJECT=my-project`;
+leave its `ATLAS_TOKEN` unset. Use the same publishing commands described in
+[sending results](#3-send-results-from-ci-and-from-laptops), omitting credentials.
+
+For local Docker:
+
+```sh
+docker run --pull always -p 8080:8080 -v atlas-data:/data ghcr.io/crvouga/atlas-insecure:latest
+```
+
+Both images publish full commit tags for pinning or rollback. A new GHCR package must be made Public
+once before Railway can pull without registry credentials; see
+[image publication](https://github.com/crvouga/atlas/blob/main/docs/releasing.md#server-image).
+
+### Docker
+
+The same published image works anywhere Docker runs. It already contains the client (the same
 for every project: the server tells the page where its data is), and keeps results on the volume at `/data`:
 
 ```sh
