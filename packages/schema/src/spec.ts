@@ -86,10 +86,13 @@ export const StateMetaSchema = z.object(StateMetaShape).partial();
 /** A parsed `StateMetaSchema` value. */
 export type StateMeta = z.infer<typeof StateMetaSchema>;
 
-/** The target of an event transition: a state name (or `#id`) written as a string, or an object with `target`. */
+/** The target of an event transition: a state name (or `#id`) written as a string, or an object with `target` and optional declarative `meta`. */
 export const TransitionTargetSchema = z.union([
   z.string().min(1),
-  z.object({ target: z.string().min(1) })
+  z.object({
+    target: z.string().min(1),
+    meta: z.record(z.string(), z.unknown()).optional()
+  })
 ]);
 
 /** Kinds of state in the composed map: `atomic`, `compound`, `parallel`, `final`. */

@@ -2727,7 +2727,8 @@ Atlas walks charts without running any code, so it executes only the parts of a 
 are pure structure:
 
 - states, nesting (`initial`), `parallel` regions and `final` states;
-- event transitions, written as a target (`Opens: Open` or `{ target: '#Open' }`);
+- event transitions, written as a target (`Opens: Open` or `{ target: '#Open' }`), with
+  optional declarative metadata (`{ target: '#Open', meta: { source: ['specs/door.feature'] } }`);
 - `invoke` that names another chart (`src`, `id`, `onDone`), composed statically;
 - `meta`.
 

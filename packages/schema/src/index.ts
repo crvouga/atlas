@@ -8,10 +8,10 @@
  *
  * @see docs/report-contract.md
  */
-export * from './common';
-export * from './manifest';
-export * from './runs-index';
-export * from './spec';
+export * from './common.js';
+export * from './manifest.js';
+export * from './runs-index.js';
+export * from './spec.js';
 export * from './report-sources';
 export * from './layer';
 export * from './server-config';

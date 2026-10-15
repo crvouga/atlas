@@ -24,6 +24,7 @@ export type LintFinding = {
 };
 
 const STATE_KEYS = new Set(['id', 'initial', 'type', 'meta', 'states', 'on', 'invoke', 'description']);
+const TRANSITION_KEYS = new Set(['target', 'meta']);
 const INVOKE_KEYS = new Set(['src', 'id', 'onDone']);
 const REQUIRED_META = ['description'] as const;
 const FORBIDDEN = ['entry', 'exit', 'actions', 'assign', 'after', 'always', 'context', 'guard', 'cond', 'delay', 'output', 'onError'];
@@ -54,7 +55,7 @@ function checkShape(node: StateConfig, name: string, requiredMeta: readonly stri
       continue;
     }
     for (const key of Object.keys(t)) {
-      if (key !== 'target') out.push({ rule: 'pure', message: `${name} --${event}-->: "${key}" is not allowed (no guards, no actions)` });
+      if (!TRANSITION_KEYS.has(key)) out.push({ rule: 'pure', message: `${name} --${event}-->: "${key}" is not allowed (no guards, no actions)` });
     }
   }
   for (const invoke of invokesOf(node)) {
@@ -72,7 +73,10 @@ function sanitized(bundle: SpecBundle): SpecBundle {
     for (const [key, value] of Object.entries(node)) if (STATE_KEYS.has(key)) out[key] = value;
     if (node.on) {
       out['on'] = Object.fromEntries(
-        Object.entries(node.on).map(([event, t]) => [event, typeof t === 'string' ? t : { target: (t as { target: string }).target }])
+        Object.entries(node.on).map(([event, t]) => [
+          event,
+          typeof t === 'string' ? t : { target: t.target, ...('meta' in t ? { meta: t.meta } : {}) }
+        ])
       );
     }
     if (node.states) out['states'] = Object.fromEntries(Object.entries(node.states).map(([k, v]) => [k, clean(v)]));
