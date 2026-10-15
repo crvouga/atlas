@@ -12,6 +12,14 @@ job publishes. A commit that fails its checks publishes nothing, however it reac
 
 ### Server image
 
+Every run ends with a **CI summary** job, including failed runs and runs with skipped jobs. Its **Atlas CI**
+summary lists job results, check coverage, log/artifact links and npm release plans with their outcome. The
+Docker section provides copyable Railway image URIs: `latest` when updated, this run's full commit tag and
+the registry digest confirmed after pushing. It distinguishes PR builds, unsuccessful publication and an
+older run that left `latest` to a newer main commit. Railway settings are included beside the image URI.
+All workflows pin Ubuntu 24.04 and use Node 24 versions of GitHub's JavaScript actions to avoid implicit
+runner migrations and deprecated action runtimes.
+
 The **Server image** job also builds the root
 [`Dockerfile`](https://github.com/crvouga/atlas/blob/main/Dockerfile) from that exact checkout, including the
 viewer, and runs `bun scripts/container-smoke.ts <image>` against it. The smoke proves readiness, viewer

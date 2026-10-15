@@ -1586,7 +1586,15 @@ use a named `--store project=s3://… --write project` to put uploads in a share
 ### Run it
 
 **Railway (deploy an image, no repository or code changes).** Create a service from the Docker image
-`ghcr.io/crvouga/atlas:latest`.
+`ghcr.io/crvouga/atlas:latest`. Copy the URI below into Railway's image field:
+
+```text
+ghcr.io/crvouga/atlas:latest
+```
+
+For a specific revision, open a [CI run](https://github.com/crvouga/atlas/actions/workflows/ci.yml)'s
+**Summary → Atlas CI**: it includes the published commit image URI, immutable digest and whether that run
+updated `latest`. Pull request builds and failed publications are labelled accordingly.
 
 1. In Railway choose **New service → Docker image** and enter `ghcr.io/crvouga/atlas:latest`.
    Leave the start command unset: the image includes the server and the prebuilt viewer.

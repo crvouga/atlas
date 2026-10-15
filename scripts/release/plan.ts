@@ -2,7 +2,7 @@
  * Print which public packages the next release would publish, and at which versions.
  *
  *   bun run release:plan
- *   bun run release:plan --github-output   (also writes has_changes=… to $GITHUB_OUTPUT)
+ *   bun run release:plan --github-output   (also writes has_changes and planned releases to $GITHUB_OUTPUT)
  */
 import { appendFileSync } from 'node:fs';
 
@@ -27,5 +27,6 @@ if (plan.releases.length === 0) {
 }
 
 if (process.argv.includes('--github-output') && process.env.GITHUB_OUTPUT) {
-  appendFileSync(process.env.GITHUB_OUTPUT, `has_changes=${plan.releases.length > 0}\n`);
+  const releases = plan.releases.map(r => ({ name: r.pkg.name, version: r.version }));
+  appendFileSync(process.env.GITHUB_OUTPUT, `has_changes=${releases.length > 0}\nreleases=${JSON.stringify(releases)}\n`);
 }

@@ -33,17 +33,18 @@ permissions:
 env:
   HUSKY: "0"
 
+# Pin the runner OS so ubuntu-latest migrations do not change our build environment.
 jobs:
   # Commit types decide the next version (docs/releasing.md), so they are checked.
   commitlint:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
@@ -67,15 +68,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
       # Only for the consumer smoke: the published package has to run on Node as well.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       - run: bun install --frozen-lockfile
@@ -90,10 +91,10 @@ jobs:
   # The object-store backend against a real S3 server (SeaweedFS), which verifies request signatures and
   # paginates listings the way S3 does. The unit tests cannot stand in for that.
   s3:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
@@ -105,7 +106,7 @@ jobs:
           JSON
           docker run -d --name s3 -p 18333:8333 -v "$RUNNER_TEMP/s3.json:/etc/s3.json" chrislusf/seaweedfs:latest server -s3 -s3.config=/etc/s3.json -dir=/data
           export AWS_ACCESS_KEY_ID=atlaskey AWS_SECRET_ACCESS_KEY=atlassecret AWS_DEFAULT_REGION=us-east-1
-          for i in $(seq 1 60); do aws --endpoint-url http://localhost:18333 s3 mb s3://atlas-test 2>/dev/null && break; sleep 2; done
+          for _ in $(seq 1 60); do aws --endpoint-url http://localhost:18333 s3 mb s3://atlas-test 2>/dev/null && break; sleep 2; done
           aws --endpoint-url http://localhost:18333 s3 ls
           # Creating a bucket only checks metadata. The first upload allocates writable volumes,
           # which must finish before a test starts its five-second timeout.
@@ -126,14 +127,14 @@ jobs:
   # a server. The two runs share nothing, so each gets its own job.
   example:
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
         script: [run, clients]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
@@ -144,14 +145,14 @@ jobs:
         if: matrix.script == 'run'
         run: |
           bun atlas --data "$RUNNER_TEMP/atlas-data" --no-log > "$RUNNER_TEMP/atlas-server.log" 2>&1 &
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if curl --fail --silent http://localhost:5180/readyz; then exit 0; fi
             sleep 1
           done
           cat "$RUNNER_TEMP/atlas-server.log"
           exit 1
       - run: bun run example:${{ matrix.script }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: atlas-runs-${{ matrix.script }}
@@ -162,7 +163,7 @@ jobs:
   image:
     name: Server image
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:
       group: atlas-image-${{ github.ref }}
@@ -172,13 +173,20 @@ jobs:
       packages: write
     env:
       IMAGE: ghcr.io/crvouga/atlas
+    outputs:
+      built: ${{ steps.build.outcome }}
+      smoke: ${{ steps.smoke.outcome }}
+      published: ${{ steps.publish.outputs.published }}
+      digest: ${{ steps.publish.outputs.digest }}
+      latest: ${{ steps.publish.outputs.latest }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
       - uses: docker/setup-buildx-action@v4.0.0
       - name: Build the server and viewer from this commit
+        id: build
         uses: docker/build-push-action@v7.2.0
         with:
           context: .
@@ -189,6 +197,7 @@ jobs:
           cache-from: type=gha,scope=atlas-server
           cache-to: type=gha,scope=atlas-server,mode=max
       - name: Exercise the container as a Railway image service
+        id: smoke
         run: bun scripts/container-smoke.ts atlas-server:ci
       - name: Log in to personal GHCR
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -198,27 +207,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the tested image
+        id: publish
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           docker tag atlas-server:ci "$IMAGE:$GITHUB_SHA"
           docker push "$IMAGE:$GITHUB_SHA"
+          echo "published=$IMAGE:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          digest=$(docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" --format '{{.Manifest.Digest}}')
+          echo "digest=$IMAGE@$digest" >> "$GITHUB_OUTPUT"
           # Jobs are serialized, but GitHub does not guarantee queue order. An older run must
           # never move latest backwards after a newer commit has reached main.
           main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
           if [ "$main_sha" = "$GITHUB_SHA" ]; then
             docker tag atlas-server:ci "$IMAGE:latest"
             docker push "$IMAGE:latest"
+            echo "latest=updated" >> "$GITHUB_OUTPUT"
           else
             echo "Published $IMAGE:$GITHUB_SHA; a newer main commit owns latest."
+            echo "latest=superseded" >> "$GITHUB_OUTPUT"
           fi
 
   release:
     name: Release
     needs: check
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     # One release at a time, and never cancelled halfway through a publish.
     concurrency:
@@ -229,9 +244,11 @@ jobs:
       id-token: write
       # Comments on the issues a release closes, with the version that carries the fix.
       issues: write
+    outputs:
+      planned: ${{ steps.plan.outputs.releases }}
     steps:
       # Tags are the versions, so the whole history and every tag is needed.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
@@ -239,7 +256,7 @@ jobs:
           bun-version-file: package.json
       # For the npm CLI only. Do not set registry-url: setup-node then writes legacy _authToken
       # config, which prevents npm from starting the OIDC exchange when no token exists.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       # Trusted Publishing needs npm >= 11.5.1.
@@ -259,3 +276,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           bun run release:publish
+
+  summary:
+    name: CI summary
+    if: always()
+    needs: [commitlint, check, s3, example, image, release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - name: Summarize results and Railway deployment references
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: bun scripts/ci-summary.ts

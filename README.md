@@ -68,6 +68,33 @@ live step logs and a Running status filter. Producers send heartbeats every
 configure `ATLAS_RUN_TIMEOUT_SECONDS` and `ATLAS_RUN_STALL_SECONDS` (0 disables the progress timeout),
 or edit these settings in the client. An interruption never turns missing outcomes into passes.
 
+## Deploy to Railway without code
+
+Copy this image URI into **Railway → New service → Docker image**:
+
+```text
+ghcr.io/crvouga/atlas:latest
+```
+
+The image includes the Atlas server and viewer; hosting it needs no repository, Dockerfile, build command
+or package installation. [`latest` on GHCR](https://github.com/users/crvouga/packages/container/atlas) follows
+the newest checked `main` image, independently of npm releases.
+
+1. Leave the start command unset. Add a long random secret as `ATLAS_TOKEN` (at least 12 characters;
+   use 48 or more) and set `RAILWAY_RUN_UID=0` for [Railway volume permissions](https://docs.railway.com/volumes#permissions).
+2. Attach a persistent volume at `/data` and keep one replica so reports and server settings survive updates.
+3. Set the healthcheck path to `/readyz` and generate a public domain. Railway supplies `PORT`;
+   leave `ATLAS_PORT` unset. Open the domain and sign in with the token as the password (any username).
+4. Enable **Settings → Source → Configure Auto Updates → Anytime** to follow `latest`.
+   [Railway checks for image updates periodically](https://docs.railway.com/deployments/image-auto-updates);
+   detection can take a few hours.
+
+For the exact image from a run, open **[CI](https://github.com/crvouga/atlas/actions/workflows/ci.yml) →
+run → Summary → Atlas CI**. The summary includes a copyable full commit tag, the immutable registry digest,
+whether that run updated `latest`, all job results, npm release details and artifact links. Use the commit
+tag to pin or roll back a deployment. The [deployment guide](docs/deploying.md#run-it) covers optional reader
+and publisher tokens, bucket storage and sending results from your projects.
+
 ## For AI agents
 
 Atlas is built to be integrated and operated by agents, with nothing to click and nothing to guess.
@@ -187,9 +214,8 @@ unless you choose a bucket. `atlas dev` runs the same server with the client's d
 development is one host too. See [the server](docs/server.md) and
 [running Atlas for a project](docs/deploying.md).
 
-On Railway, deploy the image `ghcr.io/crvouga/atlas:latest` directly, with no project checkout or
-custom Dockerfile. Every green merge to `main` publishes it; enable Railway's image auto updates to follow it.
-The [deployment guide](docs/deploying.md#run-it) covers the token, persistent volume and healthcheck.
+Deploy the server using the [Railway setup above](#deploy-to-railway-without-code), or follow the
+[deployment guide](docs/deploying.md#run-it) for other hosts.
 
 ```sh
 atlas serve                                          # the project's server, at :8080 (ATLAS_TOKEN says who may upload)
