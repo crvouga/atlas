@@ -1613,7 +1613,7 @@ A parsed `StateMetaSchema` value.
 export const TransitionTargetSchema = …
 ```
 
-The target of an event transition: a state name (or `#id`) written as a string, or an object with `target`.
+The target of an event transition: a state name (or `#id`) written as a string, or an object with `target` and optional declarative `meta`.
 
 #### `STATE_TYPES`
 
