@@ -105,6 +105,13 @@ jobs:
           export AWS_ACCESS_KEY_ID=atlaskey AWS_SECRET_ACCESS_KEY=atlassecret AWS_DEFAULT_REGION=us-east-1
           for i in $(seq 1 60); do aws --endpoint-url http://localhost:18333 s3 mb s3://atlas-test 2>/dev/null && break; sleep 2; done
           aws --endpoint-url http://localhost:18333 s3 ls
+          # Creating a bucket only checks metadata. The first upload allocates writable volumes,
+          # which must finish before a test starts its five-second timeout.
+          printf 'ready\n' > "$RUNNER_TEMP/s3-ready"
+          aws --endpoint-url http://localhost:18333 s3 cp "$RUNNER_TEMP/s3-ready" s3://atlas-test/.ci-ready
+          aws --endpoint-url http://localhost:18333 s3 cp s3://atlas-test/.ci-ready "$RUNNER_TEMP/s3-ready-read"
+          cmp "$RUNNER_TEMP/s3-ready" "$RUNNER_TEMP/s3-ready-read"
+          aws --endpoint-url http://localhost:18333 s3 rm s3://atlas-test/.ci-ready
       - name: Run the S3 store and node tests against it
         env:
           ATLAS_TEST_S3_ENDPOINT: http://localhost:18333
