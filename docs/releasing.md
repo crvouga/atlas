@@ -25,11 +25,15 @@ The **Server image** job also builds the root
 viewer, and runs `bun scripts/container-smoke.ts <image>` against it. The smoke proves readiness, viewer
 assets and admin styling, upload authentication, Railway's `PORT`, the Docker healthcheck, reports and saved
 settings surviving container replacement, root-owned Railway volumes, and clean shutdown on SIGTERM. Pull requests build and test the
-image without publishing it.
+image without publishing it. The **Insecure server image** job builds the same Dockerfile's `insecure`
+target and runs `bun scripts/container-smoke.ts <image> --insecure`, proving anonymous viewing, uploads
+and admin settings, with the same persistence, healthcheck and shutdown checks.
 
 After checks and the container smoke pass, the job publishes the tested Linux AMD64 image to the personal
 GitHub Container Registry as `ghcr.io/crvouga/atlas:<full-commit-sha>` and `:latest`. This uses the same
 personal registry as the workspace repository, with no reusable hosting workflow or deployment dispatch.
+The insecure job publishes `ghcr.io/crvouga/atlas-insecure:<full-commit-sha>` and `:latest` independently,
+after its own smoke passes. Both jobs report their confirmed publication references in the CI summary.
 Publication uses the built-in `GITHUB_TOKEN` with `packages: write`; no Docker Hub login, PAT or new repository
 secret is needed. Image publication is independent of the npm release job and also runs for docs/CI-only
 commits. Jobs serialize publication; an outdated run publishes its SHA tag but leaves `latest` to the current
@@ -38,12 +42,15 @@ commits. Jobs serialize publication; an outdated run publishes its SHA tag but l
 **Once, after the first image publish:** open the
 [GHCR package settings](https://github.com/users/crvouga/packages/container/atlas/settings) and
 set its visibility to **Public**, so Railway and other projects can pull it without registry credentials.
+Do the same for the separate [atlas-insecure package settings](https://github.com/users/crvouga/packages/container/atlas-insecure/settings)
+after its first publish.
 GHCR creates new packages as private even for a public source repository
 ([GitHub's registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images)).
 The image's source label links it to this repository. Verify public access without logging in:
 
 ```sh
 docker run --rm --pull always --entrypoint bun ghcr.io/crvouga/atlas:latest --version
+docker run --rm --pull always --entrypoint bun ghcr.io/crvouga/atlas-insecure:latest --version
 ```
 
 Run that command on a machine with no GHCR login. A Bun version and exit 0 prove an anonymous pull and
@@ -55,6 +62,8 @@ For a local container check:
 ```sh
 docker build -t atlas-server:local .
 bun scripts/container-smoke.ts atlas-server:local
+docker build --target insecure -t atlas-insecure:local .
+bun scripts/container-smoke.ts atlas-insecure:local --insecure
 ```
 
 The Dockerfile's pinned `BUN_VERSION` must match `packageManager` when upgrading Bun.

@@ -7,7 +7,6 @@ export interface JobResult {
   outputs?: Record<string, string>;
 }
 
-const image = 'ghcr.io/crvouga/atlas';
 const code = (value: string) => `<code>${value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('|', '&#124;').replace(/[\r\n]/g, ' ')}</code>`;
 const block = (value: string) => `\n\n\`\`\`text\n${value}\n\`\`\`\n`;
 
@@ -23,6 +22,7 @@ export function renderSummary(needs: Record<string, JobResult>, env: Record<stri
     ['s3', 'S3 integration', 'Store and report flow against real SeaweedFS'],
     ['example', 'Browser examples', 'Both run and clients matrix jobs; recordings in artifacts'],
     ['image', 'Server image', 'Linux AMD64 build, Railway container smoke and eligible publication'],
+    ['insecure-image', 'Insecure server image', 'Same server and viewer; anonymous read, publish and admin container smoke'],
     ['release', 'npm release', 'Publish/reconcile npm versions, tags, GitHub releases and issue notices']
   ];
   const lines = [
@@ -39,47 +39,50 @@ export function renderSummary(needs: Record<string, JobResult>, env: Record<stri
     '',
     `[Logs and timings](${run}) · [Artifacts: example recordings and Docker build record](${run}#artifacts)`,
     '',
-    '## Docker image for Railway',
-    ''
   ];
-  const output = needs.image?.outputs ?? {};
-  lines.push(`Build: ${code(output.built || 'unknown')} · Container smoke: ${code(output.smoke || 'unknown')} · Platform: ${code('linux/amd64')}`, '');
-  if (output.published) {
-    if (output.latest === 'updated') {
-      lines.push('**Copy into Railway → New service → Docker image** (tracks the newest published main image):', block(`${image}:latest`));
-      lines.push('This run updated `latest`.');
-    } else if (output.latest === 'superseded') {
-      lines.push('A newer main commit owns `latest`; this run published its commit tag and did not update `latest`.');
+  for (const [job, label, image] of [
+    ['image', 'Docker image for Railway', 'ghcr.io/crvouga/atlas'],
+    ['insecure-image', 'Insecure Docker image for Railway', 'ghcr.io/crvouga/atlas-insecure']
+  ]) {
+    lines.push(`## ${label}`, '');
+    const output = needs[job!]?.outputs ?? {};
+    lines.push(`Build: ${code(output.built || 'unknown')} · Container smoke: ${code(output.smoke || 'unknown')} · Platform: ${code('linux/amd64')}`, '');
+    if (output.published) {
+      if (output.latest === 'updated') {
+        lines.push('**Copy into Railway → New service → Docker image** (tracks the newest published main image):', block(`${image}:latest`));
+        lines.push('This run updated `latest`.');
+      } else if (output.latest === 'superseded') {
+        lines.push('A newer main commit owns `latest`; this run published its commit tag and did not update `latest`.');
+      } else {
+        lines.push('This run published its commit tag, but did not confirm updating `latest`. Check the image job logs.');
+      }
+      lines.push('', '**This run’s commit image** (paste into Railway to deploy this revision):', block(output.published));
+      if (output.digest) lines.push('**Exact registry digest** (immutable reference):', block(output.digest));
     } else {
-      lines.push('This run published its commit tag, but did not confirm updating `latest`. Check the Server image logs.');
+      lines.push('**No image publication confirmed for this run.** Pull requests build and test without publishing; failed or skipped jobs may not produce a deployable image.');
+      lines.push('', 'For the newest image from a previous successful main publication:', block(`${image}:latest`));
     }
-    lines.push('', '**This run’s commit image** (paste into Railway to deploy this revision):', block(output.published));
-    if (output.digest) lines.push('**Exact registry digest** (immutable reference):', block(output.digest));
-  } else {
-    lines.push('**No image publication confirmed for this run.** Pull requests build and test without publishing; failed or skipped jobs may not produce a deployable image.');
-    lines.push('', 'For the newest image from a previous successful main publication:', block(`${image}:latest`));
+    lines.push(
+      '',
+      `[GHCR package](https://github.com/users/crvouga/packages/container/${job === 'image' ? 'atlas' : 'atlas-insecure'}) · [Railway deployment guide](${repo}/blob/${sha}/docs/deploying.md#run-it)`,
+      '',
+      '### Railway settings (no code or checkout required)',
+      '',
+      '| Setting | Value |',
+      '| --- | --- |',
+      '| Start command | Leave unset; server and viewer are included |',
+      job === 'image' ? '| Variable | `ATLAS_TOKEN`: a random secret of at least 12 characters; use 48 or more |' : '| Authentication | No tokens needed. Leave `ATLAS_TOKEN`, `ATLAS_PUBLISH_TOKEN`, `ATLAS_READ_TOKEN` and config auth tokens unset |',
+      '| Variable | `RAILWAY_RUN_UID=0` for Railway volume permissions |',
+      '| Persistent volume | Mount at `/data`; one replica |',
+      '| Healthcheck | `/readyz` |',
+      '| Networking | Generate a public domain; Railway supplies `PORT`, leave `ATLAS_PORT` unset |',
+      '| Auto updates (with `:latest`) | Settings → Source → Configure Auto Updates → Anytime |',
+      '',
+      job === 'image' ? 'Open the domain and sign in with the token as the password (any username). Image update detection can take a few hours.' : 'Open the domain directly. Anyone who discovers the URL can read, upload and change settings; an unlisted URL is not access control. Image update detection can take a few hours.',
+      ''
+    );
   }
-  lines.push(
-    '',
-    `[GHCR package](https://github.com/users/crvouga/packages/container/atlas) · [Railway deployment guide](${repo}/blob/${sha}/docs/deploying.md#run-it)`,
-    '',
-    '### Railway settings (no code or checkout required)',
-    '',
-    '| Setting | Value |',
-    '| --- | --- |',
-    '| Start command | Leave unset; server and viewer are included |',
-    '| Variable | `ATLAS_TOKEN`: a random secret of at least 12 characters; use 48 or more |',
-    '| Variable | `RAILWAY_RUN_UID=0` for Railway volume permissions |',
-    '| Persistent volume | Mount at `/data`; one replica |',
-    '| Healthcheck | `/readyz` |',
-    '| Networking | Generate a public domain; Railway supplies `PORT`, leave `ATLAS_PORT` unset |',
-    '| Auto updates (with `:latest`) | Settings → Source → Configure Auto Updates → Anytime |',
-    '',
-    'Open the domain and sign in with the token as the password (any username). Image update detection can take a few hours.',
-    '',
-    '## npm release',
-    ''
-  );
+  lines.push('## npm release', '');
   const release = needs.release;
   if (release?.outputs?.planned) {
     const planned = JSON.parse(release.outputs.planned) as { name: string; version: string }[];

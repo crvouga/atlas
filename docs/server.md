@@ -56,6 +56,8 @@ ATLAS_STORE=http://127.0.0.1:5180 bunx atlas report publish --producer unit --ju
 For Railway, deploy `ghcr.io/crvouga/atlas:latest` directly: the image contains the server and
 viewer, and every green `main` push updates it. See [running Atlas for a project](deploying.md#run-it) for
 Railway's volume, tokens, healthcheck and image auto updates, or for Docker, Kubernetes and CI.
+For anonymous reading, uploads and administration, use `ghcr.io/crvouga/atlas-insecure:latest` with no tokens
+configured; see [deploying without authentication](deploying.md#deploy-without-authentication).
 
 ## Configuration
 

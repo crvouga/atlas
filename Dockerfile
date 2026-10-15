@@ -43,3 +43,11 @@ USER bun
 WORKDIR /data
 HEALTHCHECK --interval=15s --timeout=3s --start-period=30s CMD bun -e "fetch('http://127.0.0.1:'+(process.env.ATLAS_PORT||process.env.PORT||8080)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 ENTRYPOINT ["bun", "/app/packages/core/bin/atlas.mjs", "serve"]
+
+# Same server and viewer, with anonymous read, publish and admin access when no tokens are set.
+FROM runtime AS insecure
+ENV ATLAS_INSECURE=true
+LABEL org.opencontainers.image.description="Atlas report server and live viewer with anonymous full access"
+
+# Keep an unqualified docker build on the authenticated image.
+FROM runtime AS default

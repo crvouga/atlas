@@ -18,6 +18,34 @@ const jobs = (image: JobResult, release: JobResult = { result: 'success', output
 });
 
 describe('CI summary publication evidence', () => {
+  test('insecure publication has independent evidence and token-free deployment instructions', () => {
+    const image = 'ghcr.io/crvouga/atlas-insecure';
+    const summary = renderSummary({
+      ...jobs({ result: 'failure' }),
+      'insecure-image': { result: 'success', outputs: {
+        built: 'success', smoke: 'success', published: `${image}:${env.GITHUB_SHA}`,
+        digest: `${image}@sha256:${'c'.repeat(64)}`, latest: 'updated'
+      } }
+    }, env);
+    const section = summary.split('## Insecure Docker image for Railway')[1]!.split('## npm release')[0]!;
+    expect(section).toContain(`\`\`\`text\n${image}:latest\n\`\`\``);
+    expect(section).toContain(`${image}:${env.GITHUB_SHA}`);
+    expect(section).toContain(`${image}@sha256:`);
+    expect(section).toContain('No tokens needed');
+    expect(section).toContain('Anyone who discovers the URL');
+    expect(section).not.toContain('sign in with the token');
+    expect(summary.split('## Insecure Docker image for Railway')[0]).toContain('No image publication confirmed');
+  });
+
+  test('an insecure build without publication never borrows the authenticated image evidence', () => {
+    const summary = renderSummary(jobs({ result: 'success', outputs: { published, digest, latest: 'updated' } }), env);
+    const section = summary.split('## Insecure Docker image for Railway')[1]!.split('## npm release')[0]!;
+    expect(section).toContain('No image publication confirmed');
+    expect(section).not.toContain(`ghcr.io/crvouga/atlas-insecure:${env.GITHUB_SHA}`);
+    expect(section).not.toContain(published);
+    expect(section).not.toContain(digest);
+  });
+
   test('successful publication provides copyable URIs, provenance, release and deployment details', () => {
     const result = renderSummary(jobs({ result: 'success', outputs: { built: 'success', smoke: 'success', published, digest, latest: 'updated' } }, {
       result: 'success', outputs: { planned: JSON.stringify([{ name: '@crvouga/atlas', version: '1.2.3' }]) }

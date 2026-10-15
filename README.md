@@ -95,6 +95,21 @@ whether that run updated `latest`, all job results, npm release details and arti
 tag to pin or roll back a deployment. The [deployment guide](docs/deploying.md#run-it) covers optional reader
 and publisher tokens, bucket storage and sending results from your projects.
 
+### Deploy without authentication
+
+For anonymous access, use this image in Railway instead:
+
+```text
+ghcr.io/crvouga/atlas-insecure:latest
+```
+
+It contains the same server and viewer, with anonymous reading, uploads and administration enabled.
+Follow the Railway steps above, leaving `ATLAS_TOKEN`, `ATLAS_PUBLISH_TOKEN`, `ATLAS_READ_TOKEN` and
+configuration-file auth tokens unset. Open the generated domain directly; no sign-in is required.
+Anyone who discovers the URL can read reports, upload results and change settings. An unlisted URL
+is not access control. See the [anonymous deployment guide](docs/deploying.md#deploy-without-authentication)
+for a token-free project configuration and verification commands.
+
 ## For AI agents
 
 Atlas is built to be integrated and operated by agents, with nothing to click and nothing to guess.
