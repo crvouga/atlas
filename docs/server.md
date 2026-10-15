@@ -1,11 +1,11 @@
 # The Atlas server
 
-One process per project that **takes in results from every environment, keeps them, and shows everyone the
-combined report, live**. It is a Bun API that serves a Vite-built single-page viewer: one host, one port, in
+One node for multiple projects that **takes in results from every environment, keeps them, and shows everyone the
+combined report, live**. It is a Bun API that serves a Vite-built single-page client: one host, one port, in
 development and in production.
 
 ```
-  laptop ──────┐                                        ┌── browsers  (the viewer: reads /api, listens on /api/events)
+  laptop ──────┐                                        ┌── browsers  (the client: reads /api, listens on /api/events)
   CI job ──────┼── PUT /api/store/…  POST /api/checks ─▶│
   device lab ──┘   atlas report publish | stream        │   atlas report status  (the gate: asks /api/status)
                                                         │
@@ -18,8 +18,8 @@ development and in production.
 - **Its default backend is its own filesystem** (`./atlas-data`). That folder is the whole state: back it up,
   mount it on a volume, or put the state in a bucket instead ([backends](#backends)). Several backends are one
   report, as ever.
-- **The report is live.** Every viewer holds one server-sent-events connection; when results arrive the server
-  says so and each viewer reads only what changed ([streaming](#streaming)).
+- **The report is live.** Every client holds one server-sent-events connection; when results arrive the server
+  says so and each client reads only what changed ([streaming](#streaming)).
 - **Layered, never partitioned**, as everywhere in Atlas: the server only stores immutable, content-addressed
   layers and works out the report from them. Replace it, restore it, or run a second one on a copy of the data:
   the same layers give the same report ([the contract](report-contract.md)).
@@ -36,13 +36,13 @@ export ATLAS_TOKEN=$(openssl rand -hex 24)   # admin token; see "Tokens and role
 bunx atlas serve                             # http://127.0.0.1:8080, data in ./atlas-data
 ```
 
-It runs on Bun and on Node 22.18 or later. The first start builds the viewer once into `~/.cache/atlas/site`
+It runs on Bun and on Node 22.18 or later. The first start builds the client once into `~/.cache/atlas/site`
 (or serves `./atlas-site`, or `--site <dir>`); the build is the same for every project, because the server writes
 its own address book into the page (`window.__ATLAS_CONFIG__`).
 
-**Working on Atlas or on the viewer:** `atlas dev` runs the server on a port of its own and the viewer's Vite dev
+**Working on Atlas or on the client:** `atlas dev` runs the server on a port of its own and the client's Vite dev
 server in front of it. Vite proxies `/api` (server-sent events included) to the server, so the browser, the
-uploaders and the viewer all use **one host**, exactly as in production, and a change to the viewer shows at once.
+uploaders and the client all use **one host**, exactly as in production, and a change to the client shows at once.
 
 ```sh
 bunx atlas dev --data .atlas-data            # http://127.0.0.1:5180
@@ -90,7 +90,7 @@ purposes.
 
 A backend is anything that implements `ObjectStore`: a folder, an S3-compatible bucket (`s3://`, `r2://`,
 `gs://`), or **another Atlas server** (`https://…`, with `ATLAS_TOKEN` for it). The server reads every backend
-and shows one report; one that is down is named in the viewer and skipped, and the server recovers by itself.
+and shows one report; one that is down is named in the client and skipped, and the server recovers by itself.
 
 - **Uploads go to one backend**: the `data` folder, or the one named by `write` / `ATLAS_WRITE`. Name a bucket
   to make it the system of record, so the server holds nothing a replacement would lose:
@@ -107,7 +107,7 @@ and shows one report; one that is down is named in the viewer and skipped, and t
 
 | Role | May |
 | --- | --- |
-| `read` | look: the viewer, the report, `/api/status` |
+| `read` | look: the client, the report, `/api/status` |
 | `publish` | also upload layers, specs and runs, and remove the scratch objects `atlas report doctor` writes |
 | `admin` | all server operations |
 
@@ -191,24 +191,26 @@ there (`409`), so nothing half-uploaded is ever shown.
 
 | Event | Data | Meaning |
 | --- | --- | --- |
-| `hello` | `{ version, ready, time }` | Sent first. The report's current version. |
+| `hello` | `{ version, ready, time, heartbeatMs? }` | Sent first. The report's current version. |
 | `report` | `{ version, totalLayers, added: [{ id, producer, environment, branch, sha, recordedAtMs, counts }], addedTotal }` | Layers arrived. Enough to say who sent what, without asking. |
 | `atlas:change` | `{ scope: "specs" \| "runs", files, runIds }` | New specs or runs. |
-| `ping` | `{}` | Every 15 s, so proxies keep the connection and the viewer can tell a quiet server from a dead connection. |
+| `run` | A bounded `LiveRun` snapshot | Start, progress logs, heartbeat, completion, and interruption; no producer credentials. |
+| `projects` | `{}` | Another project was discovered; refresh the project picker. |
+| `ping` | `{}` | Every 15 s, so proxies keep the connection and the client can tell a quiet server from a dead connection. |
 
-Events say *that* something changed; the state is always fetched. A viewer that missed some (a dropped
-connection, a laptop that slept) loses nothing: it reads again when it reconnects, and the viewer also reads on a
+Run events update progress directly in the client cache. Report and specification events trigger coalesced reads of the affected data. Events arriving during a read cause a trailing refresh rather than cancelling that read. A client that missed some (a dropped
+connection, a laptop that slept) loses nothing: it reads again when it reconnects, and the client also reads on a
 slow timer behind the stream. Past `limits.maxStreams` viewers the server answers `503` with `Retry-After` and the
-viewer polls instead; a viewer that stops reading is let go rather than held in memory.
+client polls instead; a client that stops reading is let go rather than held in memory.
 
 ### Reading only what changed
 
 `GET /api/reports/evidence/effective` is the whole report: only the layers that win a check, each with only the
-rows that win, with an ETag. A viewer that holds a version asks `?since=<version>` and is sent **only the layers
+rows that win, with an ETag. A client that holds a version asks `?since=<version>` and is sent **only the layers
 that changed since, and the ids that no longer win anything** (`"delta": true`). Applying that gives exactly the
 report the server would have sent whole (`applyEffectiveDelta`, tested against every earlier version of random
-runs); a version the server does not remember, or an older server, answers with the whole report, which a viewer
-takes as it always did. A result streamed into a 100 000-check report costs a viewer a few kilobytes.
+runs); a version the server does not remember, or an older server, answers with the whole report, which a client
+takes as it always did. A result streamed into a 100 000-check report costs a client a few kilobytes.
 
 ## API reference
 
@@ -250,7 +252,7 @@ laptop with 2 000 layers of 100 checks (200 000 results, 10 000 slots) and with 
 | --- | --- | --- |
 | Start: read and fold every layer | 0.4 s | 1.7 s |
 | A refresh with nothing new | 4 ms | 4 ms |
-| Upload one layer → every viewer told | 4 ms | 5 ms |
+| Upload one layer → every client told | 4 ms | 5 ms |
 | `GET effective`, cached / `304` | 1 ms / 0.2 ms | 13 ms / 0.5 ms |
 | `GET status`, cached for the version | 12 ms first | 70 ms first |
 
@@ -264,22 +266,56 @@ What makes it so, none of it at the cost of the contract:
 - **An upload is read once.** A layer's manifest is parsed and verified when it arrives and handed to the report,
   not read again; blob existence is asked 16 at a time.
 - **The newest end of the catalog is all a refresh looks at**, with a full look now and then.
-- **Compressed once.** The viewer's files are brotli-compressed once (gzip for clients that cannot read it), a
-  report version is gzipped once however many viewers fetch it, and events are encoded once for every viewer.
-- **A small viewer.** The graph, the Gherkin parser, the recording player and the finder load when used: the
+- **Compressed once.** The client's files are brotli-compressed once (gzip for clients that cannot read it), a
+  report version is gzipped once however many viewers fetch it, and events are encoded once for every client.
+- **A small client.** The graph, the Gherkin parser, the recording player and the finder load when used: the
   first page is about 250 KB over the wire.
 
 ## Operating it
 
-- **One server per project.** It is a singleton by design: local environments and CI all talk to it, and it tells
-  every viewer at once. Two servers on one backend both work and show the same report, but a viewer hears about
+- **One node for multiple projects.** Local environments and CI select their project slug and talk to the same node, which tells
+  every client at once. Two servers on one backend both work and show the same report, but a client hears about
   an upload only from the server that took it and about the other's at the next refresh, so give a team one.
 - **State is the write backend.** Back up `./atlas-data` (or the bucket). Restoring it, or starting a new server
   on it, shows the same report.
 - **Stopping.** `SIGTERM` stops accepting, lets requests in flight finish, ends the event streams and exits 0.
 - **Logs.** One JSON line per request (method, path, status, ms) to stdout, none for the probes. The first lines
   say what it reads and which backend takes uploads, and warn when there are no tokens.
-- **A backend goes down.** The server keeps serving what it has, names the backend in the viewer and in
+- **A backend goes down.** The server keeps serving what it has, names the backend in the client and in
   `/readyz`, and recovers by itself. The gate fails closed: unknown is not a pass.
 - **Upgrades.** The layer format is a stable, versioned contract; upgrade the server before the clients that
   publish when a release says the format moved.
+
+## Configure from the client
+
+Open **Settings** (`/admin`) and enter an admin token. The token stays in page memory. Read and publish tokens cannot edit settings; the browser sign-in box only grants reading. The API uses `Authorization: Bearer` and refuses cross-origin browser writes.
+
+Use the Storage, Live updates, and Report rules forms to edit saved settings. Advanced includes request limits, logging, a JSON editor, and a read-only view of the active configuration. Save changes and restart Atlas to apply them. Atlas validates the configuration and atomically replaces `atlas.server.json`, preserving authentication and deployment settings. Changes apply at the next restart; environment variables and flags retain precedence. Concurrent edits require reloading the current revision. Data is never moved or removed by changing settings. Keep an old backend as a read source when moving future uploads to a new one. Embedded servers can provide their own settings persistence or manage configuration outside this API.
+
+Native test reporters for CodeceptJS, Mocha, Jest and Node upload directly to this server; see [runner setup](runners.md). Every publisher uses the same server address and only a publish token. Storage credentials belong in the server environment.
+
+## Live test runs and heartbeats
+
+The default native reporters and statechart runner stream tests and steps through `/api/live`, before the invocation finishes. Running tests appear inside their report with an animated status mark and the latest step. Open a test to read its progress log; its previous recorded result stays available separately. The **Running** filter narrows both the spec list and the test rows, and counts update as tests finish or time out. Statechart tests appear inside the chart and screen details. Selecting an archived run leaves live progress out of that historical view. Finished checks immediately enter normal immutable report layers. Operational progress is separate from historical winners, so a previous passed result never implies that the current invocation passed.
+
+Start with `POST /api/live/<uuid>`, send ordered check deltas with `PATCH /api/live/<uuid>`, and renew the producer lease with `POST /api/live/<uuid>/heartbeat` every 5 seconds. Finish with a terminal update. Only the publisher token that registered the invocation can update it. Replayed sequences must have identical content; late writes cannot revive an expired invocation. `createLiveReporter` handles batching, retries, heartbeat timers and the final flush.
+
+The server uses its own receipt clock. By default it interrupts a run after 30 seconds without a heartbeat (`ATLAS_RUN_TIMEOUT_SECONDS`). Heartbeats do not reset progress: after 15 minutes with no changed tests/steps, a separate stall timeout interrupts it (`ATLAS_RUN_STALL_SECONDS`, 0 disables). Both settings are editable in the admin UI. Healthy long tests continue renewing heartbeats; increase or disable the progress timeout for tests that legitimately make no observable progress for longer.
+
+Interrupted runs retain completed results and show why the remaining work stopped. Missing outcomes never become passes. The server persists bounded summaries under `server/live/` in its write backend (an HTTP relay keeps operational leases in its own data folder; the remote server only accepts immutable report objects) and restores outstanding leases as interrupted after a server restart. S3 server credentials need GetObject/PutObject for that prefix; generate the updated `atlas report policy --role both` policy. Producers still receive no backend credentials. Live `run` events carry bounded snapshots directly into test rows, including step logs and interruption reasons. The legacy `atlas:change` announcement remains available for older clients; its optional `liveRunId` identifies lease updates. Reconnecting viewers re-fetch progress, reports, and specifications. With SSE connected, live progress uses a 60-second safety refresh; without SSE it polls every two seconds. Returning to the tab or coming back online also revalidates reports and progress.
+
+In this repository, use `bun atlas` and `bun example:run` in two terminals. Every example Gherkin scenario executes, including sharing and renaming; `@unrecorded` no longer excludes tests.
+
+## Multiple projects on one node
+
+Start the node with `atlas server` (or `bun atlas` in this repository). The server builds or finds the Atlas client and serves it with the API from one process. It never imports a consumer or an example. In this repository the node uses port 5180 and `./atlas-data`; `bun example:run` publishes the Todo app to project `todo-app`.
+
+Set `ATLAS_PROJECT=todo-app` alongside `ATLAS_SERVER_URL` for native reporters and statechart runs. Report CLI commands accept `--project todo-app` (or `ATLAS_PROJECT`) with an HTTP store. Programmatic HTTP stores, live reporters and native reporter options accept `project: 'todo-app'`. Keep the same slug for the invocation's live progress, final results, spec sets and recordings. Slugs use 1–64 lowercase letters, digits or hyphens, starting and ending with a letter or digit.
+
+Every project API is available as `/api/projects/<slug>/…`, for example `/api/projects/todo-app/checks`, `/api/projects/todo-app/events` and `/api/projects/todo-app/reports/evidence/effective`. The unprefixed API accepts optional `?project=todo-app` or `X-Atlas-Project: todo-app`. Conflicting selectors are refused. `GET /api/projects` discovers projects. A successful authenticated upload creates a project; reads of an unknown project return 404.
+
+Projects isolate check identities, specs, run IDs, recordings, lease summaries, event streams and report caches. Identical layer bytes are preserved as uploaded. The node stores each project's objects under `projects/<slug>/` and discovery markers under `server/projects/`. Unqualified requests continue reading the legacy default namespace, advertised as **Default** when it has reports. Existing data is never implicitly moved. For S3, use the combined server policy (`atlas report policy --role both`) with access to both project namespaces and the catalog. An HTTP relay selects the same project on its upstream node and keeps discovery and leases locally.
+
+The project picker sits at the top right; the header also provides spec dropdown breadcrumbs. Project selection lives in the page URL, so links and refreshes preserve it. Switching projects reloads the client, clearing report queries, media and event connections. Custom report-source preferences are keyed by the project's data URL. Project namespaces share the node's authentication roles: they are organizational partitions, not separate tenant authorization policies. Settings and server identity remain node-wide.
+
+Project indexes are opened lazily; at most 64 are active in memory. An index with no active requests or event subscribers is closed after five idle minutes. Event subscribers share the node-wide stream limit. Project discovery lists only small catalog markers, never every report layer.

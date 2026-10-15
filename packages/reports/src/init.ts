@@ -93,7 +93,8 @@ function runnersOf(directory: string, pkg: Record<string, unknown> | null): Dete
   const deps = { ...((pkg?.dependencies as Record<string, string> | undefined) ?? {}), ...((pkg?.devDependencies as Record<string, string> | undefined) ?? {}) };
   const scripts = Object.values((pkg?.scripts as Record<string, string> | undefined) ?? {}).join('\n');
   const dep = (name: string, runner: string) => { if (deps[name]) found.push({ runner, evidence: `package.json dependencies: ${name}` }); };
-  dep('vitest', 'vitest'); dep('@playwright/test', 'playwright'); dep('@cucumber/cucumber', 'cucumber'); dep('cypress', 'cypress'); dep('jest', 'jest'); dep('mocha', 'mocha');
+  dep('vitest', 'vitest'); dep('@playwright/test', 'playwright'); dep('@cucumber/cucumber', 'cucumber'); dep('cypress', 'cypress'); dep('jest', 'jest'); dep('mocha', 'mocha'); dep('codeceptjs', 'codeceptjs');
+  if (/\bnode\s+--test\b/.test(scripts)) found.push({ runner: 'node-test', evidence: 'package.json scripts: node --test' });
   if (!found.some(item => item.runner === 'vitest' || item.runner === 'jest' || item.runner === 'mocha') && /\bbun test\b/.test(scripts)) found.push({ runner: 'bun-test', evidence: 'package.json scripts: bun test' });
   else if (!found.length && pkg && (existsSync(path.join(directory, 'bun.lock')) || existsSync(path.join(directory, 'bunfig.toml'))) && readdirSafe(directory).some(name => /\.(test|spec)\.[cm]?[tj]sx?$/.test(name) || name === 'tests' || name === 'test')) found.push({ runner: 'bun-test', evidence: 'bun.lock and test files' });
   const python = ['pyproject.toml', 'pytest.ini', 'tox.ini', 'setup.cfg', 'requirements.txt', 'requirements-dev.txt'].map(name => path.join(directory, name)).filter(existsSync);
@@ -123,6 +124,8 @@ function suiteOf(detected: Detected, context: { exec: string; install: string; s
     case 'cypress': return make('cypress', out('cypress'), `${context.exec} cypress run --reporter junit --reporter-options mochaFile=${out('cypress')}`, 'desktop-web');
     case 'cucumber': return make('cucumber', out('cucumber'), `${context.exec} cucumber-js --format summary --format junit:${out('cucumber')}`, null);
     case 'mocha': return make('mocha', out('mocha'), `MOCHA_FILE=${out('mocha')} ${context.exec} mocha --reporter mocha-junit-reporter`, null, [`${context.install} mocha-junit-reporter`]);
+    case 'codeceptjs': return make('codeceptjs', out('codeceptjs'), `MOCHA_FILE=${out('codeceptjs')} ${context.exec} codeceptjs run --reporter mocha-junit-reporter`, 'desktop-web', [`${context.install} mocha-junit-reporter`]);
+    case 'node-test': return make('node-test', out('node-test'), `node --test --test-reporter=junit --test-reporter-destination=${out('node-test')}`, null);
     case 'bun-test': return make('bun-test', out('bun'), `bun test --reporter=junit --reporter-outfile=${out('bun')}`, null);
     case 'pytest': return make('pytest', out('pytest'), `pytest --junitxml=${out('pytest')}`, null);
     case 'go-test': return make('go-test', out('go'), `go test -v ./... 2>&1 | go-junit-report > ${out('go')}`, null, ['go install github.com/jstemmer/go-junit-report/v2@latest']);
@@ -227,7 +230,7 @@ export async function planInit(options: InitOptions): Promise<InitPlan> {
   const exec = EXEC[manager ?? 'npm']!;
   const context = { exec, install: INSTALL_DEV[manager ?? 'npm']!, specs: specs.directory, server: serverUrl };
   const suites = runnersOf(directory, pkg).map(found => suiteOf(found, context));
-  if (!suites.length) warnings.push('No test runner was recognised (looked for vitest, jest, playwright, cypress, cucumber, mocha, bun test, pytest, go test and Atlas statecharts). Add one suite by hand: run it so it writes a JUnit XML or CTRF file, then `atlas report publish --producer <name> --junit <file>`.');
+  if (!suites.length) warnings.push('No test runner was recognised (looked for vitest, jest, playwright, cypress, cucumber, mocha, codeceptjs, node --test, bun test, pytest, go test and Atlas statecharts). Add one suite by hand: run it so it writes a JUnit XML or CTRF file, then `atlas report publish --producer <name> --junit <file>`.');
   if (!serverUrl) warnings.push('No server given. Pass --server https://… (or set ATLAS_STORE) so the plan can name it; until then the generated text says "the project\'s Atlas server".');
   if (!specs.directory) warnings.push('No spec files (Gherkin, Quint, DMN, Alloy, OpenSLO, SCXML) were found in specs/, features/ or the usual places. Results are still reported; they belong to no spec until `--specs <dir>` or `--spec <path>` links them.');
   if (existsSync(path.join(directory, 'atlas.config.ts')) && suites.some(suite => suite.runner === 'atlas-statecharts')) warnings.push('atlas.config.ts found: the statechart suite runs the whole plan (`atlas run --mode fast`); see docs/statecharts.md to choose modes and shards.');

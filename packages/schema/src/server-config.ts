@@ -74,6 +74,8 @@ export const ServerConfigSchema = z.strictObject({
       maxStreams: z.number().int().positive().default(500).describe('Viewers that may be connected for live updates at once')
     })
     .default({ maxObjectMiB: 256, maxJsonMiB: 32, maxStreams: 500 }),
+  runTimeoutSeconds: z.number().min(10).max(3600).default(30).describe('Interrupt a live run after this many seconds without a producer heartbeat'),
+  runStallSeconds: z.number().min(0).max(86400).default(900).describe('Interrupt after this many seconds without test progress; 0 disables progress expiry'),
   heartbeatSeconds: z.number().min(1).default(15).describe('How often a live connection is touched, so proxies keep it open'),
   log: z.boolean().default(true).describe('One JSON line per request')
 });
@@ -81,3 +83,15 @@ export const ServerConfigSchema = z.strictObject({
 export type ServerConfig = z.output<typeof ServerConfigSchema>;
 /** A server configuration as written, before defaults are applied. */
 export type ServerConfigInput = z.input<typeof ServerConfigSchema>;
+
+/** Storage and report settings editable by an admin. Authentication, listeners and the served site stay deployment-owned. Replaces the editable portion of the file; omitted fields use defaults after restart. */
+export const ServerEditableSettingsSchema = ServerConfigSchema.pick({ data: true, backends: true, write: true, outlineBranch: true, include: true, refreshSeconds: true, limits: true, heartbeatSeconds: true, runTimeoutSeconds: true, runStallSeconds: true, log: true }).partial();
+
+/** The settings API response: persisted editable configuration, active values, concurrency revision and restart/precedence guidance. Authentication token settings are excluded. */
+export const ServerSettingsSnapshotSchema = z.looseObject({
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
+  settings: ServerEditableSettingsSchema,
+  active: ServerEditableSettingsSchema,
+  restartRequired: z.boolean(),
+  precedence: z.string()
+});

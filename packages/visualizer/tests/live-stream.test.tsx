@@ -51,7 +51,7 @@ describe('hearing the server', () => {
     const changes: unknown[] = [];
     listenChanges('http://x/api/events', change => changes.push(change));
     FakeSource.all[0]!.send('open');
-    expect(changes).toEqual([{ scope: 'runs', files: [], runIds: [] }]);
+    expect(changes).toEqual([{ scope: 'specs', files: [], runIds: [] }, { scope: 'runs', files: [], runIds: [] }]);
   });
 
   test('a connection the server refused is tried again, slowly, by the page itself', async () => {
@@ -84,4 +84,43 @@ describe('reading again, not too often', () => {
     await new Promise(resolve => setTimeout(resolve, 80));
     expect(acted).toBe(3);
   });
+});
+
+test('a report announcement refreshes run catalogs and obsolete connections cannot update the page', () => {
+  const changes: unknown[] = [];
+  const stop = listenChanges('http://x/api/events', change => changes.push(change));
+  const source = FakeSource.all[0]!;
+  source.send('report', { version: 'v2' });
+  expect(changes).toEqual([{ scope: 'runs', files: [], runIds: [] }]);
+  stop();
+  source.send('open');
+  source.send('atlas:change', { scope: 'specs' });
+  expect(changes).toHaveLength(1);
+});
+
+test('events during a slow read are coalesced into one trailing read without cancelling it', async () => {
+  const { QueryClient, QueryObserver } = await import('@tanstack/react-query');
+  const { liveInvalidator } = await import('../src/live/live-query');
+  const client = new QueryClient();
+  let reads = 0, finish!: (value: number) => void;
+  const observer = new QueryObserver(client, { queryKey: ['slow'], queryFn: () => {
+    reads++;
+    return reads === 2 ? new Promise<number>(resolve => { finish = resolve; }) : Promise.resolve(reads);
+  }, staleTime: Infinity });
+  const stop = observer.subscribe(() => {});
+  await observer.refetch();
+  const refresh = liveInvalidator(client, ['slow'], 10);
+  try {
+    refresh();
+    await new Promise(resolve => setTimeout(resolve, 15));
+    refresh(); refresh();
+    expect(reads).toBe(2);
+    finish(2);
+    await new Promise(resolve => setTimeout(resolve, 40));
+    expect(reads).toBe(3);
+    expect(client.getQueryData(['slow'])).toBe(3);
+    refresh.cancel(); refresh();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(reads).toBe(3);
+  } finally { refresh.cancel(); stop(); client.clear(); }
 });

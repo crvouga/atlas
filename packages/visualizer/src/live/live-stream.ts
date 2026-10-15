@@ -1,4 +1,4 @@
-import { AtlasChangeSchema, type AtlasChange } from '@crvouga/atlas/schema';
+import { AtlasChangeSchema, LiveRunSchema, type LiveRun, type AtlasChange } from '@crvouga/atlas/schema';
 import { useSyncExternalStore } from 'react';
 
 import { runtimeConfig, runtimeUrl } from '../runtime';
@@ -6,6 +6,8 @@ import { runtimeConfig, runtimeUrl } from '../runtime';
 /** What the server tells a viewer as it happens. */
 export type LiveEvent =
   | { readonly type: 'open' }
+  | { readonly type: 'run'; readonly run: LiveRun }
+  | { readonly type: 'projects' }
   | { readonly type: 'report'; readonly report: ReportAnnouncement }
   | { readonly type: 'change'; readonly change: AtlasChange };
 
@@ -74,31 +76,45 @@ function connect(stream: Stream) {
   stream.timer = null;
   const source = new EventSource(stream.url);
   stream.source = source;
+  let silenceMs = SILENCE_MS;
+  const on = (name: string, handler: (event: Event) => void) => source.addEventListener(name, event => {
+    if (stream.source === source) handler(event);
+  });
   const heard = () => {
     if (stream.watchdog) clearTimeout(stream.watchdog);
-    stream.watchdog = setTimeout(() => lose(stream), SILENCE_MS);
+    stream.watchdog = setTimeout(() => lose(stream), silenceMs);
   };
-  source.addEventListener('open', () => {
+  on('open', () => {
     heard();
     stream.attempts = 0;
     setStatus(stream, 'live');
     // Anything may have happened while the stream was away, so a (re)connection reads everything again.
     emit(stream, { type: 'open' });
   });
-  source.addEventListener('hello', heard);
-  source.addEventListener('ping', heard);
-  source.addEventListener('report', (event) => {
+  on('hello', event => {
+    const hello = parse((event as MessageEvent<string>).data) as { heartbeatMs?: unknown } | null;
+    if (typeof hello?.heartbeatMs === 'number' && Number.isFinite(hello.heartbeatMs) && hello.heartbeatMs > 0) silenceMs = Math.max(SILENCE_MS, hello.heartbeatMs * 3);
+    heard();
+  });
+  on('ping', heard);
+  on('report', (event) => {
     heard();
     const report = parse((event as MessageEvent<string>).data) as ReportAnnouncement | null;
     if (report && typeof report.version === 'string') emit(stream, { type: 'report', report: { ...report, added: Array.isArray(report.added) ? report.added : [] } });
   });
-  source.addEventListener('atlas:change', (event) => {
+  on('run', event => {
+    heard();
+    const run = LiveRunSchema.safeParse(parse((event as MessageEvent<string>).data));
+    if (run.success) emit(stream, { type: 'run', run: run.data });
+  });
+  on('projects', () => { heard(); emit(stream, { type: 'projects' }); });
+  on('atlas:change', (event) => {
     heard();
     const change = AtlasChangeSchema.safeParse(parse((event as MessageEvent<string>).data));
     if (change.success) emit(stream, { type: 'change', change: change.data });
   });
   // The server's heartbeat is a named `ping` event, so a quiet server is told apart from a dead connection.
-  source.addEventListener('error', () => {
+  on('error', () => {
     setStatus(stream, stream.attempts === 0 && stream.status === 'connecting' ? 'connecting' : 'reconnecting');
     // The browser retries a dropped stream by itself. A refused one (401, 503) it gives up on: retry that here, slowly.
     if (source.readyState === EventSource.CLOSED) lose(stream);
@@ -124,6 +140,7 @@ function release(stream: Stream) {
   if (stream.timer) clearTimeout(stream.timer);
   if (stream.watchdog) clearTimeout(stream.watchdog);
   stream.source?.close();
+  stream.source = null;
   streams.delete(stream.url);
   setStatus(stream, 'off');
 }
@@ -155,7 +172,11 @@ export function listenChanges(url: string, onChange: (change: AtlasChange) => vo
   return listenLive(url, (event) => {
     if (event.type === 'change') onChange(event.change);
     // A fresh connection may have missed changes while it was away.
-    if (event.type === 'open') onChange({ scope: 'runs', files: [], runIds: [] });
+    if (event.type === 'open') {
+      onChange({ scope: 'specs', files: [], runIds: [] });
+      onChange({ scope: 'runs', files: [], runIds: [] });
+    }
+    if (event.type === 'report') onChange({ scope: 'runs', files: [], runIds: [] });
   });
 }
 

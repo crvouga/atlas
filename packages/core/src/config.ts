@@ -12,6 +12,11 @@
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
 
+import { createLiveReporter, type LiveReporter, type LiveReporterOptions } from '../../reports/src/live-reporter';
+import { httpStore } from '../../reports/src/http-store';
+import { publishChecks } from '../../reports/src/publish-checks';
+import { publishRunBundle } from '../../reports/src/run-bundle';
+import { checksFromManifest } from '../../reports/src/ingest';
 import type { StateValue } from './graph';
 import type { Shard } from './run/execute';
 import type { Driver, EventMatcher, EventSource, Implementation, PrivacyRules, RunMode } from './run/types';
@@ -28,6 +33,8 @@ import { loadSpecDirectory } from './spec/load';
 export type AtlasConfig<C = unknown> = {
   /** The directory holding the charts (`*.scxml`, `*.machine.{json,yaml}`) and `journeys.yaml`. */
   specs: string;
+  /** Live reporting endpoint. Defaults to ATLAS_SERVER_URL when set; false disables streaming. */
+  reporting?: LiveReporterOptions | false;
   /** The chart to run; the root chart when omitted. */
   chart?: string;
   /** Where generated paths start (an XState state value); the initial state when omitted. */
@@ -156,6 +163,8 @@ const contextOf = <C>(config: AtlasConfig<C>, prepared: ReturnType<typeof prepar
 export type RunCommandOptions = PrepareOptions & {
   /** `fast` when omitted. */
   mode?: RunMode;
+  /** Override live reporting. Defaults to config.reporting or ATLAS_SERVER_URL. */
+  reporting?: LiveReporterOptions | false;
   /** Only these paths, by id. */
   paths?: string[];
   /** Only paths that start from these seeds ("start" for paths that `setup` starts). */
@@ -205,7 +214,21 @@ export async function runConfig<C>(config: AtlasConfig<C>, options: RunCommandOp
   const reuseDir = options.reuse === 'latest' ? latestRun(outputRoot) : options.reuse ? path.resolve(options.reuse) : null;
   const reused = reuseDir ? readOutcomes(reuseDir) : null;
   if (options.reuse && !reused) throw new Error(`There is no earlier run to reuse${reuseDir ? ` at ${reuseDir}` : ''}`);
-  return runPaths({
+  const requestedReporting = options.reporting ?? config.reporting ?? (process.env.ATLAS_SERVER_URL ? { url: process.env.ATLAS_SERVER_URL, token: process.env.ATLAS_PUBLISH_TOKEN ?? process.env.ATLAS_TOKEN } : undefined);
+  const reporting = requestedReporting ? { ...requestedReporting, project: requestedReporting.project ?? process.env.ATLAS_PROJECT, token: requestedReporting.token ?? process.env.ATLAS_PUBLISH_TOKEN ?? process.env.ATLAS_TOKEN } : undefined;
+  let live: LiveReporter | undefined;
+  const onProgress = reporting ? (manifest: import('./run/execute').Manifest) => {
+    if (!manifest.privacy.passed) return;
+    live ??= createLiveReporter({ producer: process.env.ATLAS_PRODUCER ?? 'atlas-statecharts', title: `${prepared.scope.chart} · ${options.mode ?? 'fast'}`,
+      plannedChecks: paths.length, environment: process.env.ATLAS_ENVIRONMENT ?? 'desktop-web', branch: manifest.run.branch ?? undefined, sha: manifest.run.commit ?? undefined }, reporting);
+    const ingested = checksFromManifest(manifest);
+    ingested.checks.forEach((check, index) => {
+      if (manifest.paths[index]?.progress === 'queued' && !manifest.run.finishedAt) return;
+      live!.check({ ...check, steps: check.steps?.slice(-20).map(step => ({ name: step.name, status: step.status })) });
+    });
+  } : undefined;
+  try {
+  const outcome = await runPaths({
     ...contextOf(config, prepared),
     paths,
     driver,
@@ -217,8 +240,20 @@ export async function runConfig<C>(config: AtlasConfig<C>, options: RunCommandOp
     workers: options.workers ?? config.workers ?? availableParallelism(),
     ...(options.shard ? { shard: options.shard } : {}),
     ...(reused && reuseDir ? { reuse: { runDir: reuseDir, outcomes: reused.outcomes } } : {}),
-    ...(options.log ? { log: options.log } : {})
+    ...(options.log ? { log: options.log } : {}), ...(onProgress ? { onProgress } : {})
   });
+  await live?.finish(outcome.manifest.privacy.passed ? 'completed' : 'interrupted', outcome.manifest.privacy.passed ? undefined : 'Run failed its privacy scan; unsafe progress was withheld.');
+  if (reporting && outcome.manifest.privacy.passed) {
+    const store = httpStore({ url: reporting.url, project: reporting.project, token: reporting.token });
+    await publishChecks(store, { producer: process.env.ATLAS_PRODUCER ?? 'atlas-statecharts', environment: process.env.ATLAS_ENVIRONMENT ?? 'desktop-web',
+      branch: outcome.manifest.run.branch, sha: outcome.manifest.run.commit, recordedAtMs: Math.max(Date.now(), (live?.finishedAtMs ?? 0) + 1), checks: checksFromManifest(outcome.manifest).checks.map(check => ({ ...check, measurements: [...check.measurements] })) });
+    await publishRunBundle(store, outcome.runDir);
+  }
+  return outcome;
+  } catch (error) {
+    await live?.finish('interrupted', 'The producer exited before completing the run.').catch(() => {});
+    throw error;
+  }
 }
 
 /**

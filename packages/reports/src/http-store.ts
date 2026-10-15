@@ -11,9 +11,12 @@
 
 import type { ObjectStore, PagedListing, StoredObject } from './object-store';
 import { ObjectStoreWithPrefix } from './store-prefix';
+import { ProjectSlugSchema } from '../../schema/src/project';
 
 /** How to reach a server: its `url`, the `token` to send (never in the URL), and, for tests and special runtimes, `fetch`, the retry count, the per-attempt timeout and `sleep`. */
 export type HttpStoreOptions = {
+  /** Project namespace on a shared Atlas node. Omit for the legacy default project. */
+  readonly project?: string;
   /** The Atlas server, such as `https://atlas.example.com`. A path on it (`/atlas`) is kept. */
   readonly url: string;
   /** A publish or admin token to write with, a read token to read with. Never put it in the URL. */
@@ -36,6 +39,8 @@ export class AtlasHttpError extends Error {
 
 /** An `ObjectStore` (with paged listing) over an Atlas server, plus what only a server can answer: `ping` (is it there, and what may this token do) and `status` (the gate, worked out by the server). */
 export type HttpStore = ObjectStore & PagedListing & {
+  /** The same authenticated node connection, scoped to another project. */
+  forProject(project: string): HttpStore;
   /** `https://atlas.example.com`, with no secrets. */
   readonly label: string;
   readonly url: string;
@@ -67,7 +72,8 @@ function explain(status: number, base: string, message: string | null): string {
  */
 export function httpStore(options: HttpStoreOptions): HttpStore {
   const base = options.url.replace(/\/+$/, '');
-  const root = `${base}/api/store`;
+  const api = options.project ? `${base}/api/projects/${ProjectSlugSchema.parse(options.project)}` : `${base}/api`;
+  const root = `${api}/store`;
   const doFetch = options.fetch ?? fetch;
   const retries = options.retries ?? 4;
   const timeoutMs = options.timeoutMs ?? 30_000;
@@ -89,7 +95,7 @@ export function httpStore(options: HttpStoreOptions): HttpStore {
         }
         if (response.ok) return response;
         if (response.status === 404 && init.allow404) { await response.body?.cancel(); return null; }
-        const said = await response.json().then((body: { error?: string }) => body.error ?? null, () => null);
+        const said = await response.json().then((body: unknown) => body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' ? body.error : null, () => null);
         failure = new AtlasHttpError(explain(response.status, base, said), response.status, response.status >= 500 || response.status === 429 || response.status === 408);
       } catch (error) {
         failure = new AtlasHttpError(`cannot reach ${base} (${error instanceof Error ? (error.name === 'AbortError' ? `no answer in ${timeoutMs} ms` : error.message) : String(error)})`, null, true);
@@ -100,6 +106,7 @@ export function httpStore(options: HttpStoreOptions): HttpStore {
   }
 
   const store: HttpStore = {
+    forProject: project => httpStore({ ...options, project }),
     label: base,
     url: base,
 
@@ -145,7 +152,7 @@ export function httpStore(options: HttpStoreOptions): HttpStore {
     },
     async status(query = new URLSearchParams()) {
       const suffix = query.size ? `?${query}` : '';
-      return (await request('GET', `${base}/api/status${suffix}`))!.json();
+      return (await request('GET', `${api}/status${suffix}`))!.json();
     },
     async ping() {
       const started = performance.now();

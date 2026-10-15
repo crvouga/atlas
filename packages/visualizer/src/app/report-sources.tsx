@@ -43,7 +43,8 @@ export function ReportSourcesProvider({ children }: { children: ReactNode }) {
       label: server ? 'Atlas server' : adapter.kind === 'dev' ? 'Workspace runs' : 'Published reports',
       type: 'http',
       baseUrl: server ?? (adapter.kind === 'dev' ? '/__atlas/' : (import.meta.env.VITE_ATLAS_BASE_URL ?? './data/')),
-      live: server !== undefined || adapter.kind === 'dev'
+      live: server !== undefined || adapter.kind === 'dev',
+      ...(server ? { eventsUrl: runtimeUrl(runtimeConfig()?.eventsUrl) } : {})
     }),
     [adapter, server]
   );

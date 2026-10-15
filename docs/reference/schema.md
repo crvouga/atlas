@@ -863,6 +863,62 @@ export type SpecSet = z.output<typeof SpecSetSchema>;
 
 A parsed `SpecSetSchema` value.
 
+### live-run.ts
+
+Source: `packages/schema/src/live-run.ts`
+
+@module Live run protocol
+A live run is a producer lease, separate from immutable report layers. Server receipt times determine liveness.
+Expiration means interrupted, never passed; completed check results retain the stable layer contract.
+
+#### `LiveCheckSchema`
+
+```ts
+export const LiveCheckSchema = …
+```
+
+Small progress messages: no attachment bytes, bounded step history and text.
+
+#### `LiveRunStartSchema`
+
+```ts
+export const LiveRunStartSchema = …
+```
+
+The producer starts one UUID-named run. Identity stays fixed for its lifetime.
+
+#### `LiveRunUpdateSchema`
+
+```ts
+export const LiveRunUpdateSchema = …
+```
+
+Ordered deltas. A retried sequence must have identical content; terminal runs never accept more progress.
+
+#### `LiveRunSchema`
+
+```ts
+export const LiveRunSchema = …
+```
+
+The bounded live feed response; completed and interrupted runs remain visible as recent history.
+
+#### `LiveCheck`
+
+```ts
+export type LiveCheck = z.input<typeof LiveCheckSchema>;
+```
+
+The shape a producer uses for a progress check.
+
+#### `LiveRun`
+
+```ts
+export type LiveRun = z.output<typeof LiveRunSchema>;
+```
+
+A server's live run snapshot.
+
 ### Statechart run manifest schemas
 
 Source: `packages/schema/src/manifest.ts`
@@ -1205,6 +1261,45 @@ The top level of `runs/<run-id>/manifest.json`. Sections are `unknown` here so a
 validate each record on its own and keep the valid ones; the record schemas above are the
 contract for each entry.
 
+### project.ts
+
+Source: `packages/schema/src/project.ts`
+
+@module Project identity
+Project slugs partition every report, spec, recording and live run on an Atlas node.
+
+#### `ProjectSlugSchema`
+
+```ts
+export const ProjectSlugSchema = …
+```
+
+A portable project namespace: 1–64 lowercase letters, digits or hyphens, starting and ending with a letter or digit.
+
+#### `ProjectSchema`
+
+```ts
+export const ProjectSchema = …
+```
+
+One project advertised by a node. The default project contains uploads from older clients.
+
+#### `ProjectsSchema`
+
+```ts
+export const ProjectsSchema = …
+```
+
+Project discovery response.
+
+#### `Project`
+
+```ts
+export type Project = z.output<typeof ProjectSchema>;
+```
+
+A project's public identity.
+
 ### Report sources and change notices
 
 Source: `packages/schema/src/report-sources.ts`
@@ -1398,6 +1493,22 @@ export type ServerConfigInput = z.input<typeof ServerConfigSchema>;
 ```
 
 A server configuration as written, before defaults are applied.
+
+#### `ServerEditableSettingsSchema`
+
+```ts
+export const ServerEditableSettingsSchema = …
+```
+
+Storage and report settings editable by an admin. Authentication, listeners and the served site stay deployment-owned. Replaces the editable portion of the file; omitted fields use defaults after restart.
+
+#### `ServerSettingsSnapshotSchema`
+
+```ts
+export const ServerSettingsSnapshotSchema = …
+```
+
+The settings API response: persisted editable configuration, active values, concurrency revision and restart/precedence guidance. Authentication token settings are excluded.
 
 ### Statechart spec schemas
 

@@ -26,6 +26,10 @@
     },
     "sourceId": {
       "type": "string"
+    },
+    "liveRunId": {
+      "description": "A live lease changed; its bounded snapshot is also sent as a run event",
+      "type": "string"
     }
   },
   "required": [

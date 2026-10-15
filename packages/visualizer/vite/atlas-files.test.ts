@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterAll, describe, expect, it } from 'bun:test';
 
-import { DEFAULT_FIXTURE, FIXTURES_ROOT, isSpecFile, listSpecFiles, publicReportSources, resolveReportSources, resolveRoots, safeJoin, summarizeRun } from './atlas-files';
+import { FIXTURES_ROOT, isSpecFile, listSpecFiles, publicReportSources, resolveReportSources, resolveRoots, safeJoin, summarizeRun } from './atlas-files';
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'atlas-files-'));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -31,10 +31,10 @@ describe('resolveRoots', () => {
     expect(resolveRoots({ ATLAS_SPECS_ROOT: 'x' }, project).specs).toBe(path.join(project, 'x'));
   });
 
-  it('shows the example when nothing is configured and there is no specs/ directory', () => {
+  it('keeps an unconfigured project empty instead of loading a bundled example', () => {
     const roots = resolveRoots({ INIT_CWD: path.join(tmp, 'empty') });
-    expect(roots.specs).toBe(path.join(FIXTURES_ROOT, DEFAULT_FIXTURE, 'specs'));
-    expect(roots.label).toMatch(/^example/);
+    expect(roots.specs).toBe(path.join(tmp, 'empty', 'specs'));
+    expect(roots.label).toBe('configured');
   });
 
   it('reads a named fixture and rejects an unknown one', () => {

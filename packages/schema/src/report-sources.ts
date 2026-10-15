@@ -83,7 +83,8 @@ export const AtlasChangeSchema = z.object({
   scope: z.enum(['specs', 'runs']),
   files: z.array(z.string()).default([]),
   runIds: z.array(z.string()).default([]),
-  sourceId: z.string().optional()
+  sourceId: z.string().optional(),
+  liveRunId: z.string().optional().describe('A live lease changed; its bounded snapshot is also sent as a run event')
 });
 /** A parsed `AtlasChangeSchema` value. */
 export type AtlasChange = z.infer<typeof AtlasChangeSchema>;

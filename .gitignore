@@ -9,3 +9,9 @@ test-results/
 .turbo/
 # Generated from git tags while a release is packed (scripts/release/publish.ts).
 /CHANGELOG.md
+
+# Data owned by the Atlas node, independent of any example project.
+/.atlas-data/
+/atlas-data/
+# Previously generated example data.
+/examples/todo/.atlas-server/

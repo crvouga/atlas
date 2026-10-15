@@ -177,7 +177,7 @@ integrate. To run it for a whole team, with a bucket and one node everyone looks
 ```
  node 1: suite A, ios      ──▶ layer ─┐
  node 2: suite A, android  ──▶ layer ─┤        ┌──▶ atlas report status   (gate: exit 1 on failure)
- node 3: suite B, shard 1  ──▶ layer ─┼──▶ backends ──▶ combine ──┼──▶ the viewer          (browse it)
+ node 3: suite B, shard 1  ──▶ layer ─┼──▶ backends ──▶ combine ──┼──▶ the client          (browse it)
  node 4: suite B, shard 2  ──▶ layer ─┤        └──▶ your own code          (combineBackends)
  a laptop, one scenario    ──▶ layer ─┘
 ```
@@ -543,7 +543,7 @@ unknown is not a pass.
 
 ## 6. Browse it
 
-The visualizer lays your stores over your specs directory. Add a module to your project:
+The Atlas client lays your stores over your specs directory. Add a module to your project:
 
 ```ts
 // atlas.reports.ts
@@ -553,14 +553,14 @@ export const reportsDevFetch = reportsHost({ specs: './specs', stores: ['./atlas
 ```
 
 ```sh
-ATLAS_REPORTS_MODULE="$(pwd)/atlas.reports.ts" bunx atlas-visualizer dev --specs ./specs
+ATLAS_REPORTS_MODULE="$(pwd)/atlas.reports.ts" bunx atlas client dev --specs ./specs
 ```
 
 `reportsHost(options)` returns `(request: Request, repoRoot: string) => Promise<Response>`, the
-function the viewer calls for every `/api/reports/…` request. `specs` and directory `stores` resolve
-against `repoRoot`, which the viewer sets to where you ran the command (`INIT_CWD`), not against the
+function the client calls for every `/api/reports/…` request. `specs` and directory `stores` resolve
+against `repoRoot`, which the client sets to where you ran the command (`INIT_CWD`), not against the
 module. A wrong path comes back as a JSON error that names it. A `stores` entry that is not a string is
-a backend of your own: `{ id, label?, store }`. You can call it yourself to look at what the viewer
+a backend of your own: `{ id, label?, store }`. You can call it yourself to look at what the client
 sees:
 
 ```ts
@@ -573,11 +573,11 @@ const page = await (await reportsDevFetch(new Request('http://x/api/reports/evid
 
 | Route (after `/api/reports`) | Returns |
 | --- | --- |
-| `/evidence?cursor=` | A page of layer headers, the backends and any notices. The viewer combines them with the specs. |
+| `/evidence?cursor=` | A page of layer headers, the backends and any notices. The client combines them with the specs. |
 | `/evidence/rows/:backend/:id` | One layer's checks. |
 | `/outline`, `/outline/spec?path=` | The specs directory as an outline, and one spec's text. |
 
-The combined result of each spec is computed in the viewer. To get it without a browser, use
+The combined result of each spec is computed in the client. To get it without a browser, use
 `atlas report status --format json`: its `specs` array has each spec's counts per environment.
 
 Specs are the files of the specs directory (`.feature` as Gherkin, `.qnt` as Quint, `.dmn`, `.als`,
@@ -618,7 +618,7 @@ An integration is complete when each of these holds. Run them and keep the outpu
 | `X is unavailable` | A backend is down. The rest were combined; fix it or leave it out. |
 | `check id "…" appears twice` | Your suite emits two checks with one name. Make the names unique. Importers number repeats as `#2`. |
 | `Potentially outdated: spec changed` | The spec changed since the layer was recorded. Advisory: the recorded outcome still counts. Re-run to refresh. |
-| Viewer shows `No report store is configured` | `ATLAS_REPORTS_MODULE` is unset, or `stores` is empty. |
+| Client shows `No report store is configured` | `ATLAS_REPORTS_MODULE` is unset, or `stores` is empty. |
 
 ## Rules
 
@@ -634,15 +634,87 @@ An integration is complete when each of these holds. Run them and keep the outpu
   [stable schema](../packages/schema/schemas/report-status.schema.json).
 </doc>
 
+<doc path="docs/runners.md">
+# Native test runner reporters
+
+Projects upload results to a shared Atlas node under their own project slug. CodeceptJS, Mocha, Jest and Node's test runner have native reporters; other runners can publish their JUnit or CTRF output with `atlas report publish`. All reporters are entry points of the single `@crvouga/atlas` package.
+
+## Configure the project once
+
+Set these in the test process, locally or in CI:
+
+```sh
+export ATLAS_SERVER_URL=https://atlas.example.com
+export ATLAS_PROJECT=checkout-service
+export ATLAS_PUBLISH_TOKEN=your-publish-token
+export ATLAS_ENVIRONMENT=linux-chromium
+export ATLAS_BRANCH=main
+export ATLAS_SHA=your-commit-sha
+```
+
+The server owns its storage configuration and credentials. Consumers only need the server URL and a publish token. Upload failures fail the test invocation; reporters wait for publication before finishing. Each invocation streams a live run, then publishes final evidence, with stable check IDs relative to the project directory, durations, failures and skipped outcomes. Unknown outcomes, TODOs and skipped tests are `not-run`, never passed. Parallel processes upload independent layers; use distinct producer/environment values for independent suites.
+
+A test file is part of a check's identity, not automatically a specification: link checks to product specifications through the existing report mapping workflow when importing JUnit/CTRF, or publish explicit `specPath` checks through the API.
+
+## CodeceptJS
+
+Use its [Mocha reporter interface](https://codecept.io/reports/):
+
+```sh
+bunx codeceptjs run --reporter @crvouga/atlas/codecept
+```
+
+Streams scenario starts and outcomes, then records durations and scenario steps when supplied by CodeceptJS. Use the standard single-process runner; parallel workers should each publish their own layer. Runner-native screenshot/video attachments can also be imported from CTRF/JUnit; this reporter does not read arbitrary files from runner objects.
+
+## Mocha
+
+```sh
+bunx mocha --reporter @crvouga/atlas/mocha
+```
+
+Or configure `reporter` and `reporterOptions` in Mocha. Options include `url`, `token`, `producer`, `environment`, `branch`, `sha`, `rootDir` and `timeoutMs` (30 seconds by default); explicit options override the environment. Final failures and hook failures are failed checks. Passing retries include a flaky label. Mocha parallel mode is not supported by this reporter's event model; run each shard separately.
+
+## Jest
+
+Keep Jest's console reporter alongside Atlas:
+
+```js
+export default {
+  reporters: ['default', ['@crvouga/atlas/jest', { producer: 'unit' }]],
+};
+```
+
+The reporter streams test-case starts and results from workers and uploads full aggregated evidence after workers finish. File-level exceptions become failed checks even when no test ran. Watch mode resets publication errors on each invocation. It accepts the same options as Mocha.
+
+## Node's test runner
+
+```sh
+node --test --test-reporter=spec --test-reporter-destination=stdout \
+  --test-reporter=@crvouga/atlas/node-test --test-reporter-destination=stdout
+```
+
+Uses the native async event stream, with environment configuration. Reports leaf tests; successful suite containers are excluded, while suite hook failures remain failed checks. Test names include enclosing suites so identical names in different suites keep distinct IDs. Skips and TODOs remain not-run, including TODO failures.
+
+## Other runners and frameworks
+
+Playwright, Vitest, Bun, WebDriver/Appium and Detox already have Atlas statechart adapters. Pytest, JUnit/TestNG, NUnit, xUnit, Go, Rust, Cypress, WebdriverIO, Cucumber and Robot Framework can publish JUnit XML or CTRF JSON through the existing importer. See [integration commands](integrating.md) and the [report contract](report-contract.md). These report importers complement native reporters; they do not require a storage backend in the consumer project.
+
+## Operate the singleton
+
+Run `atlas server` once for the projects the node hosts; point local and CI publishers at that URL and set each project's `ATLAS_PROJECT`. Configure backends using environment variables or open **Settings** in the client (`/admin`). Authentication and listening addresses remain deployment configuration. Settings changes are validated and saved atomically for the next server restart. Environment variables and flags override saved values. A backend change does not migrate historical data: retain the old backend as a read source when switching the upload destination.
+
+Native reporters send a heartbeat every 5 seconds. The server interrupts invocations after 30 seconds of silence, or after the configurable progress-stall timeout. It preserves finished results and never marks missing tests as passed. See [live test runs](server.md#live-test-runs-and-heartbeats).
+</doc>
+
 <doc path="docs/server.md">
 # The Atlas server
 
-One process per project that **takes in results from every environment, keeps them, and shows everyone the
-combined report, live**. It is a Bun API that serves a Vite-built single-page viewer: one host, one port, in
+One node for multiple projects that **takes in results from every environment, keeps them, and shows everyone the
+combined report, live**. It is a Bun API that serves a Vite-built single-page client: one host, one port, in
 development and in production.
 
 ```
-  laptop ──────┐                                        ┌── browsers  (the viewer: reads /api, listens on /api/events)
+  laptop ──────┐                                        ┌── browsers  (the client: reads /api, listens on /api/events)
   CI job ──────┼── PUT /api/store/…  POST /api/checks ─▶│
   device lab ──┘   atlas report publish | stream        │   atlas report status  (the gate: asks /api/status)
                                                         │
@@ -655,8 +727,8 @@ development and in production.
 - **Its default backend is its own filesystem** (`./atlas-data`). That folder is the whole state: back it up,
   mount it on a volume, or put the state in a bucket instead ([backends](#backends)). Several backends are one
   report, as ever.
-- **The report is live.** Every viewer holds one server-sent-events connection; when results arrive the server
-  says so and each viewer reads only what changed ([streaming](#streaming)).
+- **The report is live.** Every client holds one server-sent-events connection; when results arrive the server
+  says so and each client reads only what changed ([streaming](#streaming)).
 - **Layered, never partitioned**, as everywhere in Atlas: the server only stores immutable, content-addressed
   layers and works out the report from them. Replace it, restore it, or run a second one on a copy of the data:
   the same layers give the same report ([the contract](report-contract.md)).
@@ -673,13 +745,13 @@ export ATLAS_TOKEN=$(openssl rand -hex 24)   # admin token; see "Tokens and role
 bunx atlas serve                             # http://127.0.0.1:8080, data in ./atlas-data
 ```
 
-It runs on Bun and on Node 22.18 or later. The first start builds the viewer once into `~/.cache/atlas/site`
+It runs on Bun and on Node 22.18 or later. The first start builds the client once into `~/.cache/atlas/site`
 (or serves `./atlas-site`, or `--site <dir>`); the build is the same for every project, because the server writes
 its own address book into the page (`window.__ATLAS_CONFIG__`).
 
-**Working on Atlas or on the viewer:** `atlas dev` runs the server on a port of its own and the viewer's Vite dev
+**Working on Atlas or on the client:** `atlas dev` runs the server on a port of its own and the client's Vite dev
 server in front of it. Vite proxies `/api` (server-sent events included) to the server, so the browser, the
-uploaders and the viewer all use **one host**, exactly as in production, and a change to the viewer shows at once.
+uploaders and the client all use **one host**, exactly as in production, and a change to the client shows at once.
 
 ```sh
 bunx atlas dev --data .atlas-data            # http://127.0.0.1:5180
@@ -727,7 +799,7 @@ purposes.
 
 A backend is anything that implements `ObjectStore`: a folder, an S3-compatible bucket (`s3://`, `r2://`,
 `gs://`), or **another Atlas server** (`https://…`, with `ATLAS_TOKEN` for it). The server reads every backend
-and shows one report; one that is down is named in the viewer and skipped, and the server recovers by itself.
+and shows one report; one that is down is named in the client and skipped, and the server recovers by itself.
 
 - **Uploads go to one backend**: the `data` folder, or the one named by `write` / `ATLAS_WRITE`. Name a bucket
   to make it the system of record, so the server holds nothing a replacement would lose:
@@ -744,7 +816,7 @@ and shows one report; one that is down is named in the viewer and skipped, and t
 
 | Role | May |
 | --- | --- |
-| `read` | look: the viewer, the report, `/api/status` |
+| `read` | look: the client, the report, `/api/status` |
 | `publish` | also upload layers, specs and runs, and remove the scratch objects `atlas report doctor` writes |
 | `admin` | all server operations |
 
@@ -828,24 +900,26 @@ there (`409`), so nothing half-uploaded is ever shown.
 
 | Event | Data | Meaning |
 | --- | --- | --- |
-| `hello` | `{ version, ready, time }` | Sent first. The report's current version. |
+| `hello` | `{ version, ready, time, heartbeatMs? }` | Sent first. The report's current version. |
 | `report` | `{ version, totalLayers, added: [{ id, producer, environment, branch, sha, recordedAtMs, counts }], addedTotal }` | Layers arrived. Enough to say who sent what, without asking. |
 | `atlas:change` | `{ scope: "specs" \| "runs", files, runIds }` | New specs or runs. |
-| `ping` | `{}` | Every 15 s, so proxies keep the connection and the viewer can tell a quiet server from a dead connection. |
+| `run` | A bounded `LiveRun` snapshot | Start, progress logs, heartbeat, completion, and interruption; no producer credentials. |
+| `projects` | `{}` | Another project was discovered; refresh the project picker. |
+| `ping` | `{}` | Every 15 s, so proxies keep the connection and the client can tell a quiet server from a dead connection. |
 
-Events say *that* something changed; the state is always fetched. A viewer that missed some (a dropped
-connection, a laptop that slept) loses nothing: it reads again when it reconnects, and the viewer also reads on a
+Run events update progress directly in the client cache. Report and specification events trigger coalesced reads of the affected data. Events arriving during a read cause a trailing refresh rather than cancelling that read. A client that missed some (a dropped
+connection, a laptop that slept) loses nothing: it reads again when it reconnects, and the client also reads on a
 slow timer behind the stream. Past `limits.maxStreams` viewers the server answers `503` with `Retry-After` and the
-viewer polls instead; a viewer that stops reading is let go rather than held in memory.
+client polls instead; a client that stops reading is let go rather than held in memory.
 
 ### Reading only what changed
 
 `GET /api/reports/evidence/effective` is the whole report: only the layers that win a check, each with only the
-rows that win, with an ETag. A viewer that holds a version asks `?since=<version>` and is sent **only the layers
+rows that win, with an ETag. A client that holds a version asks `?since=<version>` and is sent **only the layers
 that changed since, and the ids that no longer win anything** (`"delta": true`). Applying that gives exactly the
 report the server would have sent whole (`applyEffectiveDelta`, tested against every earlier version of random
-runs); a version the server does not remember, or an older server, answers with the whole report, which a viewer
-takes as it always did. A result streamed into a 100 000-check report costs a viewer a few kilobytes.
+runs); a version the server does not remember, or an older server, answers with the whole report, which a client
+takes as it always did. A result streamed into a 100 000-check report costs a client a few kilobytes.
 
 ## API reference
 
@@ -887,7 +961,7 @@ laptop with 2 000 layers of 100 checks (200 000 results, 10 000 slots) and with 
 | --- | --- | --- |
 | Start: read and fold every layer | 0.4 s | 1.7 s |
 | A refresh with nothing new | 4 ms | 4 ms |
-| Upload one layer → every viewer told | 4 ms | 5 ms |
+| Upload one layer → every client told | 4 ms | 5 ms |
 | `GET effective`, cached / `304` | 1 ms / 0.2 ms | 13 ms / 0.5 ms |
 | `GET status`, cached for the version | 12 ms first | 70 ms first |
 
@@ -901,25 +975,59 @@ What makes it so, none of it at the cost of the contract:
 - **An upload is read once.** A layer's manifest is parsed and verified when it arrives and handed to the report,
   not read again; blob existence is asked 16 at a time.
 - **The newest end of the catalog is all a refresh looks at**, with a full look now and then.
-- **Compressed once.** The viewer's files are brotli-compressed once (gzip for clients that cannot read it), a
-  report version is gzipped once however many viewers fetch it, and events are encoded once for every viewer.
-- **A small viewer.** The graph, the Gherkin parser, the recording player and the finder load when used: the
+- **Compressed once.** The client's files are brotli-compressed once (gzip for clients that cannot read it), a
+  report version is gzipped once however many viewers fetch it, and events are encoded once for every client.
+- **A small client.** The graph, the Gherkin parser, the recording player and the finder load when used: the
   first page is about 250 KB over the wire.
 
 ## Operating it
 
-- **One server per project.** It is a singleton by design: local environments and CI all talk to it, and it tells
-  every viewer at once. Two servers on one backend both work and show the same report, but a viewer hears about
+- **One node for multiple projects.** Local environments and CI select their project slug and talk to the same node, which tells
+  every client at once. Two servers on one backend both work and show the same report, but a client hears about
   an upload only from the server that took it and about the other's at the next refresh, so give a team one.
 - **State is the write backend.** Back up `./atlas-data` (or the bucket). Restoring it, or starting a new server
   on it, shows the same report.
 - **Stopping.** `SIGTERM` stops accepting, lets requests in flight finish, ends the event streams and exits 0.
 - **Logs.** One JSON line per request (method, path, status, ms) to stdout, none for the probes. The first lines
   say what it reads and which backend takes uploads, and warn when there are no tokens.
-- **A backend goes down.** The server keeps serving what it has, names the backend in the viewer and in
+- **A backend goes down.** The server keeps serving what it has, names the backend in the client and in
   `/readyz`, and recovers by itself. The gate fails closed: unknown is not a pass.
 - **Upgrades.** The layer format is a stable, versioned contract; upgrade the server before the clients that
   publish when a release says the format moved.
+
+## Configure from the client
+
+Open **Settings** (`/admin`) and enter an admin token. The token stays in page memory. Read and publish tokens cannot edit settings; the browser sign-in box only grants reading. The API uses `Authorization: Bearer` and refuses cross-origin browser writes.
+
+Use the Storage, Live updates, and Report rules forms to edit saved settings. Advanced includes request limits, logging, a JSON editor, and a read-only view of the active configuration. Save changes and restart Atlas to apply them. Atlas validates the configuration and atomically replaces `atlas.server.json`, preserving authentication and deployment settings. Changes apply at the next restart; environment variables and flags retain precedence. Concurrent edits require reloading the current revision. Data is never moved or removed by changing settings. Keep an old backend as a read source when moving future uploads to a new one. Embedded servers can provide their own settings persistence or manage configuration outside this API.
+
+Native test reporters for CodeceptJS, Mocha, Jest and Node upload directly to this server; see [runner setup](runners.md). Every publisher uses the same server address and only a publish token. Storage credentials belong in the server environment.
+
+## Live test runs and heartbeats
+
+The default native reporters and statechart runner stream tests and steps through `/api/live`, before the invocation finishes. Running tests appear inside their report with an animated status mark and the latest step. Open a test to read its progress log; its previous recorded result stays available separately. The **Running** filter narrows both the spec list and the test rows, and counts update as tests finish or time out. Statechart tests appear inside the chart and screen details. Selecting an archived run leaves live progress out of that historical view. Finished checks immediately enter normal immutable report layers. Operational progress is separate from historical winners, so a previous passed result never implies that the current invocation passed.
+
+Start with `POST /api/live/<uuid>`, send ordered check deltas with `PATCH /api/live/<uuid>`, and renew the producer lease with `POST /api/live/<uuid>/heartbeat` every 5 seconds. Finish with a terminal update. Only the publisher token that registered the invocation can update it. Replayed sequences must have identical content; late writes cannot revive an expired invocation. `createLiveReporter` handles batching, retries, heartbeat timers and the final flush.
+
+The server uses its own receipt clock. By default it interrupts a run after 30 seconds without a heartbeat (`ATLAS_RUN_TIMEOUT_SECONDS`). Heartbeats do not reset progress: after 15 minutes with no changed tests/steps, a separate stall timeout interrupts it (`ATLAS_RUN_STALL_SECONDS`, 0 disables). Both settings are editable in the admin UI. Healthy long tests continue renewing heartbeats; increase or disable the progress timeout for tests that legitimately make no observable progress for longer.
+
+Interrupted runs retain completed results and show why the remaining work stopped. Missing outcomes never become passes. The server persists bounded summaries under `server/live/` in its write backend (an HTTP relay keeps operational leases in its own data folder; the remote server only accepts immutable report objects) and restores outstanding leases as interrupted after a server restart. S3 server credentials need GetObject/PutObject for that prefix; generate the updated `atlas report policy --role both` policy. Producers still receive no backend credentials. Live `run` events carry bounded snapshots directly into test rows, including step logs and interruption reasons. The legacy `atlas:change` announcement remains available for older clients; its optional `liveRunId` identifies lease updates. Reconnecting viewers re-fetch progress, reports, and specifications. With SSE connected, live progress uses a 60-second safety refresh; without SSE it polls every two seconds. Returning to the tab or coming back online also revalidates reports and progress.
+
+In this repository, use `bun atlas` and `bun example:run` in two terminals. Every example Gherkin scenario executes, including sharing and renaming; `@unrecorded` no longer excludes tests.
+
+## Multiple projects on one node
+
+Start the node with `atlas server` (or `bun atlas` in this repository). The server builds or finds the Atlas client and serves it with the API from one process. It never imports a consumer or an example. In this repository the node uses port 5180 and `./atlas-data`; `bun example:run` publishes the Todo app to project `todo-app`.
+
+Set `ATLAS_PROJECT=todo-app` alongside `ATLAS_SERVER_URL` for native reporters and statechart runs. Report CLI commands accept `--project todo-app` (or `ATLAS_PROJECT`) with an HTTP store. Programmatic HTTP stores, live reporters and native reporter options accept `project: 'todo-app'`. Keep the same slug for the invocation's live progress, final results, spec sets and recordings. Slugs use 1–64 lowercase letters, digits or hyphens, starting and ending with a letter or digit.
+
+Every project API is available as `/api/projects/<slug>/…`, for example `/api/projects/todo-app/checks`, `/api/projects/todo-app/events` and `/api/projects/todo-app/reports/evidence/effective`. The unprefixed API accepts optional `?project=todo-app` or `X-Atlas-Project: todo-app`. Conflicting selectors are refused. `GET /api/projects` discovers projects. A successful authenticated upload creates a project; reads of an unknown project return 404.
+
+Projects isolate check identities, specs, run IDs, recordings, lease summaries, event streams and report caches. Identical layer bytes are preserved as uploaded. The node stores each project's objects under `projects/<slug>/` and discovery markers under `server/projects/`. Unqualified requests continue reading the legacy default namespace, advertised as **Default** when it has reports. Existing data is never implicitly moved. For S3, use the combined server policy (`atlas report policy --role both`) with access to both project namespaces and the catalog. An HTTP relay selects the same project on its upstream node and keeps discovery and leases locally.
+
+The project picker sits at the top right; the header also provides spec dropdown breadcrumbs. Project selection lives in the page URL, so links and refreshes preserve it. Switching projects reloads the client, clearing report queries, media and event connections. Custom report-source preferences are keyed by the project's data URL. Project namespaces share the node's authentication roles: they are organizational partitions, not separate tenant authorization policies. Settings and server identity remain node-wide.
+
+Project indexes are opened lazily; at most 64 are active in memory. An index with no active requests or event subscribers is closed after five idle minutes. Event subscribers share the node-wide stream limit. Project discovery lists only small catalog markers, never every report layer.
 </doc>
 
 <doc path="docs/deploying.md">
@@ -993,7 +1101,7 @@ so run `atlas report doctor` against yours before relying on it.
    ```sh
    atlas report policy --store s3://my-bucket/atlas/my-project --role publisher   # CI and developers
    atlas report policy --store s3://my-bucket/atlas/my-project --role reader      # a server that only reads it, and the gate
-   # the server that uploads into it needs --role both
+   # the server that uploads into it needs --role both (also grants server/live/* for live leases)
    ```
 
    A publisher may write and read `layers/*` and list the folder. A reader may read `layers/*` and list.
@@ -1102,7 +1210,7 @@ Everything is immutable and addressed by its content, so each publish is safe to
 in parallel. A set of specs is named by the files and the commit, so publishing the same commit from ten
 nodes writes it once.
 
-For statecharts, publish each run as a layer and upload it for the viewer:
+For statecharts, publish each run as a layer and upload it for the client:
 
 ```sh
 bunx atlas run --config atlas.config.ts --shard 1/2
@@ -1110,7 +1218,7 @@ bunx atlas report publish --producer statecharts --environment desktop-web \
   --manifest atlas-runs/<run>/manifest.json --specs ./specs --upload-run
 ```
 
-A run is uploaded only when its privacy scan passed: the same rule the static viewer applies.
+A run is uploaded only when its privacy scan passed: the same rule the static client applies.
 
 ## 4. The server
 
@@ -1118,7 +1226,7 @@ A run is uploaded only when its privacy scan passed: the same rule the static vi
 atlas serve                    # ATLAS_STORE says where; listens on :8080
 ```
 
-It serves the viewer, the report and the project's specs and runs from all configured backends. It also
+It serves the client, the report and the project's specs and runs from all configured backends. It also
 accepts uploads and announces new results on its event stream. Uploads go to `--data` by default;
 use a named `--store project=s3://… --write project` to put uploads in a shared bucket, with publisher permissions.
 
@@ -1129,7 +1237,7 @@ use a named `--store project=s3://… --write project` to put uploads in a share
 | `--write <id>` | `ATLAS_WRITE` | Backend that accepts uploads. Default `data`. |
 | `--port <n>` | `ATLAS_PORT` or `PORT` | Default 8080. `0` picks a free one. |
 | `--host <h>` | `ATLAS_HOST` or `HOST` | Default `127.0.0.1`. Listening beyond this machine requires tokens or `--insecure`. |
-| `--site <dir>` | `ATLAS_SITE` | The built viewer. Default: `./atlas-site`, else built once into `~/.cache/atlas/site`. |
+| `--site <dir>` | `ATLAS_SITE` | The built client. Default: `./atlas-site`, else built once into `~/.cache/atlas/site`. |
 | `--outline-branch <b>` | `ATLAS_OUTLINE_BRANCH` | Which branch's specs the report is laid over. Default `main`, then `master`, then the newest. |
 | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | How often the bucket is looked at for new layers. Default 10. |
 | `--branch <name>` (repeatable) | `ATLAS_ONLY_BRANCH` | Only layers recorded on these branches take part. |
@@ -1139,7 +1247,7 @@ use a named `--store project=s3://… --write project` to put uploads in a share
 ### Run it
 
 **Docker.** [`examples/deploy/Dockerfile`](https://github.com/crvouga/atlas/blob/main/examples/deploy/Dockerfile)
-installs Atlas, builds the viewer once (it is the same for every project: the server tells the page where its
+installs Atlas, builds the client once (it is the same for every project: the server tells the page where its
 data is) and starts the server, keeping results on the volume at `/data`:
 
 ```sh
@@ -1148,7 +1256,7 @@ docker run -p 8080:8080 -v atlas-data:/data -e ATLAS_TOKEN=$(openssl rand -hex 2
 ```
 
 For a bucket as the system of record add `-e ATLAS_STORE=project=s3://my-bucket/atlas/my-project -e ATLAS_WRITE=project -e AWS_REGION=us-east-1`.
-On ECS, EKS or EC2, attach a role with the **publisher** and **reader** policies to the task, service account or
+On ECS, EKS or EC2, attach the combined **both** policy (including `server/live/*` for producer leases) to the task, service account or
 instance and set no keys.
 
 **Try it on one machine.** [`examples/deploy/compose.yaml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/compose.yaml)
@@ -1159,7 +1267,7 @@ Publish to `http://localhost:8080` from your project and open it.
 one copy (the server is a singleton for the project), results in the bucket, readiness on `/readyz`, an IRSA
 service account.
 
-**Without a container.** `bun add -d @crvouga/atlas`, then `bunx atlas-visualizer build --no-data --out
+**Without a container.** `bun add -d @crvouga/atlas`, then `bunx atlas client build --no-data --out
 atlas-site` and `bunx atlas serve`. It runs on Bun and on Node 22.18 or later. Everything it can be told is in
 [the Atlas server](server.md#configuration).
 
@@ -1174,12 +1282,12 @@ layer too. Pass `--insecure` only when that proxy handles sign-in.
 
 | Path | |
 | --- | --- |
-| `/` | The viewer. Its page carries the server's address book, so one build serves every project. |
+| `/` | The client. Its page carries the server's address book, so one build serves every project. |
 | `/api/reports/evidence/effective` | The whole report in one request: only the layers that win a check, each with only the rows that win. ETag, gzip. |
 | `/api/reports/evidence`, `/evidence/rows/<backend>/<id>`, `/outline`, `/outline/spec?path=` | History, one layer's checks, the specs. |
 | `/api/reports/evidence/detail/<backend>/<id>?check=<id>&kind=<kind>` | Everything one result carries: its timeline, annotations, retries, attachments and extensions, and the run's own. Without `check`, only the run's. |
 | `/api/reports/layers/<id>/blobs/<key>` | One file a layer carries (screenshot, video, trace…), served as untrusted bytes with range support, cached for good. |
-| `/api/data/specs/…`, `/api/data/runs/…`, `/api/data/sources.json` | The specs and runs, laid out the way the viewer reads a static host. |
+| `/api/data/specs/…`, `/api/data/runs/…`, `/api/data/sources.json` | The specs and runs, laid out the way the client reads a static host. |
 | `/api/checks` | Upload a layer of checks with `POST`. |
 | `/api/events` | Live report updates over server-sent events. |
 | `/healthz` | The process is up. |
@@ -1202,7 +1310,7 @@ Narrow it by choice, per consumer, never by moving data:
 | A pull request's gate that inherits what it did not re-run from `main` | `--branch "$PR_BRANCH" --branch main --ignore-modified` |
 | A business dashboard of what is committed | `atlas serve --ignore-modified` |
 | Everything, as the team lives it | nothing (the default) |
-| One person's view of what leaving a source out changes | **Sources** in the viewer: leave out a branch, environment, version or layer |
+| One person's view of what leaving a source out changes | **Sources** in the client: leave out a branch, environment, version or layer |
 
 ## 6. Operating it
 
@@ -1212,12 +1320,12 @@ Narrow it by choice, per consumer, never by moving data:
   they never need to move together.
 - **Logs.** One JSON line per request to stdout. `/healthz` and `/readyz` are not logged. At start it
   prints what it reads and any store it cannot reach.
-- **A store goes down.** The server keeps serving what it has, names the store in the viewer's notices and
+- **A store goes down.** The server keeps serving what it has, names the store in the client's notices and
   in `/readyz`, and recovers by itself. The gate fails closed: unknown is not a pass.
 - **A layer cannot be read** (corrupt, or written by a newer Atlas): a notice names it. It is tried again
   every five minutes.
-- **Scaling.** One server per project is the design, and it is enough: it takes in an upload in milliseconds and a
-  report of 100,000 checks costs a viewer kilobytes per change ([performance](server.md#performance)). Memory
+- **Scaling.** One Atlas node supports multiple project namespaces with independently loaded report indexes. It takes in an upload in milliseconds and a
+  report of 100,000 checks costs a client kilobytes per change ([performance](server.md#performance)). Memory
   grows with the number of distinct checks, plus about a hundred bytes for each layer ever seen (to know it has
   read it). More than one server on a backend works and shows the same report, but each hears of uploads to
   another only at its next refresh.
@@ -1243,13 +1351,13 @@ latency per request, which the server hides by reading 64 at a time):
 | Publish a layer of plain checks | One `HEAD` and two small `PUT`s. Two thousand layers published in under two seconds from one process, in parallel. |
 | Server start | About 0.2 ms of CPU per layer, plus S3 latency ÷ 64 per layer: 2,000 layers in well under a second on a fast store, a few seconds on S3. Each layer is read once, ever. |
 | Refresh with nothing new | One `LIST` request for the newest page of the catalog, whatever the history. |
-| The report, to a viewer | One request. 12,000 checks from 2,000 layers is 108 KB gzipped, built once per change. |
-| The viewer asking again | `304 Not Modified` in under a millisecond. While the live stream is open it asks only when told, and then for only what changed. |
-| The viewer in a browser | One request for the report, plus the spec index, outline and run index and the specs it opens. None per layer, whatever the history (measured in Chromium against a server reading S3). |
+| The report, to a client | One request. 12,000 checks from 2,000 layers is 108 KB gzipped, built once per change. |
+| The client asking again | `304 Not Modified` in under a millisecond. While the live stream is open it asks only when told, and then for only what changed. |
+| The client in a browser | One request for the report, plus the spec index, outline and run index and the specs it opens. None per layer, whatever the history (measured in Chromium against a server reading S3). |
 
 How: each layer is folded into the winning result of every check once and dropped unless it still holds a
 winner, so work and memory follow the number of checks. Because the winner rule is a total order, folding in
-any order is exact; a test proves the incremental report equals recomputing from every layer. The viewer
+any order is exact; a test proves the incremental report equals recomputing from every layer. The client
 reads that compact report in one request and only falls back to reading every layer when you ask it to
 leave a source out (which needs the history).
 
@@ -1266,7 +1374,7 @@ leave a source out (which needs the history).
 | The server says `listening … no backend can be read yet` | The bucket is unreachable from the server. It retries; `/readyz` stays 503 until it can read. |
 | A new layer does not show | Uploaded through the server it is there at once: check the token (`401`/`403` say so). Written straight to a bucket, wait one refresh interval (10 s). Check `atlas report status --store <url>` sees it. |
 | Everything is red because of one laptop | By design the newest result wins. Gate on `--ignore-modified` and a branch ([above](#5-choosing-what-takes-part)). |
-| Specs are empty in the viewer | Nothing published with `--specs` yet, or only from a branch other than `main`: set `--outline-branch`. |
+| Specs are empty in the client | Nothing published with `--specs` yet, or only from a branch other than `main`: set `--outline-branch`. |
 | `Run … is not shared: its privacy scan did not pass` | `--upload-run` refuses runs whose scan found real data. Fix what it found and run again. |
 </doc>
 
@@ -1279,7 +1387,7 @@ unit tests, linters, anything that ends in "this check passed or failed". If thi
 disagree, that is a bug: [file it](reporting-issues.md).
 
 The contract is small on purpose. It is one document (the **layer**), one rule (how layers compose),
-and one interface (the **backend** that stores them). Everything else, the viewer, the gate, the CLI,
+and one interface (the **backend** that stores them). Everything else, the client, the gate, the CLI,
 is built on those three and can be replaced.
 
 - [Concepts](#concepts)
@@ -1562,7 +1670,7 @@ import { verifyObjectStore } from '@crvouga/atlas/reports/object-store-conforman
 const { ok, failures } = await verifyObjectStore(myS3Store); // writes under a scratch prefix, cleans up
 ```
 
-Several backends are one report: pass them all to `combineBackends`, to the viewer
+Several backends are one report: pass them all to `combineBackends`, to the client
 (`reportsHost`), or to the CLI (`--store` for directories, `--backends <module>` for the rest). A
 backend that cannot be reached is named in the notices and leaves the others usable; asking again
 retries it.
@@ -1575,7 +1683,7 @@ entry whose content has not arrived:
 A layer's checks are the contract. Next to them the store holds the two other things a whole project
 needs, written the same way (content first, catalog entry last, nothing overwritten):
 
-- **Spec sets** (`layers/specs/…`): the specs of one commit, so a viewer needs no checkout. A spec set is
+- **Spec sets** (`layers/specs/…`): the specs of one commit, so a client needs no checkout. A spec set is
   `{ schemaVersion, id, branch, sha, recordedAtMs, freshness?, files: [{ path, digest, fingerprint, kind,
   title, domain, bytes }] }` ([`spec-set.schema.json`](../packages/schema/schemas/spec-set.schema.json)). Its
   id is the digest of the branch, commit and file digests, so one commit's specs are one set however many
@@ -1583,7 +1691,7 @@ needs, written the same way (content first, catalog entry last, nothing overwrit
   The outline a report is laid over is the **newest set from `main`** (then `master`, then the newest);
   a set from a modified checkout is used only if no committed set exists.
 - **Run bundles** (`layers/runs/<run>/…` and `layers/runs/index/…`): a finished statechart run with its
-  screenshots and clips, for the viewer. Uploaded only when the run's privacy scan passed; the manifest is
+  screenshots and clips, for the client. Uploaded only when the run's privacy scan passed; the manifest is
   written last, then the catalog entry.
 
 The keys of a layer, bottom up:
@@ -1649,13 +1757,13 @@ and composed with layers; Atlas never rewrites them. `copyStore` and `atlas repo
   the number of checks (plus a few bytes for each layer ever read), not the age of the project, and a refresh
   with nothing new is one request for the newest page of the catalog. Folding is exact in any order because the winner
   rule is a total order; a test proves the incremental report equals combining every layer from scratch.
-  The node sends the viewer only that: one request, only winning rows, with an ETag.
+  The node sends the client only that: one request, only winning rows, with an ETag.
 - Measured on a laptop with a directory backend: 300 layers of 50 checks in about 0.2 s; 1,000 layers
   of 100 checks, each recorded against 1,000 specs (100,000 results), in about 0.9 s. Composing two
   thousand layers of 100 checks (200,000 results) already in memory takes about 0.3 s.
   `performance.test.ts` holds budgets ten times looser, to catch an accidental quadratic step on a
   slow machine.
-- A directory backend lists only the directories a prefix can reach. The viewer polls a small index,
+- A directory backend lists only the directories a prefix can reach. The client polls a small index,
   reads an immutable layer once and caches it forever, and loads recordings only when opened.
 
 ## Other documents of the contract
@@ -1667,7 +1775,7 @@ and composed with layers; Atlas never rewrites them. `copyStore` and `atlas repo
 | Report status | `report-status.schema.json` | The output of `atlas report status --format json`. |
 | Spec set | `spec-set.schema.json` | The specs of one commit, as published beside the layers. |
 | Run manifest | `manifest.schema.json` | What `atlas run` writes for a statechart run. Publish it as a layer with `--manifest`. |
-| Runs index, sources, change notices | `runs-index`, `report-sources`, `atlas-change` | How the viewer finds runs. See [report backends](report-backends.md). |
+| Runs index, sources, change notices | `runs-index`, `report-sources`, `atlas-change` | How the client finds runs. See [report backends](report-backends.md). |
 | CloudEvents | `cloud-event.schema.json` | Business events a run observed. |
 
 All of them are JSON Schema 2020-12 and ship in the package at `@crvouga/atlas/schemas/<name>.schema.json`.
@@ -1707,7 +1815,7 @@ carry any of these. Every one is optional.
 | `attempts[]` | Every try, when the check was retried. |
 | `tags[]` | Free labels to filter by: `smoke`, `payments`. |
 | `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. |
-| `links[]` | Where to read more: the CI run, the issue, the trace viewer. |
+| `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
 | `measurements[]` | Numbers, with units and an allowance (already part of the contract). |
 
@@ -1900,7 +2008,7 @@ Annotation `type`: `note`, `warning`, `deprecation`, `issue`, `accessibility`, `
 | Something that should be shown well | Ask for a renderer (below). |
 | A field every tool should have | Open an issue. It is added as an optional field, and the rules above guarantee nothing breaks. |
 
-**A renderer** is one entry in the viewer's list (`artifactRenderers` in
+**A renderer** is one entry in the client's list (`artifactRenderers` in
 `packages/visualizer/src/evidence/artifacts.tsx`): how to show an attachment of a media type. The first one that
 matches wins:
 
@@ -1912,7 +2020,7 @@ registerArtifactRenderer({
 });
 ```
 
-The viewer is part of Atlas, so a renderer for a new media type is a contribution to Atlas: file an issue
+The client is part of Atlas, so a renderer for a new media type is a contribution to Atlas: file an issue
 ([reporting issues](reporting-issues.md)) with a sample file. Until it lands, the attachment is still stored,
 listed with its name, role, type and size, and offered for download, and everything else about the result is
 unaffected.
@@ -1924,7 +2032,7 @@ unaffected.
 > [!NOTE]
 > Atlas has two kinds of backend, and this page is about the first.
 >
-> - **Run sources** (this page): where the viewer finds *statechart runs* (`manifest.json` per run)
+> - **Run sources** (this page): where the client finds *statechart runs* (`manifest.json` per run)
 >   and live snapshots of a run in progress: a directory, HTTP files, or an HTTP API.
 > - **Layer stores**: where *layers of evidence for any kind of spec* are kept, an `ObjectStore`
 >   such as a directory or a bucket. Any number of them are one report. See
@@ -1935,7 +2043,7 @@ unaffected.
 
 Atlas maps the product's areas, screens, events and journeys from a spec, then overlays evidence
 of what the product did. Specs and reports are independent. Local development, CI, device labs
-and hosted runners can supply reports to the same product atlas simultaneously. The viewer works
+and hosted runners can supply reports to the same product atlas simultaneously. The client works
 before the first report exists.
 
 ## Connect sources
@@ -1954,9 +2062,9 @@ The default source is the directory passed to `--runs`. Add sources with a JSON 
 ```
 
 ```sh
-atlas-visualizer dev --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json
-atlas-visualizer build --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json --out ./atlas-site
-atlas-visualizer publish-data --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json --out ./atlas-data
+atlas client dev --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json
+atlas client build --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json --out ./atlas-site
+atlas client publish-data --specs ./specs --runs ./atlas-runs --sources ./atlas.sources.json --out ./atlas-data
 ```
 
 Directory paths resolve against the configuration file. Source ids are unique, stable names
@@ -1966,7 +2074,7 @@ Credentials must not appear in this file or URLs: descriptors are sent to the br
 included in static output.
 
 Remote services must allow requests
-from the viewer's origin. For private services, use an authenticated same-origin gateway. Atlas
+from the client's origin. For private services, use an authenticated same-origin gateway. Atlas
 does not download private GitHub artifacts or sign object-storage requests itself: expose their
 published data over HTTP or implement a gateway using the contract below.
 
@@ -2034,7 +2142,7 @@ updates to keep a snapshot steady; manual Refresh still works. Resuming refreshe
 
 ## Identity, failures and publishing
 
-Viewer identities combine source ids and native run ids. Cache keys include the backend location
+Client identities combine source ids and native run ids. Cache keys include the backend location
 and transport. Matching run names cannot mix results or media. Shared links retain the qualified
 identity; old links containing only a run id still resolve to workspace reports.
 
@@ -2057,7 +2165,7 @@ URLs and never expose the directory paths.
 
 `src/data/adapters/report-backend.ts` defines `ReportBackend`: stable identity and cache key,
 report listing, snapshot loading, media resolution and optional change subscription. The query
-layer consumes this separately from the spec adapter. An embedded viewer can supply a backend
+layer consumes this separately from the spec adapter. An embedded client can supply a backend
 through `ReportSourcesContext`; a new built-in transport can add a factory alongside
 `createReportBackend`. Screens, maps and journeys require no transport-specific code.
 
@@ -2073,7 +2181,7 @@ paths that cover every transition, run those paths against the real product thro
 browser, a phone, a plain function), and write a manifest of what happened, with screenshots, video
 clips, captions, business events and standard test reports. Each run publishes as a layer
 (`atlas report publish --manifest`), so it combines with every other suite's evidence. This page covers
-running them, from a runnable example to the visualizer.
+running them, from a runnable example to the Atlas client.
 
 ```
 specs/                     atlas lint      the charts are pure, reachable, free of silent dead ends,
@@ -2103,7 +2211,7 @@ served by a small Node server) specified as two charts:
 - `specs/getting-started.feature` and `specs/working-the-list.feature`, the same stories in Gherkin.
 - `specs/todo.qnt`, the list, its sync, and its actions as a Quint model.
 
-The visualizer lists the features under Gherkin and the model under Quint.
+The Atlas client lists the features under Gherkin and the model under Quint.
 
 It has every kind of event: user events (taps and typing), a **system** event ("Sync fails", which
 the test triggers through a real HTTP endpoint on the example server), a **time** event ("Retry
@@ -2133,24 +2241,26 @@ visualizer updates when a run finishes.
 
 ```sh
 bun run atlas:run   # example:clients, then example:run: every chart of the example, in showcase mode
-bun run atlas:viz   # the example's specs, chart runs, and layered reports
+bun atlas          # the example's specs, chart runs, and layered reports
 ```
 
-Each config writes its own run and the visualizer shows one run at a time: the latest is the
+Each config writes its own run and the Atlas client shows one run at a time: the latest is the
 single-browser run, and the run across clients is the one before it in the run picker.
 
-`bun run viz:dev` opens the full coffee example with a layered report, without waiting
-for a run. Gherkin, Quint, DMN, Alloy and OpenSLO documents sit beside the charts. The same scenarios
-are filled by separate layers across desktop web, mobile web, iOS and Android, and across versions,
-branches and backends (this machine, shared reports, and a device lab). A layer that repeated one
-scenario leaves the others as the last layer that ran them. One feature is left with no results.
-**Sources** in the header switches any of those off. The chart runs stay on the statechart map.
+Gherkin, Quint, DMN, Alloy and OpenSLO documents sit beside the charts. Results compose across
+environments, branches and backends within each project. **Sources** switches report sources on or off.
 
-`bun run atlas:viz` opens the todo example the same way. The Gherkin, Quint, DMN, Alloy and OpenSLO
-tabs already show five layers, so each environment is visible before a run. `example:run` adds one
-desktop web layer for the scenarios and traces it actually ran. That layer replaces only those
-desktop web results. The other environments stay. `ATLAS_REPORTS_MODULE` replaces this example API
-with a host's reports.
+`bun atlas` runs the singleton Atlas server and the client together at `http://localhost:5180`.
+It starts a project-agnostic node with no example data. Select a project using the top-right picker.
+In another terminal run `bun run example:run`: statecharts, Gherkin scenarios and Quint traces stream running checks, completed results and current steps
+to project `todo-app` on that server while testing. Producers renew a heartbeat every 5 seconds; 30 seconds of silence
+marks an invocation interrupted. Final specs and recordings upload when their privacy scan completes.
+Tests show inline running indicators and logs without waiting for the whole suite to finish. Report history
+is retained in `atlas-data/projects/todo-app`; local run artifacts remain in `atlas-runs` and
+`atlas-reports`. To upload a completed run again without rerunning tests,
+use `bun run example:publish`. Set `ATLAS_SERVER_URL` for a different upload destination (and
+`ATLAS_PUBLISH_TOKEN` when it requires one). Restart `bun atlas` when switching from the older
+file-based example client; a busy port is an error so publishers cannot silently target another server.
 
 A showcase run ends with:
 
@@ -2160,7 +2270,7 @@ Transitions 14/14 passed, 0 failed, 0 not reached
 Manifest: examples/todo/atlas-runs/<run-id>/manifest.json
 ```
 
-`example:run` then runs the Gherkin features in a browser and the Quint model, and publishes that desktop web layer beside the ones already in the report.
+`example:run` then runs the Gherkin features in a browser and the Quint model, and streams every scenario and trace as it runs, including sharing and renaming. The final recordings are uploaded alongside the completed statechart run.
 
 `bun test examples` runs [`model.test.ts`](https://github.com/crvouga/atlas/blob/main/examples/todo/model.test.ts): the same charts and journeys
 against `TodoModel`, a plain class, through `functionDriver` and `describeAtlas`. Only the driver
@@ -2585,7 +2695,7 @@ atlas report publish --producer statecharts --environment desktop-web \
   --manifest atlas-runs/<run>/manifest.json --specs ./specs --upload-run
 ```
 
-`--upload-run` also sends the run's screenshots and clips to the store (or the server) so the viewer can show them
+`--upload-run` also sends the run's screenshots and clips to the store (or the server) so the client can show them
 (only when the run's privacy scan passed).
 
 ## Config reference
@@ -2695,7 +2805,7 @@ Runs produce media and manifests that get shared, so Atlas refuses to leak real 
 
 ## Visualizer
 
-The [`atlas-visualizer`](../packages/visualizer) command renders the charts from the specs directory and
+The [`atlas client`](../packages/visualizer) command renders the charts from the specs directory and
 overlays runs from the runs directory: screenshots on states, clips on transitions, statuses and
 history. See its README for how to point it at a project.
 
@@ -2706,7 +2816,7 @@ and completed steps while paths are still running.
 
 Layered reports for any spec appear beside the charts: each Gherkin, Quint, DMN, Alloy and OpenSLO
 document shows the combined result of its checks per environment, with the layer behind each. Point
-the viewer at your stores with `reportsHost` ([integrating Atlas](integrating.md#6-browse-it)).
+the client at your stores with `reportsHost` ([integrating Atlas](integrating.md#6-browse-it)).
 </doc>
 
 <doc path="docs/dogfooding.md">
@@ -2763,7 +2873,7 @@ and nothing runs just because the package is installed.
 | `@crvouga/atlas/reports/<module>` | Publishing, storing, combining, gating and serving test evidence for specs of any kind. |
 
 It also installs two commands: `atlas` (report, lint, plan, run, merge, export) and
-`atlas-visualizer` (browse specs, runs and reports).
+`atlas client` (browse specs, runs and reports).
 
 `playwright` and `detox` are optional peers: install the one your driver uses, as above. The
 documentation ships in the package, matching the version you installed: the README of each part at
@@ -2863,7 +2973,7 @@ Do this once per project. Check first that the package is on npm:
    | `@crvouga/atlas-schema` | `@crvouga/atlas/schema` |
    | `@crvouga/atlas-schema/schemas/<file>` | `@crvouga/atlas/schemas/<file>` |
    | `@crvouga/atlas-reports/<module>` | `@crvouga/atlas/reports/<module>` |
-   | `@crvouga/atlas-visualizer` (the `atlas-visualizer` command) | installed with `@crvouga/atlas` |
+   | `@crvouga/atlas client` (the `atlas client` command) | installed with `@crvouga/atlas` |
 
    `@crvouga/atlas`, `@crvouga/atlas/spec` and `@crvouga/atlas/signals` are unchanged. One pass
    over a project's sources does the rest:
@@ -2906,7 +3016,7 @@ This guide is written for coding agents. Read it top to bottom once, then use
 
 `<part>` is the part of `@crvouga/atlas` the issue is about: `core` (the main import and the
 `atlas` command), or the import path after the package name: `playwright`, `bun`, `webdriver`,
-`detox`, `vitest`, `schema`, `reports`; `visualizer` for the `atlas-visualizer` command. Use `core`
+`detox`, `vitest`, `schema`, `reports`; `visualizer` for the `atlas client` command. Use `core`
 when you cannot tell.
 
 1. [Search for an existing issue](#1-search-first). Comment on it instead of opening a duplicate.
@@ -2933,10 +3043,10 @@ File when:
 
 - **bug**: Atlas throws or hangs; lint, plan or a run gives a result the spec does not support;
   a driver taps, types, waits or records differently from what its README says; the manifest or a
-  report does not match its JSON Schema; the visualizer shows something other than what the run
+  report does not match its JSON Schema; the Atlas client shows something other than what the run
   recorded; the package fails to install, import, build or type-check.
 - **feature**: you need something Atlas does not have: a spec construct, a config option, a driver
-  capability, a CLI flag, a field in the manifest, a view in the visualizer, an export format. Check
+  capability, a CLI flag, a field in the manifest, a view in the Atlas client, an export format. Check
   that part's README and `docs/` first.
 
 Do not file when:
@@ -3069,8 +3179,9 @@ atlas — executable statecharts
                [--no-retry] [--output <dir>]
   atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
   atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
-  atlas serve  [--data <dir>] [--port 8080] [--store <url>]...   the Atlas server: results in, the live report out
-  atlas dev    [--port 5180]                                     the server and the viewer's dev server, on one host
+  atlas server [--data <dir>] [--port 8080] [--store <url>]...   one Atlas node: API, projects and client
+  atlas client build [--no-data] [--out <dir>]                    build the project-agnostic Atlas client
+  atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
   atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
 
@@ -3110,7 +3221,7 @@ atlas serve: the Atlas server
               [--outline-branch <b>] [--branch <name>]... [--ignore-modified] [--refresh <seconds>]
               [--anonymous-read] [--insecure] [--no-log]
 
-  One process serves the viewer and the API. Test results are uploaded to it from anywhere (laptops, CI) and it
+  One process serves the client and the API. Test results are uploaded to it from anywhere (laptops, CI) and it
   shows everyone the combined report, live. It keeps its data in --data (default ./atlas-data) and can read more
   backends (--store): S3, other servers, folders. Uploads go to the data folder unless --write names another.
 
@@ -3121,12 +3232,12 @@ atlas serve: the Atlas server
 ## atlas dev
 
 ```text
-atlas dev: the Atlas server and the viewer, for working on either
+atlas dev: the Atlas server and the client, for working on either
 
   atlas dev [--port 5180] [--host 127.0.0.1] [--data <dir>] [--store <url|id=url>]... [--config atlas.server.json]
 
-  Starts the server (API only, on a port of its own) and the viewer's dev server, which proxies /api to it, so the
-  browser talks to one host and a change to the viewer shows at once. In production `atlas serve` does both from
+  Starts the server (API only, on a port of its own) and the client's dev server, which proxies /api to it, so the
+  browser talks to one host and a change to the client shows at once. In production `atlas serve` does both from
   one process.
 ```
 
@@ -3154,7 +3265,8 @@ atlas report — layered evidence for any kind of spec
   atlas report policy  --store s3://bucket/prefix [--role publisher|reader|both]
 
   A store is a directory or s3://bucket/prefix (add ?region=…&endpoint=… for R2, MinIO and the
-  rest). When no --store is given, ATLAS_STORE is used. Keys never go in the URL: set
+  rest). Select a project on an Atlas node with --project <slug> or ATLAS_PROJECT. This scopes specs, reports and recordings together.
+  When no --store is given, ATLAS_STORE is used. Keys never go in the URL: set
   AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or sign in with `aws sso login`, or use a role.
 
   publish   Write one immutable layer: the checks of one producer, on one environment. Safe to repeat.
@@ -3204,6 +3316,134 @@ atlas report — layered evidence for any kind of spec
 
 > Generated from the operation table in `packages/server/src/openapi.ts` by `bun run docs`. Do not edit. The same description, for tools, is `openapi.json` (OpenAPI 3.1) and `GET /api/openapi.json` on every server.
 
+### List projects on this Atlas node
+
+`GET /api/projects` · role: read
+
+Projects are created on their first authenticated upload. All report, spec, recording and live-run data is isolated by project. Unqualified API calls address the legacy default project. Tokens retain their node-wide role; project partitioning is not a tenant authorization boundary.
+
+Responses: `200` Available project identities.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The project catalog is unavailable.
+
+### Live test progress and recent invocations
+
+`GET /api/live` · role: read
+
+Returns up to 50 recent producer leases, including running, completed and interrupted runs. Counters and recent check/step updates are bounded; authentication credentials are never returned. Consume run events for immediate bounded snapshots; re-fetch after reconnect or atlas:change with scope runs on older servers.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` Recent live run summaries.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Live test progress and recent invocations
+
+`GET /api/projects/{project}/live` · role: read
+
+Returns up to 50 recent producer leases, including running, completed and interrupted runs. Counters and recent check/step updates are bounded; authentication credentials are never returned. Consume run events for immediate bounded snapshots; re-fetch after reconnect or atlas:change with scope runs on older servers.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` Recent live run summaries.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Start a live producer lease
+
+`POST /api/live/{id}` · role: publish
+
+Register a UUID run id and fixed producer identity before tests begin. Retrying the same identity and token is idempotent. The server timestamps receipt. Send heartbeats every 5 seconds and progress as tests execute. The default heartbeat timeout is 30 seconds; a 15-minute progress stall is configurable separately.
+
+- `id` (path, required): Producer-generated UUID, also given in the body.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The registered lease.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` The id already belongs to another invocation.; `413` Request too large.; `422` Invalid identity.; `429` Live run capacity reached.
+
+### Start a live producer lease
+
+`POST /api/projects/{project}/live/{id}` · role: publish
+
+Register a UUID run id and fixed producer identity before tests begin. Retrying the same identity and token is idempotent. The server timestamps receipt. Send heartbeats every 5 seconds and progress as tests execute. The default heartbeat timeout is 30 seconds; a 15-minute progress stall is configurable separately.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): Producer-generated UUID, also given in the body.
+
+Responses: `201` The registered lease.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` The id already belongs to another invocation.; `413` Request too large.; `422` Invalid identity.; `429` Live run capacity reached.
+
+### Publish progress or finish an invocation
+
+`PATCH /api/live/{id}` · role: publish
+
+Apply ordered check deltas, starting at sequence 1. Retry a sequence with identical content only. Completed results become immutable report layers immediately; running checks remain operational progress and do not replace historical winners. Finish as completed or interrupted. Stale updates cannot revive an expired lease; pending checks never become passes.
+
+- `id` (path, required): The UUID of a run started with this publisher token.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` Updated progress.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` Unknown run.; `409` Run ended or sequence is stale.; `413` Request too large.; `422` Invalid progress.; `429` Run check capacity reached.
+
+### Publish progress or finish an invocation
+
+`PATCH /api/projects/{project}/live/{id}` · role: publish
+
+Apply ordered check deltas, starting at sequence 1. Retry a sequence with identical content only. Completed results become immutable report layers immediately; running checks remain operational progress and do not replace historical winners. Finish as completed or interrupted. Stale updates cannot revive an expired lease; pending checks never become passes.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The UUID of a run started with this publisher token.
+
+Responses: `200` Updated progress.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` Unknown run.; `409` Run ended or sequence is stale.; `413` Request too large.; `422` Invalid progress.; `429` Run check capacity reached.
+
+### Renew a producer heartbeat
+
+`POST /api/live/{id}/heartbeat` · role: publish
+
+Renew a running lease using server receipt time, independently of test progress. No result layers are created. Heartbeats cannot revive terminal runs or bypass the configured progress-stall timeout. The producer token must be the one that started this invocation.
+
+- `id` (path, required): The UUID of this producer invocation.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` Heartbeat received.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` Unknown run.; `409` Run ended or its lease expired.; `422` Invalid run id.
+
+### Renew a producer heartbeat
+
+`POST /api/projects/{project}/live/{id}/heartbeat` · role: publish
+
+Renew a running lease using server receipt time, independently of test progress. No result layers are created. Heartbeats cannot revive terminal runs or bypass the configured progress-stall timeout. The producer token must be the one that started this invocation.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The UUID of this producer invocation.
+
+Responses: `200` Heartbeat received.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` Unknown run.; `409` Run ended or its lease expired.; `422` Invalid run id.
+
+### Server settings page
+
+`GET /admin` · role: read
+
+A standalone settings editor. Supply an admin Bearer token in the page to read or save configuration. The token is held only in memory.
+
+Responses: `200` Settings editor.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Read server settings
+
+`GET /api/settings` · role: admin
+
+Returns editable persisted storage/report settings, active settings, a revision, and configuration precedence. Authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.
+
+Responses: `200` Settings and revision.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `503` Configuration is managed by the embedding application.
+
+### Save settings for the next restart
+
+`PUT /api/settings` · role: admin
+
+Replaces editable storage/report settings, preserving authentication and other file fields. Atomically persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.
+
+- `If-Match` (header, required): The quoted revision returned by GET /api/settings.
+
+Responses: `200` Saved settings and new revision. Restart required.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` Settings changed; reload before saving.; `413` Settings exceed the body limit.; `422` Invalid configuration.; `428` A quoted settings revision is required.; `503` Configuration is managed by the embedding application.
+
 ### Is the process up
 
 `GET /healthz` · role: none
@@ -3248,16 +3488,43 @@ Responses: `200` The server.; `401` No token, or an unknown one. Send `Authoriza
 
 `GET /api/events` · role: read
 
-A `text/event-stream` that stays open. Events say *that* something changed; the state is always fetched, so a client that missed events (a dropped connection) loses nothing: read again on reconnect.
+A `text/event-stream` that stays open. Report events announce changes, and run events carry bounded live progress snapshots; authoritative state can always be fetched, so a client that missed events (a dropped connection) loses nothing: read again on reconnect.
 
 | event | data |
 | --- | --- |
-| `hello` | `{ version, ready, time }`, sent first |
+| `hello` | `{ version, ready, time, heartbeatMs? }`, sent first |
 | `report` | `{ version, totalLayers, added: [{ id, producer, environment, branch, sha, recordedAtMs, counts }], addedTotal }`: layers arrived |
 | `atlas:change` | `{ scope: "specs" \| "runs", files, runIds }`: new specs or runs |
+| `run` | A LiveRun snapshot after start, progress, heartbeat, completion, or interruption; contains no producer credentials |
+| `projects` | `{}` when the node discovers another project; refresh `/api/projects` |
 | `ping` | `{}` every `heartbeatSeconds`, so a quiet server is told apart from a dead connection |
 
 Past `limits.maxStreams` viewers the answer is `503` with `Retry-After`: poll `/api/reports/evidence/effective` instead. A browser needs no code beyond `new EventSource("/api/events")`; other clients send the token as `Authorization: Bearer`.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The stream.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` Too many viewers are connected; poll instead.
+
+### Server-sent events: results arrived, specs or runs changed
+
+`GET /api/projects/{project}/events` · role: read
+
+A `text/event-stream` that stays open. Report events announce changes, and run events carry bounded live progress snapshots; authoritative state can always be fetched, so a client that missed events (a dropped connection) loses nothing: read again on reconnect.
+
+| event | data |
+| --- | --- |
+| `hello` | `{ version, ready, time, heartbeatMs? }`, sent first |
+| `report` | `{ version, totalLayers, added: [{ id, producer, environment, branch, sha, recordedAtMs, counts }], addedTotal }`: layers arrived |
+| `atlas:change` | `{ scope: "specs" \| "runs", files, runIds }`: new specs or runs |
+| `run` | A LiveRun snapshot after start, progress, heartbeat, completion, or interruption; contains no producer credentials |
+| `projects` | `{}` when the node discovers another project; refresh `/api/projects` |
+| `ping` | `{}` every `heartbeatSeconds`, so a quiet server is told apart from a dead connection |
+
+Past `limits.maxStreams` viewers the answer is `503` with `Retry-After`: poll `/api/reports/evidence/effective` instead. A browser needs no code beyond `new EventSource("/api/events")`; other clients send the token as `Authorization: Bearer`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
 Responses: `200` The stream.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` Too many viewers are connected; poll instead.
 
@@ -3271,6 +3538,25 @@ The report as it stands: only the layers that win at least one check, each with 
 
 To combine layers yourself, a check's *slot* is `(producer, kind, specPath, check id, environment, parameters)`; the newest completed result wins it. See `docs/report-contract.md`.
 
+- `since` (query): The `version` of the report you hold.
+- `if-none-match` (header): The ETag (the quoted version) of the report you hold.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The whole report, or a delta when `since` was given and remembered.; `304` You already hold this version.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The whole report, or only what changed since a version
+
+`GET /api/projects/{project}/reports/evidence/effective` · role: read
+
+The report as it stands: only the layers that win at least one check, each with only the rows that win. Whatever the history behind it, this is one request.
+
+`version` changes exactly when the report does, so it works as an ETag: send `If-None-Match` and get `304`. Better, send `?since=<version>` of the report you hold and get **only what changed** (`delta: true`): replace the layers of the same id, drop `removed`, keep the rest. If the server does not remember that version it answers with the whole report (no `delta` key), so a client always handles both.
+
+To combine layers yourself, a check's *slot* is `(producer, kind, specPath, check id, environment, parameters)`; the newest completed result wins it. See `docs/report-contract.md`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `since` (query): The `version` of the report you hold.
 - `if-none-match` (header): The ETag (the quoted version) of the report you hold.
 
@@ -3288,6 +3574,25 @@ The header `X-Atlas-Ok: true|false` carries the verdict, so a shell can test it 
 - `ignoreModified` (query): `1`: leave out layers from modified checkouts and unknown origins.
 - `requireEnvironments` (query): Comma-separated environments that must have results.
 - `requireAllSpecs` (query): `1`: fail while any spec of the outline has no results.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The verdict, whether or not it passes.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The gate: does the report pass
+
+`GET /api/projects/{project}/status` · role: read
+
+The `atlas report status --format json` document, worked out by the server from the layers it holds and remembered for each version of the report. It passes (`ok: true`) only if some check completed, none failed, none is still running, every layer and backend could be read, and every required environment has results. **Unknown is never a pass.**
+
+The header `X-Atlas-Ok: true|false` carries the verdict, so a shell can test it without parsing. Narrow it by choice, per request: `branch` (repeatable) and `ignoreModified` read only matching layers.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `branch` (query): Only layers recorded on this branch. Repeatable.
+- `ignoreModified` (query): `1`: leave out layers from modified checkouts and unknown origins.
+- `requireEnvironments` (query): Comma-separated environments that must have results.
+- `requireAllSpecs` (query): `1`: fail while any spec of the outline has no results.
 
 Responses: `200` The verdict, whether or not it passes.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
@@ -3299,6 +3604,22 @@ The simplest way in: anything that can make an HTTP request can report. The body
 
 Send the token as `Authorization: Bearer <token>` (a `publish` or `admin` token). A browser's sign-in box is refused for uploads on purpose. A check id appearing twice in one body is `422`.
 
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The layer was written.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` The body is over `limits.maxJsonMiB`.; `422` The body is not valid: the detail says which field.
+
+### Upload one layer of checks as JSON
+
+`POST /api/projects/{project}/checks` · role: publish
+
+The simplest way in: anything that can make an HTTP request can report. The body is the checks file (`packages/schema/schemas/publish-checks.schema.json`); `recordedAtMs` defaults to now. Binary evidence goes in as `base64`. The server writes the layer and it is in every viewer's report before this answers.
+
+Send the token as `Authorization: Bearer <token>` (a `publish` or `admin` token). A browser's sign-in box is refused for uploads on purpose. A check id appearing twice in one body is `422`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
 Responses: `201` The layer was written.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` The body is over `limits.maxJsonMiB`.; `422` The body is not valid: the detail says which field.
 
 ### List keys under layers/
@@ -3307,6 +3628,22 @@ Responses: `201` The layer was written.; `401` No token, or an unknown one. Send
 
 One page of the keys of `layers/…` (never anything else), in code-unit order. Page with `after` = the `next` of the previous page. This is the `listPage` of the `ObjectStore` interface; `atlas report merge` and `httpStore` use it.
 
+- `prefix` (query): Only keys starting with this. Default `layers/`.
+- `after` (query): Only keys after this one (exclusive).
+- `limit` (query): Page size, 1 to 1000. Default 1000.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` A page.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `422` The prefix is not one Atlas holds.
+
+### List keys under layers/
+
+`GET /api/projects/{project}/store` · role: read
+
+One page of the keys of `layers/…` (never anything else), in code-unit order. Page with `after` = the `next` of the previous page. This is the `listPage` of the `ObjectStore` interface; `atlas report merge` and `httpStore` use it.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `prefix` (query): Only keys starting with this. Default `layers/`.
 - `after` (query): Only keys after this one (exclusive).
 - `limit` (query): Page size, 1 to 1000. Default 1000.
@@ -3320,6 +3657,20 @@ Responses: `200` A page.; `401` No token, or an unknown one. Send `Authorization
 The bytes of one object, with the content type it was stored with. Everything under `layers/` is immutable, so the answer is cacheable for good. The bytes came from a test run and are untrusted: they are served with `nosniff` and a sandboxing Content-Security-Policy, whatever type their uploader gave them.
 
 - `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The object.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such object.; `422` Not a key Atlas holds.
+
+### Read an object
+
+`GET /api/projects/{project}/store/{key}` · role: read
+
+The bytes of one object, with the content type it was stored with. Everything under `layers/` is immutable, so the answer is cacheable for good. The bytes came from a test run and are untrusted: they are served with `nosniff` and a sandboxing Content-Security-Policy, whatever type their uploader gave them.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
 
 Responses: `200` The object.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such object.; `422` Not a key Atlas holds.
 
@@ -3329,6 +3680,20 @@ Responses: `200` The object.; `401` No token, or an unknown one. Send `Authoriza
 
 `200` when the object exists, `404` when not. No body.
 
+- `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` It exists.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such object.
+
+### Does an object exist
+
+`HEAD /api/projects/{project}/store/{key}` · role: read
+
+`200` when the object exists, `404` when not. No body.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
 
 Responses: `200` It exists.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such object.
@@ -3349,6 +3714,29 @@ Upload in dependency order: blobs, then the manifest, then the catalog entry. `a
 
 - `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
 - `content-type` (header): Stored with the object and returned when it is read.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` Already there with the same bytes.; `201` Stored.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` A dependency has not been uploaded yet, or other bytes are already stored under this key.; `413` Over `limits.maxObjectMiB`.; `422` Not a key Atlas writes, or the content is not what its name says.
+
+### Upload an object
+
+`PUT /api/projects/{project}/store/{key}` · role: publish
+
+The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
+
+- a **layer manifest** (`layers/manifests/<id>.json`) must be a valid layer whose content hashes to `<id>`, and its blobs must already be there (`409` otherwise);
+- a **blob** (`layers/blobs/<sha256>.gz`) must be gzip of content whose SHA-256 is its name; a **spec file** likewise;
+- a **catalog entry** (`…/index/…`) must name something already uploaded (`409` otherwise): it is what makes a layer visible, so it is written last;
+- a **run manifest** must have passed its privacy scan;
+- keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
+
+Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
+- `content-type` (header): Stored with the object and returned when it is read.
 
 Responses: `200` Already there with the same bytes.; `201` Stored.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` A dependency has not been uploaded yet, or other bytes are already stored under this key.; `413` Over `limits.maxObjectMiB`.; `422` Not a key Atlas writes, or the content is not what its name says.
 
@@ -3359,6 +3747,20 @@ Responses: `200` Already there with the same bytes.; `201` Stored.; `401` No tok
 Only the scratch objects `atlas report doctor` writes (`layers/doctor-…`) can be removed. Layers, specs and runs are never removed through the API.
 
 - `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `204` Removed (or it was not there).; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` Not a scratch object, or the token may not.
+
+### Remove a scratch object
+
+`DELETE /api/projects/{project}/store/{key}` · role: publish
+
+Only the scratch objects `atlas report doctor` writes (`layers/doctor-…`) can be removed. Layers, specs and runs are never removed through the API.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
 
 Responses: `204` Removed (or it was not there).; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` Not a scratch object, or the token may not.
 
@@ -3367,6 +3769,20 @@ Responses: `204` Removed (or it was not there).; `401` No token, or an unknown o
 `GET /api/reports/outline` · role: read
 
 The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. A spec here with no result shows as having none.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The outline.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### The specs a report is laid over
+
+`GET /api/projects/{project}/reports/outline` · role: read
+
+The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. A spec here with no result shows as having none.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
 Responses: `200` The outline.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
 
@@ -3377,6 +3793,20 @@ Responses: `200` The outline.; `401` No token, or an unknown one. Send `Authoriz
 The text of a spec file of the outline, by its path.
 
 - `path` (query, required): The spec's path, `specs/<path>`.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The spec text.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such spec in the outline.
+
+### The text of one spec
+
+`GET /api/projects/{project}/reports/outline/spec` · role: read
+
+The text of a spec file of the outline, by its path.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `path` (query, required): The spec's path, `specs/<path>`.
 
 Responses: `200` The spec text.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such spec in the outline.
 
@@ -3386,6 +3816,20 @@ Responses: `200` The spec text.; `401` No token, or an unknown one. Send `Author
 
 The history: layer headers newest first, merged from every backend. Prefer `/api/reports/evidence/effective`, which is one request and holds only what wins. Use this to audit what was recorded.
 
+- `cursor` (query): The `cursor` of the previous page.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` A page of headers.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Page through every layer header
+
+`GET /api/projects/{project}/reports/evidence` · role: read
+
+The history: layer headers newest first, merged from every backend. Prefer `/api/reports/evidence/effective`, which is one request and holds only what wins. Use this to audit what was recorded.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `cursor` (query): The `cursor` of the previous page.
 
 Responses: `200` A page of headers.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
@@ -3398,6 +3842,21 @@ Every check of one layer (not only those that win), with the spec fingerprints i
 
 - `backend` (path, required): A backend id from `/api/server`.
 - `id` (path, required): A layer id: 64 lowercase hex digits.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The rows.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such layer in that backend.
+
+### The checks of one layer
+
+`GET /api/projects/{project}/reports/evidence/rows/{backend}/{id}` · role: read
+
+Every check of one layer (not only those that win), with the spec fingerprints it recorded.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `backend` (path, required): A backend id from `/api/server`.
+- `id` (path, required): A layer id: 64 lowercase hex digits.
 
 Responses: `200` The rows.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such layer in that backend.
 
@@ -3407,6 +3866,23 @@ Responses: `200` The rows.; `401` No token, or an unknown one. Send `Authorizati
 
 The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run's. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.
 
+- `backend` (path, required): A backend id from `/api/server`.
+- `id` (path, required): A layer id: 64 lowercase hex digits.
+- `check` (query): The check id.
+- `kind` (query): The kind of the part, when the same id is in several.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The detail.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such layer or check.
+
+### Everything one result carries
+
+`GET /api/projects/{project}/reports/evidence/detail/{backend}/{id}` · role: read
+
+The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run's. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `backend` (path, required): A backend id from `/api/server`.
 - `id` (path, required): A layer id: 64 lowercase hex digits.
 - `check` (query): The check id.
@@ -3423,6 +3899,22 @@ A screenshot, video, trace, log or any attachment of a layer, by the `bundleKey`
 - `id` (path, required): A layer id: 64 lowercase hex digits.
 - `bundleKey` (path, required): The attachment's `bundleKey`, which contains a slash.
 - `range` (header): A byte range, `bytes=0-1023`.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The bytes, with the type the producer gave (or `application/octet-stream`).; `206` The requested range.; `304` Not modified.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such layer or file.
+
+### A file a layer carries
+
+`GET /api/projects/{project}/reports/layers/{id}/blobs/{bundleKey}` · role: read
+
+A screenshot, video, trace, log or any attachment of a layer, by the `bundleKey` its attachment names (`attachments/<sha256>`). Served as untrusted bytes: never sniffed, never run, sandboxed; immutable, cacheable for good; videos can be sought with `Range`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): A layer id: 64 lowercase hex digits.
+- `bundleKey` (path, required): The attachment's `bundleKey`, which contains a slash.
+- `range` (header): A byte range, `bytes=0-1023`.
 
 Responses: `200` The bytes, with the type the producer gave (or `application/octet-stream`).; `206` The requested range.; `304` Not modified.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such layer or file.
 
@@ -3434,6 +3926,21 @@ The `report.json`, captured files and frame stylesheet of a recorded statechart 
 
 - `id` (path, required): A layer id: 64 lowercase hex digits.
 - `path` (path, required): The path under the layer.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The file.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such file.
+
+### A recorded test of a statechart run
+
+`GET /api/projects/{project}/reports/layers/{id}/{path}` · role: read
+
+The `report.json`, captured files and frame stylesheet of a recorded statechart test of a layer (`tests/<testId>/report.json`, `tests/<testId>/files/…`, `frame.css`). Untrusted bytes, served like attachments.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): A layer id: 64 lowercase hex digits.
+- `path` (path, required): The path under the layer.
 
 Responses: `200` The file.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such file.
 
@@ -3443,6 +3950,20 @@ Responses: `200` The file.; `401` No token, or an unknown one. Send `Authorizati
 
 For spec runs writing on the same machine as a development host (`atlas-visualizer dev`). A server has none: it answers `404`.
 
+- `source` (path, required): The live source id.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The stylesheet.; `404` Not a live source.
+
+### Frame stylesheet of a live spec run (development only)
+
+`GET /api/projects/{project}/reports/live/{source}/frame.css` · role: read
+
+For spec runs writing on the same machine as a development host (`atlas-visualizer dev`). A server has none: it answers `404`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `source` (path, required): The live source id.
 
 Responses: `200` The stylesheet.; `404` Not a live source.
@@ -3456,6 +3977,22 @@ For spec runs writing on the same machine as a development host. A server has no
 - `source` (path, required): The live source id.
 - `testId` (path, required): The test id.
 - `path` (path, required): The path under the test.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The file.; `404` Not a live source.
+
+### A file of a test in a live spec run (development only)
+
+`GET /api/projects/{project}/reports/live/{source}/tests/{testId}/{path}` · role: read
+
+For spec runs writing on the same machine as a development host. A server has none: it answers `404`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `source` (path, required): The live source id.
+- `testId` (path, required): The test id.
+- `path` (path, required): The path under the test.
 
 Responses: `200` The file.; `404` Not a live source.
 
@@ -3465,6 +4002,20 @@ Responses: `200` The file.; `404` Not a live source.
 
 The viewer's address book of data sources, in the shape a static host serves. A server has one source, itself.
 
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The sources file.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### The sources the viewer reads
+
+`GET /api/projects/{project}/data/sources.json` · role: read
+
+The viewer's address book of data sources, in the shape a static host serves. A server has one source, itself.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
 Responses: `200` The sources file.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
 
 ### The spec files
@@ -3472,6 +4023,20 @@ Responses: `200` The sources file.; `401` No token, or an unknown one. Send `Aut
 `GET /api/data/specs/index.json` · role: read
 
 The files of the newest committed spec set, relative to `specs/`.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The index.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### The spec files
+
+`GET /api/projects/{project}/data/specs/index.json` · role: read
+
+The files of the newest committed spec set, relative to `specs/`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
 Responses: `200` The index.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
 
@@ -3482,6 +4047,20 @@ Responses: `200` The index.; `401` No token, or an unknown one. Send `Authorizat
 The text of a spec file, with the digest of its content as `ETag`.
 
 - `file` (path, required): The file's path relative to `specs/`.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The text.; `304` Not modified.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such spec.
+
+### One spec file
+
+`GET /api/projects/{project}/data/specs/{file}` · role: read
+
+The text of a spec file, with the digest of its content as `ETag`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `file` (path, required): The file's path relative to `specs/`.
 
 Responses: `200` The text.; `304` Not modified.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such spec.
 
@@ -3491,6 +4070,20 @@ Responses: `200` The text.; `304` Not modified.; `401` No token, or an unknown o
 
 The newest uploaded statechart runs (`atlas report publish --manifest … --upload-run`), newest first.
 
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The index.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### The statechart runs
+
+`GET /api/projects/{project}/data/runs/index.json` · role: read
+
+The newest uploaded statechart runs (`atlas report publish --manifest … --upload-run`), newest first.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
 Responses: `200` The index.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
 
 ### A file of an uploaded run
@@ -3499,6 +4092,21 @@ Responses: `200` The index.; `401` No token, or an unknown one. Send `Authorizat
 
 A file of an uploaded run: its manifest, timelines, screenshots, clips. Untrusted bytes, served sandboxed; immutable.
 
+- `id` (path, required): The run id.
+- `path` (path, required): The path inside the run.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The file.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such run or file.
+
+### A file of an uploaded run
+
+`GET /api/projects/{project}/data/runs/{id}/{path}` · role: read
+
+A file of an uploaded run: its manifest, timelines, screenshots, clips. Untrusted bytes, served sandboxed; immutable.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `id` (path, required): The run id.
 - `path` (path, required): The path inside the run.
 

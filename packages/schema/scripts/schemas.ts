@@ -7,7 +7,9 @@ import {
   LayerDocumentSchema,
   ReportStatusSchema,
   SpecSetSchema,
-  ServerConfigSchema,
+  LiveRunStartSchema, LiveRunUpdateSchema, LiveRunSchema,
+  ProjectSlugSchema, ProjectSchema, ProjectsSchema,
+  ServerConfigSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema,
   InitPlanSchema, PublishResultSchema, StreamResultSchema, MergeResultSchema, DoctorResultSchema, CommandErrorSchema,
   ProblemSchema, ServerInfoSchema, ReadySchema, EffectiveEvidenceSchema, EffectiveDeltaSchema, OutlineSchema, EvidencePageSchema, LayerRowsSchema, CheckDetailSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema,
   PublishChecksSchema,
@@ -26,6 +28,9 @@ import {
 
 /** The contract, one JSON Schema (draft 2020-12) document per Zod schema, as the text of its file. */
 export const SCHEMAS: Record<string, z.ZodType> = {
+  'project-slug': ProjectSlugSchema,
+  project: ProjectSchema,
+  projects: ProjectsSchema,
   'state-node': StateNodeSchema,
   journeys: JourneysFileSchema,
   atlas: AtlasFileSchema,
@@ -44,7 +49,10 @@ export const SCHEMAS: Record<string, z.ZodType> = {
   'publish-checks': PublishChecksSchema,
   'report-status': ReportStatusSchema,
   'spec-set': SpecSetSchema,
+  'live-run-start': LiveRunStartSchema, 'live-run-update': LiveRunUpdateSchema, 'live-run': LiveRunSchema,
   'server-config': ServerConfigSchema,
+  'server-editable-settings': ServerEditableSettingsSchema,
+  'server-settings-snapshot': ServerSettingsSnapshotSchema,
   // What the server answers (docs/server.md); the OpenAPI document refers to the same schemas.
   problem: ProblemSchema,
   'server-info': ServerInfoSchema,

@@ -2,7 +2,7 @@
  * @module `atlas serve`
  *
  * Starts the Atlas server from its configuration: opens every backend (creating the data folder), proves the upload
- * backend can be written to before listening, finds or builds the viewer, listens at once (so a liveness probe finds the
+ * backend can be written to before listening, finds or builds the client, listens at once (so a liveness probe finds the
  * process while a large backend is still being read), and stops cleanly on SIGTERM or SIGINT. `serverOptionsOf` is shared
  * with `atlas dev`, so the two run the same server.
  *
@@ -17,6 +17,7 @@ import type { BackendInput } from '../../reports/src/compose';
 import { createAtlasServer, type AtlasServerOptions } from './app';
 import { ConfigError, loadServerConfig, SERVER_USAGE, type ResolvedServerConfig } from './config';
 import { listen } from './host';
+import { fileServerSettings } from './settings';
 import { findSite } from './site';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -52,9 +53,10 @@ export function serverOptionsOf(config: ResolvedServerConfig, backends: ReturnTy
     ? (layer: { readonly branch: string | null; readonly freshness?: 'unknown' | 'modified' }) => (!branches?.length || (layer.branch !== null && branches.includes(layer.branch))) && (!config.include.ignoreModified || layer.freshness === undefined)
     : undefined;
   return {
-    backends, write: config.writeId, tokens: config.tokens, anonymousRead: config.anonymousRead,
+    backends, write: config.writeId,
+    ...(/^https?:\/\//.test(config.backends.find(backend => backend.id === config.writeId)!.url) ? { liveStore: backends[0]!.store } : {}), tokens: config.tokens, anonymousRead: config.anonymousRead,
     ...(config.outlineBranch ? { outlineBranch: config.outlineBranch } : {}), ...(include ? { include } : {}),
-    refreshMs: config.refreshSeconds * 1000, limits: config.limits, heartbeatMs: config.heartbeatSeconds * 1000,
+    runTimeoutMs: config.runTimeoutSeconds * 1000, runStallMs: config.runStallSeconds * 1000, refreshMs: config.refreshSeconds * 1000, limits: config.limits, heartbeatMs: config.heartbeatSeconds * 1000,
     ...(config.log && log ? { log } : {})
   };
 }
@@ -79,9 +81,9 @@ export async function serveMain(argv: readonly string[], io: ServeIo): Promise<n
   if (problem) { io.out(`atlas serve: uploads would go to "${writeBackend.id}" and it cannot be written to: ${problem}\n`); return 2; }
 
   const site = await findSite(config.site, cwd, io.out);
-  if (!site) io.out('No viewer to serve: build one with `atlas-visualizer build --no-data --out atlas-site`. The API is served meanwhile.\n');
+  if (!site) io.out('No Atlas client to serve: build one with `atlas client build --no-data --out atlas-site`. The API is served meanwhile.\n');
 
-  const server = createAtlasServer({ ...serverOptionsOf(config, backends, line => io.out(`${JSON.stringify(line)}\n`)), ...(site ? { site } : {}) });
+  const server = createAtlasServer({ settings: fileServerSettings(config, argv, env, cwd), ...serverOptionsOf(config, backends, line => io.out(`${JSON.stringify(line)}\n`)), ...(site ? { site } : {}) });
   // Listen at once: the first pass over a large backend can take a while, and a liveness probe must find the
   // process meanwhile. /readyz is 503 until there is a report to show.
   const running = await listen(server.fetch, { port: config.port, host: config.host, maxBodyBytes: Math.max(config.limits.maxObjectMiB, config.limits.maxJsonMiB) * 1024 * 1024 });

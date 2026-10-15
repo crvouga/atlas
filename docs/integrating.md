@@ -28,7 +28,7 @@ integrate. To run it for a whole team, with a bucket and one node everyone looks
 ```
  node 1: suite A, ios      ──▶ layer ─┐
  node 2: suite A, android  ──▶ layer ─┤        ┌──▶ atlas report status   (gate: exit 1 on failure)
- node 3: suite B, shard 1  ──▶ layer ─┼──▶ backends ──▶ combine ──┼──▶ the viewer          (browse it)
+ node 3: suite B, shard 1  ──▶ layer ─┼──▶ backends ──▶ combine ──┼──▶ the client          (browse it)
  node 4: suite B, shard 2  ──▶ layer ─┤        └──▶ your own code          (combineBackends)
  a laptop, one scenario    ──▶ layer ─┘
 ```
@@ -394,7 +394,7 @@ unknown is not a pass.
 
 ## 6. Browse it
 
-The visualizer lays your stores over your specs directory. Add a module to your project:
+The Atlas client lays your stores over your specs directory. Add a module to your project:
 
 ```ts
 // atlas.reports.ts
@@ -404,14 +404,14 @@ export const reportsDevFetch = reportsHost({ specs: './specs', stores: ['./atlas
 ```
 
 ```sh
-ATLAS_REPORTS_MODULE="$(pwd)/atlas.reports.ts" bunx atlas-visualizer dev --specs ./specs
+ATLAS_REPORTS_MODULE="$(pwd)/atlas.reports.ts" bunx atlas client dev --specs ./specs
 ```
 
 `reportsHost(options)` returns `(request: Request, repoRoot: string) => Promise<Response>`, the
-function the viewer calls for every `/api/reports/…` request. `specs` and directory `stores` resolve
-against `repoRoot`, which the viewer sets to where you ran the command (`INIT_CWD`), not against the
+function the client calls for every `/api/reports/…` request. `specs` and directory `stores` resolve
+against `repoRoot`, which the client sets to where you ran the command (`INIT_CWD`), not against the
 module. A wrong path comes back as a JSON error that names it. A `stores` entry that is not a string is
-a backend of your own: `{ id, label?, store }`. You can call it yourself to look at what the viewer
+a backend of your own: `{ id, label?, store }`. You can call it yourself to look at what the client
 sees:
 
 ```ts
@@ -424,11 +424,11 @@ const page = await (await reportsDevFetch(new Request('http://x/api/reports/evid
 
 | Route (after `/api/reports`) | Returns |
 | --- | --- |
-| `/evidence?cursor=` | A page of layer headers, the backends and any notices. The viewer combines them with the specs. |
+| `/evidence?cursor=` | A page of layer headers, the backends and any notices. The client combines them with the specs. |
 | `/evidence/rows/:backend/:id` | One layer's checks. |
 | `/outline`, `/outline/spec?path=` | The specs directory as an outline, and one spec's text. |
 
-The combined result of each spec is computed in the viewer. To get it without a browser, use
+The combined result of each spec is computed in the client. To get it without a browser, use
 `atlas report status --format json`: its `specs` array has each spec's counts per environment.
 
 Specs are the files of the specs directory (`.feature` as Gherkin, `.qnt` as Quint, `.dmn`, `.als`,
@@ -469,7 +469,7 @@ An integration is complete when each of these holds. Run them and keep the outpu
 | `X is unavailable` | A backend is down. The rest were combined; fix it or leave it out. |
 | `check id "…" appears twice` | Your suite emits two checks with one name. Make the names unique. Importers number repeats as `#2`. |
 | `Potentially outdated: spec changed` | The spec changed since the layer was recorded. Advisory: the recorded outcome still counts. Re-run to refresh. |
-| Viewer shows `No report store is configured` | `ATLAS_REPORTS_MODULE` is unset, or `stores` is empty. |
+| Client shows `No report store is configured` | `ATLAS_REPORTS_MODULE` is unset, or `stores` is empty. |
 
 ## Rules
 

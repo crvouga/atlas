@@ -84,7 +84,7 @@ export const SERVER_SETTINGS: readonly ServerSetting[] = [
   { summary: 'The server\'s own folder: the default backend and write target', key: 'data', flag: '--data <dir>', env: ['ATLAS_DATA'], default: '`./atlas-data`', example: { value: 'results', read: c => path.basename(c.data), expected: 'results' } },
   { summary: 'More backends, read together with the data folder', key: 'backends', flag: '--store <[id=]url>` (repeatable)', env: ['ATLAS_STORE'], default: 'none', example: { value: 'lab=https://lab.example.com', read: c => c.backends.map(backend => backend.id), expected: ['data', 'lab'] } },
   { summary: 'The backend uploads go to', key: 'write', flag: '--write <id>', env: ['ATLAS_WRITE'], default: '`data`', example: { value: 'data', read: c => c.writeId, expected: 'data' } },
-  { summary: 'The built viewer', key: 'site', flag: '--site <dir>', env: ['ATLAS_SITE'], default: '`./atlas-site`, else built once', example: { value: 'viewer', read: c => path.basename(c.site ?? ''), expected: 'viewer' } },
+  { summary: 'The built client', key: 'site', flag: '--site <dir>', env: ['ATLAS_SITE'], default: '`./atlas-site`, else built once', example: { value: 'client', read: c => path.basename(c.site ?? ''), expected: 'client' } },
   { summary: 'Whose specs the report is laid over', key: 'outlineBranch', flag: '--outline-branch <branch>', env: ['ATLAS_OUTLINE_BRANCH'], default: '`main`, then `master`, then the newest', example: { value: 'trunk', read: c => c.outlineBranch, expected: 'trunk' } },
   { summary: 'Only layers recorded on these branches take part', key: 'include.branches', flag: '--branch <name>` (repeatable)', env: ['ATLAS_ONLY_BRANCH'], default: 'all', example: { value: 'main', read: c => c.include.branches, expected: ['main'] } },
   { summary: 'Leave out layers from modified checkouts and unknown origins', key: 'include.ignoreModified', flag: '--ignore-modified', env: ['ATLAS_IGNORE_MODIFIED'], default: 'no', example: { value: '1', read: c => c.include.ignoreModified, expected: true } },
@@ -93,7 +93,13 @@ export const SERVER_SETTINGS: readonly ServerSetting[] = [
   { summary: 'Listen publicly with no tokens (something in front signs people in)', key: 'auth.insecure', flag: '--insecure', env: ['ATLAS_INSECURE'], default: 'no', example: { value: '1', read: c => c.insecure, expected: true } },
   { summary: 'The admin token (also `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file)', key: 'auth.tokens', flag: null, env: ['ATLAS_TOKEN'], default: 'none: the server is open and listens on this machine only', example: { value: 'admin-token-123456', read: c => c.tokens.map(token => token.role), expected: ['admin'] } },
   { summary: 'The configuration file', key: '(the file itself)', flag: '--config <file>', env: ['ATLAS_CONFIG'], default: '`./atlas.server.json` when it exists', example: { value: 'custom.json', read: c => path.basename(c.configFile ?? ''), expected: 'custom.json' } },
-  { summary: 'No request log', key: 'log', flag: '--no-log', env: [], default: 'one JSON line per request', example: { value: '', read: c => c.log, expected: false } }
+  { summary: 'Largest uploaded object in MiB', key: 'limits.maxObjectMiB', flag: null, env: ['ATLAS_MAX_OBJECT_MIB'], default: '`256`', example: { value: '64', read: c => c.limits.maxObjectMiB, expected: 64 } },
+  { summary: 'Largest JSON upload in MiB', key: 'limits.maxJsonMiB', flag: null, env: ['ATLAS_MAX_JSON_MIB'], default: '`32`', example: { value: '8', read: c => c.limits.maxJsonMiB, expected: 8 } },
+  { summary: 'Maximum simultaneous live viewers', key: 'limits.maxStreams', flag: null, env: ['ATLAS_MAX_STREAMS'], default: '`500`', example: { value: '100', read: c => c.limits.maxStreams, expected: 100 } },
+  { summary: 'Live connection heartbeat in seconds', key: 'heartbeatSeconds', flag: null, env: ['ATLAS_HEARTBEAT_SECONDS'], default: '`15`', example: { value: '20', read: c => c.heartbeatSeconds, expected: 20 } },
+  { summary: 'Live producer heartbeat timeout in seconds', key: 'runTimeoutSeconds', flag: null, env: ['ATLAS_RUN_TIMEOUT_SECONDS'], default: '`30`', example: { value: '60', read: c => c.runTimeoutSeconds, expected: 60 } },
+  { summary: 'Live run progress stall timeout in seconds (0 disables)', key: 'runStallSeconds', flag: null, env: ['ATLAS_RUN_STALL_SECONDS'], default: '`900`', example: { value: '0', read: c => c.runStallSeconds, expected: 0 } },
+  { summary: 'No request log', key: 'log', flag: '--no-log', env: ['ATLAS_LOG'], default: 'one JSON line per request', example: { value: 'false', read: c => c.log, expected: false } }
 ];
 
 /** The text `atlas serve --help` prints. Also the source of the `atlas serve` section of `docs/reference/cli.md`. */
@@ -104,7 +110,7 @@ export const SERVER_USAGE = `atlas serve: the Atlas server
               [--outline-branch <b>] [--branch <name>]... [--ignore-modified] [--refresh <seconds>]
               [--anonymous-read] [--insecure] [--no-log]
 
-  One process serves the viewer and the API. Test results are uploaded to it from anywhere (laptops, CI) and it
+  One process serves the client and the API. Test results are uploaded to it from anywhere (laptops, CI) and it
   shows everyone the combined report, live. It keeps its data in --data (default ./atlas-data) and can read more
   backends (--store): S3, other servers, folders. Uploads go to the data folder unless --write names another.
 
@@ -164,7 +170,16 @@ export function loadServerConfig(argv: readonly string[], env: Env, cwd: string,
   set('site', flags.site ?? env.ATLAS_SITE);
   set('outlineBranch', flags['outline-branch'] ?? env.ATLAS_OUTLINE_BRANCH);
   set('refreshSeconds', flags.refresh !== undefined ? Number(flags.refresh) : env.ATLAS_REFRESH_SECONDS !== undefined ? Number(env.ATLAS_REFRESH_SECONDS) : undefined);
+  if (env.ATLAS_LOG !== undefined) merged.log = truthy(env.ATLAS_LOG);
   if (flags['no-log']) merged.log = false;
+  set('runTimeoutSeconds', env.ATLAS_RUN_TIMEOUT_SECONDS === undefined ? undefined : Number(env.ATLAS_RUN_TIMEOUT_SECONDS));
+  set('runStallSeconds', env.ATLAS_RUN_STALL_SECONDS === undefined ? undefined : Number(env.ATLAS_RUN_STALL_SECONDS));
+  set('heartbeatSeconds', env.ATLAS_HEARTBEAT_SECONDS === undefined ? undefined : Number(env.ATLAS_HEARTBEAT_SECONDS));
+  const limits = { ...(raw.limits as Record<string, unknown> | undefined) };
+  for (const [key, variable] of [['maxObjectMiB', 'ATLAS_MAX_OBJECT_MIB'], ['maxJsonMiB', 'ATLAS_MAX_JSON_MIB'], ['maxStreams', 'ATLAS_MAX_STREAMS']] as const) {
+    if (env[variable] !== undefined) limits[key] = Number(env[variable]);
+  }
+  merged.limits = limits;
   if (flags.insecure || truthy(env.ATLAS_INSECURE)) auth.insecure = true;
   if (flags['anonymous-read'] || truthy(env.ATLAS_ANONYMOUS_READ)) auth.anonymousRead = true;
   const branches = [...(flags.branch ?? []), ...list(env.ATLAS_ONLY_BRANCH)];

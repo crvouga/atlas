@@ -16,6 +16,7 @@ import type { FeatureExamples, FeatureStep } from './gherkin';
 import { Bounded, Origin, StatusMark } from './marks';
 import { ModelTrace } from './model-trace';
 import { recordedModelStates } from './quint';
+import { TestProgress, useTestProgress } from '../live/test-progress';
 
 /** What the address says is open: a check, and optionally one particular layer's record of it. */
 export type CheckSelection = { readonly check?: string; readonly layer?: string };
@@ -59,8 +60,11 @@ function outcomeName(outcome: EvidenceResult) {
 
 export function ResultRow({ label, slot, open, onToggle, children }: { label: string; slot: CheckSlot | null; open: boolean; onToggle: () => void; children: ReactNode }) {
   const now = useNow();
+  const progress = useTestProgress(slot);
+  const current = progress.tests.find(({ run, check }) => run.status === 'running' && check.status === 'running');
+  const interrupted = !current && progress.tests.find(({ run, check }) => run.status === 'interrupted' && check.status === 'not-run');
   const newest = slot?.outcomes[0];
-  const marks = slot ? environmentMarks(slot) : [];
+  const marks = slot && !current ? environmentMarks(slot) : [];
   const failure = slot?.status === 'failed' ? slot.outcomes.find((outcome) => outcome.row.status === 'failed')?.row.detail.split('\n')[0] : '';
   return (
     <li className={styles.result} data-status={slot?.status ?? 'none'} data-open={open || undefined}>
@@ -77,12 +81,15 @@ export function ResultRow({ label, slot, open, onToggle, children }: { label: st
           )}
         </span>
         {slot?.live && <span className={styles.liveTag}>Running now</span>}
+        {interrupted && <span className={styles.liveTag}>Interrupted</span>}
         <span className={styles.resultAside}>
-          {newest ? [newest.row.evidence?.attachments ? plural(newest.row.evidence.attachments, 'attachment', 'attachments') : '', duration(newest.row.durationMs), slot.live ? '' : ago(slot.latestAtMs, now)].filter(Boolean).join(' · ') : 'No result'}
+          {current ? duration(current.check.durationMs ?? null) || 'In progress' : interrupted ? 'No completed result' : newest ? [newest.row.evidence?.attachments ? plural(newest.row.evidence.attachments, 'attachment', 'attachments') : '', duration(newest.row.durationMs), slot.live ? '' : ago(slot.latestAtMs, now)].filter(Boolean).join(' · ') : 'No result'}
         </span>
         <span className={styles.chevron} aria-hidden="true" />
       </button>
-      {!open && failure && <p className={styles.excerpt}>{failure}</p>}
+      {!open && current && <p className={styles.excerpt} data-progress="true" role="status">{current.check.detail || current.check.steps?.at(-1)?.name || 'Test in progress…'}{progress.error ? ` · ${progress.error}` : ''}</p>}
+      {!open && interrupted && <p className={styles.excerpt} data-progress="true" role="status">{interrupted.run.reason ?? 'The test run was interrupted.'}</p>}
+      {!open && !current && failure && <p className={styles.excerpt}>{failure}</p>}
       {open && <div className={styles.resultBody}>{children}</div>}
     </li>
   );
@@ -197,7 +204,15 @@ type Props = {
 };
 
 /** Everything recorded for one check: the chosen result, how it went, and every other run of it. */
-export function CheckDetail({ slot, layerId, select, reads, written }: Props) {
+export function CheckDetail(props: Props) {
+  const progress = useTestProgress(props.slot);
+  const inProgress = progress.tests.some(({ run, check }) => check.status === 'running' && run.status === 'running' || check.status === 'not-run' && run.status === 'interrupted');
+  return <><TestProgress {...progress} />{props.slot.outcomes.length > 0
+    ? inProgress && !props.layerId ? <details className={styles.actions}><summary>Previous recorded result</summary><RecordedCheckDetail {...props} /></details> : <RecordedCheckDetail {...props} />
+    : props.written}</>;
+}
+
+function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
   const { evidence, backends } = useEvidence();
   const now = useNow();
   const [variant, setVariant] = useState(0);

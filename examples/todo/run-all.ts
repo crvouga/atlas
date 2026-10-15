@@ -2,6 +2,12 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { exampleServerUrl, publishExampleReports } from './publish';
+
+process.env.ATLAS_SERVER_URL ??= exampleServerUrl();
+process.env.ATLAS_PROJECT ??= 'todo-app';
+process.env.ATLAS_PRODUCER ??= 'todo-statecharts';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 function run(args: string[]): Promise<number> {
@@ -27,4 +33,12 @@ try {
   console.error(error instanceof Error ? error.message : error);
 }
 
-if (atlas !== 0 || documents !== 0) process.exitCode = 1;
+let published = 0;
+try {
+  await publishExampleReports(exampleServerUrl());
+} catch (error) {
+  published = 1;
+  console.error(`Reports remain on disk, but uploading to ${exampleServerUrl()} failed: ${error instanceof Error ? error.message : String(error)}`);
+  console.error('Start `bun atlas`, then run `bun example:publish` to upload this run without rerunning tests.');
+}
+if (atlas !== 0 || documents !== 0 || published !== 0) process.exitCode = 1;

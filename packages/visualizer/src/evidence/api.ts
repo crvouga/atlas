@@ -33,7 +33,8 @@ function explain(status: number) {
 
 /** A captured file's address in the browser. Pictures and video use it directly; fetches use the same address. */
 export function reportAssetUrl(path: string): string {
-  return staticEvidence ? `${reportsBase}/${evidenceFile(path).split('/').map(encodeURIComponent).join('/')}` : `${reportsBase}${path}`;
+  const base = runtime()?.reportsUrl?.replace(/\/$/, '') ?? reportsBase;
+  return staticEvidence ? `${base}/${evidenceFile(path).split('/').map(encodeURIComponent).join('/')}` : `${base}${path}`;
 }
 
 export async function reportResponse(path: string, signal?: AbortSignal) {

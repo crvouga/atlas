@@ -178,6 +178,20 @@
       },
       "additionalProperties": false
     },
+    "runTimeoutSeconds": {
+      "description": "Interrupt a live run after this many seconds without a producer heartbeat",
+      "default": 30,
+      "type": "number",
+      "minimum": 10,
+      "maximum": 3600
+    },
+    "runStallSeconds": {
+      "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
+      "default": 900,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 86400
+    },
     "heartbeatSeconds": {
       "description": "How often a live connection is touched, so proxies keep it open",
       "default": 15,

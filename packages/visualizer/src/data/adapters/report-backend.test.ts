@@ -78,18 +78,19 @@ describe('report backends', () => {
       }
     }
     stubGlobal('EventSource', Stream);
-    const adapter = createHttpAdapter('/api/', 'api', './events');
+    const adapter = createReportBackend({ id: 'workspace', label: 'Atlas server', type: 'api', baseUrl: '/api/', live: true, eventsUrl: './events' });
     const receive = vi.fn();
     const unsubscribe = adapter.subscribe!(receive);
     const stream = streams[0]!;
     expect(stream.url).toBe('https://atlas.example.test/api/events');
     stream.dispatchEvent(new Event('open'));
+    expect(receive).toHaveBeenNthCalledWith(1, { scope: 'specs', files: [], runIds: [] });
     expect(receive).toHaveBeenLastCalledWith({ scope: 'runs', files: [], runIds: [] });
     stream.dispatchEvent(new MessageEvent('atlas:change', { data: '{"scope":"runs","runIds":["live"]}' }));
     expect(receive).toHaveBeenLastCalledWith({ scope: 'runs', files: [], runIds: ['live'] });
     stream.dispatchEvent(new MessageEvent('message', { data: '{broken' }));
     stream.dispatchEvent(new MessageEvent('message', { data: '{"scope":"unknown"}' }));
-    expect(receive).toHaveBeenCalledTimes(2);
+    expect(receive).toHaveBeenCalledTimes(3);
     unsubscribe();
     expect(stream.close).toHaveBeenCalledTimes(1);
   });

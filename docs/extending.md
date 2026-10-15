@@ -31,7 +31,7 @@ carry any of these. Every one is optional.
 | `attempts[]` | Every try, when the check was retried. |
 | `tags[]` | Free labels to filter by: `smoke`, `payments`. |
 | `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. |
-| `links[]` | Where to read more: the CI run, the issue, the trace viewer. |
+| `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
 | `measurements[]` | Numbers, with units and an allowance (already part of the contract). |
 
@@ -224,7 +224,7 @@ Annotation `type`: `note`, `warning`, `deprecation`, `issue`, `accessibility`, `
 | Something that should be shown well | Ask for a renderer (below). |
 | A field every tool should have | Open an issue. It is added as an optional field, and the rules above guarantee nothing breaks. |
 
-**A renderer** is one entry in the viewer's list (`artifactRenderers` in
+**A renderer** is one entry in the client's list (`artifactRenderers` in
 `packages/visualizer/src/evidence/artifacts.tsx`): how to show an attachment of a media type. The first one that
 matches wins:
 
@@ -236,7 +236,7 @@ registerArtifactRenderer({
 });
 ```
 
-The viewer is part of Atlas, so a renderer for a new media type is a contribution to Atlas: file an issue
+The client is part of Atlas, so a renderer for a new media type is a contribution to Atlas: file an issue
 ([reporting issues](reporting-issues.md)) with a sample file. Until it lands, the attachment is still stored,
 listed with its name, role, type and size, and offered for download, and everything else about the result is
 unaffected.

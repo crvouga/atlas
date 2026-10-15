@@ -75,22 +75,26 @@ suite('one bucket, many publishers, one node', () => {
 
     const controller = new AbortController();
     let output = '';
-    const done = serveMain(['--data', path.join(root, 'server-data'), '--store', url, '--port', '0', '--host', '127.0.0.1', '--refresh', '1', '--no-log'], { out: text => { output += text; }, env, cwd: root, signal: controller.signal });
-    for (let i = 0; i < 200 && !output.includes('Atlas ready'); i++) await new Promise(resolve => setTimeout(resolve, 25));
-    const base = /ready on (http:\/\/[^:]+:\d+)/.exec(output)?.[1]?.replace('localhost', '127.0.0.1');
-    expect(base).toBeDefined();
-    expect(output).toContain('Backends: data (uploads),');
-    const effective = async () => (await (await fetch(`${base}/api/reports/evidence/effective`)).json()) as EffectiveEvidence;
-    expect((await effective()).layers.length).toBe(1);
-    expect(await (await fetch(`${base}/api/data/specs/cart.feature`)).text()).toContain('Shopping cart');
+    // This exercises the API, so skip the unrelated cold client build on a fresh CI runner.
+    const done = serveMain(['--data', path.join(root, 'server-data'), '--site', path.join(root, 'no-site'), '--store', url, '--port', '0', '--host', '127.0.0.1', '--refresh', '1', '--no-log'], { out: text => { output += text; }, env, cwd: root, signal: controller.signal });
+    try {
+      for (let i = 0; i < 200 && !output.includes('Atlas ready'); i++) await new Promise(resolve => setTimeout(resolve, 25));
+      const base = /ready on (http:\/\/[^:]+:\d+)/.exec(output)?.[1]?.replace('localhost', '127.0.0.1');
+      expect(base).toBeDefined();
+      expect(output).toContain('Backends: data (uploads),');
+      const effective = async () => (await (await fetch(`${base}/api/reports/evidence/effective`)).json()) as EffectiveEvidence;
+      expect((await effective()).layers.length).toBe(1);
+      expect(await (await fetch(`${base}/api/data/specs/cart.feature`)).text()).toContain('Shopping cart');
 
-    await atlas(['publish', '--store', url, '--producer', 'bdd', '--junit', 'checkout-ci.xml', '--specs', 'specs', '--environment', 'ios'], () => null, ci);
-    let layers = 1;
-    for (let i = 0; i < 100 && layers < 2; i++) { await new Promise(resolve => setTimeout(resolve, 100)); layers = (await effective()).layers.length; }
-    expect(layers).toBe(2);
-    expect((await fetch(`${base}/readyz`)).status).toBe(200);
-    controller.abort();
-    expect(await done).toBe(0);
+      await atlas(['publish', '--store', url, '--producer', 'bdd', '--junit', 'checkout-ci.xml', '--specs', 'specs', '--environment', 'ios'], () => null, ci);
+      let layers = 1;
+      for (let i = 0; i < 100 && layers < 2; i++) { await new Promise(resolve => setTimeout(resolve, 100)); layers = (await effective()).layers.length; }
+      expect(layers).toBe(2);
+      expect((await fetch(`${base}/readyz`)).status).toBe(200);
+    } finally {
+      controller.abort();
+      expect(await done).toBe(0);
+    }
   }, 30_000);
 
   test('merging a laptop folder up to the bucket is safe to repeat', async () => {

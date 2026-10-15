@@ -90,6 +90,8 @@ export type RunOptions<C> = RunContext<C> & {
   reuse?: { runDir: string; outcomes: Record<string, PathOutcome> };
   /** Receives progress lines; writes to stdout when omitted. */
   log?: (line: string) => void;
+  /** Receives privacy-checked manifest snapshots as paths and steps change. */
+  onProgress?: (manifest: Manifest) => void;
 };
 
 type StepResult = { transition: string; event: string; status: Status; reason: string | null };
@@ -553,6 +555,7 @@ export function buildManifest<C>(
       key: string;
       name: string;
       kind: PlannedPath['kind'];
+      progress?: 'queued' | 'running' | 'complete';
       status: Status;
       attempts: Attempt[];
       steps: StepResult[];
@@ -1033,7 +1036,8 @@ export async function runPaths<C>(options: RunOptions<C>) {
   });
 
   function publish() {
-    writeRun(runDir, options, options.paths, new Map([...outcomes, ...activeOutcomes]), runInfo(false));
+    const snapshot = writeRun(runDir, options, options.paths, new Map([...outcomes, ...activeOutcomes]), runInfo(false));
+    options.onProgress?.(snapshot);
   }
 
   const history = durationHistory(options.outputRoot);
@@ -1041,7 +1045,7 @@ export async function runPaths<C>(options: RunOptions<C>) {
   const queue = toRun.filter((p) => !reused.has(p.key)).sort((a, b) => cost(b) - cost(a) || options.paths.indexOf(a) - options.paths.indexOf(b));
   if (reused.size) log(`Reusing ${reused.size} passed path(s) from ${path.basename(options.reuse!.runDir)}`);
   log(`Running ${queue.length} path(s) on ${workers} worker(s)`);
-  writeRun(runDir, options, options.paths, outcomes, runInfo(false));
+  options.onProgress?.(writeRun(runDir, options, options.paths, outcomes, runInfo(false)));
   // A driver can throw outside any awaited call (a message for a context that just closed); it
   // belongs to one attempt, so it is logged and the run goes on instead of the process dying.
   const stray = (error: unknown) => log(`  (ignored an error thrown outside any step: ${(error instanceof Error ? error.message : String(error)).split('\n')[0]})`);
@@ -1067,5 +1071,6 @@ export async function runPaths<C>(options: RunOptions<C>) {
   await driver.dispose?.();
   await Promise.all(sources.map((s) => s.close?.()));
   const manifest = writeRun(runDir, options, options.paths, outcomes, runInfo(true));
+  options.onProgress?.(manifest);
   return { runDir, manifest, ok: manifest.privacy.passed && manifest.paths.every((r) => r.status !== 'failed') };
 }

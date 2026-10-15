@@ -208,7 +208,7 @@ export const ChecksResultSchema = z.looseObject({
 });
 
 /** The data of the `hello` event: sent first on `/api/events`. */
-export const HelloEventSchema = z.looseObject({ version: z.string(), ready: z.boolean(), time: z.number() });
+export const HelloEventSchema = z.looseObject({ version: z.string(), ready: z.boolean(), time: z.number(), heartbeatMs: z.number().positive().optional() });
 
 /** The data of the `report` event: layers arrived. Enough to say who sent what, without asking. */
 export const ReportEventSchema = z.looseObject({

@@ -16,8 +16,9 @@ atlas — executable statecharts
                [--no-retry] [--output <dir>]
   atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
   atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
-  atlas serve  [--data <dir>] [--port 8080] [--store <url>]...   the Atlas server: results in, the live report out
-  atlas dev    [--port 5180]                                     the server and the viewer's dev server, on one host
+  atlas server [--data <dir>] [--port 8080] [--store <url>]...   one Atlas node: API, projects and client
+  atlas client build [--no-data] [--out <dir>]                    build the project-agnostic Atlas client
+  atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
   atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
 
@@ -57,7 +58,7 @@ atlas serve: the Atlas server
               [--outline-branch <b>] [--branch <name>]... [--ignore-modified] [--refresh <seconds>]
               [--anonymous-read] [--insecure] [--no-log]
 
-  One process serves the viewer and the API. Test results are uploaded to it from anywhere (laptops, CI) and it
+  One process serves the client and the API. Test results are uploaded to it from anywhere (laptops, CI) and it
   shows everyone the combined report, live. It keeps its data in --data (default ./atlas-data) and can read more
   backends (--store): S3, other servers, folders. Uploads go to the data folder unless --write names another.
 
@@ -68,12 +69,12 @@ atlas serve: the Atlas server
 ## atlas dev
 
 ```text
-atlas dev: the Atlas server and the viewer, for working on either
+atlas dev: the Atlas server and the client, for working on either
 
   atlas dev [--port 5180] [--host 127.0.0.1] [--data <dir>] [--store <url|id=url>]... [--config atlas.server.json]
 
-  Starts the server (API only, on a port of its own) and the viewer's dev server, which proxies /api to it, so the
-  browser talks to one host and a change to the viewer shows at once. In production `atlas serve` does both from
+  Starts the server (API only, on a port of its own) and the client's dev server, which proxies /api to it, so the
+  browser talks to one host and a change to the client shows at once. In production `atlas serve` does both from
   one process.
 ```
 
@@ -101,7 +102,8 @@ atlas report — layered evidence for any kind of spec
   atlas report policy  --store s3://bucket/prefix [--role publisher|reader|both]
 
   A store is a directory or s3://bucket/prefix (add ?region=…&endpoint=… for R2, MinIO and the
-  rest). When no --store is given, ATLAS_STORE is used. Keys never go in the URL: set
+  rest). Select a project on an Atlas node with --project <slug> or ATLAS_PROJECT. This scopes specs, reports and recordings together.
+  When no --store is given, ATLAS_STORE is used. Keys never go in the URL: set
   AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or sign in with `aws sso login`, or use a role.
 
   publish   Write one immutable layer: the checks of one producer, on one environment. Safe to repeat.

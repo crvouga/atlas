@@ -53,6 +53,15 @@ describe('what it finds', () => {
     expect(jest.nextSteps.join('\n')).toContain('npm install -D jest-junit');
   });
 
+  test('CodeceptJS and the Node runner are detected with reproducible report commands', async () => {
+    const plan = await planInit({ directory: await project({ 'package.json': JSON.stringify({ devDependencies: { codeceptjs: '^4' }, scripts: { test: 'node --test' } }), 'bun.lock': '' }), server: 'https://atlas.example.com', git: noGit });
+    expect(plan.suites.map(suite => suite.id)).toEqual(['codeceptjs', 'node-test']);
+    expect(plan.suites[0]!.run).toContain('codeceptjs run --reporter mocha-junit-reporter');
+    expect(plan.suites[0]!.publish).toContain('--junit atlas-codeceptjs.xml');
+    expect(plan.suites[1]!.run).toContain('node --test --test-reporter=junit');
+    expect(plan.suites[1]!.publish).toContain('--junit atlas-node-test.xml');
+  });
+
   test('a project it cannot read is said, not guessed: no suites, a warning that says what to do, and still an AGENTS.md section', async () => {
     const plan = await planInit({ directory: await project({ 'README.md': 'hi' }), git: noGit });
     expect(plan.suites).toEqual([]);

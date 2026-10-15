@@ -1,3 +1,4 @@
+import { liveInvalidator } from '../live/live-query';
 import type { DataIssue } from '@crvouga/atlas/schema';
 import { useContext, useEffect, useMemo } from 'react';
 import { isStatechartFile, RunsIndexSchema, SpecIndexSchema } from '@crvouga/atlas/schema';
@@ -71,28 +72,34 @@ export function useLiveUpdates(enabled = true) {
   useEffect(() => {
     if (!enabled) return;
     const unsubscribe: (() => void)[] = [];
+    const refreshers = new Map<string, ReturnType<typeof liveInvalidator>>();
+    const refresh = (key: readonly string[]) => {
+      const id = JSON.stringify(key);
+      let reread = refreshers.get(id);
+      if (!reread) { reread = liveInvalidator(client, key); refreshers.set(id, reread); }
+      reread();
+    };
     if (adapter.subscribe)
       unsubscribe.push(
         adapter.subscribe((change) => {
           if (change.scope !== 'specs') return;
-          void client.invalidateQueries({ queryKey: keys.specIndex(specKey(adapter)) });
-          if (!change.files.length) void client.invalidateQueries({ queryKey: ['spec', specKey(adapter)] });
-          for (const file of change.files) void client.invalidateQueries({ queryKey: keys.specFile(specKey(adapter), file) });
+          refresh(keys.specIndex(specKey(adapter)));
+          if (!change.files.length) refresh(['spec', specKey(adapter)]);
+          for (const file of change.files) refresh(keys.specFile(specKey(adapter), file));
         })
       );
     for (const { backend, enabled: active } of entries) {
       if (!active || !backend.subscribe) continue;
       unsubscribe.push(
         backend.subscribe((change) => {
-          if (change.scope !== 'runs') return;
-          void client.invalidateQueries({ queryKey: keys.runsIndex(backend.cacheKey) });
-          if (!change.runIds.length) void client.invalidateQueries({ queryKey: keys.manifests(backend.cacheKey) });
-          for (const id of change.runIds) void client.invalidateQueries({ queryKey: keys.manifest(backend.cacheKey, id) });
+          if (change.scope !== 'runs' || change.liveRunId) return;
+          refresh(['reports', backend.cacheKey]);
         })
       );
     }
     return () => {
       for (const stop of unsubscribe) stop();
+      for (const refresh of refreshers.values()) refresh.cancel();
     };
   }, [adapter, entries, client, enabled]);
 }

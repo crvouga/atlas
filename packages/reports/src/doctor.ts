@@ -16,7 +16,7 @@ import type { CliBackend } from './cli-stores';
 /** One thing `inspectStore` checked: its `name` (`store`, `list`, `contents`, `write`, …), whether it is `ok`, what was seen, and, when it is not, what to `fix`. */
 export type Check = { readonly ok: boolean; readonly name: string; readonly detail: string; readonly fix?: string };
 
-/** The least an account needs, as an AWS IAM policy. R2, MinIO and the rest have their own policy languages: grant the same actions. */
+/** The least an account needs, as an AWS IAM policy. The combined server role also stores operational leases under server/live/. R2, MinIO and the rest have their own policy languages: grant the same actions. */
 export function iamPolicy(location: { bucket: string; prefix: string }, role: 'publisher' | 'reader' | 'both'): object {
   const base = location.prefix ? `${location.prefix}/` : '';
   const bucketArn = `arn:aws:s3:::${location.bucket}`;
@@ -30,6 +30,10 @@ export function iamPolicy(location: { bucket: string; prefix: string }, role: 'p
   if (role !== 'publisher') {
     statements.push({ Sid: 'AtlasRead', Effect: 'Allow', Action: 's3:GetObject', Resource: `${bucketArn}/${base}layers/*` });
   }
+  if (role === 'both') statements.push(
+    { Sid: 'AtlasLiveRuns', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject'], Resource: `${bucketArn}/${base}server/live/*` },
+    { Sid: 'AtlasProjects', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'], Resource: [`${bucketArn}/${base}projects/*`, `${bucketArn}/${base}server/projects/*`] }
+  );
   // Publishers need this too: without it S3 answers 403, not 404, when asked whether a layer exists yet.
   statements.push({ Sid: 'AtlasList', Effect: 'Allow', Action: 's3:ListBucket', Resource: bucketArn, // IfExists: a listing always carries a prefix and is held to it; a HEAD or GET of one object carries none, and
     // must still be answered "not found" rather than "forbidden".

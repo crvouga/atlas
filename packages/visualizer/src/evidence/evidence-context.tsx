@@ -10,7 +10,10 @@ import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstac
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { keys, specKey, useAdapter } from '../data/queries';
-import { eventsAddress, listenLive, throttled, useLiveStatus } from '../live/live-stream';
+import { eventsAddress, listenLive, useLiveStatus } from '../live/live-stream';
+import { liveInvalidator } from '../live/live-query';
+import { useLiveTests } from '../live/live-runs';
+import { withLiveProgress } from '../live/report-progress';
 import { fileName, folderOf, kindOfFile, outlinePath } from '../spec-kind';
 import { useUiStore } from '../state/ui-store';
 import { effectiveEvidence, reportJson, staticEvidence } from './api';
@@ -92,22 +95,19 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
     const url = eventsAddress();
     if (!url) return;
     // A burst of results (a CI run finishing, many shards at once) is read once, not once for each.
-    const reread = throttled(() => {
-      void client.invalidateQueries({ queryKey: ['evidence-effective'] });
-      void client.invalidateQueries({ queryKey: ['evidence-index'] });
-    }, LIVE_REREAD_MS);
-    const reoutline = throttled(() => {
-      void client.invalidateQueries({ queryKey: ['evidence-outline'] });
-      void client.invalidateQueries({ queryKey: ['evidence-effective'] });
-    }, LIVE_REREAD_MS);
+    const reads = [liveInvalidator(client, ['evidence-effective'], LIVE_REREAD_MS), liveInvalidator(client, ['evidence-index'], LIVE_REREAD_MS)];
+    const outlines = [liveInvalidator(client, ['evidence-outline'], LIVE_REREAD_MS), liveInvalidator(client, ['spec', source], LIVE_REREAD_MS)];
+    const reread = () => reads.forEach(refresh => refresh());
+    const reoutline = () => { outlines.forEach(refresh => refresh()); reread(); };
     const stop = listenLive(url, (event) => {
       if (event.type === 'change' && event.change.scope === 'specs') return reoutline();
+      if (event.type === 'change' && event.change.scope === 'runs' && !event.change.liveRunId) return reread();
       if (event.type !== 'report' && event.type !== 'open') return;
       reread();
       if (event.type === 'open') reoutline();
     });
-    return () => { stop(); reread.cancel(); reoutline.cancel(); };
-  }, [client]);
+    return () => { stop(); [...reads, ...outlines].forEach(refresh => refresh.cancel()); };
+  }, [client, source]);
 
   const specIndex = useQuery({ queryKey: keys.specIndex(source), queryFn: adapter.specIndex, retry: false });
   const files = useMemo(() => {
@@ -129,6 +129,8 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
     },
     enabled: effective,
     staleTime: 0,
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
     retry: false,
     refetchInterval: streaming ? LIVE_SAFETY_POLL_MS : EFFECTIVE_POLL_MS
   });
@@ -140,6 +142,8 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
     queryFn: ({ pageParam, signal }) => reportJson<EvidencePage>(`/evidence${pageParam ? `?cursor=${encodeURIComponent(pageParam)}` : ''}`, signal),
     getNextPageParam: (page) => page.cursor,
     staleTime: 0,
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
     retry: false,
     refetchInterval: (query) => (staticEvidence ? false : streaming ? LIVE_SAFETY_POLL_MS : query.state.data?.pages[0]?.active.length ? LIVE_POLL_MS : IDLE_POLL_MS)
   });
@@ -186,7 +190,8 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
   }, [wanted, rows.stamp]);
 
   const shown = effective ? overview.data?.layers ?? NONE : evidence;
-  const view = useMemo(() => evidenceView(combineEvidence(outline, shown)), [outline, shown]);
+  const { tests: liveTests } = useLiveTests();
+  const view = useMemo(() => withLiveProgress(evidenceView(combineEvidence(outline, shown)), liveTests), [outline, shown, liveTests]);
   const titles = useMemo(() => new Map(outline.specs.map((spec) => [spec.path, spec.title])), [outline]);
   const effectiveHeaders = useMemo(() => (overview.data?.layers ?? NONE).map((entry) => entry.layer), [overview.data]);
 

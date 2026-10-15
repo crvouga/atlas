@@ -105,6 +105,13 @@ jobs:
           export AWS_ACCESS_KEY_ID=atlaskey AWS_SECRET_ACCESS_KEY=atlassecret AWS_DEFAULT_REGION=us-east-1
           for i in $(seq 1 60); do aws --endpoint-url http://localhost:18333 s3 mb s3://atlas-test 2>/dev/null && break; sleep 2; done
           aws --endpoint-url http://localhost:18333 s3 ls
+          # Creating a bucket only checks metadata. The first upload allocates writable volumes,
+          # which must finish before a test starts its five-second timeout.
+          printf 'ready\n' > "$RUNNER_TEMP/s3-ready"
+          aws --endpoint-url http://localhost:18333 s3 cp "$RUNNER_TEMP/s3-ready" s3://atlas-test/.ci-ready
+          aws --endpoint-url http://localhost:18333 s3 cp s3://atlas-test/.ci-ready "$RUNNER_TEMP/s3-ready-read"
+          cmp "$RUNNER_TEMP/s3-ready" "$RUNNER_TEMP/s3-ready-read"
+          aws --endpoint-url http://localhost:18333 s3 rm s3://atlas-test/.ci-ready
       - name: Run the S3 store and node tests against it
         env:
           ATLAS_TEST_S3_ENDPOINT: http://localhost:18333
@@ -131,6 +138,16 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
+      - name: Start the Atlas report server
+        if: matrix.script == 'run'
+        run: |
+          bun atlas --data "$RUNNER_TEMP/atlas-data" --no-log > "$RUNNER_TEMP/atlas-server.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://localhost:5180/readyz; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/atlas-server.log"
+          exit 1
       - run: bun run example:${{ matrix.script }}
       - uses: actions/upload-artifact@v4
         if: always()

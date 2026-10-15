@@ -58,7 +58,8 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
   atlas report policy  --store s3://bucket/prefix [--role publisher|reader|both]
 
   A store is a directory or s3://bucket/prefix (add ?region=…&endpoint=… for R2, MinIO and the
-  rest). When no --store is given, ATLAS_STORE is used. Keys never go in the URL: set
+  rest). Select a project on an Atlas node with --project <slug> or ATLAS_PROJECT. This scopes specs, reports and recordings together.
+  When no --store is given, ATLAS_STORE is used. Keys never go in the URL: set
   AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or sign in with \`aws sso login\`, or use a role.
 
   publish   Write one immutable layer: the checks of one producer, on one environment. Safe to repeat.
@@ -215,7 +216,7 @@ function printChecks(out: (text: string) => void, label: string, checks: readonl
 export async function reportMain(argv: readonly string[], io: ReportIo = { out: text => process.stdout.write(text) }): Promise<number> {
   const [command, ...rest] = argv;
   const base = io.cwd ?? process.cwd();
-  const env = io.env ?? process.env;
+  const env: Readonly<Record<string, string | undefined>> = { ...(io.env ?? process.env), ...(value(rest, 'project') !== undefined ? { ATLAS_PROJECT: value(rest, 'project') } : {}) };
   const clock = io.clock ?? Date.now;
 
   if (command === 'publish') {

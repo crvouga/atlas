@@ -895,7 +895,7 @@ One thing `inspectStore` checked: its `name` (`store`, `list`, `contents`, `writ
 export function iamPolicy(location: { bucket: string; prefix: string }, role: 'publisher' | 'reader' | 'both'): object
 ```
 
-The least an account needs, as an AWS IAM policy. R2, MinIO and the rest have their own policy languages: grant the same actions.
+The least an account needs, as an AWS IAM policy. The combined server role also stores operational leases under server/live/. R2, MinIO and the rest have their own policy languages: grant the same actions.
 
 #### `Role`
 
@@ -2453,6 +2453,8 @@ See docs/server.md#the-store-protocol
 
 ```ts
 export type HttpStoreOptions = {
+  /** Project namespace on a shared Atlas node. Omit for the legacy default project. */
+  readonly project?: string;
   /** The Atlas server, such as `https://atlas.example.com`. A path on it (`/atlas`) is kept. */
   readonly url: string;
   /** A publish or admin token to write with, a read token to read with. Never put it in the URL. */
@@ -2480,6 +2482,8 @@ What an Atlas server said no to, with what to do about it.
 
 ```ts
 export type HttpStore = ObjectStore & PagedListing & {
+  /** The same authenticated node connection, scoped to another project. */
+  forProject(project: string): HttpStore;
   /** `https://atlas.example.com`, with no secrets. */
   readonly label: string;
   readonly url: string;
@@ -3618,6 +3622,56 @@ Routes, relative to where it is mounted:
 
 Directory listings are cached for 30 s (1.5 s for the local store). A listing that fails keeps the previous keys and
 marks the backend unavailable; the page then carries a notice.
+
+### live-reporter.ts
+
+Source: `packages/reports/src/live-reporter.ts`. Import: `@crvouga/atlas/reports/live-reporter`
+
+@module Reporting a live run to Atlas
+Streams bounded check deltas while tests execute. Heartbeats are independent of progress; finished results are
+published by the server as ordinary immutable layers. A final flush is awaited before a runner exits.
+
+#### `LiveIdentity`
+
+```ts
+export type LiveIdentity = Omit<z.input<typeof LiveRunStartSchema>, 'id'> & { id?: string };
+```
+
+Fixed identity of a live invocation; a UUID is generated when omitted.
+
+#### `LiveReporterOptions`
+
+```ts
+export type LiveReporterOptions = { url: string; project?: string; token?: string; flushMs?: number; heartbeatMs?: number; timeoutMs?: number; onError?: (error: Error) => void };
+```
+
+Transport and batching configuration. Defaults: 250 ms batches, 5 s heartbeats and 10 s request timeouts.
+
+#### `LiveReporter`
+
+```ts
+export type LiveReporter = { readonly id: string; readonly finishedAtMs?: number; check(check: LiveCheck): void; flush(): Promise<void>; finish(status?: 'completed' | 'interrupted', reason?: string): Promise<void> };
+```
+
+Producer handle. check never throws transport errors into a test; finish flushes and rejects if publication failed.
+
+#### `createLiveReporter`
+
+```ts
+export function createLiveReporter(identity: LiveIdentity, options: LiveReporterOptions): LiveReporter
+```
+
+Start publishing immediately, batch changing checks, and send independent heartbeats while the producer is alive.
+The same failed batch is retried with the same sequence and content; never silently replace a lost update.
+
+**Example**
+
+```ts
+const run = createLiveReporter({ producer: 'unit', plannedChecks: 10 }, { url: 'http://localhost:5180' });
+run.check({ id: 'a', title: 'Adds a todo', status: 'running' });
+run.check({ id: 'a', title: 'Adds a todo', status: 'passed' });
+await run.finish();
+```
 
 ### Media types by file extension
 

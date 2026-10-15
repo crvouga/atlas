@@ -127,6 +127,12 @@ export async function startTodoServer(options: { port?: number; host?: string; e
         await emit('List created', { named: listName !== DEFAULT_LIST_NAME });
         return send(res, 200, { listName, todos });
       }
+      case 'POST /api/rename': {
+        const body = (await readJson(req)) as { name?: unknown };
+        if (!listName || typeof body.name !== 'string' || !body.name.trim()) return send(res, 422, { error: 'A list and a nonempty name are required' });
+        listName = body.name.trim();
+        return send(res, 200, { listName, todos });
+      }
       case 'POST /api/ops': {
         const body = (await readJson(req)) as { ops?: unknown; retry?: unknown };
         const ops = Array.isArray(body.ops) ? body.ops.filter(isOp) : [];

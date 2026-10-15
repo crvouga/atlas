@@ -2,9 +2,10 @@ import { ALL_SOURCES, type SourceSelection } from '@crvouga/atlas/reports/eviden
 import type { Viewport } from '@xyflow/react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { currentProject } from '../runtime';
 
 /** Which specs the index lists, by what has been recorded for them. */
-export type ResultFilter = 'all' | 'results' | 'failed' | 'none';
+export type ResultFilter = 'all' | 'results' | 'running' | 'failed' | 'none';
 
 type UiState = {
   viewports: Record<string, Viewport>;
@@ -36,7 +37,7 @@ export const useUiStore = create<UiState>()(
       setExcluded: (excluded) => set({ excluded })
     }),
     {
-      name: 'atlas-ui',
+      name: currentProject() ? `atlas-ui:${currentProject()}` : 'atlas-ui',
       storage: createJSONStorage(() => sessionStorage),
       partialize: (s) => ({ viewports: s.viewports, excluded: s.excluded, resultFilter: s.resultFilter }),
       merge: (persisted, current) => {

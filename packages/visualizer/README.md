@@ -23,7 +23,7 @@ the API contract, streaming notifications and adding another transport.
 ## Point it at your project
 
 ```sh
-atlas-visualizer dev --specs ./specs --runs ./atlas-runs
+atlas client dev --specs ./specs --runs ./atlas-runs
 ```
 
 | Flag              | Meaning                                                                                                  |
@@ -47,7 +47,7 @@ keeping selection, zoom and pan.
 
 ### Layered reports for any spec
 
-Besides charts and runs, the viewer shows the combined result of every spec (Gherkin, Quint, DMN,
+Besides charts and runs, the client shows the combined result of every spec (Gherkin, Quint, DMN,
 Alloy, OpenSLO, …) from the layers your suites published. Point `ATLAS_REPORTS_MODULE` at a module in
 your project that exports `reportsDevFetch`, built with `reportsHost` from
 `@crvouga/atlas/reports/host`:
@@ -60,7 +60,7 @@ export const reportsDevFetch = reportsHost({ specs: './specs', stores: ['./atlas
 ```
 
 ```sh
-ATLAS_REPORTS_MODULE="$(pwd)/atlas.reports.ts" atlas-visualizer dev --specs ./specs
+ATLAS_REPORTS_MODULE="$(pwd)/atlas.reports.ts" atlas client dev --specs ./specs
 ```
 
 See [integrating Atlas](../../docs/integrating.md#6-browse-it) for publishing layers and the routes
@@ -69,9 +69,9 @@ this serves.
 ### Commands
 
 ```sh
-atlas-visualizer dev          --specs <dir> --runs <dir>             # live, from disk
-atlas-visualizer build        --specs <dir> --runs <dir> --out site  # static site + its data
-atlas-visualizer publish-data --specs <dir> --runs <dir> --out data  # data only
+atlas client dev          --specs <dir> --runs <dir>             # live, from disk
+atlas client build        --specs <dir> --runs <dir> --out site  # static site + its data
+atlas client publish-data --specs <dir> --runs <dir> --out data  # data only
 ```
 
 `build` writes a static site that any file server can host, with the spec and the newest privacy-checked snapshots
@@ -83,14 +83,14 @@ sets how often the site checks for new runs (default 60 s, plus when the tab reg
 ### Inside this repository
 
 ```sh
-bun run viz:dev                          # the full coffee example, charts and layered report
+bun client:dev                          # the full coffee example, charts and layered report
 bun test packages/visualizer/src packages/visualizer/vite   # parsing, composition, statuses, every fixture
-bun run viz:fixtures                     # regenerate the fixtures (needs ImageMagick, cwebp, ffmpeg)
+bun client:fixtures                     # regenerate the fixtures (needs ImageMagick, cwebp, ffmpeg)
 ```
 
-`bun run viz:publish-data` and `bun run viz:build` do the same as the CLI, writing to `public/data` (or
+`bun client:publish-data` and `bun client:build` do the same as the CLI, writing to `public/data` (or
 `ATLAS_OUT`) and `dist`. `ATLAS_SOURCES_FILE` supplies additional sources, and
-`VITE_ATLAS_SOURCES_URL` can point a hosted viewer at a separate source descriptor file.
+`VITE_ATLAS_SOURCES_URL` can point a hosted client at a separate source descriptor file.
 
 ## What it reads
 
@@ -124,7 +124,7 @@ The spec parsing is `@crvouga/atlas/spec`, the browser-safe part of the Atlas co
 ## How it fits together
 
 ```
-bin/atlas-visualizer.mjs   CLI: dev, build and publish-data through Vite's JS API
+bin/atlas-client.mjs   CLI: dev, build and publish-data through Vite's JS API
 vite/atlas-files.ts        node: resolve the roots, find spec files, summarize run directories, safe paths
 vite/atlas-dev-plugin.ts   dev adapter: serves /__atlas/{specs,runs}, range requests, change events over HMR
 vite/publish.ts            lays out specs/ and runs/ (with index.json files) for a static host
@@ -171,8 +171,8 @@ Beside the statechart map, every other kind of spec has its own tab: Gherkin fea
 
 Results come from the Atlas reports API (`/api/reports` in dev, `VITE_ATLAS_REPORTS_URL` when hosted elsewhere) or from a static `data/evidence` export. They combine across backends, branches, versions, environments and layers; **Sources** in the header switches any of them off. While a spec suite is running, the header says so and each finished test appears within a couple of seconds. See [Atlas reports](../reports/README.md) for the API and host configuration.
 
-The coffee example ships those documents and a layered report. `bun run viz:dev` opens that full example, and the same report is the fallback when a working directory has no `specs/` and `ATLAS_REPORTS_MODULE` is unset. `atlas:viz` serves the same kind of report for the todo example, and adds the desktop web layer `example:run` writes. Each built-in report is five layers: an older desktop web run, a mobile web branch, Android from a device lab, a focused iOS run, and a newer desktop web run that repeated one scenario. The same check stays visible on each environment. A feature with no layer stays empty.
+`bun atlas` starts a project-agnostic node. The Todo example publishes into project `todo-app` through `bun example:run`; it never configures the server. A project without specs or reports stays empty. Bundled coffee fixtures are available only through explicit `atlas client` fixture options for client development and tests.
 
 The header title is the product's name, taken from `atlas.yaml`'s `title` up to its first dash or colon, or "Atlas".
 
-`src/evidence/` holds this part of the viewer: `evidence-context.tsx` reads and combines the layers, `spec-index.tsx` is the index, `feature-page.tsx`, `model-page.tsx` and `document-page.tsx` are the three kinds of spec page, `check-detail.tsx` is one check's results, and `recording.tsx` is the recorded timeline. `tests/reports.test.tsx` drives the whole viewer against an in-memory reports API.
+`src/evidence/` holds this part of the client: `evidence-context.tsx` reads and combines the layers, `spec-index.tsx` is the index, `feature-page.tsx`, `model-page.tsx` and `document-page.tsx` are the three kinds of spec page, `check-detail.tsx` is one check's results, and `recording.tsx` is the recorded timeline. `tests/reports.test.tsx` drives the whole client against an in-memory reports API.

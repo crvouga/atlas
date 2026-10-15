@@ -8,6 +8,7 @@ import { Bounded } from './marks';
 import { QUINT_GROUPS, quintOutline } from './quint';
 import { SourceText, SpecHeader } from './spec-header';
 import { SpecSnapshot } from './spec-snapshot';
+import { TestFilter, useRunningFilter } from './test-filter';
 
 type Props = { file: string; text: string; kind: SpecKind; entry: SpecEvidence | undefined; selection: CheckSelection; select: SelectCheck };
 
@@ -16,17 +17,20 @@ export function ModelPage({ file, text, kind, entry, selection, select }: Props)
   const items = useMemo(() => quintOutline(text), [text]);
   const moduleName = items.find((item) => item.kind === 'module')?.name;
   const slots = useMemo(() => [...(entry?.slots ?? [])].sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true })), [entry]);
+  const runningOnly = useRunningFilter();
+  const visible = slots.filter(slot => !runningOnly || slot.status === 'running');
   const toggle = (id: string) => select({ check: selection.check === id ? null : id, layer: null });
   const label = (title: string) => (moduleName && title.startsWith(`${moduleName} · `) ? title.slice(moduleName.length + 3) : title);
   return (
     <article className={styles.page}>
       <SpecHeader title={moduleName ?? file.split('/').at(-1)!} file={file} kind={kind} entry={entry} />
       <SpecSnapshot title={moduleName ?? file.split('/').at(-1)!} text={text} kind={kind.one} />
-      {slots.length > 0 && (
+      <TestFilter slots={slots} />
+      {visible.length > 0 && (
         <section className={styles.block}>
           <h2 className={styles.blockTitle}>Traces</h2>
           <ul className={styles.results}>
-            <Bounded items={slots} size={40} more="More traces">
+            <Bounded items={visible} size={40} more="More traces">
               {(slot) => (
                 <ResultRow key={slot.key} label={label(slot.title)} slot={slot} open={selection.check === slot.id} onToggle={() => toggle(slot.id)}>
                   <CheckDetail slot={slot} layerId={selection.check === slot.id ? selection.layer : undefined} select={(patch) => select({ check: slot.id, ...patch })} reads="trace" />

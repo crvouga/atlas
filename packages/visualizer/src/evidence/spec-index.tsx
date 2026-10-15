@@ -11,6 +11,7 @@ import { StatusMark, Tally } from './marks';
 const FILTERS: readonly { readonly id: ResultFilter; readonly label: string; readonly keeps: (summary: SpecSummary) => boolean }[] = [
   { id: 'all', label: 'All', keeps: () => true },
   { id: 'results', label: 'Results', keeps: (summary) => summary.status !== 'none' },
+  { id: 'running', label: 'Running', keeps: (summary) => summary.counts.running > 0 },
   { id: 'failed', label: 'Failing', keeps: (summary) => summary.counts.failed > 0 },
   { id: 'none', label: 'None', keeps: (summary) => summary.status === 'none' }
 ];
@@ -47,7 +48,7 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
       {evidence.filesError && <p className={styles.indexNote}>The file list could not be loaded.</p>}
       {!evidence.filesPending && !evidence.filesError && visible.length === 0 && (
         <p className={styles.indexNote}>
-          {rows.length === 0 ? `No ${kind.many} in this spec set.` : filter === 'failed' ? `No failing ${kind.many}.` : filter === 'results' ? `No ${kind.many} with results yet.` : `Every ${kind.one} has results.`}
+          {rows.length === 0 ? `No ${kind.many} in this spec set.` : filter === 'running' ? `No running ${kind.many}.` : filter === 'failed' ? `No failing ${kind.many}.` : filter === 'results' ? `No ${kind.many} with results yet.` : `Every ${kind.one} has results.`}
         </p>
       )}
       {groups.map(([folder, entries]) => (

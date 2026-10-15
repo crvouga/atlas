@@ -56,7 +56,20 @@
     "./schemas/*": "./packages/schema/schemas/*",
     "./openapi.json": "./packages/server/openapi.json",
     "./llms.txt": "./llms.txt",
-    "./llms-full.txt": "./llms-full.txt"
+    "./llms-full.txt": "./llms-full.txt",
+    "./mocha": {
+      "require": "./packages/runners/compat/mocha.cjs",
+      "default": "./packages/runners/src/mocha.ts"
+    },
+    "./codecept": {
+      "require": "./packages/runners/compat/codecept.cjs",
+      "default": "./packages/runners/src/codecept.ts"
+    },
+    "./jest": {
+      "require": "./packages/runners/compat/jest.cjs",
+      "default": "./packages/runners/src/jest.ts"
+    },
+    "./node-test": "./packages/runners/src/node-test.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -113,7 +126,26 @@
       "./schemas/*": "./packages/schema/schemas/*",
       "./openapi.json": "./packages/server/openapi.json",
       "./llms.txt": "./llms.txt",
-      "./llms-full.txt": "./llms-full.txt"
+      "./llms-full.txt": "./llms-full.txt",
+      "./mocha": {
+        "types": "./dist/runners/src/mocha.d.ts",
+        "require": "./packages/runners/compat/mocha.cjs",
+        "default": "./dist/runners/src/mocha.js"
+      },
+      "./codecept": {
+        "types": "./dist/runners/src/codecept.d.ts",
+        "require": "./packages/runners/compat/codecept.cjs",
+        "default": "./dist/runners/src/codecept.js"
+      },
+      "./jest": {
+        "types": "./dist/runners/src/jest.d.ts",
+        "require": "./packages/runners/compat/jest.cjs",
+        "default": "./dist/runners/src/jest.js"
+      },
+      "./node-test": {
+        "types": "./dist/runners/src/node-test.d.ts",
+        "default": "./dist/runners/src/node-test.js"
+      }
     }
   },
   "files": [
@@ -144,7 +176,9 @@
     "docs/report-backends.md",
     "docs/dogfooding.md",
     "docs/reporting-issues.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/runners.md",
+    "packages/runners/compat"
   ],
   "scripts": {
     "build": "bun scripts/build-package.ts",
@@ -153,10 +187,10 @@
     "schemas": "bun packages/schema/scripts/emit-json-schemas.ts",
     "docs": "bun scripts/docs/generate.ts",
     "dev": "bun packages/core/bin/atlas.mjs dev --data .atlas-data",
-    "viz:dev": "bun packages/visualizer/bin/atlas-visualizer.mjs dev --specs \"$(pwd)/packages/visualizer/fixtures/full/specs\" --runs \"$(pwd)/packages/visualizer/fixtures/full/runs\"",
-    "viz:build": "cd packages/visualizer && INIT_CWD=\"$OLDPWD\" bun --bun vite build --configLoader runner",
-    "viz:publish-data": "bun packages/visualizer/scripts/publish-data.ts",
-    "viz:fixtures": "bun packages/visualizer/scripts/make-fixtures.ts",
+    "client:dev": "bun packages/core/bin/atlas.mjs dev",
+    "client:build": "bun packages/core/bin/atlas.mjs client build --no-data",
+    "client:publish-data": "bun packages/visualizer/scripts/publish-data.ts",
+    "client:fixtures": "bun packages/visualizer/scripts/make-fixtures.ts",
     "example:start": "bun examples/todo/server.ts",
     "example:lint": "bun --cwd examples/todo ../../packages/core/bin/atlas.mjs lint --require-implementations",
     "example:plan": "bun --cwd examples/todo ../../packages/core/bin/atlas.mjs plan",
@@ -165,13 +199,14 @@
     "example:clients": "bun --cwd examples/todo ../../packages/core/bin/atlas.mjs run --config clients/atlas.config.ts --mode showcase",
     "example:clients:bun": "ATLAS_DESKTOP=bun bun --cwd examples/todo ../../packages/core/bin/atlas.mjs run --config clients/atlas.config.ts --mode showcase",
     "atlas:run": "status=0; bun run example:clients || status=$?; bun run example:run || status=$?; exit $status",
-    "atlas:viz": "ATLAS_REPORTS_MODULE=\"$(pwd)/examples/todo/reports-dev.ts\" bun packages/visualizer/bin/atlas-visualizer.mjs dev --specs examples/todo/specs --runs examples/todo/atlas-runs",
     "release:plan": "bun scripts/release/plan.ts",
     "release:publish": "bun scripts/release/publish.ts",
     "release:smoke": "bun scripts/release/consumer-smoke.ts",
     "release:seed": "bun scripts/release/seed.ts",
     "health": "bun scripts/health/cli.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "example:publish": "bun examples/todo/publish.ts",
+    "atlas": "bun scripts/atlas.mjs"
   },
   "dependencies": {
     "@cucumber/gherkin": "^42.0.1",
