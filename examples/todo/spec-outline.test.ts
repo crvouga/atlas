@@ -53,10 +53,10 @@ describe('example spec outline', () => {
     expect(slug('Name a list')).toBe('name-a-list');
   });
 
-  test('features tagged @unrecorded stay in the outline but are not run', async () => {
+  test('every example Gherkin scenario is runnable, including sharing and renaming', async () => {
     const shared = expandFeature('specs/share-a-list.feature', await readFile(path.join(specs, 'share-a-list.feature'), 'utf8'));
     const started = expandFeature('specs/getting-started.feature', await readFile(path.join(specs, 'getting-started.feature'), 'utf8'));
-    expect(shared.every((scenario) => !scenario.runnable)).toBe(true);
+    expect(shared.every((scenario) => scenario.runnable)).toBe(true);
     expect(started.every((scenario) => scenario.runnable)).toBe(true);
   });
 

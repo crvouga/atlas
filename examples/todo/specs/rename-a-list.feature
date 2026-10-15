@@ -1,6 +1,5 @@
-@unrecorded
 Feature: Rename a list
-  The name of a list can change after it is created. No layer has recorded this yet.
+  The name of a list can change after it is created.
 
   Scenario: Renames the weekend list
     Given a list named Weekend chores

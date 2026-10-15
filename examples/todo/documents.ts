@@ -4,12 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { createLiveReporter, type LiveReporter } from '../../packages/reports/src/live-reporter';
 import { publishLayer } from '@crvouga/atlas/reports/layer-store';
 import type { LayerSummary } from '@crvouga/atlas/reports/layer-types';
 import type { ReportArtifact, ReportFrame, ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
 import { chromium, type Browser, type Page } from 'playwright';
 
-import { emptyDirectory, directoryStore } from './report-store';
+import { directoryStore } from './report-store';
 import { startTodoServer, type TodoServer } from './server';
 import { actionsIn, expandFeature, gitOrigin, loadOutline, quintRuns, specFiles, type QuintRun, type RunnableScenario, type ScenarioStep } from './spec-outline';
 
@@ -36,6 +37,9 @@ type Recorded = {
 };
 
 type CapturedFile = { file: string; bytes: Uint8Array; contentType: string };
+
+let live: LiveReporter | undefined;
+const progress = (value: Pick<Recorded, 'id' | 'title' | 'specPath'>, status: 'running' | 'passed' | 'failed', detail = '', steps: ReportStep[] = []) => live?.check({ id: `todo/${value.id}`, title: value.title, specPath: value.specPath, status, detail, steps: steps.slice(-20).map(step => ({ name: step.title, status: step.status })) });
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -122,6 +126,36 @@ async function openList(page: Page, name: string): Promise<void> {
 
 async function perform(page: Page, url: string, action: ScenarioStep): Promise<void> {
   const text = action.text;
+  if (text === 'no list yet') return;
+  if (text === 'a list' || text === 'a list with a todo' || text === 'a sync outage') {
+    await openList(page, 'My todos');
+    if (text === 'a list with a todo') await addTodo(page, 'Water the plants');
+    if (text === 'a sync outage') await perform(page, url, { keyword: 'When', text: 'the sync fails' });
+    return;
+  }
+  if (text === 'the customer names the list') return openList(page, 'Weekend chores');
+  if (text === 'adds a todo' || text === 'the customer adds a todo') return addTodo(page, 'Water the plants');
+  if (text === 'marks it done') return tap(page, 'Mark all done');
+  if (text === 'sync fails') return perform(page, url, { keyword: 'When', text: 'the sync fails' });
+  if (text === 'the retry timer elapses') return perform(page, url, { keyword: 'When', text: '30 seconds pass' });
+  if (text === 'the list is synced' || text === 'the new list is synced') return see(page, 'All changes synced');
+  if (text === 'the list is clear and synced') {
+    await see(page, 'All done!');
+    return see(page, 'All changes synced');
+  }
+  if (text === 'the customer throws the list away') return tap(page, 'Start over');
+  if (text === 'the app is back at the welcome') return see(page, 'Plan your day');
+  if (text === 'starts a new list') return openList(page, 'My todos');
+  if (text.startsWith('a list named ') && !text.includes('"')) return openList(page, text.slice('a list named '.length));
+  if (text.startsWith('the customer renames it to ')) {
+    await page.getByLabel('New list name').fill(text.slice('the customer renames it to '.length));
+    await tap(page, 'Rename list');
+    return;
+  }
+  if (text.startsWith('the list is called ')) {
+    await page.getByRole('heading', { name: text.slice('the list is called '.length), exact: true }).waitFor({ timeout: 5000 });
+    return;
+  }
   if (/welcome screen says|they see|the list says/.test(text)) return see(page, quote(text));
   if (/the list is named/.test(text)) {
     await page.getByRole('heading', { name: quote(text), exact: true }).waitFor({ timeout: 5_000 });
@@ -168,6 +202,7 @@ async function perform(page: Page, url: string, action: ScenarioStep): Promise<v
 
 async function runScenario(browser: Browser, server: TodoServer, scenario: RunnableScenario): Promise<Recorded> {
   const startedAtMs = Date.now();
+  progress(scenario, 'running');
   const steps: ReportStep[] = [];
   const files: CapturedFile[] = [];
   const videoDir = await mkdtemp(path.join(os.tmpdir(), 'atlas-gherkin-'));
@@ -186,10 +221,12 @@ async function runScenario(browser: Browser, server: TodoServer, scenario: Runna
       const at = Date.now();
       const title = `${action.keyword} ${action.text}`;
       const kind = action.keyword.toLowerCase();
+      progress(scenario, 'running', title, steps);
       try {
         await perform(page, server.url, action);
         const frames = await snap(page, index + 1, at, files);
         steps.push(step(index + 1, title, 'passed', at, Date.now(), { kind, frames }));
+        progress(scenario, 'running', title, steps);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         const frames = await snap(page, index + 1, at, files);
@@ -237,6 +274,7 @@ async function runGherkin(scenarios: readonly RunnableScenario[]): Promise<Recor
     for (const scenario of scenarios) {
       const result = await runScenario(browser, server, scenario);
       recorded.push(result);
+      progress(result, result.status, result.error, result.steps);
       console.log(`▶ ${scenario.title.slice(scenario.title.indexOf(': ') + 2)}`);
       console.log(`${result.status}${result.error ? `: ${result.error.split('\n')[0]}` : ''}`);
     }
@@ -309,6 +347,7 @@ async function runQuint(moduleName: string, runs: readonly QuintRun[]): Promise<
   const startedAtMs = Date.now();
   try {
     const resultPath = path.join(dir, 'result.json');
+    for (const run of runs) progress({ id: run.id, title: `${moduleName} · ${run.title}`, specPath: 'specs/todo.qnt' }, 'running');
     const tested = await command(['test', modelPath, '--seed=1', '--max-samples=1', '--out', resultPath, '--out-itf', path.join(dir, '{test}_{seq}.itf.json')], repoRoot);
     const note = notable(`${tested.stdout}\n${tested.stderr}`);
     if (note) console.log(note);
@@ -331,9 +370,11 @@ async function runQuint(moduleName: string, runs: readonly QuintRun[]): Promise<
       const steps = traceSteps(run.body, await readItf(dir, run.name), status === 'failed');
       const endedAtMs = Date.now();
       recorded.push({ id: run.id, title: `${moduleName} · ${run.title}`, specPath: 'specs/todo.qnt', runtime: 'quint', status, ...(error ? { error } : {}), startedAtMs, endedAtMs, steps });
+      progress(recorded.at(-1)!, status, error, steps);
       console.log(`▶ ${run.title}`);
       console.log(`${status}${error ? `: ${error.split('\n')[0]}` : ''}`);
     }
+    progress({ id: 'quint.invariants', title: `${moduleName} · Invariants hold`, specPath: 'specs/todo.qnt' }, 'running');
     const invariants = await command(['run', modelPath, '--seed=1', '--max-samples=200', '--max-steps=20', '--invariant=list_holds', '--out', path.join(dir, 'invariants.json'), '--out-itf', path.join(dir, 'invariants_{seq}.itf.json')], repoRoot);
     const invariantNote = notable(`${invariants.stdout}\n${invariants.stderr}`);
     if (invariantNote) console.log(invariantNote);
@@ -360,6 +401,7 @@ async function runQuint(moduleName: string, runs: readonly QuintRun[]): Promise<
       endedAtMs: Date.now(),
       steps: invariantSteps
     });
+    progress(recorded.at(-1)!, invariantStatus, invariantError, invariantSteps);
     console.log('▶ Invariants hold');
     console.log(`${invariantStatus}${invariantError ? `: ${invariantError.split('\n')[0]}` : ''}`);
     return recorded;
@@ -420,7 +462,6 @@ async function publish(checks: readonly Recorded[]): Promise<void> {
       }
     ]
   };
-  await emptyDirectory(reportsDir);
   async function* entries() {
     for (const check of checks) {
       const report = reportOf(check);
@@ -443,6 +484,8 @@ export async function runDocuments(): Promise<number> {
   const model = files.find((file) => file.path === 'specs/todo.qnt');
   if (!model) throw new Error('examples/todo/specs/todo.qnt is missing');
   const quint = quintRuns(model.text);
+  if (process.env.ATLAS_SERVER_URL) live = createLiveReporter({ producer: 'todo', title: 'Todo · Gherkin and Quint', plannedChecks: scenarios.length + quint.runs.length + 1, environment: 'desktop-web' }, { url: process.env.ATLAS_SERVER_URL, project: process.env.ATLAS_PROJECT ?? 'todo-app', token: process.env.ATLAS_PUBLISH_TOKEN ?? process.env.ATLAS_TOKEN });
+  try {
   console.log(`Running ${scenarios.length} scenario(s) and ${quint.runs.length + 1} trace(s)`);
   let gherkin: Recorded[];
   try {
@@ -454,11 +497,14 @@ export async function runDocuments(): Promise<number> {
   }
   const traces = await runQuint(quint.moduleName, quint.runs);
   const checks = [...gherkin, ...traces];
+  for (const check of checks) progress(check, check.status, check.error, check.steps);
+  await live?.finish();
   await publish(checks);
   summary('Gherkin', gherkin);
   summary('Quint', traces);
   console.log(`Reports: ${path.relative(repoRoot, reportsDir)}`);
   return checks.some((check) => check.status === 'failed') ? 1 : 0;
+  } catch (error) { await live?.finish('interrupted', 'The document runner stopped unexpectedly.').catch(() => {}); throw error; } finally { live = undefined; }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

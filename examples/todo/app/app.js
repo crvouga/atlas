@@ -69,6 +69,7 @@ function list() {
   return `
     <main class="card list">
       <header><h1>${escape(state.listName)}</h1><button class="link" data-action="start-over">Start over</button></header>
+      <div><label for="rename-list">New list name</label><input id="rename-list" value="${escape(state.listName)}" /><button type="button" data-action="rename">Rename list</button></div>
       ${sync}
       <form class="add" data-action="add">
         <label for="new-todo" class="hidden-label">New todo</label>
@@ -158,6 +159,13 @@ const actions = {
   skip: async () => {
     const created = await api('/api/setup', {});
     openList(created.listName, created.todos);
+  },
+  rename: async () => {
+    const name = document.getElementById('rename-list').value.trim();
+    if (!name) return;
+    const renamed = await api('/api/rename', { name });
+    state.listName = renamed.listName;
+    render();
   },
   'complete-all': () => change({ type: 'complete-all' }),
   clear: () => change({ type: 'clear-completed' }),
