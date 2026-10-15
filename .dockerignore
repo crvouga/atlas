@@ -1,0 +1,17 @@
+.git
+.super.engineering
+.superconductor
+**/node_modules
+**/dist
+**/.cache
+**/.env
+**/.env.*
+**/*.tgz
+**/*.tsbuildinfo
+**/atlas-runs
+**/atlas-reports
+**/atlas-data
+**/.atlas-data
+**/atlas-site
+**/test-results
+**/.DS_Store

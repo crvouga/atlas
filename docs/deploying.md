@@ -213,21 +213,51 @@ use a named `--store project=s3://… --write project` to put uploads in a share
 
 ### Run it
 
-**Docker.** [`examples/deploy/Dockerfile`](https://github.com/crvouga/atlas/blob/main/examples/deploy/Dockerfile)
-installs Atlas, builds the client once (it is the same for every project: the server tells the page where its
-data is) and starts the server, keeping results on the volume at `/data`:
+**Railway (deploy an image, no repository or code changes).** Create a service from the Docker image
+`ghcr.io/crvouga/atlas:latest`.
+
+1. In Railway choose **New service → Docker image** and enter `ghcr.io/crvouga/atlas:latest`.
+   Leave the start command unset: the image includes the server and the prebuilt viewer.
+2. Add `ATLAS_TOKEN` with a long random value (generate one with `openssl rand -hex 24`). It grants admin
+   access; optionally add separate `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for publishers and readers.
+3. Attach a volume at `/data` and set `RAILWAY_RUN_UID=0`: Railway mounts volumes as root, while the image
+   normally runs as `bun` ([Railway volume permissions](https://docs.railway.com/volumes#permissions)).
+   Keep one replica. The volume retains reports and server settings when the image is replaced.
+4. Set the healthcheck path to `/readyz` and generate a public domain. The image listens on `0.0.0.0` and
+   honors Railway's `PORT`; leave `ATLAS_PORT` unset. Open the domain and sign in with your token as the
+   password (any username), or use the viewer's token sign-in.
+5. Under **Settings → Source → Configure Auto Updates**, enable image updates and select **Anytime**.
+   Each successful `main` build publishes a new `latest`. Railway detects the changed digest and redeploys
+   within its update schedule; detection can be cached for a few hours, so publishing does not mean an
+   immediate deployment ([Railway image auto updates](https://docs.railway.com/deployments/image-auto-updates)).
+
+Check the domain with `curl --fail https://YOUR-DOMAIN/readyz`: HTTP 200 means the server read its backend.
+Projects publish to that domain with `ATLAS_STORE=https://YOUR-DOMAIN` and their `ATLAS_TOKEN`, as in
+[sending results](#3-send-results-from-ci-and-from-laptops). Hosting Atlas needs no project checkout; publishing
+your project's test results still needs the integration described there.
+
+For bucket storage instead, set `ATLAS_STORE=project=s3://my-bucket/atlas/my-project`, `ATLAS_WRITE=project`,
+and the bucket credentials. Keep the `/data` volume for server settings and local state.
+
+**Docker.** The same published image works anywhere Docker runs. It already contains the client (the same
+for every project: the server tells the page where its data is), and keeps results on the volume at `/data`:
 
 ```sh
-docker build -t atlas examples/deploy
-docker run -p 8080:8080 -v atlas-data:/data -e ATLAS_TOKEN=$(openssl rand -hex 24) atlas
+docker run --pull always -p 8080:8080 -v atlas-data:/data \
+  -e ATLAS_TOKEN=$(openssl rand -hex 24) ghcr.io/crvouga/atlas:latest
 ```
+
+The image is built from each checked commit, independently of npm releases. To pin a deployment or roll
+back, replace `latest` with the full commit SHA. To build from this repository, use `docker build -t atlas .`;
+[`examples/deploy/Dockerfile`](https://github.com/crvouga/atlas/blob/main/examples/deploy/Dockerfile) is the
+alternative for building from an npm version or a local package tarball.
 
 For a bucket as the system of record add `-e ATLAS_STORE=project=s3://my-bucket/atlas/my-project -e ATLAS_WRITE=project -e AWS_REGION=us-east-1`.
 On ECS, EKS or EC2, attach the combined **both** policy (including `server/live/*` for producer leases) to the task, service account or
 instance and set no keys.
 
 **Try it on one machine.** [`examples/deploy/compose.yaml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/compose.yaml)
-starts the server on a volume; `compose.s3.yaml` starts it with an S3 server and a bucket as its storage.
+starts the published image on a volume; `compose.s3.yaml` starts it with an S3 server and a bucket as its storage.
 Publish to `http://localhost:8080` from your project and open it.
 
 **Kubernetes.** [`examples/deploy/kubernetes.yaml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/kubernetes.yaml):

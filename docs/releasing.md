@@ -1,13 +1,57 @@
 # Releasing
 
-How `@crvouga/atlas` gets from `main` to npm. Atlas is one package with one version. Releases are
-automatic; the one manual step is a single command, run once.
+How Atlas gets from `main` to npm and to its server container image. Atlas is one npm package with one
+version. npm releases are automatic after the initial seed; the server image is published on every green
+push to `main`, regardless of whether a new npm version is needed.
 
 ## What happens on every push to `main`
 
 The [CI workflow](../.github/workflows/ci.yml) checks the commit (`type-check`, `test`, `build`, and
 the consumer smoke, which installs the packed tarball into a clean project), and then its Release
 job publishes. A commit that fails its checks publishes nothing, however it reached `main`.
+
+### Server image
+
+The **Server image** job also builds the root
+[`Dockerfile`](https://github.com/crvouga/atlas/blob/main/Dockerfile) from that exact checkout, including the
+viewer, and runs `bun scripts/container-smoke.ts <image>` against it. The smoke proves readiness, viewer
+assets and admin styling, upload authentication, Railway's `PORT`, the Docker healthcheck, reports and saved
+settings surviving container replacement, root-owned Railway volumes, and clean shutdown on SIGTERM. Pull requests build and test the
+image without publishing it.
+
+After checks and the container smoke pass, the job publishes the tested Linux AMD64 image to the personal
+GitHub Container Registry as `ghcr.io/crvouga/atlas:<full-commit-sha>` and `:latest`. This uses the same
+personal registry as the workspace repository, with no reusable hosting workflow or deployment dispatch.
+Publication uses the built-in `GITHUB_TOKEN` with `packages: write`; no Docker Hub login, PAT or new repository
+secret is needed. Image publication is independent of the npm release job and also runs for docs/CI-only
+commits. Jobs serialize publication; an outdated run publishes its SHA tag but leaves `latest` to the current
+`main` commit, so a late run cannot roll it back. Manual dispatch and scheduled CI runs can retry a failed push.
+
+**Once, after the first image publish:** open the
+[GHCR package settings](https://github.com/users/crvouga/packages/container/atlas/settings) and
+set its visibility to **Public**, so Railway and other projects can pull it without registry credentials.
+GHCR creates new packages as private even for a public source repository
+([GitHub's registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images)).
+The image's source label links it to this repository. Verify public access without logging in:
+
+```sh
+docker run --rm --pull always --entrypoint bun ghcr.io/crvouga/atlas:latest --version
+```
+
+Run that command on a machine with no GHCR login. A Bun version and exit 0 prove an anonymous pull and
+startup. If this one-time visibility step is unavailable, Railway needs GHCR read credentials until it is done.
+The [deployment guide](deploying.md#run-it) covers selecting the image, the volume and Railway auto updates.
+
+For a local container check:
+
+```sh
+docker build -t atlas-server:local .
+bun scripts/container-smoke.ts atlas-server:local
+```
+
+The Dockerfile's pinned `BUN_VERSION` must match `packageManager` when upgrading Bun.
+
+### npm package
 
 - **Whether to release:** when a releasable Conventional Commit since the last
   `@crvouga/atlas@<version>` git tag touched what ships: `packages/`, `package.json`, `README.md`,
@@ -134,6 +178,7 @@ name. Docs: <https://docs.npmjs.com/trusted-publishers>
 | --- | --- | --- |
 | npm Trusted Publisher (OIDC) | the package on npm | CI publish (attached by the seed) |
 | `GITHUB_TOKEN` | built into GitHub Actions | tags, GitHub Releases, issue comments |
+| `GITHUB_TOKEN` with `packages: write` | built into GitHub Actions, Server image job | personal GHCR image publish |
 | Your npm login | your machine (`npm login`) | `bun run release:seed` and `bun run health` only |
 
 Publishing is the one job Bun does not do here: npm Trusted Publishing and provenance need the npm

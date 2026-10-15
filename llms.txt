@@ -47,4 +47,4 @@ Given only the repository link, start at docs/agents.md: install `@crvouga/atlas
 
 ## Optional
 
-- [Releasing](https://raw.githubusercontent.com/crvouga/atlas/main/docs/releasing.md): How @crvouga/atlas gets from main to npm.
+- [Releasing](https://raw.githubusercontent.com/crvouga/atlas/main/docs/releasing.md): How Atlas gets from main to npm and to its server container image.

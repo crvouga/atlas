@@ -25,7 +25,8 @@ spec:
       serviceAccountName: atlas
       containers:
         - name: atlas
-          image: ghcr.io/your-org/atlas:latest   # build examples/deploy/Dockerfile and push it
+          image: ghcr.io/crvouga/atlas:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
