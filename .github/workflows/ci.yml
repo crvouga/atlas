@@ -131,6 +131,16 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
+      - name: Start the Atlas report server
+        if: matrix.script == 'run'
+        run: |
+          bun atlas --data "$RUNNER_TEMP/atlas-data" --no-log > "$RUNNER_TEMP/atlas-server.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://localhost:5180/readyz; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/atlas-server.log"
+          exit 1
       - run: bun run example:${{ matrix.script }}
       - uses: actions/upload-artifact@v4
         if: always()
