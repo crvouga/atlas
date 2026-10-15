@@ -225,6 +225,13 @@
               "target": {
                 "type": "string",
                 "minLength": 1
+              },
+              "meta": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
               }
             },
             "required": [

@@ -2241,7 +2241,12 @@ See docs/statecharts.md
 #### `TransitionConfig`
 
 ```ts
-export type TransitionConfig = { target: string };
+export type TransitionConfig = {
+  /** The destination state, optionally prefixed with `#`. */
+  target: string;
+  /** Declarative provenance or business metadata; ignored while executing the chart. */
+  meta?: Record<string, unknown>;
+};
 ```
 
 The object form of a transition. `target` is a state name, optionally prefixed with `#` (a reference by name across the composed product).
@@ -2308,7 +2313,7 @@ export type StateConfig = {
   type?: 'parallel' | 'final';
   meta?: StateMeta;
   states?: Record<string, StateConfig>;
-  /** Event name (exact business wording) to its transition: a target string or `{ target }`. */
+  /** Event name (exact business wording) to its transition: a target string or `{ target, meta? }`. */
   on?: Record<string, TransitionConfig | string>;
   /** Child chart(s) that run inside this state. */
   invoke?: InvokeConfig | InvokeConfig[];

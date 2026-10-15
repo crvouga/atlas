@@ -26,6 +26,31 @@ describe('lintBundle', () => {
     expect(rules(DOOR)).toEqual([]);
   });
 
+  it('accepts declarative metadata on transitions', () => {
+    const documented: MachineConfig = {
+      ...DOOR,
+      states: {
+        ...DOOR.states,
+        Closed: {
+          meta: d('Shut.'),
+          on: {
+            Opens: { target: 'Open', meta: { source: ['specs/door.feature'] } },
+            Locks: 'Locked'
+          }
+        }
+      }
+    };
+    const { findings, composition, graph } = lintBundle(bundleOf('.', [chart(documented)], []));
+    expect(findings).toEqual([]);
+    expect(composition.machine.states?.['Closed']?.on?.['Opens']).toEqual({
+      target: 'Open', meta: { source: ['specs/door.feature'] }
+    });
+    expect(graph.replay(graph.initial(), ['Opens', 'Closes']).config.active).toContain('Closed');
+    expect(documented.states?.['Closed']?.on?.['Opens']).toEqual({
+      target: 'Open', meta: { source: ['specs/door.feature'] }
+    });
+  });
+
   it('rejects guards, actions, context, delays and unknown keys', () => {
     const impure = {
       ...DOOR,

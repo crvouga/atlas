@@ -9,7 +9,7 @@
  */
 import { z } from 'zod/v4';
 
-import { CountSchema } from './common';
+import { CountSchema } from './common.js';
 import { RunInfoSchema } from './manifest';
 
 /** Whether a run is still being written (`running`) or finished (`complete`). */
