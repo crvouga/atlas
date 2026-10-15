@@ -79,6 +79,8 @@ jobs:
         with:
           node-version: 22
       - run: bun install --frozen-lockfile
+      - name: Documentation contracts (generated docs, schemas, links, agent commands and examples)
+        run: bun run docs:check
       - run: bun run type-check
       - run: bun run test
       - run: bun run build

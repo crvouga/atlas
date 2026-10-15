@@ -13,6 +13,11 @@ layers over your specs, whatever produced them, whichever machine or branch they
 commands of this guide for your project (`--write` applies them; `--format json` is for agents). See
 [Atlas for AI agents](agents.md). The rest of this guide explains what those commands do.
 
+**Only have the repository link?** Start with [the consumer playbook](agents.md#given-only-this-repository-link)
+for installation choices and version-matched docs. **No server yet?** [Verify Atlas locally](quickstart.md)
+proves publish, repeat-publish, failure and recovery with copyable commands and no credentials. This guide's
+directory/artifact integration works without a server too.
+
 Read [the report contract](report-contract.md) once if you want the exact rules. You do not need it to
 integrate. To run it for a whole team, with a bucket and one node everyone looks at, see
 [running Atlas for a project](deploying.md). This guide ships with the package, matching your version, at
@@ -60,8 +65,11 @@ bun add -d @crvouga/atlas        # or: npm install -D @crvouga/atlas, pnpm add -
 bunx atlas report --help         # npx atlas report --help
 ```
 
-Expected: the usage text of `atlas report`. Atlas runs on Bun and on Node 22.18 or later. Add the
-directory you publish to (`atlas-reports/`) to `.gitignore`.
+Expected: the usage text of `atlas report`. Add the directory you publish to (`atlas-reports/`) to `.gitignore`.
+
+<!-- generated:runtime-requirements -->
+Supported runtimes (from `package.json`): **node `>=22.18.0`** or **bun `>=1.2.0`**. Node consumers do not need Bun unless they use the Bun WebView driver.
+<!-- /generated:runtime-requirements -->
 
 ## 3. Make each suite publish a layer
 

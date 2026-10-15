@@ -9,7 +9,9 @@ any driver, and write a manifest with JUnit, CTRF, Mermaid and WebVTT alongside.
 bun add -d @crvouga/atlas
 ```
 
-Runs on Bun, or on Node 22.18 or later.
+<!-- generated:runtime-requirements -->
+Supported runtimes (from `package.json`): **node `>=22.18.0`** or **bun `>=1.2.0`**. Node consumers do not need Bun unless they use the Bun WebView driver.
+<!-- /generated:runtime-requirements -->
 
 ## Use
 

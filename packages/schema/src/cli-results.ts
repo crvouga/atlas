@@ -13,6 +13,7 @@
  * @see docs/agents.md
  */
 import { z } from 'zod/v4';
+import { ReportStatusSchema } from './layer';
 
 /** What was written for one layer by `atlas report publish`. */
 export const PublishedLayerSchema = z.looseObject({
@@ -132,3 +133,17 @@ export const InitPlanSchema = z.looseObject({
   nextSteps: z.array(z.string()).describe('What to do next, in order, as plain instructions an agent can follow'),
   warnings: z.array(z.string())
 });
+
+/**
+ * JSON command contracts, shared by schema publication, agent documentation and executable command checks.
+ * A new result needs an entry here and a runtime scenario in the documentation contract tests.
+ */
+export const CLI_RESULTS = {
+  init: { command: 'atlas init', schemaName: 'init-plan', schema: InitPlanSchema },
+  publish: { command: 'atlas report publish', schemaName: 'publish-result', schema: PublishResultSchema },
+  stream: { command: 'atlas report stream', schemaName: 'stream-result', schema: StreamResultSchema },
+  merge: { command: 'atlas report merge', schemaName: 'merge-result', schema: MergeResultSchema },
+  doctor: { command: 'atlas report doctor', schemaName: 'doctor-result', schema: DoctorResultSchema },
+  status: { command: 'atlas report status', schemaName: 'report-status', schema: ReportStatusSchema },
+  error: { command: 'a command that was wrong (standard error)', schemaName: 'command-error', schema: CommandErrorSchema }
+} as const;

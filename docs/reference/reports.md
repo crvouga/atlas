@@ -3947,6 +3947,35 @@ export function isPaged(store: ObjectStore): store is ObjectStore & PagedListing
 
 Whether a store also implements `PagedListing`.
 
+### Consumer package-manager commands
+
+Source: `packages/reports/src/package-managers.ts`. Import: `@crvouga/atlas/reports/package-managers`
+
+One source for commands emitted by init, the running server's agent guide, and generated documentation.
+Execute the installed CLI so a consumer keeps the versions selected by its own manifest and lockfile.
+
+#### `PACKAGE_MANAGERS`
+
+```ts
+export const PACKAGE_MANAGERS = …
+```
+
+Supported consumer package managers, their development install command and installed-binary executor.
+
+#### `packageManagerTable`
+
+```ts
+export function packageManagerTable(): string
+```
+
+Markdown installation table for consumer and server agent documentation.
+
+**Example**
+
+```ts
+const markdown = packageManagerTable(); // the same commands `atlas init` emits
+```
+
 ### Schema parsing with readable errors
 
 Source: `packages/reports/src/parse-with.ts`. Import: `@crvouga/atlas/reports/parse-with`

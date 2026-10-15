@@ -305,6 +305,15 @@ export const InitPlanSchema = …
 What `atlas init --format json` prints: everything found about the project, and everything it would change.
 Without `--write` nothing is changed. With `--write`, the files are written and `written` says which.
 
+#### `CLI_RESULTS`
+
+```ts
+export const CLI_RESULTS = …
+```
+
+JSON command contracts, shared by schema publication, agent documentation and executable command checks.
+A new result needs an entry here and a runtime scenario in the documentation contract tests.
+
 ### Shared statechart vocabulary
 
 Source: `packages/schema/src/common.ts`

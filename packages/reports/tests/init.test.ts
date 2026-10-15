@@ -35,9 +35,10 @@ describe('what it finds', () => {
     const playwright = plan.suites[1]!;
     expect(playwright).toMatchObject({ format: 'junit', environment: 'desktop-web' });
     expect(playwright.run).toContain('bunx playwright test');
-    expect(playwright.publish).toBe('bunx @crvouga/atlas report publish --producer playwright --junit atlas-playwright.xml --specs specs --environment desktop-web');
+    expect(playwright.publish).toBe('bunx atlas report publish --producer playwright --junit atlas-playwright.xml --specs specs --environment desktop-web');
     expect(plan.files.map(file => [file.path, file.action])).toEqual([['AGENTS.md', 'create'], ['.github/workflows/atlas.yml', 'create']]);
     expect(plan.written).toEqual([]);
+    expect(plan.nextSteps.join('\n')).toContain('bun add -d @crvouga/atlas');
   });
 
   test('other ecosystems: pytest, Go and Cucumber are found by what the project declares, and what each needs is said', async () => {
@@ -78,6 +79,27 @@ describe('what it finds', () => {
 });
 
 describe('what it writes', () => {
+  test.each([
+    ['npm', 'package-lock.json', 'npm exec -- atlas', 'npm exec -- vitest'],
+    ['pnpm', 'pnpm-lock.yaml', 'pnpm exec atlas', 'pnpm exec vitest'],
+    ['yarn', 'yarn.lock', 'yarn exec atlas', 'yarn exec vitest']
+  ])('%s projects use their installed tools in suites, the gate and agent instructions', async (manager, lockfile, atlas, runner) => {
+    const root = await project({ 'package.json': JSON.stringify({ devDependencies: { vitest: '2', '@crvouga/atlas': '1' } }), [lockfile]: '', '.github/keep': '' });
+    const plan = await planInit({ directory: root, server: 'https://atlas.example.com', git: noGit });
+    expect(plan.project.packageManager).toBe(manager);
+    expect(plan.nextSteps.join('\n')).not.toContain('Install Atlas in this project');
+    expect(plan.suites[0]!.run).toStartWith(`${runner} run`);
+    expect(plan.suites[0]!.publish).toStartWith(`${atlas} report publish`);
+    const workflow = YAML.parse(plan.files.find(file => file.path.endsWith('atlas.yml'))!.content);
+    expect(workflow.jobs.gate.steps.at(-1).run).toStartWith(`${atlas} report status`);
+    expect(workflow.jobs.gate.steps.some((step: { run?: string }) => step.run?.includes('install') || step.run === 'npm ci')).toBe(true);
+    expect(JSON.stringify(workflow)).not.toMatch(/\bbunx?\b|setup-bun/);
+    const agents = plan.files.find(file => file.path === 'AGENTS.md')!.content;
+    expect(agents).toContain(`${atlas} report status`);
+    expect(agents).toContain('ATLAS_PROJECT');
+    expect(workflow.env.ATLAS_PROJECT).toBe('${{ vars.ATLAS_PROJECT }}');
+  });
+
   test('--write creates the files, the workflow is valid YAML that sends and gates, and running again changes nothing', async () => {
     const root = await project({ 'package.json': JSON.stringify({ devDependencies: { vitest: '2' } }), 'bun.lock': '', 'specs/a.feature': FEATURE, '.github/keep': '' });
     const first = await planInit({ directory: root, server: 'https://atlas.example.com', write: true, git: noGit });

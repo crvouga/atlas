@@ -8,22 +8,28 @@
  * - `docs/reference/<package>.md`: the TypeScript API of each package, from the doc comments in its source.
  * - `docs/reference/cli.md` and `docs/reference/http-api.md`: the usage text of every command, and the HTTP operations.
  * - Marked blocks inside hand-written guides (`<!-- generated:NAME -->` … `<!-- /generated:NAME -->`): the server
- *   settings table and the operation table of `docs/server.md`.
+ *   settings and operation tables, consumer facts, and contributor check commands.
+ * - JSON Schemas, from the same Zod registry used by schema and command contract tests.
  * - `llms.txt` and `llms-full.txt`: the guide index for AI agents and the guides in one file ([llmstxt.org](https://llmstxt.org)).
  *
  * The source is always the code or a comment beside it; nothing here is edited by hand.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import YAML from 'yaml';
 
 import { USAGE } from '../../packages/core/src/cli';
 import { INIT_USAGE } from '../../packages/reports/src/init';
 import { REPORT_USAGE } from '../../packages/reports/src/report-cli';
+import { packageManagerTable } from '../../packages/reports/src/package-managers';
+import { CLI_RESULTS } from '../../packages/schema/src/cli-results';
+import { renderSchemas } from '../../packages/schema/scripts/schemas';
 import { DEV_USAGE } from '../../packages/server/src/dev';
 import { SERVER_SETTINGS, SERVER_USAGE } from '../../packages/server/src/config';
 import { OPERATIONS, openApiDocument } from '../../packages/server/src/openapi';
 import { DOCUMENTED_ROOTS, REPO } from './coverage';
 import { packageReference } from './reference';
+import { renderBlocks } from './blocks';
 
 /** One generated file: where it goes, relative to the repository, and its content. */
 export type Generated = { readonly file: string; readonly text: string };
@@ -45,6 +51,7 @@ export const PACKAGES: Readonly<Record<string, string>> = {
 /** The guides, in the order an agent should meet them, with the section of `llms.txt` each is listed under. */
 export const GUIDES: readonly { readonly file: string; readonly section: string }[] = [
   { file: 'docs/agents.md', section: 'Start here' },
+  { file: 'docs/quickstart.md', section: 'Start here' },
   { file: 'docs/integrating.md', section: 'Start here' },
   { file: 'docs/runners.md', section: 'Start here' },
   { file: 'docs/server.md', section: 'Run and use the server' },
@@ -62,9 +69,18 @@ const read = (file: string) => readFileSync(path.join(REPO, file), 'utf8');
 const RAW = 'https://raw.githubusercontent.com/crvouga/atlas/main';
 
 /** The command line reference: the usage text of every command. */
+export const CLI_HELP = [
+  { title: 'atlas', args: [], usage: USAGE },
+  { title: 'atlas init', args: ['init'], usage: INIT_USAGE },
+  { title: 'atlas serve', args: ['serve'], usage: SERVER_USAGE },
+  { title: 'atlas dev', args: ['dev'], usage: DEV_USAGE },
+  { title: 'atlas report', args: ['report'], usage: REPORT_USAGE }
+];
+
+/** The command line reference, using the same help inventory the executable documentation checks exercise. */
 function cliReference(): string {
   const block = (title: string, text: string) => `## ${title}\n\n\`\`\`text\n${text.trimEnd()}\n\`\`\`\n`;
-  return `# Command line reference\n\n> Generated from the usage text each command prints (\`atlas <command> --help\`) by \`bun run docs\`. Do not edit.\n\nAdd \`--format json\` (alias \`--json\`) to \`init\`, \`report publish\`, \`stream\`, \`merge\`, \`doctor\` and \`status\` for a JSON document on standard output (schemas in \`@crvouga/atlas/schemas\`). Exit codes: \`0\` it worked, \`1\` it ran and the answer is no, \`2\` the command was wrong.\n\n${[block('atlas', USAGE), block('atlas init', INIT_USAGE), block('atlas serve', SERVER_USAGE), block('atlas dev', DEV_USAGE), block('atlas report', REPORT_USAGE)].join('\n')}`;
+  return `# Command line reference\n\n> Generated from the usage text each command prints (\`atlas <command> --help\`) by \`bun run docs\`. Do not edit.\n\nAdd \`--format json\` (alias \`--json\`) to \`init\`, \`report publish\`, \`stream\`, \`merge\`, \`doctor\` and \`status\` for a JSON document on standard output (schemas in \`@crvouga/atlas/schemas\`). Exit codes: \`0\` it worked, \`1\` it ran and the answer is no, \`2\` the command was wrong.\n\n${CLI_HELP.map(help => block(help.title, help.usage)).join('\n')}`;
 }
 
 /** The operations of the HTTP API as Markdown, in full. */
@@ -89,15 +105,46 @@ function operationsTable(): string {
   return `| Method and path | Role | |\n| --- | --- | --- |\n${rows.join('\n')}\n\nEvery operation, parameter, body, response and error is in [the HTTP API reference](reference/http-api.md) and, for tools, in \`openapi.json\`.`;
 }
 
-const BLOCKS: Readonly<Record<string, () => string>> = { 'server-settings': settingsTable, 'server-operations': operationsTable };
+/** Required generated blocks by document. Removing both markers is drift too. */
+export const BLOCK_FILES: Readonly<Record<string, readonly string[]>> = {
+  'server-settings': ['docs/server.md'],
+  'server-operations': ['docs/server.md'],
+  'package-managers': ['docs/agents.md'],
+  'json-command-schemas': ['docs/agents.md'],
+  'public-exports': ['docs/agents.md'],
+  'repository-checks': ['AGENTS.md'],
+  'runtime-requirements': ['README.md', 'docs/agents.md', 'docs/integrating.md', 'docs/dogfooding.md', 'docs/deploying.md', 'docs/server.md', 'packages/core/README.md']
+};
+
+const manifest = () => JSON.parse(read('package.json')) as { name: string; engines: Record<string, string>; exports: Record<string, unknown> };
+const BLOCKS: Readonly<Record<string, () => string>> = {
+  'server-settings': settingsTable,
+  'server-operations': operationsTable,
+  'package-managers': packageManagerTable,
+  'repository-checks': () => {
+    const ci = YAML.parse(read('.github/workflows/ci.yml')) as { jobs: { check: { steps: { run?: string }[] } } };
+    return ['```sh', ...ci.jobs.check.steps.flatMap(step => step.run ? [step.run] : []), '```'].join('\n');
+  },
+  'json-command-schemas': () => ['| Command | Schema |', '| --- | --- |', ...Object.values(CLI_RESULTS).map(result => `| \`${result.command}\` | \`${result.schemaName}\` |`)].join('\n'),
+  'runtime-requirements': () => `Supported runtimes (from \`package.json\`): ${Object.entries(manifest().engines).map(([name, range]) => `**${name} \`${range}\`**`).join(' or ')}. Node consumers do not need Bun unless they use the Bun WebView driver.`,
+  'public-exports': () => ['```text', ...Object.keys(manifest().exports).map(key => key === '.' ? manifest().name : `${manifest().name}/${key.slice(2)}`), '```'].join('\n')
+};
 
 /** The text of a hand-written guide with each generated block between its markers replaced by what the code says. */
-export function withBlocks(text: string): string {
-  return text.replace(/(<!-- generated:([\w-]+) -->\n)[\s\S]*?(\n<!-- \/generated:\2 -->)/g, (_all, open: string, name: string, close: string) => {
-    const render = BLOCKS[name];
-    if (!render) throw new Error(`Unknown generated block "${name}"`);
-    return `${open}${render()}${close}`;
-  });
+export function withBlocks(text: string, required: readonly string[] = []): string {
+  return renderBlocks(text, BLOCKS, required);
+}
+
+/** Render a document with its required blocks, so removing its markers fails generation and CI. */
+export function renderDocument(file: string, text = read(file)): string {
+  try {
+    const required = Object.entries(BLOCK_FILES).filter(([, files]) => files.includes(file)).map(([name]) => name);
+    for (const match of text.matchAll(/^<!-- generated:([\w-]+) -->$/gm)) {
+      if (!required.includes(match[1]!)) throw new Error(`Generated block "${match[1]}" is not registered for this file in BLOCK_FILES`);
+    }
+    return withBlocks(text, required);
+  }
+  catch (error) { throw new Error(`${file}: ${error instanceof Error ? error.message : String(error)}`); }
 }
 
 /** The first sentence of a guide's opening paragraph: what `llms.txt` says about it. */
@@ -138,9 +185,9 @@ function llmsTxt(): string {
   ];
   return `# Atlas
 
-> Atlas shows whether a product still does what it was specified to do. Test results from any suite on any machine are published as immutable layers; a report is computed from layers, never partitioned, and one Atlas server per project keeps them and shows everyone the combined report, live. Specs of any kind (Gherkin, Quint, DMN, Alloy, OpenSLO, statecharts); evidence of any kind (screenshots, videos, traces, logs). Distributed as the npm package \`@crvouga/atlas\`; runs on Bun and Node.
+> Atlas shows whether a product still does what it was specified to do. Test results from any suite on any machine are published as immutable layers; a report is computed from layers, and a shared Atlas server hosts projects selected by slug and shows each project's combined report, live. Directory stores also work without a server. Specs of any kind (Gherkin, Quint, DMN, Alloy, OpenSLO, statecharts); evidence of any kind (screenshots, videos, traces, logs). Distributed as the npm package \`@crvouga/atlas\`; runs on Bun and Node.
 
-To integrate a project: \`bunx @crvouga/atlas init --server <url> --format json\` prints a plan; \`--write\` applies it. Everything prints JSON on request, has a JSON Schema, and exits 0 (worked), 1 (the answer is no) or 2 (the command was wrong).
+Given only the repository link, start at docs/agents.md: install \`@crvouga/atlas\` in the consumer project with its own package manager, then read the version-matched docs in the installed package. No clone or Atlas build is needed. docs/quickstart.md verifies local publishing and gating without a server or token. For a shared server, \`atlas init --server <url> --format json\` prints a plan; \`--write\` applies it. Report commands and init support JSON with published schemas; exits are 0 (worked), 1 (the answer is no), 2 (the command was wrong).
 
 ${body.join('\n')}`;
 }
@@ -149,7 +196,7 @@ ${body.join('\n')}`;
 function llmsFull(): string {
   const doc = (file: string, text: string) => `<doc path="${file}">\n${text.trimEnd()}\n</doc>\n`;
   return `${llmsTxt().split('\n## ')[0]!.trimEnd()}\n\nThe documents below are the whole guide, then the references. The TypeScript API of each package is in docs/reference/<package>.md.\n\n${[
-    ...GUIDES.filter(guide => guide.file !== 'docs/releasing.md').map(guide => doc(guide.file, withBlocks(read(guide.file)))),
+    ...GUIDES.filter(guide => guide.file !== 'docs/releasing.md').map(guide => doc(guide.file, renderDocument(guide.file))),
     doc('docs/reference/cli.md', cliReference()),
     doc('docs/reference/http-api.md', operationsReference())
   ].join('\n')}`;
@@ -162,7 +209,8 @@ export function generated(): Generated[] {
     { file: 'docs/reference/cli.md', text: cliReference() },
     { file: 'docs/reference/http-api.md', text: operationsReference() },
     ...Object.entries(PACKAGES).map(([name, summary]) => ({ file: `docs/reference/${name}.md`, text: packageReference(name, summary) })),
-    ...GUIDES.map(guide => ({ file: guide.file, text: withBlocks(read(guide.file)) })),
+    ...Object.entries(renderSchemas()).map(([file, text]) => ({ file: `packages/schema/schemas/${file}`, text })),
+    ...[...new Set([...GUIDES.map(guide => guide.file), ...Object.values(BLOCK_FILES).flat()])].map(file => ({ file, text: renderDocument(file) })),
     { file: 'llms.txt', text: llmsTxt() }
   ];
   files.push({ file: 'llms-full.txt', text: llmsFull() });
@@ -171,18 +219,29 @@ export function generated(): Generated[] {
 
 /** The generated files that differ from what is on disk (`current` is null when the file does not exist). */
 export function drift(): { file: string; current: string | null }[] {
-  return generated().flatMap(({ file, text }) => {
+  const files = generated();
+  const expected = new Set(files.map(file => file.file));
+  const stale = files.flatMap(({ file, text }) => {
     let current: string | null = null;
     try { current = readFileSync(path.join(REPO, file), 'utf8'); } catch { /* not there */ }
     return current === text ? [] : [{ file, current }];
   });
+  for (const file of obsoleteOutputs(expected)) stale.push({ file, current: read(file) });
+  return stale;
+}
+
+/** Files left behind after a generated reference or schema was removed from its source inventory. */
+export function obsoleteOutputs(expected: ReadonlySet<string>, root = REPO): string[] {
+  return ['docs/reference', 'packages/schema/schemas'].flatMap(directory =>
+    (existsSync(path.join(root, directory)) ? readdirSync(path.join(root, directory)) : []).map(name => `${directory}/${name}`).filter(file => !expected.has(file))
+  );
 }
 
 if (import.meta.main) {
   const check = process.argv.includes('--check');
   if (check) {
     const stale = drift();
-    for (const { file } of stale) process.stdout.write(`out of date: ${file} (run \`bun run docs\`)\n`);
+    for (const { file } of stale) process.stdout.write(`out of date: ${file} (run \`bun run docs\`; remove obsolete generated files)\n`);
     process.exitCode = stale.length ? 1 : 0;
   } else {
     const files = generated();

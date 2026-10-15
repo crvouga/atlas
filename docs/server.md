@@ -36,7 +36,11 @@ export ATLAS_TOKEN=$(openssl rand -hex 24)   # admin token; see "Tokens and role
 bunx atlas serve                             # http://127.0.0.1:8080, data in ./atlas-data
 ```
 
-It runs on Bun and on Node 22.18 or later. The first start builds the client once into `~/.cache/atlas/site`
+<!-- generated:runtime-requirements -->
+Supported runtimes (from `package.json`): **node `>=22.18.0`** or **bun `>=1.2.0`**. Node consumers do not need Bun unless they use the Bun WebView driver.
+<!-- /generated:runtime-requirements -->
+
+The first start builds the client once into `~/.cache/atlas/site`
 (or serves `./atlas-site`, or `--site <dir>`); the build is the same for every project, because the server writes
 its own address book into the page (`window.__ATLAS_CONFIG__`).
 
@@ -81,6 +85,29 @@ is said in words and the server does not start. The file has a published
 ```
 
 <!-- generated:server-settings -->
+| Setting | File key | Flag | Environment | Default |
+| --- | --- | --- | --- | --- |
+| Address to listen on | `host` | `--host <address>` | `ATLAS_HOST`, `HOST` | `127.0.0.1` |
+| Port (`0` picks a free one) | `port` | `--port <n>` | `ATLAS_PORT`, `PORT` | `8080` |
+| The server's own folder: the default backend and write target | `data` | `--data <dir>` | `ATLAS_DATA` | `./atlas-data` |
+| More backends, read together with the data folder | `backends` | `--store <[id=]url>` (repeatable) | `ATLAS_STORE` | none |
+| The backend uploads go to | `write` | `--write <id>` | `ATLAS_WRITE` | `data` |
+| The built client | `site` | `--site <dir>` | `ATLAS_SITE` | `./atlas-site`, else built once |
+| Whose specs the report is laid over | `outlineBranch` | `--outline-branch <branch>` | `ATLAS_OUTLINE_BRANCH` | `main`, then `master`, then the newest |
+| Only layers recorded on these branches take part | `include.branches` | `--branch <name>` (repeatable) | `ATLAS_ONLY_BRANCH` | all |
+| Leave out layers from modified checkouts and unknown origins | `include.ignoreModified` | `--ignore-modified` | `ATLAS_IGNORE_MODIFIED` | no |
+| How often (seconds) the backends are looked at for layers written by something else | `refreshSeconds` | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
+| Let anyone look, not upload | `auth.anonymousRead` | `--anonymous-read` | `ATLAS_ANONYMOUS_READ` | no |
+| Listen publicly with no tokens (something in front signs people in) | `auth.insecure` | `--insecure` | `ATLAS_INSECURE` | no |
+| The admin token (also `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
+| The configuration file | `(the file itself)` | `--config <file>` | `ATLAS_CONFIG` | `./atlas.server.json` when it exists |
+| Largest uploaded object in MiB | `limits.maxObjectMiB` |  | `ATLAS_MAX_OBJECT_MIB` | `256` |
+| Largest JSON upload in MiB | `limits.maxJsonMiB` |  | `ATLAS_MAX_JSON_MIB` | `32` |
+| Maximum simultaneous live viewers | `limits.maxStreams` |  | `ATLAS_MAX_STREAMS` | `500` |
+| Live connection heartbeat in seconds | `heartbeatSeconds` |  | `ATLAS_HEARTBEAT_SECONDS` | `15` |
+| Live producer heartbeat timeout in seconds | `runTimeoutSeconds` |  | `ATLAS_RUN_TIMEOUT_SECONDS` | `30` |
+| Live run progress stall timeout in seconds (0 disables) | `runStallSeconds` |  | `ATLAS_RUN_STALL_SECONDS` | `900` |
+| No request log | `log` | `--no-log` | `ATLAS_LOG` | one JSON line per request |
 <!-- /generated:server-settings -->
 
 `ATLAS_HOST` and `ATLAS_PORT` win over `HOST` and `PORT`, which other tools on a machine often set for their own
@@ -215,6 +242,73 @@ takes as it always did. A result streamed into a 100 000-check report costs a cl
 ## API reference
 
 <!-- generated:server-operations -->
+| Method and path | Role | |
+| --- | --- | --- |
+| `GET /api/projects` | read | List projects on this Atlas node. |
+| `GET /api/live` | read | Live test progress and recent invocations. |
+| `GET /api/projects/{project}/live` | read | Live test progress and recent invocations. |
+| `POST /api/live/{id}` | publish | Start a live producer lease. |
+| `POST /api/projects/{project}/live/{id}` | publish | Start a live producer lease. |
+| `PATCH /api/live/{id}` | publish | Publish progress or finish an invocation. |
+| `PATCH /api/projects/{project}/live/{id}` | publish | Publish progress or finish an invocation. |
+| `POST /api/live/{id}/heartbeat` | publish | Renew a producer heartbeat. |
+| `POST /api/projects/{project}/live/{id}/heartbeat` | publish | Renew a producer heartbeat. |
+| `GET /admin` | read | Server settings page. |
+| `GET /api/settings` | admin | Read server settings. |
+| `PUT /api/settings` | admin | Save settings for the next restart. |
+| `GET /healthz` | none | Is the process up. |
+| `GET /readyz` | none | Has the server read its backends. |
+| `GET /api/openapi.json` | none | This document. |
+| `GET /llms.txt` | none | How to use this server, for an agent. |
+| `GET /api/server` | read | What this server is and who is asking. |
+| `GET /api/events` | read | Server-sent events: results arrived, specs or runs changed. |
+| `GET /api/projects/{project}/events` | read | Server-sent events: results arrived, specs or runs changed. |
+| `GET /api/reports/evidence/effective` | read | The whole report, or only what changed since a version. |
+| `GET /api/projects/{project}/reports/evidence/effective` | read | The whole report, or only what changed since a version. |
+| `GET /api/status` | read | The gate: does the report pass. |
+| `GET /api/projects/{project}/status` | read | The gate: does the report pass. |
+| `POST /api/checks` | publish | Upload one layer of checks as JSON. |
+| `POST /api/projects/{project}/checks` | publish | Upload one layer of checks as JSON. |
+| `GET /api/store` | read | List keys under layers/. |
+| `GET /api/projects/{project}/store` | read | List keys under layers/. |
+| `GET /api/store/{key}` | read | Read an object. |
+| `GET /api/projects/{project}/store/{key}` | read | Read an object. |
+| `HEAD /api/store/{key}` | read | Does an object exist. |
+| `HEAD /api/projects/{project}/store/{key}` | read | Does an object exist. |
+| `PUT /api/store/{key}` | publish | Upload an object. |
+| `PUT /api/projects/{project}/store/{key}` | publish | Upload an object. |
+| `DELETE /api/store/{key}` | publish | Remove a scratch object. |
+| `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
+| `GET /api/reports/outline` | read | The specs a report is laid over. |
+| `GET /api/projects/{project}/reports/outline` | read | The specs a report is laid over. |
+| `GET /api/reports/outline/spec` | read | The text of one spec. |
+| `GET /api/projects/{project}/reports/outline/spec` | read | The text of one spec. |
+| `GET /api/reports/evidence` | read | Page through every layer header. |
+| `GET /api/projects/{project}/reports/evidence` | read | Page through every layer header. |
+| `GET /api/reports/evidence/rows/{backend}/{id}` | read | The checks of one layer. |
+| `GET /api/projects/{project}/reports/evidence/rows/{backend}/{id}` | read | The checks of one layer. |
+| `GET /api/reports/evidence/detail/{backend}/{id}` | read | Everything one result carries. |
+| `GET /api/projects/{project}/reports/evidence/detail/{backend}/{id}` | read | Everything one result carries. |
+| `GET /api/reports/layers/{id}/blobs/{bundleKey}` | read | A file a layer carries. |
+| `GET /api/projects/{project}/reports/layers/{id}/blobs/{bundleKey}` | read | A file a layer carries. |
+| `GET /api/reports/layers/{id}/{path}` | read | A recorded test of a statechart run. |
+| `GET /api/projects/{project}/reports/layers/{id}/{path}` | read | A recorded test of a statechart run. |
+| `GET /api/reports/live/{source}/frame.css` | read | Frame stylesheet of a live spec run (development only). |
+| `GET /api/projects/{project}/reports/live/{source}/frame.css` | read | Frame stylesheet of a live spec run (development only). |
+| `GET /api/reports/live/{source}/tests/{testId}/{path}` | read | A file of a test in a live spec run (development only). |
+| `GET /api/projects/{project}/reports/live/{source}/tests/{testId}/{path}` | read | A file of a test in a live spec run (development only). |
+| `GET /api/data/sources.json` | read | The sources the viewer reads. |
+| `GET /api/projects/{project}/data/sources.json` | read | The sources the viewer reads. |
+| `GET /api/data/specs/index.json` | read | The spec files. |
+| `GET /api/projects/{project}/data/specs/index.json` | read | The spec files. |
+| `GET /api/data/specs/{file}` | read | One spec file. |
+| `GET /api/projects/{project}/data/specs/{file}` | read | One spec file. |
+| `GET /api/data/runs/index.json` | read | The statechart runs. |
+| `GET /api/projects/{project}/data/runs/index.json` | read | The statechart runs. |
+| `GET /api/data/runs/{id}/{path}` | read | A file of an uploaded run. |
+| `GET /api/projects/{project}/data/runs/{id}/{path}` | read | A file of an uploaded run. |
+
+Every operation, parameter, body, response and error is in [the HTTP API reference](reference/http-api.md) and, for tools, in `openapi.json`.
 <!-- /generated:server-operations -->
 
 Errors are always [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`: `type`,
