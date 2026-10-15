@@ -235,8 +235,12 @@ one copy (the server is a singleton for the project), results in the bucket, rea
 service account.
 
 **Without a container.** `bun add -d @crvouga/atlas`, then `bunx atlas client build --no-data --out
-atlas-site` and `bunx atlas serve`. It runs on Bun and on Node 22.18 or later. Everything it can be told is in
+atlas-site` and `bunx atlas serve`. Everything it can be told is in
 [the Atlas server](server.md#configuration).
+
+<!-- generated:runtime-requirements -->
+Supported runtimes (from `package.json`): **node `>=22.18.0`** or **bun `>=1.2.0`**. Node consumers do not need Bun unless they use the Bun WebView driver.
+<!-- /generated:runtime-requirements -->
 
 ### Who may look
 

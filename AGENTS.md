@@ -1,5 +1,12 @@
 # Agent guidance
 
+## Given this repository link from another project?
+
+Read [the consumer integration playbook](docs/agents.md#given-only-this-repository-link) first. Work in the
+consumer repository and install `@crvouga/atlas` from npm with its existing package manager. You do not need to
+build Atlas, install Bun in a Node project, or run this repository's example to integrate it. The
+[local quickstart](docs/quickstart.md) proves publishing and gating without a server or credentials.
+
 ## How Atlas is developed: one npm package and GitHub issues
 
 Atlas is published to npm as a single package, `@crvouga/atlas`. Other projects install it and report
@@ -90,12 +97,13 @@ colocation: say it once, next to what it describes, and generate everything else
 - Generated, never edited by hand: `docs/reference/*.md` (from those comments, the usage text and the operation table),
   `packages/server/openapi.json`, `llms.txt`, `llms-full.txt`, the JSON Schemas (`bun run schemas`), and the blocks between
   `<!-- generated:NAME -->` markers in the guides. After changing a comment, a route, a setting, a schema or a command's
-  usage, run `bun run docs` (and `bun run schemas`) and commit the result; `bun run docs -- --check` and the tests fail when
-  anything is stale.
+  usage, run `bun run docs` (it also emits JSON Schemas) and commit the result. `bun run docs:check` is the explicit CI gate;
+  it rejects stale or obsolete outputs, missing generation markers, broken links and mismatched executable instructions.
 - A new HTTP route needs an operation in `packages/server/src/openapi.ts` (a test fails if a route is undescribed). A new
   server setting needs a row in `SERVER_SETTINGS` with an example that a test proves. A new command output document needs a
-  Zod schema in `packages/schema/src/cli-results.ts` and a line in `docs/agents.md`. Every command that prints a result
-  supports `--format json`.
+  Zod schema and an entry in `CLI_RESULTS` in `packages/schema/src/cli-results.ts`, plus a runtime scenario in
+  `scripts/docs/cli-contract.test.ts`. The command/schema table in `docs/agents.md` is generated from that registry.
+  Every command that prints a result supports `--format json`.
 - Guides in `docs/` are written by hand and listed in `scripts/docs/generate.ts` (`GUIDES`) so they reach `llms.txt`; a test
   checks every relative link and anchor.
 
@@ -162,13 +170,22 @@ at the version `packageManager` names in `package.json`.
 
 From this repository's root:
 
+<!-- generated:repository-checks -->
 ```sh
 bun install --frozen-lockfile
+bun run docs:check
 bun run type-check
 bun run test
 bun run build
 bun run release:smoke
 ```
+<!-- /generated:repository-checks -->
+
+This check list is generated from CI's `check` job. After any code, configuration, documentation or agent-guidance
+change, run `bun run docs` to regenerate docs and schemas, then `bun run docs:check`. It checks required generation
+markers, stale and obsolete outputs, documentation coverage, links, schemas, CLI help and executable agent flows.
+Keep factual tables in generated blocks and annotate runnable walkthroughs for the documentation smoke checks.
+Prose still needs review: when behaviour changes, update its explanation and add a regression that exercises it.
 
 `bun run test` is the whole suite: `bun test`, then the viewer's DOM tests
 (`packages/visualizer/tests`), which need a browser-like global scope and so run on their own with a

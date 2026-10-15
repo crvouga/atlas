@@ -1,12 +1,13 @@
 # Atlas
 
-> Atlas shows whether a product still does what it was specified to do. Test results from any suite on any machine are published as immutable layers; a report is computed from layers, never partitioned, and one Atlas server per project keeps them and shows everyone the combined report, live. Specs of any kind (Gherkin, Quint, DMN, Alloy, OpenSLO, statecharts); evidence of any kind (screenshots, videos, traces, logs). Distributed as the npm package `@crvouga/atlas`; runs on Bun and Node.
+> Atlas shows whether a product still does what it was specified to do. Test results from any suite on any machine are published as immutable layers; a report is computed from layers, and a shared Atlas server hosts projects selected by slug and shows each project's combined report, live. Directory stores also work without a server. Specs of any kind (Gherkin, Quint, DMN, Alloy, OpenSLO, statecharts); evidence of any kind (screenshots, videos, traces, logs). Distributed as the npm package `@crvouga/atlas`; runs on Bun and Node.
 
-To integrate a project: `bunx @crvouga/atlas init --server <url> --format json` prints a plan; `--write` applies it. Everything prints JSON on request, has a JSON Schema, and exits 0 (worked), 1 (the answer is no) or 2 (the command was wrong).
+Given only the repository link, start at docs/agents.md: install `@crvouga/atlas` in the consumer project with its own package manager, then read the version-matched docs in the installed package. No clone or Atlas build is needed. docs/quickstart.md verifies local publishing and gating without a server or token. For a shared server, `atlas init --server <url> --format json` prints a plan; `--write` applies it. Report commands and init support JSON with published schemas; exits are 0 (worked), 1 (the answer is no), 2 (the command was wrong).
 
 ## Start here
 
-- [Atlas for AI agents](https://raw.githubusercontent.com/crvouga/atlas/main/docs/agents.md): Everything an agent needs to integrate a project with Atlas, send it test results, and read them back, with nothing to click and nothing to guess.
+- [Atlas for AI agents](https://raw.githubusercontent.com/crvouga/atlas/main/docs/agents.md): Start here when given the Atlas repository link to integrate it into another project.
+- [Verify Atlas locally](https://raw.githubusercontent.com/crvouga/atlas/main/docs/quickstart.md): Prove that the installed Atlas can publish, combine and gate evidence before connecting your project's real suites.
 - [Integrating Atlas into a project](https://raw.githubusercontent.com/crvouga/atlas/main/docs/integrating.md): This guide takes a project from nothing to a layered, gated report of its specs.
 - [Native test runner reporters](https://raw.githubusercontent.com/crvouga/atlas/main/docs/runners.md): Projects upload results to a shared Atlas node under their own project slug.
 

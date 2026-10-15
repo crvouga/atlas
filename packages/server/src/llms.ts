@@ -7,6 +7,8 @@
  * machine-readable description (`/api/openapi.json`) rather than repeating it.
  */
 
+import { packageManagerTable } from '../../reports/src/package-managers';
+
 /** What the guide says about the server that serves it. */
 export type LlmsContext = {
   /** The address clients use, such as `https://atlas.example.com`, no trailing slash. */
@@ -39,27 +41,35 @@ ${context.open
 
 ## Integrate a project (run in the project's repository)
 
+Install \`@crvouga/atlas\` with the project's existing package manager first. The commands below use Bun;
+substitute the executor for your package manager. Node also runs the CLI; Bun is optional. Read the installed
+\`docs/agents.md\` for the supported runtime versions and full integration playbook.
+
+${packageManagerTable()}
+
 \`\`\`sh
+bun add -d @crvouga/atlas
 export ATLAS_STORE=${url}${context.open ? '' : '\nexport ATLAS_TOKEN=<a publish token>'}
-bunx @crvouga/atlas init --server ${url}          # detects test runners and specs, prints a plan (add --json for a machine-readable one)
-bunx @crvouga/atlas init --server ${url} --write  # writes the CI workflow and the AGENTS.md section the plan names
-bunx @crvouga/atlas report doctor                 # proves the server can be written to and read
+export ATLAS_PROJECT=checkout-service          # choose the same stable slug locally and in CI
+bunx atlas init --server ${url}                # detects test runners and specs, prints a plan (add --json for a machine-readable one)
+bunx atlas init --server ${url} --write        # writes the CI workflow and the AGENTS.md section the plan names
+bunx atlas report doctor                       # proves the server can be written to and read
 \`\`\`
 
 After each suite, send its results (a JUnit or CTRF file, or JSON lines as checks finish):
 
 \`\`\`sh
-bunx @crvouga/atlas report publish --producer <suite> --junit out.xml --specs ./specs --environment <env>
-my-suite --json | bunx @crvouga/atlas report stream --producer <suite> --environment <env>
+bunx atlas report publish --producer <suite> --junit out.xml --specs ./specs --environment <env>
+my-suite --json | bunx atlas report stream --producer <suite> --environment <env>
 \`\`\`
 
-Or with no tooling at all: \`POST ${url}/api/checks\` with \`{"producer":"smoke","checks":[{"id":"login","title":"can log in","status":"passed"}]}\`.
+Or with no tooling at all: \`POST ${url}/api/checks?project=<slug>\` with \`{"producer":"smoke","checks":[{"id":"login","title":"can log in","status":"passed"}]}\`.
 
 ## Ask whether it passes
 
 \`\`\`sh
-bunx @crvouga/atlas report status --format json --branch main --ignore-modified   # exit 0 pass, 1 does not, 2 wrong command
-curl ${context.open ? '' : '-H "authorization: Bearer $ATLAS_TOKEN" '}${url}/api/status                      # the same verdict; header X-Atlas-Ok: true|false
+bunx atlas report status --format json --branch main --ignore-modified   # exit 0 pass, 1 does not, 2 wrong command
+curl ${context.open ? '' : '-H "authorization: Bearer $ATLAS_TOKEN" '}"${url}/api/status?project=$ATLAS_PROJECT"    # the same verdict; header X-Atlas-Ok: true|false
 \`\`\`
 
 ## Rules worth knowing

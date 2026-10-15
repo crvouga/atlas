@@ -40,7 +40,18 @@ backends, and tells you in one command whether the product still does what it wa
 > [using Atlas from another project](docs/dogfooding.md) and [reporting issues](docs/reporting-issues.md).
 > Releases are automatic: see [releasing](https://github.com/crvouga/atlas/blob/main/docs/releasing.md).
 
+## Given this repo link to integrate Atlas?
+
+Start with **[the agent integration playbook](docs/agents.md#given-only-this-repository-link)** in your own
+project. It covers choosing an integration, installing with your package manager, finding docs for your installed
+version, running without a server, connecting real suites, and proving completion. **[Verify Atlas locally](docs/quickstart.md)**
+is a copyable walkthrough with expected JSON and exit codes; it needs no credentials or existing test suite.
+The machine-readable index is [llms.txt](llms.txt), and [llms-full.txt](llms-full.txt) contains the guides in one file.
+
 ## Run this repository's example
+
+For contributors working in an Atlas checkout with dependencies installed (`bun install --frozen-lockfile`).
+Consumer projects install the npm package instead; they do not need to clone or build this repository.
 
 Use two terminals:
 
@@ -64,20 +75,21 @@ Atlas is built to be integrated and operated by agents, with nothing to click an
 - **`atlas init`** detects a project's test runners, specs and CI and prints a plan (`--format json`) of the exact commands to
   run each suite and send its results; `--write` creates the CI workflow and an `AGENTS.md` section. Running it twice
   changes nothing.
-- **Every command prints JSON on request** (`--format json`), every document has a published JSON Schema, exit codes mean the
-  same everywhere (`0` worked, `1` the answer is no, `2` the command was wrong), and every operation is safe to repeat.
+- **Init and report commands print JSON on request** (`--format json`) with published JSON Schemas and consistent
+  exit codes (`0` worked, `1` the answer is no, `2` the command was wrong). Reapplying init or publishing identical evidence is safe.
 - **The server describes itself:** `GET /api/openapi.json` (OpenAPI 3.1) and `GET /llms.txt` (a guide for an agent given only
   the address) need no token; errors are RFC 9457 problem documents that say what to do.
 - **Documentation is generated from the code beside it:** `llms.txt` / `llms-full.txt` (also in the package), the TypeScript
   reference in [`docs/reference/`](docs/reference/server.md), the CLI and HTTP references, and the settings tables; tests fail when
   any of it drifts.
 
-Start with **[Atlas for AI agents](docs/agents.md)**.
+Start with **[Atlas for AI agents](docs/agents.md)**. A [copyable integration brief](docs/agents.md#an-integration-brief-you-can-give-an-agent)
+lets a user hand an agent this repository URL and a concrete definition of done.
 
 ## Integrate in five minutes
 
 ```sh
-bun add -d @crvouga/atlas            # or npm install -D / pnpm add -D; runs on Bun and Node 22.18+
+bun add -d @crvouga/atlas            # or npm install -D / pnpm add -D
 
 # 1. Each suite publishes a layer of what it ran: a JUnit or CTRF file, an Atlas run, or a checks file.
 bunx atlas report publish --store atlas-reports --producer web-e2e --junit out.xml --specs ./specs --environment desktop-web
@@ -105,7 +117,11 @@ bunx atlas report status --store all --specs ./specs --require-environments desk
 ## One package
 
 Atlas is a single npm package. Each part is its own import path, so a bundler keeps only what you
-import. It runs on Bun and on Node 22.18 or later, with any package manager:
+import. Use your project's package manager:
+
+<!-- generated:runtime-requirements -->
+Supported runtimes (from `package.json`): **node `>=22.18.0`** or **bun `>=1.2.0`**. Node consumers do not need Bun unless they use the Bun WebView driver.
+<!-- /generated:runtime-requirements -->
 
 ```sh
 bun add -d @crvouga/atlas

@@ -24,6 +24,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { probeRunners } from './runner-smoke';
+import { probeQuickstart } from '../docs/quickstart-smoke';
+import { probeAgentInstructions } from '../docs/agent-smoke';
 import { must } from '../process.ts';
 import { restoreOriginals } from './files.ts';
 import { discoverPackages, type Manifest, missingEntryPoints, pack, packedFiles, packedManifest, publishManifest, unresolvablePins } from './lib.ts';
@@ -267,6 +269,17 @@ async function main(): Promise<void> {
 
     const atlas = bins.get('atlas');
     if (atlas) {
+      // Execute the shipped guide itself, outside the repository, against the packed CLI under both runtimes.
+      for (const [runtime, args] of RUNTIMES) {
+        const cwd = path.join(app, `quickstart-${runtime}`);
+        mkdirSync(cwd);
+        console.log(`consumer-smoke: ${runtime} shipped local quickstart`);
+        await probeQuickstart({ guide: path.join(app, 'node_modules/@crvouga/atlas/docs/quickstart.md'), command: [runtime, ...args, atlas], cwd });
+        const instructions = path.join(app, `agent-instructions-${runtime}`);
+        mkdirSync(instructions);
+        console.log(`consumer-smoke: ${runtime} generated agent instructions with real suite failure and recovery`);
+        await probeAgentInstructions({ cwd: instructions, command: [runtime, ...args, atlas], runtime: runtime as 'bun' | 'node' });
+      }
       // A TypeScript config is what projects write: Bun loads it natively, Node through tsx.
       mkdirSync(path.join(app, 'specs'));
       writeFileSync(path.join(app, 'specs/flow.machine.json'), JSON.stringify(SMOKE_CHART));

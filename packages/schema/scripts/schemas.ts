@@ -5,12 +5,11 @@ import {
   CloudEventSchema,
   JourneysFileSchema,
   LayerDocumentSchema,
-  ReportStatusSchema,
   SpecSetSchema,
   LiveRunStartSchema, LiveRunUpdateSchema, LiveRunSchema,
   ProjectSlugSchema, ProjectSchema, ProjectsSchema,
   ServerConfigSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema,
-  InitPlanSchema, PublishResultSchema, StreamResultSchema, MergeResultSchema, DoctorResultSchema, CommandErrorSchema,
+  CLI_RESULTS,
   ProblemSchema, ServerInfoSchema, ReadySchema, EffectiveEvidenceSchema, EffectiveDeltaSchema, OutlineSchema, EvidencePageSchema, LayerRowsSchema, CheckDetailSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema,
   PublishChecksSchema,
   ManifestEnvelopeSchema,
@@ -47,7 +46,6 @@ export const SCHEMAS: Record<string, z.ZodType> = {
   'atlas-change': AtlasChangeSchema,
   layer: LayerDocumentSchema,
   'publish-checks': PublishChecksSchema,
-  'report-status': ReportStatusSchema,
   'spec-set': SpecSetSchema,
   'live-run-start': LiveRunStartSchema, 'live-run-update': LiveRunUpdateSchema, 'live-run': LiveRunSchema,
   'server-config': ServerConfigSchema,
@@ -69,12 +67,7 @@ export const SCHEMAS: Record<string, z.ZodType> = {
   'hello-event': HelloEventSchema,
   'report-event': ReportEventSchema,
   // What `atlas report … --format json` prints (docs/agents.md).
-  'publish-result': PublishResultSchema,
-  'stream-result': StreamResultSchema,
-  'merge-result': MergeResultSchema,
-  'doctor-result': DoctorResultSchema,
-  'command-error': CommandErrorSchema,
-  'init-plan': InitPlanSchema
+  ...Object.fromEntries(Object.values(CLI_RESULTS).map(result => [result.schemaName, result.schema]))
 };
 
 

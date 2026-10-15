@@ -24,7 +24,11 @@ upgrade, and what to do when something is wrong.
 
 ## Install
 
-Atlas runs on Bun, and on Node 22.18 or later. It is one package:
+<!-- generated:runtime-requirements -->
+Supported runtimes (from `package.json`): **node `>=22.18.0`** or **bun `>=1.2.0`**. Node consumers do not need Bun unless they use the Bun WebView driver.
+<!-- /generated:runtime-requirements -->
+
+It is one package:
 
 ```sh
 bun add -d @crvouga/atlas
