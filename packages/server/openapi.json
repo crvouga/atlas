@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Atlas server API",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "summary": "Take in test results from every environment, keep them, and show everyone the combined report, live.",
     "description": "One Atlas node serves multiple projects. Clients select a project using ?project=<slug>, X-Atlas-Project, or /api/projects/<slug>/… . Each project has independent specs, layers, recordings, status, and event streams. Within each project, the newest completed result of every check wins its slot. Unqualified requests address the legacy default project.\n\n**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `publish` < `admin`. Uploading needs a Bearer token; a browser's HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.\n\n**Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`) with a `detail` that says what to do. `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not valid, `503` still starting (retry after `Retry-After`).\n\n**Compatibility.** Within `/api` the API only grows: optional parameters, optional response fields, new events. Ignore what you do not know.\n\nGuides: `/llms.txt`. Source: https://github.com/crvouga/atlas.",
     "license": {
@@ -2973,6 +2973,1038 @@
         }
       }
     },
+    "/api/reports/tests": {
+      "get": {
+        "operationId": "getTests",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Every test, with insights, facets and history statistics",
+        "description": "The report as a list of tests, for exploring it or for an agent to read in one request. A test is a check identity (its spec path and id) across producers and environments; `outcomes` holds its current result on each environment, and `stats` how it went over its recorded history (pass rate, flips, flaky, durations avg/p50/p95, runs, branches).\n\n`summary` and `facets` cover every test (counts by status, by environment, by producer and by domain, the slowest, flakiest and failing tests); `tests` is the page the query matched. Without a published spec set, specs come from the `specs[]` the layers recorded.\n\nSend `format=markdown` (or `Accept: text/markdown`) for the same as a Markdown report. The current status of a test is always the report's winner; history never changes it.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "q",
+            "in": "query",
+            "description": "Words that must all appear in the title, id, spec, domain, tags, labels, environments or producers. Case does not matter.",
+            "example": "checkout card",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "status",
+            "in": "query",
+            "description": "Current status, or `flaky`. Repeatable or comma-separated.",
+            "example": "failed,flaky",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "environment",
+            "in": "query",
+            "description": "Only tests with a result on this environment. Repeatable or comma-separated.",
+            "example": "desktop-web",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "producer",
+            "in": "query",
+            "description": "Only tests from this producer. Repeatable or comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "domain",
+            "in": "query",
+            "description": "Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "spec",
+            "in": "query",
+            "description": "Only tests of this spec path. Repeatable or comma-separated.",
+            "example": "specs/checkout/pay.feature",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "tag",
+            "in": "query",
+            "description": "Only tests with this tag. Repeatable or comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "run",
+            "in": "query",
+            "description": "Only tests recorded in this run (a `key` from `/api/reports/runs`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "sort",
+            "in": "query",
+            "description": "The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "spec",
+                "title",
+                "recent",
+                "slowest",
+                "failures",
+                "flaky",
+                "runs"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "offset",
+            "in": "query",
+            "description": "Skip this many matching tests.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many tests (default 500, at most 20000).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20000
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for a Markdown report instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The catalog.",
+            "headers": {
+              "ETag": {
+                "description": "Changes with the report, its history and the query.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestCatalog"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/tests": {
+      "get": {
+        "operationId": "getTestsForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Every test, with insights, facets and history statistics",
+        "description": "The report as a list of tests, for exploring it or for an agent to read in one request. A test is a check identity (its spec path and id) across producers and environments; `outcomes` holds its current result on each environment, and `stats` how it went over its recorded history (pass rate, flips, flaky, durations avg/p50/p95, runs, branches).\n\n`summary` and `facets` cover every test (counts by status, by environment, by producer and by domain, the slowest, flakiest and failing tests); `tests` is the page the query matched. Without a published spec set, specs come from the `specs[]` the layers recorded.\n\nSend `format=markdown` (or `Accept: text/markdown`) for the same as a Markdown report. The current status of a test is always the report's winner; history never changes it.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "q",
+            "in": "query",
+            "description": "Words that must all appear in the title, id, spec, domain, tags, labels, environments or producers. Case does not matter.",
+            "example": "checkout card",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "status",
+            "in": "query",
+            "description": "Current status, or `flaky`. Repeatable or comma-separated.",
+            "example": "failed,flaky",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "environment",
+            "in": "query",
+            "description": "Only tests with a result on this environment. Repeatable or comma-separated.",
+            "example": "desktop-web",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "producer",
+            "in": "query",
+            "description": "Only tests from this producer. Repeatable or comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "domain",
+            "in": "query",
+            "description": "Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "spec",
+            "in": "query",
+            "description": "Only tests of this spec path. Repeatable or comma-separated.",
+            "example": "specs/checkout/pay.feature",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "tag",
+            "in": "query",
+            "description": "Only tests with this tag. Repeatable or comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "run",
+            "in": "query",
+            "description": "Only tests recorded in this run (a `key` from `/api/reports/runs`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "sort",
+            "in": "query",
+            "description": "The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "spec",
+                "title",
+                "recent",
+                "slowest",
+                "failures",
+                "flaky",
+                "runs"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "offset",
+            "in": "query",
+            "description": "Skip this many matching tests.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many tests (default 500, at most 20000).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20000
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for a Markdown report instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The catalog.",
+            "headers": {
+              "ETag": {
+                "description": "Changes with the report, its history and the query.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestCatalog"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/tests/history": {
+      "get": {
+        "operationId": "getTestHistory",
+        "tags": [
+          "Report"
+        ],
+        "summary": "One test and every result recorded for it",
+        "description": "The test (as `/api/reports/tests` lists it) and up to 100 recorded results, newest first: status, duration, environment, producer, branch, commit, CI run, layer and the first 500 characters of the detail. Open a result's evidence (attachments, steps, retries) with `/api/reports/evidence/detail/{backend}/{id}?check=<id>`. Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "key",
+            "in": "query",
+            "description": "The test's `key` from `/api/reports/tests`: `JSON.stringify([specPath, id])`, URL-encoded.",
+            "example": "[\"specs/checkout/pay.feature\",\"Pay with a card\"]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for Markdown instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The test and its history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestHistory"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "400": {
+            "description": "No `key`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No test in the report has that key.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/tests/history": {
+      "get": {
+        "operationId": "getTestHistoryForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "One test and every result recorded for it",
+        "description": "The test (as `/api/reports/tests` lists it) and up to 100 recorded results, newest first: status, duration, environment, producer, branch, commit, CI run, layer and the first 500 characters of the detail. Open a result's evidence (attachments, steps, retries) with `/api/reports/evidence/detail/{backend}/{id}?check=<id>`. Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "key",
+            "in": "query",
+            "description": "The test's `key` from `/api/reports/tests`: `JSON.stringify([specPath, id])`, URL-encoded.",
+            "example": "[\"specs/checkout/pay.feature\",\"Pay with a card\"]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for Markdown instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The test and its history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestHistory"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "400": {
+            "description": "No `key`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No test in the report has that key.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/runs": {
+      "get": {
+        "operationId": "getReportRuns",
+        "tags": [
+          "Report"
+        ],
+        "summary": "The runs that recorded the report",
+        "description": "Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many runs (default 100).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for Markdown instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/runs": {
+      "get": {
+        "operationId": "getReportRunsForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "The runs that recorded the report",
+        "description": "Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many runs (default 100).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for Markdown instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/runs/detail": {
+      "get": {
+        "operationId": "getReportRun",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Every test one run recorded",
+        "description": "One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "key",
+            "in": "query",
+            "description": "The run's `key` from `/api/reports/runs`, URL-encoded.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for Markdown instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The run and its results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "400": {
+            "description": "No `key`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No run has that key.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/runs/detail": {
+      "get": {
+        "operationId": "getReportRunForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Every test one run recorded",
+        "description": "One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "key",
+            "in": "query",
+            "description": "The run's `key` from `/api/reports/runs`, URL-encoded.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for Markdown instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The run and its results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "400": {
+            "description": "No `key`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No run has that key.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/outline": {
       "get": {
         "operationId": "getOutline",
@@ -2980,7 +4012,7 @@
           "Report"
         ],
         "summary": "The specs a report is laid over",
-        "description": "The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. A spec here with no result shows as having none.\n\nRole needed: `read`.",
+        "description": "The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. Without a spec set, the specs the layers recorded (`specs[]`), newest per path. A spec here with no result shows as having none.\n\nRole needed: `read`.",
         "x-atlas-role": "read",
         "security": [
           {
@@ -3035,7 +4067,7 @@
           "Report"
         ],
         "summary": "The specs a report is laid over",
-        "description": "The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. A spec here with no result shows as having none.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "description": "The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. Without a spec set, the specs the layers recorded (`specs[]`), newest per path. A spec here with no result shows as having none.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
         "x-atlas-role": "read",
         "security": [
           {
@@ -10465,6 +11497,2299 @@
           "kind",
           "check",
           "run"
+        ],
+        "additionalProperties": {}
+      },
+      "TestCatalog": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "description": "Changes whenever the report or its history does",
+            "type": "string"
+          },
+          "generatedAtMs": {
+            "type": "number"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "tests": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "counts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "outcomes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "flaky": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "durations": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "count": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "totalMs": {
+                        "type": "number"
+                      },
+                      "avgMs": {
+                        "type": "number"
+                      },
+                      "p50Ms": {
+                        "type": "number"
+                      },
+                      "p95Ms": {
+                        "type": "number"
+                      },
+                      "minMs": {
+                        "type": "number"
+                      },
+                      "maxMs": {
+                        "type": "number"
+                      },
+                      "lastMs": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "count",
+                      "totalMs",
+                      "avgMs",
+                      "p50Ms",
+                      "p95Ms",
+                      "minMs",
+                      "maxMs",
+                      "lastMs"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "measured": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "withAttachments": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "environments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "tests": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "counts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "avgMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "tests",
+                    "counts",
+                    "avgMs"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "producers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "tests": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "counts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "avgMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "tests",
+                    "counts",
+                    "avgMs"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "domains": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "tests": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "counts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "avgMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "tests",
+                    "counts",
+                    "avgMs"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "slowest": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "specPath": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "title",
+                    "specPath",
+                    "status",
+                    "value"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "flakiest": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "specPath": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "title",
+                    "specPath",
+                    "status",
+                    "value"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "failing": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "specPath": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "title",
+                    "specPath",
+                    "status",
+                    "value"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "runs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "lastRecordedAtMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "history": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "tests",
+              "counts",
+              "outcomes",
+              "flaky",
+              "durations",
+              "measured",
+              "withAttachments",
+              "environments",
+              "producers",
+              "domains",
+              "slowest",
+              "flakiest",
+              "failing",
+              "runs",
+              "lastRecordedAtMs",
+              "history"
+            ],
+            "additionalProperties": {}
+          },
+          "facets": {
+            "type": "object",
+            "properties": {
+              "statuses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "environments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "producers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "domains": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "specs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "domain": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "tests": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "counts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "title",
+                    "domain",
+                    "kind",
+                    "tests",
+                    "counts"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "branches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "labels": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string"
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "count"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              }
+            },
+            "required": [
+              "statuses",
+              "environments",
+              "producers",
+              "domains",
+              "specs",
+              "tags",
+              "branches",
+              "labels"
+            ],
+            "additionalProperties": {}
+          },
+          "total": {
+            "description": "Tests the query matched, before offset and limit",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "specPath": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "spec": {
+                  "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "domain": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "title",
+                        "domain",
+                        "kind"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "description": "The worst current result across environments: failed, then running, then not-run, then passed",
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "environments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "producers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "outcomes": {
+                  "description": "The current result per producer, environment and parameter set, newest first",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "description": "When it was recorded, epoch milliseconds",
+                        "type": "number"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      },
+                      "durationMs": {
+                        "description": "How long it took, or null when the producer did not measure it",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "environment": {
+                        "description": "The client it checked, such as `desktop-web` or `ios`",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "producer": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "parameters": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "branch": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "sha": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "runUrl": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "run": {
+                        "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it",
+                        "type": "string"
+                      },
+                      "layer": {
+                        "description": "The id of the layer that recorded it",
+                        "type": "string"
+                      },
+                      "backend": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "description": "Why it has its status, at most 500 characters",
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "object",
+                        "properties": {
+                          "attachments": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "steps": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "annotations": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "attempts": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "links": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "labels": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "roles": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "attachments",
+                          "steps",
+                          "annotations",
+                          "attempts",
+                          "links",
+                          "tags",
+                          "labels",
+                          "roles"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "status",
+                      "durationMs",
+                      "environment",
+                      "producer",
+                      "kind",
+                      "parameters",
+                      "branch",
+                      "sha",
+                      "runUrl",
+                      "run",
+                      "layer",
+                      "backend",
+                      "detail"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "stats": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "passed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "failed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "passRate": {
+                      "description": "passed / (passed + failed), or null with no completed result",
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "flaky": {
+                      "type": "boolean"
+                    },
+                    "flakyReason": {
+                      "type": "string"
+                    },
+                    "flips": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "durations": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "totalMs": {
+                              "type": "number"
+                            },
+                            "avgMs": {
+                              "type": "number"
+                            },
+                            "p50Ms": {
+                              "type": "number"
+                            },
+                            "p95Ms": {
+                              "type": "number"
+                            },
+                            "minMs": {
+                              "type": "number"
+                            },
+                            "maxMs": {
+                              "type": "number"
+                            },
+                            "lastMs": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "totalMs",
+                            "avgMs",
+                            "p50Ms",
+                            "p95Ms",
+                            "minMs",
+                            "maxMs",
+                            "lastMs"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "firstSeenMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastSeenMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastPassedAtMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastFailedAtMs": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "runs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "branches": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "results",
+                    "passed",
+                    "failed",
+                    "passRate",
+                    "flaky",
+                    "flakyReason",
+                    "flips",
+                    "durations",
+                    "firstSeenMs",
+                    "lastSeenMs",
+                    "lastPassedAtMs",
+                    "lastFailedAtMs",
+                    "runs",
+                    "branches"
+                  ],
+                  "additionalProperties": {}
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "labels": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "evidence": {
+                  "type": "object",
+                  "properties": {
+                    "attachments": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "steps": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "attachments",
+                    "steps",
+                    "attempts",
+                    "roles"
+                  ],
+                  "additionalProperties": {}
+                },
+                "lastRecordedAtMs": {
+                  "type": "number"
+                },
+                "live": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "key",
+                "id",
+                "title",
+                "specPath",
+                "spec",
+                "status",
+                "environments",
+                "producers",
+                "outcomes",
+                "stats",
+                "tags",
+                "labels",
+                "evidence",
+                "lastRecordedAtMs",
+                "live"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "version",
+          "generatedAtMs",
+          "summary",
+          "facets",
+          "total",
+          "offset",
+          "limit",
+          "tests"
+        ],
+        "additionalProperties": {}
+      },
+      "TestHistory": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "type": "string"
+          },
+          "test": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`",
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "specPath": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "spec": {
+                "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "domain": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "title",
+                      "domain",
+                      "kind"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "description": "The worst current result across environments: failed, then running, then not-run, then passed",
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
+              },
+              "environments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "producers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "outcomes": {
+                "description": "The current result per producer, environment and parameter set, newest first",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "description": "When it was recorded, epoch milliseconds",
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
+                    },
+                    "durationMs": {
+                      "description": "How long it took, or null when the producer did not measure it",
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "environment": {
+                      "description": "The client it checked, such as `desktop-web` or `ios`",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "producer": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "branch": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sha": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "runUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "run": {
+                      "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it",
+                      "type": "string"
+                    },
+                    "layer": {
+                      "description": "The id of the layer that recorded it",
+                      "type": "string"
+                    },
+                    "backend": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "description": "Why it has its status, at most 500 characters",
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "properties": {
+                        "attachments": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "steps": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "annotations": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "attempts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "links": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "labels": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "attachments",
+                        "steps",
+                        "annotations",
+                        "attempts",
+                        "links",
+                        "tags",
+                        "labels",
+                        "roles"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "status",
+                    "durationMs",
+                    "environment",
+                    "producer",
+                    "kind",
+                    "parameters",
+                    "branch",
+                    "sha",
+                    "runUrl",
+                    "run",
+                    "layer",
+                    "backend",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "stats": {
+                "type": "object",
+                "properties": {
+                  "results": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "passed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "failed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "passRate": {
+                    "description": "passed / (passed + failed), or null with no completed result",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "flaky": {
+                    "type": "boolean"
+                  },
+                  "flakyReason": {
+                    "type": "string"
+                  },
+                  "flips": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "durations": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "totalMs": {
+                            "type": "number"
+                          },
+                          "avgMs": {
+                            "type": "number"
+                          },
+                          "p50Ms": {
+                            "type": "number"
+                          },
+                          "p95Ms": {
+                            "type": "number"
+                          },
+                          "minMs": {
+                            "type": "number"
+                          },
+                          "maxMs": {
+                            "type": "number"
+                          },
+                          "lastMs": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "count",
+                          "totalMs",
+                          "avgMs",
+                          "p50Ms",
+                          "p95Ms",
+                          "minMs",
+                          "maxMs",
+                          "lastMs"
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "firstSeenMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastSeenMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastPassedAtMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastFailedAtMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "runs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "branches": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "results",
+                  "passed",
+                  "failed",
+                  "passRate",
+                  "flaky",
+                  "flakyReason",
+                  "flips",
+                  "durations",
+                  "firstSeenMs",
+                  "lastSeenMs",
+                  "lastPassedAtMs",
+                  "lastFailedAtMs",
+                  "runs",
+                  "branches"
+                ],
+                "additionalProperties": {}
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "labels": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "evidence": {
+                "type": "object",
+                "properties": {
+                  "attachments": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "steps": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "attempts": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "attachments",
+                  "steps",
+                  "attempts",
+                  "roles"
+                ],
+                "additionalProperties": {}
+              },
+              "lastRecordedAtMs": {
+                "type": "number"
+              },
+              "live": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "id",
+              "title",
+              "specPath",
+              "spec",
+              "status",
+              "environments",
+              "producers",
+              "outcomes",
+              "stats",
+              "tags",
+              "labels",
+              "evidence",
+              "lastRecordedAtMs",
+              "live"
+            ],
+            "additionalProperties": {}
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": {
+                  "description": "When it was recorded, epoch milliseconds",
+                  "type": "number"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "durationMs": {
+                  "description": "How long it took, or null when the producer did not measure it",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "environment": {
+                  "description": "The client it checked, such as `desktop-web` or `ios`",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "producer": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "parameters": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "branch": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sha": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "runUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "run": {
+                  "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it",
+                  "type": "string"
+                },
+                "layer": {
+                  "description": "The id of the layer that recorded it",
+                  "type": "string"
+                },
+                "backend": {
+                  "type": "string"
+                },
+                "detail": {
+                  "description": "Why it has its status, at most 500 characters",
+                  "type": "string"
+                },
+                "evidence": {
+                  "type": "object",
+                  "properties": {
+                    "attachments": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "steps": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "annotations": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "links": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "labels": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "attachments",
+                    "steps",
+                    "annotations",
+                    "attempts",
+                    "links",
+                    "tags",
+                    "labels",
+                    "roles"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "at",
+                "status",
+                "durationMs",
+                "environment",
+                "producer",
+                "kind",
+                "parameters",
+                "branch",
+                "sha",
+                "runUrl",
+                "run",
+                "layer",
+                "backend",
+                "detail"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "version",
+          "test",
+          "history"
+        ],
+        "additionalProperties": {}
+      },
+      "RunList": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`",
+                  "type": "string"
+                },
+                "runUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "branch": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sha": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "startedAtMs": {
+                  "type": "number"
+                },
+                "endedAtMs": {
+                  "type": "number"
+                },
+                "spanMs": {
+                  "type": "number"
+                },
+                "producers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "environments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "layers": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "tests": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "counts": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "enum": [
+                      "passed",
+                      "failed",
+                      "running",
+                      "not-run"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "totalDurationMs": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "failing": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "environment": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "detail": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "title",
+                      "environment",
+                      "detail"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              },
+              "required": [
+                "key",
+                "runUrl",
+                "branch",
+                "sha",
+                "startedAtMs",
+                "endedAtMs",
+                "spanMs",
+                "producers",
+                "environments",
+                "layers",
+                "tests",
+                "counts",
+                "totalDurationMs",
+                "failing"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "version",
+          "total",
+          "runs"
+        ],
+        "additionalProperties": {}
+      },
+      "RunDetail": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "type": "string"
+          },
+          "run": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`",
+                "type": "string"
+              },
+              "runUrl": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "branch": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sha": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "startedAtMs": {
+                "type": "number"
+              },
+              "endedAtMs": {
+                "type": "number"
+              },
+              "spanMs": {
+                "type": "number"
+              },
+              "producers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "environments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "layers": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "tests": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "counts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "totalDurationMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "failing": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "environment": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "title",
+                    "environment",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "key",
+              "runUrl",
+              "branch",
+              "sha",
+              "startedAtMs",
+              "endedAtMs",
+              "spanMs",
+              "producers",
+              "environments",
+              "layers",
+              "tests",
+              "counts",
+              "totalDurationMs",
+              "failing"
+            ],
+            "additionalProperties": {}
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "specPath": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "environment": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "producer": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "durationMs": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "at": {
+                  "type": "number"
+                },
+                "layer": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "id",
+                "title",
+                "specPath",
+                "environment",
+                "producer",
+                "status",
+                "durationMs",
+                "at",
+                "layer",
+                "detail"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "version",
+          "run",
+          "results"
         ],
         "additionalProperties": {}
       },

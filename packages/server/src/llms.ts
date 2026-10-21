@@ -72,6 +72,20 @@ bunx atlas report status --format json --branch main --ignore-modified   # exit 
 curl ${context.open ? '' : '-H "authorization: Bearer $ATLAS_TOKEN" '}"${url}/api/status?project=$ATLAS_PROJECT"    # the same verdict; header X-Atlas-Ok: true|false
 \`\`\`
 
+## Read the tests, their history and the runs
+
+Every endpoint below answers JSON, or Markdown with \`format=markdown\`. Prefix it with \`/api/projects/<slug>\` (or add \`?project=<slug>\`) for a project; \`GET ${url}/api/projects\` lists them.
+
+\`\`\`sh
+curl "${url}/api/projects/$ATLAS_PROJECT/reports/tests?format=markdown&limit=50"                 # summary, environments, domains, failing, flaky, slowest, then the tests
+curl "${url}/api/projects/$ATLAS_PROJECT/reports/tests?status=failed,flaky&environment=desktop-web" # filter: q, status, environment, producer, domain, spec, tag, run; sort, offset, limit
+curl "${url}/api/projects/$ATLAS_PROJECT/reports/tests/history?key=<url-encoded test key>"         # one test: every recorded result, durations, branches, CI runs
+curl "${url}/api/projects/$ATLAS_PROJECT/reports/runs?format=markdown"                             # CI runs, newest first, with their results by status
+curl "${url}/api/projects/$ATLAS_PROJECT/reports/runs/detail?key=<url-encoded run key>"            # every test one run recorded
+\`\`\`
+
+A test's \`key\` is \`JSON.stringify([specPath, id])\`; its \`outcomes\` are its current results per environment and \`stats\` its pass rate, flips, flakiness and durations. The evidence of one result (attachments, steps, retries) is at \`/api/reports/evidence/detail/<backend>/<layer>?check=<id>\`, its files at \`/api/reports/layers/<layer>/blobs/<bundleKey>\`.
+
 ## Rules worth knowing
 
 - **Layered, never partitioned.** A check is identified by its \`id\` (keep it stable across runs) plus producer, kind, spec, environment and parameters. A layer that re-ran one check leaves every other check as the last layer that ran it.

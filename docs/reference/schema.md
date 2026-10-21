@@ -209,6 +209,63 @@ export const PingEventSchema = …
 
 The data of the `ping` event: sent every `heartbeatSeconds`, so a quiet server is told apart from a dead connection.
 
+#### `TestResultEntrySchema`
+
+```ts
+export const TestResultEntrySchema = …
+```
+
+One recorded result of a test in the test catalog: when, where, how it went and how long it took, and where it came from.
+
+#### `TestSummarySchema`
+
+```ts
+export const TestSummarySchema = …
+```
+
+One test of the catalog: what it is, its current result per environment, and how it has gone over its recorded history.
+
+#### `TestCatalogSchema`
+
+```ts
+export const TestCatalogSchema = …
+```
+
+`GET /api/reports/tests`: every test of the report with a summary, insights and facets. The summary and facets cover
+every test; `tests` is the page of those the query matched.
+
+#### `TestHistorySchema`
+
+```ts
+export const TestHistorySchema = …
+```
+
+`GET /api/reports/tests/history`: one test and every result recorded for it (at most 100), newest first.
+
+#### `ReportRunSchema`
+
+```ts
+export const ReportRunSchema = …
+```
+
+A run: the layers that share a run URL (else a branch and commit), with what they recorded.
+
+#### `RunListSchema`
+
+```ts
+export const RunListSchema = …
+```
+
+`GET /api/reports/runs`: runs, newest first.
+
+#### `RunDetailSchema`
+
+```ts
+export const RunDetailSchema = …
+```
+
+`GET /api/reports/runs/detail`: one run and its last result for every test, environment and producer it recorded.
+
 ### Command results (`--format json`)
 
 Source: `packages/schema/src/cli-results.ts`

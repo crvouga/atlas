@@ -450,11 +450,143 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `204` Removed (or it was not there).; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` Not a scratch object, or the token may not.
 
+### Every test, with insights, facets and history statistics
+
+`GET /api/reports/tests` · role: read
+
+The report as a list of tests, for exploring it or for an agent to read in one request. A test is a check identity (its spec path and id) across producers and environments; `outcomes` holds its current result on each environment, and `stats` how it went over its recorded history (pass rate, flips, flaky, durations avg/p50/p95, runs, branches).
+
+`summary` and `facets` cover every test (counts by status, by environment, by producer and by domain, the slowest, flakiest and failing tests); `tests` is the page the query matched. Without a published spec set, specs come from the `specs[]` the layers recorded.
+
+Send `format=markdown` (or `Accept: text/markdown`) for the same as a Markdown report. The current status of a test is always the report's winner; history never changes it.
+
+- `q` (query): Words that must all appear in the title, id, spec, domain, tags, labels, environments or producers. Case does not matter.
+- `status` (query): Current status, or `flaky`. Repeatable or comma-separated.
+- `environment` (query): Only tests with a result on this environment. Repeatable or comma-separated.
+- `producer` (query): Only tests from this producer. Repeatable or comma-separated.
+- `domain` (query): Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.
+- `spec` (query): Only tests of this spec path. Repeatable or comma-separated.
+- `tag` (query): Only tests with this tag. Repeatable or comma-separated.
+- `run` (query): Only tests recorded in this run (a `key` from `/api/reports/runs`).
+- `sort` (query): The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.
+- `offset` (query): Skip this many matching tests.
+- `limit` (query): At most this many tests (default 500, at most 20000).
+- `format` (query): `markdown` for a Markdown report instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Every test, with insights, facets and history statistics
+
+`GET /api/projects/{project}/reports/tests` · role: read
+
+The report as a list of tests, for exploring it or for an agent to read in one request. A test is a check identity (its spec path and id) across producers and environments; `outcomes` holds its current result on each environment, and `stats` how it went over its recorded history (pass rate, flips, flaky, durations avg/p50/p95, runs, branches).
+
+`summary` and `facets` cover every test (counts by status, by environment, by producer and by domain, the slowest, flakiest and failing tests); `tests` is the page the query matched. Without a published spec set, specs come from the `specs[]` the layers recorded.
+
+Send `format=markdown` (or `Accept: text/markdown`) for the same as a Markdown report. The current status of a test is always the report's winner; history never changes it.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `q` (query): Words that must all appear in the title, id, spec, domain, tags, labels, environments or producers. Case does not matter.
+- `status` (query): Current status, or `flaky`. Repeatable or comma-separated.
+- `environment` (query): Only tests with a result on this environment. Repeatable or comma-separated.
+- `producer` (query): Only tests from this producer. Repeatable or comma-separated.
+- `domain` (query): Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.
+- `spec` (query): Only tests of this spec path. Repeatable or comma-separated.
+- `tag` (query): Only tests with this tag. Repeatable or comma-separated.
+- `run` (query): Only tests recorded in this run (a `key` from `/api/reports/runs`).
+- `sort` (query): The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.
+- `offset` (query): Skip this many matching tests.
+- `limit` (query): At most this many tests (default 500, at most 20000).
+- `format` (query): `markdown` for a Markdown report instead of JSON.
+
+Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### One test and every result recorded for it
+
+`GET /api/reports/tests/history` · role: read
+
+The test (as `/api/reports/tests` lists it) and up to 100 recorded results, newest first: status, duration, environment, producer, branch, commit, CI run, layer and the first 500 characters of the detail. Open a result's evidence (attachments, steps, retries) with `/api/reports/evidence/detail/{backend}/{id}?check=<id>`. Send `format=markdown` for Markdown.
+
+- `key` (query, required): The test's `key` from `/api/reports/tests`: `JSON.stringify([specPath, id])`, URL-encoded.
+- `format` (query): `markdown` for Markdown instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The test and its history.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No test in the report has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### One test and every result recorded for it
+
+`GET /api/projects/{project}/reports/tests/history` · role: read
+
+The test (as `/api/reports/tests` lists it) and up to 100 recorded results, newest first: status, duration, environment, producer, branch, commit, CI run, layer and the first 500 characters of the detail. Open a result's evidence (attachments, steps, retries) with `/api/reports/evidence/detail/{backend}/{id}?check=<id>`. Send `format=markdown` for Markdown.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `key` (query, required): The test's `key` from `/api/reports/tests`: `JSON.stringify([specPath, id])`, URL-encoded.
+- `format` (query): `markdown` for Markdown instead of JSON.
+
+Responses: `200` The test and its history.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No test in the report has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The runs that recorded the report
+
+`GET /api/reports/runs` · role: read
+
+Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.
+
+- `limit` (query): At most this many runs (default 100).
+- `format` (query): `markdown` for Markdown instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The runs.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The runs that recorded the report
+
+`GET /api/projects/{project}/reports/runs` · role: read
+
+Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `limit` (query): At most this many runs (default 100).
+- `format` (query): `markdown` for Markdown instead of JSON.
+
+Responses: `200` The runs.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Every test one run recorded
+
+`GET /api/reports/runs/detail` · role: read
+
+One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.
+
+- `key` (query, required): The run's `key` from `/api/reports/runs`, URL-encoded.
+- `format` (query): `markdown` for Markdown instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The run and its results.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No run has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Every test one run recorded
+
+`GET /api/projects/{project}/reports/runs/detail` · role: read
+
+One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `key` (query, required): The run's `key` from `/api/reports/runs`, URL-encoded.
+- `format` (query): `markdown` for Markdown instead of JSON.
+
+Responses: `200` The run and its results.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No run has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
 ### The specs a report is laid over
 
 `GET /api/reports/outline` · role: read
 
-The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. A spec here with no result shows as having none.
+The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. Without a spec set, the specs the layers recorded (`specs[]`), newest per path. A spec here with no result shows as having none.
 
 - `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
@@ -464,7 +596,7 @@ Responses: `200` The outline.; `401` No token, or an unknown one. Send `Authoriz
 
 `GET /api/projects/{project}/reports/outline` · role: read
 
-The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. A spec here with no result shows as having none.
+The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. Without a spec set, the specs the layers recorded (`specs[]`), newest per path. A spec here with no result shows as having none.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 

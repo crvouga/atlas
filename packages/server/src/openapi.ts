@@ -15,11 +15,11 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, TestHistorySchema, RunListSchema, RunDetailSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
-export const API_VERSION = '1.3.0';
+export const API_VERSION = '1.4.0';
 
 /** Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`). */
 export type Role = 'none' | 'read' | 'publish' | 'admin';
@@ -64,6 +64,7 @@ const COMPONENTS = {
   PublishChecks: [PublishChecksSchema.partial({ recordedAtMs: true }), 'input'], ChecksResult: [ChecksResultSchema, 'output'],
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -285,9 +286,65 @@ const BASE_OPERATIONS: readonly Operation[] = [
     responses: { '204': { description: 'Removed (or it was not there).' }, '401': UNAUTHORIZED, '403': problem('Not a scratch object, or the token may not.') }
   },
   {
+    route: 'GET /api/reports/tests', path: '/api/reports/tests', operationId: 'getTests', tag: 'Report', role: 'read',
+    summary: 'Every test, with insights, facets and history statistics',
+    description: [
+      'The report as a list of tests, for exploring it or for an agent to read in one request. A test is a check identity (its spec path and id) across producers and environments; `outcomes` holds its current result on each environment, and `stats` how it went over its recorded history (pass rate, flips, flaky, durations avg/p50/p95, runs, branches).',
+      '',
+      '`summary` and `facets` cover every test (counts by status, by environment, by producer and by domain, the slowest, flakiest and failing tests); `tests` is the page the query matched. Without a published spec set, specs come from the `specs[]` the layers recorded.',
+      '',
+      'Send `format=markdown` (or `Accept: text/markdown`) for the same as a Markdown report. The current status of a test is always the report\'s winner; history never changes it.'
+    ].join('\n'),
+    parameters: [
+      { name: 'q', in: 'query', description: 'Words that must all appear in the title, id, spec, domain, tags, labels, environments or producers. Case does not matter.', schema: str, example: 'checkout card' },
+      { name: 'status', in: 'query', description: 'Current status, or `flaky`. Repeatable or comma-separated.', schema: str, example: 'failed,flaky' },
+      { name: 'environment', in: 'query', description: 'Only tests with a result on this environment. Repeatable or comma-separated.', schema: str, example: 'desktop-web' },
+      { name: 'producer', in: 'query', description: 'Only tests from this producer. Repeatable or comma-separated.', schema: str },
+      { name: 'domain', in: 'query', description: 'Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.', schema: str },
+      { name: 'spec', in: 'query', description: 'Only tests of this spec path. Repeatable or comma-separated.', schema: str, example: 'specs/checkout/pay.feature' },
+      { name: 'tag', in: 'query', description: 'Only tests with this tag. Repeatable or comma-separated.', schema: str },
+      { name: 'run', in: 'query', description: 'Only tests recorded in this run (a `key` from `/api/reports/runs`).', schema: str },
+      { name: 'sort', in: 'query', description: 'The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.', schema: { type: 'string', enum: ['spec', 'title', 'recent', 'slowest', 'failures', 'flaky', 'runs'] } },
+      { name: 'offset', in: 'query', description: 'Skip this many matching tests.', schema: { type: 'integer', minimum: 0 } },
+      { name: 'limit', in: 'query', description: 'At most this many tests (default 500, at most 20000).', schema: { type: 'integer', minimum: 0, maximum: 20000 } },
+      { name: 'format', in: 'query', description: '`markdown` for a Markdown report instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': { ...json('The catalog.', 'TestCatalog'), headers: { ETag: { description: 'Changes with the report, its history and the query.', schema: str } } }, '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/tests/history', path: '/api/reports/tests/history', operationId: 'getTestHistory', tag: 'Report', role: 'read',
+    summary: 'One test and every result recorded for it',
+    description: 'The test (as `/api/reports/tests` lists it) and up to 100 recorded results, newest first: status, duration, environment, producer, branch, commit, CI run, layer and the first 500 characters of the detail. Open a result\'s evidence (attachments, steps, retries) with `/api/reports/evidence/detail/{backend}/{id}?check=<id>`. Send `format=markdown` for Markdown.',
+    parameters: [
+      { name: 'key', in: 'query', required: true, description: 'The test\'s `key` from `/api/reports/tests`: `JSON.stringify([specPath, id])`, URL-encoded.', schema: str, example: '["specs/checkout/pay.feature","Pay with a card"]' },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The test and its history.', 'TestHistory'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('No `key`.'), '401': UNAUTHORIZED, '404': problem('No test in the report has that key.'), '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/runs', path: '/api/reports/runs', operationId: 'getReportRuns', tag: 'Report', role: 'read',
+    summary: 'The runs that recorded the report',
+    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.',
+    parameters: [
+      { name: 'limit', in: 'query', description: 'At most this many runs (default 100).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The runs.', 'RunList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',
+    summary: 'Every test one run recorded',
+    description: 'One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.',
+    parameters: [
+      { name: 'key', in: 'query', required: true, description: 'The run\'s `key` from `/api/reports/runs`, URL-encoded.', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The run and its results.', 'RunDetail'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('No `key`.'), '401': UNAUTHORIZED, '404': problem('No run has that key.'), '503': NOT_READY }
+  },
+  {
     route: 'GET /api/reports/outline', path: '/api/reports/outline', operationId: 'getOutline', tag: 'Report', role: 'read',
     summary: 'The specs a report is laid over',
-    description: 'The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. A spec here with no result shows as having none.',
+    description: 'The specs of the newest committed spec set (of `main`, else the newest), so the report needs no checkout. Without a spec set, the specs the layers recorded (`specs[]`), newest per path. A spec here with no result shows as having none.',
     responses: { '200': json('The outline.', 'Outline'), '401': UNAUTHORIZED }
   },
   {
