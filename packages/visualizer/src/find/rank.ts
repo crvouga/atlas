@@ -52,6 +52,8 @@ export type FindTarget = {
     readonly spec?: string;
     readonly check?: string;
     readonly view?: 'recording';
+    /** A test opened in the explorer of a project without statecharts (`TestSummary.key`). */
+    readonly test?: string;
   };
 };
 

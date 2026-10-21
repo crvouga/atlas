@@ -124,10 +124,10 @@ export function Header() {
         Atlas
       </Link>
       <div className={styles.breadcrumbs}>
-      <HeaderMenu label="Spec type" working={tabs.some(tab => tab.running)} caption={kind?.label ?? (hasCharts ? 'Statecharts' : 'Specs')}>
+      <HeaderMenu label="Spec type" working={tabs.some(tab => tab.running)} caption={kind?.label ?? (hasCharts ? 'Statecharts' : evidence.ready && !tabs.length ? 'Tests' : 'Specs')}>
       <nav className={styles.tabs} aria-label="Spec type" onClick={event => event.currentTarget.closest('details')?.removeAttribute('open')}>
         <Link to="/" search={(prev) => runOnly(prev)} aria-current={pathname.startsWith('/specs/') ? undefined : 'page'}>
-          {hasCharts || !evidence.ready ? 'Statecharts' : 'Project reports'}
+          {hasCharts || !evidence.ready ? 'Statecharts' : 'Tests'}
         </Link>
         {tabs.map((tab) => (
           <Link key={tab.kind.id} to="/specs/$kind" params={{ kind: tab.kind.id }} search={{}} aria-current={tab.kind === kind ? 'page' : undefined}>

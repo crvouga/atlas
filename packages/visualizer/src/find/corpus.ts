@@ -1,5 +1,5 @@
 import type { CheckSlot, EvidenceView } from '@crvouga/atlas/reports/evidence-view';
-import type { RunStatus } from '@crvouga/atlas/schema';
+import { isStatechartFile, type RunStatus } from '@crvouga/atlas/schema';
 
 import type { AtlasView, ItemStatus } from '../data/model';
 import { worstOf } from '../data/model/status';
@@ -65,6 +65,8 @@ export type CorpusSource = {
   readonly files: readonly CorpusFile[];
   readonly slots: readonly CorpusSlot[];
   readonly texts: ReadonlyMap<string, string>;
+  /** The project home is the test explorer (no statecharts): a check without a published spec opens there. */
+  readonly explorer?: boolean;
 };
 
 function itemStatus(status: ItemStatus): FindStatus {
@@ -128,7 +130,10 @@ function actionsIn(text: string): string[] {
   return [...new Set([...text.matchAll(ACTION)].map((match) => match[1]!))];
 }
 
-function runDoc(slot: CorpusSlot, title: string, kind: string | null, file: string): FindDoc {
+function runDoc(slot: CorpusSlot, title: string, kind: string | null, file: string, explorer = false): FindDoc {
+  if (explorer) {
+    return { id: `run:${slot.key}`, group: 'Runs', kind: 'run', title, subtitle: file, fields: fieldsOf(title, '', slot.detail, file), status: slot.status, related: [], target: { to: '/', search: { test: slot.key } }, recording: null };
+  }
   const recording = timelineTarget(kind, file, [slot]);
   return {
     id: `run:${slot.key}`,
@@ -222,11 +227,11 @@ export function buildCorpus(source: CorpusSource): FindDoc[] {
     }
   }
 
-  const pushRun = (slot: CorpusSlot, title: string, kind: string | null, file: string) => {
+  const pushRun = (slot: CorpusSlot, title: string, kind: string | null, file: string, explorer = false) => {
     const id = `run:${slot.key}`;
     if (seenRuns.has(id)) return;
     seenRuns.add(id);
-    docs.push(runDoc(slot, title, kind, file));
+    docs.push(runDoc(slot, title, kind, file, explorer));
   };
 
   for (const file of source.files) {
@@ -314,7 +319,8 @@ export function buildCorpus(source: CorpusSource): FindDoc[] {
 
   for (const slot of source.slots) {
     const file = slot.specPath ? specFile(slot.specPath) : '';
-    pushRun(slot, slot.title, file ? kindOfFile(file)?.id ?? null : null, file);
+    // Its spec was not published: in a project without statecharts the explorer has it, with everything recorded for it.
+    pushRun(slot, slot.title, file ? kindOfFile(file)?.id ?? null : null, file, source.explorer === true);
   }
   return docs;
 }
@@ -363,6 +369,7 @@ export function corpusFrom(view: AtlasView | null, files: readonly string[], tit
       : [],
     files: files.map((path) => ({ path, title: titleOf(path) })),
     slots,
-    texts
+    texts,
+    explorer: !files.some(isStatechartFile)
   });
 }
