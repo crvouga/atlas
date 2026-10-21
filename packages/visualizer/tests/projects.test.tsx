@@ -28,8 +28,8 @@ test('a runner-only project displays test reports even with no specification doc
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
   await atlas.sees('Runs without statecharts');
   expect(atlas.text()).not.toContain('This spec has no screens yet.');
-  await atlas.click('li.result button', 'Runs without statecharts');
-  await atlas.sees('Passed');
+  await atlas.click('section[aria-label="Tests"] li a', 'Runs without statecharts');
+  await atlas.until(() => atlas!.host.querySelector('aside[aria-label="Test detail"]')?.textContent?.includes('Passed') ?? false, 'the open test');
 });
 
 test('the selected project scopes every data, evidence, media and stream address while discovery stays node-wide', async () => {
@@ -52,4 +52,18 @@ test('unqualified addresses retain the default project protocol and unrelated or
   expect(runtimeConfig()?.api).toBe('./api');
   history.replaceState({}, '', '/?project=alpha#/');
   expect(runtimeConfig()?.reportsUrl).toBe('https://external.test/reports');
+});
+
+test('the page query that selects a project is not read into the hash address', async () => {
+  // regression: TanStack's hash history appended `?project=…` to the last search value of the hash.
+  const { createProjectHashHistory } = await import('../src/app/router');
+  history.replaceState(null, '', '/?project=geviti#/?status=passed&group=domain');
+  const address = createProjectHashHistory(window as unknown as Window);
+  expect(address.location.pathname).toBe('/');
+  expect(address.location.search).toBe('?status=passed&group=domain');
+  address.push('/?group=status');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(address.location.search).toBe('?group=status');
+  expect(window.location.href).toBe('http://atlas.test/?project=geviti#/?group=status');
+  address.destroy();
 });

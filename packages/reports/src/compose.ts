@@ -13,7 +13,8 @@ import { eachLimited } from './completion-order';
 import type { BackendInfo, LayerEvidence, LayerHeader, StatusCounts } from './evidence-types';
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import { catalogEntries, catalogLayers } from './layer-catalog';
-import { combineEvidence, distinctHeaders, emptyCounts, isDiagnosticKind, layerEvidence, specPath, type CombinedEvidence, type EvidenceResult } from './layer-merge';
+import { combineEvidence, distinctHeaders, emptyCounts, isDiagnosticKind, layerEvidence, type CombinedEvidence, type EvidenceResult } from './layer-merge';
+import { RecordedSpecs } from './recorded-specs';
 import type { ReportOutline } from './layer-types';
 import type { ObjectStore } from './object-store';
 
@@ -146,18 +147,9 @@ export async function combineBackends(backends: readonly BackendInput[], options
   const kept = include ? loaded.filter(item => include(item.evidence.layer)) : loaded;
   const layers = kept.map(item => item.evidence);
   // The specs a report is laid over come from the layers that are in it, not from ones left out.
-  const recorded = new Map<string, { entry: SpecEntry; at: number }>();
-  if (!options.outline) {
-    for (const { evidence, specs } of kept) {
-      for (const spec of specs) {
-        const key = specPath(spec.path);
-        const prior = recorded.get(key);
-        const at = evidence.layer.recordedAtMs;
-        if (!prior || at > prior.at || (at === prior.at && (spec.fingerprint ?? '') > (prior.entry.fingerprint ?? ''))) recorded.set(key, { entry: { ...spec, path: key }, at });
-      }
-    }
-  }
-  const outline = options.outline ?? { specs: [...recorded.values()].map(item => item.entry).sort((a, b) => (a.path < b.path ? -1 : 1)), sha: null, changedFiles: [] };
+  const recorded = new RecordedSpecs();
+  if (!options.outline) for (const { evidence, specs } of kept) recorded.add(specs, evidence.layer.recordedAtMs);
+  const outline = options.outline ?? { specs: recorded.entries(), sha: null, changedFiles: [] };
   const combined = combineEvidence(outline, layers);
   const headers = distinctHeaders(layers.map(evidence => evidence.layer)).sort((a, b) => b.recordedAtMs - a.recordedAtMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { combined, layers: headers, backends: info.sort((a, b) => (a.id < b.id ? -1 : 1)), notices: [...new Set(notices)].sort(), summary: summarize(combined) };

@@ -22,6 +22,8 @@ import { readUtf8 } from './object-io';
 import type { BackendInput } from './compose';
 import type { ReportLayer } from './layer-types';
 import { isPaged } from './object-store';
+import type { SpecEntry } from './explorer-types';
+import { TestHistory } from './test-catalog';
 
 /** What a viewer needs to show the report, and nothing that is only history. */
 export type EffectiveEvidence = {
@@ -66,6 +68,8 @@ export class ReportIndex {
   readonly #concurrency: number;
   readonly #now: () => number;
   readonly #winners = new Map<string, EvidenceResult>();
+  /** Every result of every test (bounded per test) and every run, for the test catalog. It never decides a winner. */
+  readonly #history = new TestHistory();
   readonly #held = new Map<string, Held>();
   /** The smallest backend id a layer was found in, so attribution does not depend on read order. */
   readonly #attribution = new Map<string, string>();
@@ -220,7 +224,8 @@ export class ReportIndex {
         layer = id ? await readLayer(backend.store, id) : null;
       }
       if (!id || !layer) throw new Error('an indexed layer is missing');
-      this.#fold(layerEvidence(layerSummary(layer), backend.id), backend.id);
+      const summary = layerSummary(layer);
+      this.#fold(layerEvidence(summary, backend.id), backend.id, summary.specs);
       this.#folded.add(mark);
       this.#failed.delete(mark);
       this.#refreshedAt ||= this.#now();
@@ -234,7 +239,7 @@ export class ReportIndex {
     return failure !== undefined && this.#now() - failure.at < RETRY_FAILED_MS;
   }
 
-  #fold(evidence: LayerEvidence, backend: string): void {
+  #fold(evidence: LayerEvidence, backend: string, specs: readonly SpecEntry[] = []): void {
     const id = evidence.id;
     const known = this.#attribution.get(id);
     if (known !== undefined) {
@@ -245,6 +250,7 @@ export class ReportIndex {
     this.#attribution.set(id, backend);
     if (!this.#include(evidence.layer)) return;
     this.#added.push({ ...evidence.layer, backend });
+    this.#history.add(evidence.layer, evidence.rows, specs, backend);
     const wins = new Set<string>();
     const keyOf = layerResultKeys(evidence.layer);
     for (const row of evidence.rows) {
@@ -344,6 +350,14 @@ export class ReportIndex {
       version: value.version,
       text: `{"version":${JSON.stringify(value.version)},"base":${JSON.stringify(since)},"delta":true,"layers":[${changed.map(item => (item.json ??= JSON.stringify(this.#entryOf(item)))).join(',')}],"removed":${JSON.stringify(gone)},"backends":${JSON.stringify(value.backends)},"notices":${JSON.stringify(value.notices)},"totalLayers":${value.totalLayers},"active":[]}`
     };
+  }
+
+  /**
+   * Every recorded result of every test and every run, as layers were folded in: what the test catalog, a test's history
+   * and the run list are built from. Read-only for callers; `history.rev` changes whenever a layer is taken in.
+   */
+  get history(): TestHistory {
+    return this.#history;
   }
 
   /** For `/readyz` and logs. */

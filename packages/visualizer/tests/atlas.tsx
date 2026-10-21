@@ -108,8 +108,9 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
     if (!url.startsWith(REPORTS_URL)) return new Response('not found', { status: 404 });
     requests.push(url.slice(REPORTS_URL.length));
     if (args.down?.value) return new Response('{"error":"reports_unavailable"}', { status: 503 });
-    // What a node answers beyond the report itself: one result's evidence, and the files it points to.
-    if (args.node && /^\/(evidence\/(effective|detail)|layers\/)/.test(url.slice(REPORTS_URL.length))) return args.node.fetch(new Request(url));
+    // What a node answers beyond the report itself: one result's evidence, the files it points to, and the test catalog,
+    // a test's history and the runs, which only a node keeps.
+    if (args.node && /^\/(evidence\/(effective|detail)|layers\/|(tests|runs)(\/|\?|$))/.test(url.slice(REPORTS_URL.length))) return args.node.fetch(new Request(url));
     return app.request(url.slice(REPORTS_URL.length));
   }) as typeof fetch;
   const adapter: AtlasAdapter = {

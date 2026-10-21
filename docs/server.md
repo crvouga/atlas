@@ -243,6 +243,39 @@ report the server would have sent whole (`applyEffectiveDelta`, tested against e
 runs); a version the server does not remember, or an older server, answers with the whole report, which a client
 takes as it always did. A result streamed into a 100 000-check report costs a client a few kilobytes.
 
+## Reading the report as an agent
+
+The effective report says what each check's result is now. To explore a project, or to answer "what is tested,
+where, how long does it take, what is flaky", read the tests instead. Every endpoint here answers JSON, or Markdown
+with `format=markdown` (or `Accept: text/markdown`), and takes the project prefix like every other
+(`/api/projects/<slug>/reports/tests`).
+
+| Ask | Endpoint |
+| --- | --- |
+| Every test, a summary (by status, environment, producer, domain), insights (failing, flaky, slowest) and facets | `GET /api/reports/tests` |
+| Only some: `q` (all words), `status` (or `flaky`), `environment`, `producer`, `domain`, `spec`, `tag`, `run`; `sort`, `offset`, `limit` | `GET /api/reports/tests?status=failed&environment=ios` |
+| One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
+| The runs that recorded the report (by CI run URL, else branch and commit) | `GET /api/reports/runs` |
+| Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
+
+```sh
+curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdown&limit=50"
+```
+
+- A **test** is a check identity, its spec path and id, across producers and environments. `outcomes` holds its
+  current result on each environment (the report's winners, so a test's status here is always the gate's);
+  `stats` describes its recorded history: pass rate, flips, whether it is flaky and why (it passed and failed on the
+  same commit, passed only after a retry, or its producer said so), durations (avg, p50, p95, min, max, last), runs
+  and branches.
+- The server keeps the newest 100 results of every test (progress reported as `running` is not history) and every run's last result per test, in memory, as layers
+  arrive; it is rebuilt from the layers on restart. History never changes a result.
+- Without a published spec set, tests are grouped under the specs their layers recorded (`specs[]`: path, domain,
+  title), and the gate and the outline do the same, so a project needs no spec set to be browsable. A path no layer
+  described is titled from its file name and grouped by its folder under `specs/`.
+- Statistics are only as rich as what producers send: durations need `durationMs`, devices need an environment and
+  labels (`browser`, `device`, `os`), videos and screenshots need attachments. See
+  [Send rich evidence](rich-evidence.md).
+
 ## API reference
 
 <!-- generated:server-operations -->
@@ -283,6 +316,14 @@ takes as it always did. A result streamed into a 100 000-check report costs a cl
 | `PUT /api/projects/{project}/store/{key}` | publish | Upload an object. |
 | `DELETE /api/store/{key}` | publish | Remove a scratch object. |
 | `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
+| `GET /api/reports/tests` | read | Every test, with insights, facets and history statistics. |
+| `GET /api/projects/{project}/reports/tests` | read | Every test, with insights, facets and history statistics. |
+| `GET /api/reports/tests/history` | read | One test and every result recorded for it. |
+| `GET /api/projects/{project}/reports/tests/history` | read | One test and every result recorded for it. |
+| `GET /api/reports/runs` | read | The runs that recorded the report. |
+| `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
+| `GET /api/reports/runs/detail` | read | Every test one run recorded. |
+| `GET /api/projects/{project}/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/reports/outline` | read | The specs a report is laid over. |
 | `GET /api/projects/{project}/reports/outline` | read | The specs a report is laid over. |
 | `GET /api/reports/outline/spec` | read | The text of one spec. |

@@ -111,6 +111,7 @@ The complete public export map is generated from the package manifest (wildcards
 @crvouga/atlas/codecept
 @crvouga/atlas/jest
 @crvouga/atlas/node-test
+@crvouga/atlas/playwright-reporter
 ```
 <!-- /generated:public-exports -->
 

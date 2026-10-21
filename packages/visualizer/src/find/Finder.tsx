@@ -209,6 +209,8 @@ export function Finder() {
         params: { kind },
         search: { run, spec: target.search.spec, check: target.search.check, view: target.search.view }
       });
+    } else if (target.to === '/' && target.search.test) {
+      void navigate({ to: '/', search: { run, test: target.search.test } });
     }
     setFinderOpen(false);
   };

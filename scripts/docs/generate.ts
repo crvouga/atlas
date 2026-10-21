@@ -45,7 +45,8 @@ export const PACKAGES: Readonly<Record<string, string>> = {
   webdriver: 'The W3C WebDriver / Appium driver for statechart runs. Import path `@crvouga/atlas/webdriver`.',
   detox: 'The Detox driver for statechart runs of React Native apps. Import path `@crvouga/atlas/detox`.',
   runners: 'Native reporters that upload to the project server. Import paths `@crvouga/atlas/codecept`, `@crvouga/atlas/mocha`, `@crvouga/atlas/jest`, `@crvouga/atlas/node-test`.',
-  vitest: 'Run a statechart plan as Vitest tests. Import path `@crvouga/atlas/vitest`.'
+  vitest: 'Run a statechart plan as Vitest tests. Import path `@crvouga/atlas/vitest`.',
+  'playwright-reporter': 'A Playwright Test reporter that streams every test to Atlas with its duration, device labels, steps, retries, videos, screenshots and traces. Import path `@crvouga/atlas/playwright-reporter`.'
 };
 
 /** The guides, in the order an agent should meet them, with the section of `llms.txt` each is listed under. */
@@ -54,6 +55,7 @@ export const GUIDES: readonly { readonly file: string; readonly section: string 
   { file: 'docs/quickstart.md', section: 'Start here' },
   { file: 'docs/integrating.md', section: 'Start here' },
   { file: 'docs/runners.md', section: 'Start here' },
+  { file: 'docs/rich-evidence.md', section: 'Start here' },
   { file: 'docs/server.md', section: 'Run and use the server' },
   { file: 'docs/deploying.md', section: 'Run and use the server' },
   { file: 'docs/report-contract.md', section: 'Formats and rules' },

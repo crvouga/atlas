@@ -12,7 +12,9 @@ import { AtlasProvider, useAtlas } from './atlas-context';
 import { Gazetteer } from './gazetteer';
 import { useEvidence } from '../evidence/evidence-context';
 import { isStatechartFile } from '@crvouga/atlas/schema';
-import { ProjectHome, ProjectSpecIndex } from '../evidence/project-home';
+import { Explorer } from '../explorer/Explorer';
+import { ProjectIndex } from '../explorer/ExplorerIndex';
+import { TestCatalogProvider } from '../explorer/catalog';
 
 // The finder brings every spec parser with it. It loads as soon as the page has drawn, long before anyone presses ⌘K.
 const loadFinder = () => import('../find/Finder').then((m) => ({ default: m.Finder }));
@@ -23,14 +25,14 @@ function Index() {
   const evidence = useEvidence();
   const { pathname } = useLocation();
   const kind = kindOfAddress(pathname);
-  return kind ? <SpecIndex kind={kind} /> : pathname.startsWith('/specs/') ? <nav aria-label="Specs" /> : evidence.ready && !evidence.files.some(isStatechartFile) ? <ProjectSpecIndex /> : <Gazetteer />;
+  return kind ? <SpecIndex kind={kind} /> : pathname.startsWith('/specs/') ? <nav aria-label="Specs" /> : evidence.ready && !evidence.files.some(isStatechartFile) ? <ProjectIndex /> : <Gazetteer />;
 }
 
 function Body() {
   const evidence = useEvidence();
   const { view, spec } = useAtlas();
   const { pathname } = useLocation();
-  if (pathname === '/' && evidence.ready && !evidence.filesPending && !evidence.files.some(isStatechartFile)) return <ProjectHome />;
+  if (pathname === '/' && evidence.ready && !evidence.filesPending && !evidence.files.some(isStatechartFile)) return <Explorer />;
   if (!pathname.startsWith('/specs/') && !view && spec.error) {
     return (
       <div className={styles.message} role="alert">
@@ -51,6 +53,7 @@ export function AppShell() {
     <LiveRunsProvider enabled={!run}>
       <AtlasProvider run={run}>
         <EvidenceProvider>
+          <TestCatalogProvider>
           <div className={styles.app}>
             <Header />
             <div className={styles.frame}>
@@ -64,6 +67,7 @@ export function AppShell() {
               <Finder />
             </Suspense>
           </div>
+          </TestCatalogProvider>
         </EvidenceProvider>
       </AtlasProvider>
     </LiveRunsProvider>

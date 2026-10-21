@@ -137,6 +137,15 @@ which uses the full width.
 - **Recording.** A way back, the check's name, its outcome and origin. Steps on the left, the
   chosen moment on the right, with a transport row above it. Timing is a second tab.
 - **Sources.** A sheet from the right: backends, branches and runs, each with a checkbox.
+- **Test explorer.** The home of a project without statecharts. The project's title over two tabs, Tests and Runs.
+  Tests: an insight strip (tests by outcome with a meter, flaky, average and p95 duration, each environment with its
+  tally, runs and when the last result arrived; each one filters when clicked), then one toolbar row (a pill search
+  box that filters as you type, Group by, Sort), the status filter with counts, environment chips, producer and domain
+  selects, and the grouped list: one bordered group per spec (under quiet domain labels), its header a chevron, the
+  title, the path in mono, a meter and the tally; rows with mark, title, one chip per environment, badges, then average,
+  pass rate, runs and age in aligned columns. Large reports open with groups closed and show fifty rows a group at a
+  time. Opening a test puts its detail beside the list (above it when narrow); everything is in the address. Runs: a
+  table of CI runs; opening one lists its results by spec. The index lists domains and their specs with tallies.
 
 At 760px the document scrolls: header (tabs on their own row), page, then the index.
 
@@ -147,6 +156,12 @@ At 760px the document scrolls: header (tabs on their own row), page, then the in
   alternative.
 - **Tally.** The short count on an index row. Only a failure is colored.
 - **Meter.** A 6px rounded bar split by outcome. Scenarios without a result show as gray.
+- **Insight tile.** A white tile with a hairline border and 12px corners: a quiet label, one number at 1.5rem/650, and
+  a quiet note. A tile that filters is a button; when its filter is on, its border is blue and its fill blue-soft.
+- **Environment chip.** An environment's name after a 10px outcome mark, in outcome ink (red and bold when it failed
+  there, quiet green when it passed, gray otherwise). A test checked on several environments has one chip each.
+- **Trend.** A 2px gray line of durations over time, a red dot on each failed result, the newest point marked; under
+  it a strip of 8px cells, one per recorded result, colored by outcome, oldest on the left. Hover gives the details.
 - **Origin.** Backend, branch, short revision, "with local changes" when the checkout was
   modified, and how long ago, separated by middle dots in ink quiet.
 - **Buttons.** Pills. The one primary action on a result (Open recording) is blue with white

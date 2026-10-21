@@ -1,9 +1,10 @@
-import { createHashHistory, createRootRoute, createRoute, createRouter, lazyRouteComponent, type RouterHistory } from '@tanstack/react-router';
+import { createBrowserHistory, createMemoryHistory, createRootRoute, createRoute, createRouter, lazyRouteComponent, type RouterHistory } from '@tanstack/react-router';
 import { z } from 'zod/v4';
 
 import { SpecPage } from '../evidence/spec-page';
 import { ProductPage } from '../views/ProductPage';
 import { AppShell } from './AppShell';
+import { ExplorerSearchFields } from '../explorer/search';
 
 const RootSearch = z.object({ run: z.string().min(1).optional().catch(undefined) });
 
@@ -16,6 +17,9 @@ const ChartSearch = RootSearch.extend({
 });
 
 export type ChartSearch = z.infer<typeof ChartSearch>;
+
+/** The project home: the test explorer's filters, grouping, order, open test and open run (see `explorer/search.ts`). */
+const HomeSearch = RootSearch.extend(ExplorerSearchFields);
 
 /** A spec document, the check opened in it, one layer's record of that check, and a recorded moment. */
 const SpecSearch = RootSearch.extend({
@@ -37,6 +41,7 @@ function routeTree() {
   const productRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/',
+    validateSearch: (search) => HomeSearch.parse(search),
     component: ProductPage
   });
   const chartRoute = createRoute({
@@ -59,8 +64,26 @@ export function createAtlasRouter(history: RouterHistory) {
   return createRouter({ routeTree: routeTree(), history, defaultPreload: false, scrollRestoration: true });
 }
 
-/** Addresses use the hash, so a built site deep-links without server rewrites. */
-export const router = createAtlasRouter(createHashHistory());
+/**
+ * Addresses in the hash, so a built site deep-links without server rewrites. The page's own query (`?project=geviti`)
+ * selects the project and is not part of the address: TanStack's hash history appends it to the hash, which turned
+ * `#/?group=domain` into a `group` of `domain?project=geviti`. This one reads the hash alone and keeps the query in links.
+ */
+export function createProjectHashHistory(win: Window = window): RouterHistory {
+  return createBrowserHistory({
+    window: win,
+    parseLocation: () => {
+      const hash = win.location.hash;
+      const second = hash.indexOf('#', 1);
+      const at = second < 0 ? hash.length : second;
+      const parsed = createMemoryHistory({ initialEntries: [`${hash.slice(1, at) || '/'}${hash.slice(at)}`] }).location;
+      return win.history.state ? { ...parsed, state: win.history.state } : parsed;
+    },
+    createHref: (href) => `${win.location.pathname}${win.location.search}#${href}`
+  });
+}
+
+export const router = createAtlasRouter(createProjectHashHistory());
 
 declare module '@tanstack/react-router' {
   interface Register {

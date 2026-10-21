@@ -221,6 +221,7 @@ bunx atlas report publish --producer e2e --junit out.xml --attach ci.log --attac
 Files are stored in the layer by content, shown by what they are (pictures, videos, page snapshots, text) and
 offered for download otherwise. [Evidence](extending.md) is the full model, and why a new kind of evidence never
 breaks anything.
+[Send rich evidence](rich-evidence.md) lists what to send and what the viewer does with it, and covers the Playwright Test reporter.
 
 ### Statecharts
 

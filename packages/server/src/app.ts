@@ -31,6 +31,7 @@ import { reportStatus } from '../../reports/src/report-status';
 import { ReportIndex, type IndexChange } from '../../reports/src/report-index';
 import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
+import { catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
 import { llmsTxt } from './llms';
 import { openApiDocument } from './openapi';
 import { asProblem, problemResponse } from './problem';
@@ -183,7 +184,8 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
 
   const outline = async (): Promise<ReportOutline & { readSpec: (path: string) => Promise<string | null> }> => {
     const found = await specs();
-    if (!found) return { specs: [], sha: null, changedFiles: [], readSpec: async () => null };
+    // Without a published spec set, the report is laid over the specs its layers recorded, as the CLI does.
+    if (!found) return { specs: [...index.history.specs.entries()], sha: null, changedFiles: [], readSpec: async () => null };
     const entries = found.set.files.map(({ path: file, domain, kind, title, fingerprint }) => ({ path: file, domain, kind, title, fingerprint }));
     return { specs: entries, sha: found.set.sha, changedFiles: [], readSpec: async file => {
       const entry = found.set.files.find(item => item.path === file);
@@ -296,7 +298,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true }
     });
   });
 
@@ -372,6 +374,71 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     if (delta) return body(c, delta.text, 'application/json', headers);
     return body(c, text, 'application/json', headers, `effective|${version}`);
   });
+  // Tests, their history and the runs that recorded them: the report as a person or an agent explores it.
+  let model: { key: string; value: CatalogModel } | null = null;
+  const catalog = async (): Promise<CatalogModel> => {
+    const snapshot = index.snapshot();
+    const set = await specs();
+    const key = `${snapshot.version}|${index.history.rev}|${set?.set.id ?? ''}`;
+    if (model?.key !== key) {
+      const entries = set?.set.files.map(({ path: file, domain, kind, title }) => ({ path: file, domain, kind, title }));
+      model = { key, value: catalogModel(snapshot.layers, { history: index.history, version: createHash('sha256').update(key).digest('hex').slice(0, 20), now: now(), ...(entries ? { specs: entries } : {}) }) };
+    }
+    return model.value;
+  };
+  const wantsMarkdown = (c: Context) => {
+    const format = c.req.query('format');
+    return format === 'markdown' || format === 'md' || (format === undefined && /\btext\/markdown\b/.test(c.req.header('accept') ?? ''));
+  };
+  const notReady = (c: Context) => c.json({ error: 'Atlas is still reading its backends; try again in a moment.' }, 503, { 'retry-after': '1' });
+  // What was written for a version and a question is written once, however many viewers poll for it.
+  const rendered = new Map<string, string>();
+  const answer = async (c: Context, version: string, document: () => unknown, markdown: () => string, cacheKey: string) => {
+    const key = `${version}|${cacheKey}`;
+    const etag = `"${version}-${createHash('sha256').update(cacheKey).digest('hex').slice(0, 12)}"`;
+    const headers = { etag, 'cache-control': 'no-cache' };
+    if (c.req.header('if-none-match') === etag) return new Response(null, { status: 304, headers });
+    const asMarkdown = wantsMarkdown(c);
+    let text = rendered.get(key);
+    if (text === undefined) {
+      text = asMarkdown ? markdown() : JSON.stringify(document());
+      if (rendered.size >= 32) rendered.delete(rendered.keys().next().value!);
+      rendered.set(key, text);
+    }
+    return body(c, text, asMarkdown ? 'text/markdown; charset=utf-8' : 'application/json', headers, key);
+  };
+  app.get('/api/reports/tests', async c => {
+    if (!index.ready) return notReady(c);
+    const found = await catalog();
+    const query = parseTestQuery(new URL(c.req.url).searchParams);
+    const document = () => testCatalog(found, query);
+    return answer(c, found.version, document, () => catalogMarkdown(document()), `tests|${new URL(c.req.url).search}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/tests/history', async c => {
+    if (!index.ready) return notReady(c);
+    const key = c.req.query('key');
+    if (!key) return problemResponse(400, 'Name the test with ?key=, a key from GET /api/reports/tests.');
+    const found = await catalog();
+    const document = testHistory(found, key);
+    if (!document) return problemResponse(404, 'No test in the report has that key.');
+    return answer(c, found.version, () => document, () => historyMarkdown(document), `history|${key}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/runs', async c => {
+    if (!index.ready) return notReady(c);
+    const found = await catalog();
+    const limit = /^\d+$/.test(c.req.query('limit') ?? '') ? Number(c.req.query('limit')) : 100;
+    const document = () => runList(index.history, found.version, limit);
+    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${limit}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/runs/detail', async c => {
+    if (!index.ready) return notReady(c);
+    const key = c.req.query('key');
+    if (!key) return problemResponse(400, 'Name the run with ?key=, a key from GET /api/reports/runs.');
+    const found = await catalog();
+    const document = runDetail(index.history, found.version, key);
+    if (!document) return problemResponse(404, 'No run has that key.');
+    return answer(c, found.version, () => document, () => runMarkdown(document), `run|${key}|${wantsMarkdown(c)}`);
+  });
   app.route('/api/reports', layers);
 
   // Upload: the store protocol, and a simple JSON way in for anything that can make a request.
@@ -413,7 +480,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const snapshot = index.snapshot();
     const found = await outline();
     // The gate is a function of the report and the specs, so it is worked out once for each pair, however often CI asks.
-    const asked = `${snapshot.version}|${(await specs())?.set.id ?? ''}|${[...branches].sort().join(',')}|${ignoreModified}|${required.join(',')}|${requireAllSpecs}`;
+    const asked = `${snapshot.version}|${(await specs())?.set.id ?? `recorded:${index.history.specs.size}`}|${[...branches].sort().join(',')}|${ignoreModified}|${required.join(',')}|${requireAllSpecs}`;
     if (!verdicts.has(asked)) {
       if (verdicts.size >= 16) verdicts.delete(verdicts.keys().next().value!);
       verdicts.set(asked, (async () => {
@@ -426,7 +493,8 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
           const key = `${snapshot.version}|${[...branches].sort().join(',')}|${ignoreModified}`;
           if (!filtered.has(key)) {
             if (filtered.size >= 8) filtered.delete(filtered.keys().next().value!);
-            filtered.set(key, combineBackends(backends, { outline: found, include: layer => (options.include?.(layer) ?? true) && (!branches.length || (layer.branch !== null && branches.includes(layer.branch))) && (!ignoreModified || layer.freshness === undefined) }));
+            const specSet = await specs();
+            filtered.set(key, combineBackends(backends, { ...(specSet ? { outline: found } : {}), include: layer => (options.include?.(layer) ?? true) && (!branches.length || (layer.branch !== null && branches.includes(layer.branch))) && (!ignoreModified || layer.freshness === undefined) }));
           }
           report = await filtered.get(key)!;
         }

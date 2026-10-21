@@ -69,7 +69,8 @@
       "require": "./packages/runners/compat/jest.cjs",
       "default": "./packages/runners/src/jest.ts"
     },
-    "./node-test": "./packages/runners/src/node-test.ts"
+    "./node-test": "./packages/runners/src/node-test.ts",
+    "./playwright-reporter": "./packages/playwright-reporter/src/index.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -145,6 +146,10 @@
       "./node-test": {
         "types": "./dist/runners/src/node-test.d.ts",
         "default": "./dist/runners/src/node-test.js"
+      },
+      "./playwright-reporter": {
+        "types": "./dist/playwright-reporter/src/index.d.ts",
+        "default": "./dist/playwright-reporter/src/index.js"
       }
     }
   },
@@ -172,6 +177,7 @@
     "docs/deploying.md",
     "docs/server.md",
     "docs/extending.md",
+    "docs/rich-evidence.md",
     "docs/statecharts.md",
     "docs/report-contract.md",
     "docs/report-backends.md",

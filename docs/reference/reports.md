@@ -4713,6 +4713,39 @@ Streams a test as events: its report, then each frame file the report names as i
 the report names but the store lacks is skipped. Text media (`html`, `json`, `text`) arrive as inline text, the rest
 as base64.
 
+### Specs the layers recorded
+
+Source: `packages/reports/src/recorded-specs.ts`. Import: `@crvouga/atlas/reports/recorded-specs`
+
+When no spec set was published, a report is laid over the specs its layers say they ran against (each layer's
+`specs[]`). `RecordedSpecs` keeps one entry per spec path: the one from the newest layer, and at the same time the
+one with the larger fingerprint, so the outline it gives does not depend on the order layers are read in. The CLI's
+composition and the server's live report use it alike, so the two cannot disagree about which specs a report has.
+
+See docs/report-contract.md#how-layers-compose
+
+#### `RecordedSpecs`
+
+```ts
+export class RecordedSpecs
+```
+
+The specs layers recorded, newest first per path. Add every included layer's `specs[]` with its `recordedAtMs`;
+`entries()` is the outline, sorted by path.
+
+**Example**
+
+```ts
+const recorded = new RecordedSpecs();
+for (const layer of layers) recorded.add(layer.specs, layer.recordedAtMs);
+const outline = { specs: recorded.entries(), sha: null, changedFiles: [] };
+```
+
+- `add(specs: readonly SpecEntry[], at: number): void` — Takes in the specs one layer recorded at `at` (epoch ms). A spec whose path is empty is ignored.
+- `get(path: string): SpecEntry | undefined` — The recorded spec at a path (as `specPath` normalises it), or undefined.
+- `get size(): number { return this.#byPath.size; }` — How many distinct specs were recorded.
+- `entries(): readonly SpecEntry[]` — Every recorded spec, sorted by path.
+
 ### In-memory recorded test
 
 Source: `packages/reports/src/recording-bundle.ts`. Import: `@crvouga/atlas/reports/recording-bundle`
@@ -5061,6 +5094,7 @@ It reads only immutable layers (`layers/index/…`), which is what makes "read o
 - `snapshot(): EffectiveEvidence` — The current report, ready to send. Built once per change, and only the layers that changed are rebuilt.
 - `json(): { readonly version: string; readonly text: string }` — The report as JSON text: exactly what `JSON.stringify({ ...snapshot(), active: [] })` writes, put together from the text of each layer, which is written once. `active` is what a store without live runs always sends: none.
 - `delta(since: string): { readonly text: string; readonly version: string } | null` — What differs between the report a viewer holds (named by its version) and the current one: the layers that changed in full, and the ids of those that no longer hold a winner. Null when that version is not remembered, and the viewer should ask for the whole report. See `applyEffectiveDelta`.
+- `get history(): TestHistory { return this.#history; }` — Every recorded result of every test and every run, as layers were folded in: what the test catalog, a test's history and the run list are built from. Read-only for callers; `history.rev` changes whenever a layer is taken in.
 - `stats()` — For `/readyz` and logs.
 
 ### Test loading state
@@ -7092,6 +7126,604 @@ Flattens a recorded test into a `CatalogEntity`: its id, title, status and durat
 file; the package (the part of the viewer test id's source before `--`, or `report`); its runtime; and the first
 line of its error as the detail. `search` joins the title, ids, paths, system, runtime, package and error for text
 matching. `href` is `null`; the caller sets where a row links to.
+
+### Test catalog, history and runs
+
+Source: `packages/reports/src/test-catalog.ts`. Import: `@crvouga/atlas/reports/test-catalog`
+
+What a person or an agent asks of a report once it holds more than a handful of checks: every test with where it ran,
+how it went over time and how long it takes; the specs, domains, environments and producers they fall under; the CI
+runs that produced them and which tests each one ran.
+
+- `TestHistory` keeps every recorded result of every test (bounded per test) and every run's results, folded in one
+  layer at a time, in any order, with the same outcome. It never decides a status: the current status of a test is
+  always the report's winner (`combineEvidence`), and history only describes how it got there.
+- `testCatalog` turns the report's winners (plus a history, when there is one) into a `TestCatalog`: a summary with
+  insights (slowest, flaky, failing), facets to filter by, and the tests that match a `TestQuery`.
+- `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run.
+- `catalogMarkdown`, `historyMarkdown`, `runsMarkdown` and `runMarkdown` say the same in Markdown, for an agent or a
+  terminal.
+
+A test is a check identity (its spec path and id) regardless of producer, environment and parameters; each of those
+combinations is one of its results. A result that is not `passed` is never counted as a pass, and a test with no
+completed result has no pass rate.
+
+See docs/server.md#reading-the-report-as-an-agent
+
+#### `TEST_CATALOG_VERSION`
+
+```ts
+export const TEST_CATALOG_VERSION = …
+```
+
+The version of the documents this module writes (`TestCatalog`, `TestHistoryDocument`, `RunList`, `RunDetail`). Only optional fields are added within it.
+
+#### `HISTORY_PER_TEST`
+
+```ts
+export const HISTORY_PER_TEST = …
+```
+
+Recorded results kept per test, newest first. Older ones are counted in no statistic.
+
+#### `TestResultEntry`
+
+```ts
+export type TestResultEntry = {
+  /** When it was recorded, epoch ms. */
+  readonly at: number;
+  readonly status: EvidenceStatus;
+  /** How long it took, ms, or null when the producer did not measure it. */
+  readonly durationMs: number | null;
+  /** The client it checked (`desktop-web`, `api`, `ios`…), or null. */
+  readonly environment: string | null;
+  readonly producer: string;
+  /** The kind of the part that held it (`checks`, `behavior`, `performance`…). */
+  readonly kind: string;
+  /** Other choices that made it its own result (a device size, a locale…). */
+  readonly parameters: Readonly<Record<string, string>>;
+  readonly branch: string | null;
+  readonly sha: string | null;
+  readonly runUrl: string | null;
+  /** The key of the run it belongs to (see `runKey`). */
+  readonly run: string;
+  /** The id of the layer that recorded it. */
+  readonly layer: string;
+  readonly backend: string;
+  /** Why it has its status: the first 500 characters of the check's detail. */
+  readonly detail: string;
+  /** What it carried beyond its outcome (attachments, steps, retries, tags, labels), when anything. */
+  readonly evidence?: EvidenceSummary;
+};
+```
+
+One recorded result of a test: when, where, how it went and how long it took, and the layer and run it came from.
+
+#### `TestOutcome`
+
+```ts
+export type TestOutcome = TestResultEntry;
+```
+
+The current result of a test in one producer, environment and parameter set: the report's winner for that slot.
+
+#### `DurationStats`
+
+```ts
+export type DurationStats = {
+  readonly count: number;
+  readonly totalMs: number;
+  readonly avgMs: number;
+  readonly p50Ms: number;
+  readonly p95Ms: number;
+  readonly minMs: number;
+  readonly maxMs: number;
+  /** The newest recorded duration. */
+  readonly lastMs: number;
+};
+```
+
+Durations of a set of results, ms. Only results that recorded one are counted.
+
+#### `TestStats`
+
+```ts
+export type TestStats = {
+  /** Recorded results: passed, failed and not-run (progress reported as `running` is not history). */
+  readonly results: number;
+  readonly passed: number;
+  readonly failed: number;
+  /** passed / (passed + failed), or null with no completed result. */
+  readonly passRate: number | null;
+  /** True when the same code both passed and failed, a retry was needed to pass, or the producer said so. */
+  readonly flaky: boolean;
+  /** Why it is flaky, for a person; empty when it is not. */
+  readonly flakyReason: string;
+  /** How many times the completed outcome changed, per result, newest history first. */
+  readonly flips: number;
+  readonly durations: DurationStats | null;
+  readonly firstSeenMs: number | null;
+  readonly lastSeenMs: number | null;
+  readonly lastPassedAtMs: number | null;
+  readonly lastFailedAtMs: number | null;
+  /** Distinct runs it was recorded in. */
+  readonly runs: number;
+  /** Branches it was recorded on, most recent first, at most ten. */
+  readonly branches: readonly string[];
+};
+```
+
+How a test has gone across its recorded history (at most `HISTORY_PER_TEST` results).
+
+#### `CatalogSpec`
+
+```ts
+export type CatalogSpec = {
+  readonly path: string;
+  readonly title: string;
+  /** The group it belongs to: the spec's own domain, else the folder under `specs/`. */
+  readonly domain: string;
+  readonly kind: string;
+};
+```
+
+A spec as the catalog shows it: recorded by a layer or published in a spec set, or derived from the path alone.
+
+#### `TestSummary`
+
+```ts
+export type TestSummary = {
+  /** The check identity, `JSON.stringify([specPath, id])`. Stable; use it to ask for the test's history. */
+  readonly key: string;
+  readonly id: string;
+  readonly title: string;
+  readonly specPath: string | null;
+  readonly spec: CatalogSpec | null;
+  /** The worst current outcome across its results (failed, then running, then not-run, then passed). */
+  readonly status: EvidenceStatus;
+  readonly environments: readonly string[];
+  readonly producers: readonly string[];
+  /** The current result per producer, environment and parameter set, newest first. */
+  readonly outcomes: readonly TestOutcome[];
+  readonly stats: TestStats;
+  readonly tags: readonly string[];
+  readonly labels: Readonly<Record<string, string>>;
+  /** What its current results carry: attachments, steps, retries, and the kinds of attachment. */
+  readonly evidence: { readonly attachments: number; readonly steps: number; readonly attempts: number; readonly roles: readonly string[] };
+  /** The newest time any of its results was recorded. */
+  readonly lastRecordedAtMs: number;
+  /** True while one of its results comes from a run still in progress. */
+  readonly live: boolean;
+};
+```
+
+One test: what it is, its current status per environment, and how it has gone.
+
+#### `TestRef`
+
+```ts
+export type TestRef = {
+  readonly key: string;
+  readonly title: string;
+  readonly specPath: string | null;
+  readonly status: EvidenceStatus;
+  /** Average duration (ms) for `slowest`, flips for `flaky`, failures for `failing`. */
+  readonly value: number;
+};
+```
+
+A test named in an insight list, with the number that put it there.
+
+#### `CatalogGroup`
+
+```ts
+export type CatalogGroup = {
+  readonly name: string;
+  readonly tests: number;
+  readonly counts: StatusCounts;
+  /** Average of its tests' average durations, ms, or null when none was measured. */
+  readonly avgMs: number | null;
+};
+```
+
+A group in the summary (an environment, a producer, a domain, a spec): how many tests, by status (for an environment, by how they went on it), and their timing.
+
+#### `CatalogSummary`
+
+```ts
+export type CatalogSummary = {
+  readonly tests: number;
+  /** Tests by their current status. */
+  readonly counts: StatusCounts;
+  /** Current results (a test checked on two environments has two). */
+  readonly outcomes: number;
+  readonly flaky: number;
+  /** Over each test's average duration. */
+  readonly durations: DurationStats | null;
+  /** Tests with at least one measured duration. */
+  readonly measured: number;
+  readonly withAttachments: number;
+  readonly environments: readonly CatalogGroup[];
+  readonly producers: readonly CatalogGroup[];
+  readonly domains: readonly CatalogGroup[];
+  readonly slowest: readonly TestRef[];
+  readonly flakiest: readonly TestRef[];
+  readonly failing: readonly TestRef[];
+  /** Runs the history knows of. */
+  readonly runs: number;
+  readonly lastRecordedAtMs: number | null;
+  /** True when statistics come from recorded history, false when only the current results were available. */
+  readonly history: boolean;
+};
+```
+
+The report at a glance: counts, timing and insights over every test (not only those a query matched).
+
+#### `FacetValue`
+
+```ts
+export type FacetValue = { readonly value: string; readonly count: number };
+```
+
+A value to filter by, and how many tests have it.
+
+#### `CatalogFacets`
+
+```ts
+export type CatalogFacets = {
+  readonly statuses: readonly FacetValue[];
+  readonly environments: readonly FacetValue[];
+  readonly producers: readonly FacetValue[];
+  readonly domains: readonly FacetValue[];
+  readonly specs: readonly (CatalogSpec & { readonly tests: number; readonly counts: StatusCounts })[];
+  readonly tags: readonly FacetValue[];
+  readonly branches: readonly FacetValue[];
+  readonly labels: Readonly<Record<string, readonly FacetValue[]>>;
+};
+```
+
+Everything the tests can be filtered and grouped by, with counts over every test.
+
+#### `TEST_SORTS`
+
+```ts
+export const TEST_SORTS = …
+```
+
+How tests are ordered.
+
+#### `TestSort`
+
+```ts
+export type TestSort = (typeof TEST_SORTS)[number];
+```
+
+One of `TEST_SORTS`. `spec` (the default) orders by domain, spec and title.
+
+#### `TestQuery`
+
+```ts
+export type TestQuery = {
+  /** Words that must all appear in the title, id, spec, domain, tags, labels, environments or producers. Case does not matter. */
+  readonly q?: string;
+  /** Current status, or `flaky`. */
+  readonly status?: readonly string[];
+  readonly environment?: readonly string[];
+  readonly producer?: readonly string[];
+  readonly domain?: readonly string[];
+  /** Spec paths (`specs/...`). */
+  readonly spec?: readonly string[];
+  readonly tag?: readonly string[];
+  /** Only tests recorded in this run (a key from `runList`). */
+  readonly run?: string;
+  readonly sort?: TestSort;
+  readonly offset?: number;
+  /** At most this many tests (default 500, at most 20000). */
+  readonly limit?: number;
+};
+```
+
+Which tests to list. Every field is optional; several values of one field match any of them, and fields combine.
+
+#### `TestCatalog`
+
+```ts
+export type TestCatalog = {
+  readonly schemaVersion: typeof TEST_CATALOG_VERSION;
+  /** Changes whenever the report or its history does. */
+  readonly version: string;
+  readonly generatedAtMs: number;
+  readonly summary: CatalogSummary;
+  readonly facets: CatalogFacets;
+  /** Tests that matched, before `offset` and `limit`. */
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly tests: readonly TestSummary[];
+};
+```
+
+`GET /api/reports/tests`: the summary, the facets and the tests that match a query.
+
+#### `TestHistoryDocument`
+
+```ts
+export type TestHistoryDocument = {
+  readonly schemaVersion: typeof TEST_CATALOG_VERSION;
+  readonly version: string;
+  readonly test: TestSummary;
+  readonly history: readonly TestResultEntry[];
+};
+```
+
+`GET /api/reports/tests/history`: one test and every result recorded for it, newest first.
+
+#### `RunSummary`
+
+```ts
+export type RunSummary = {
+  /** Stable key: the run URL, or `branch@sha`. */
+  readonly key: string;
+  readonly runUrl: string | null;
+  readonly branch: string | null;
+  readonly sha: string | null;
+  readonly startedAtMs: number;
+  readonly endedAtMs: number;
+  /** From its first to its last recorded result, ms. */
+  readonly spanMs: number;
+  readonly producers: readonly string[];
+  readonly environments: readonly string[];
+  readonly layers: number;
+  /** Distinct tests it recorded. */
+  readonly tests: number;
+  /** Its results by status (its last word on each test, environment and producer). */
+  readonly counts: StatusCounts;
+  /** Sum of its results' durations, ms, when any was measured. */
+  readonly totalDurationMs: number | null;
+  /** Up to twenty tests that failed in it. */
+  readonly failing: readonly { readonly key: string; readonly title: string; readonly environment: string | null; readonly detail: string }[];
+};
+```
+
+A CI run (or any group of layers sharing a run URL, else a branch and commit): when, where, and how its tests went.
+
+#### `RunList`
+
+```ts
+export type RunList = {
+  readonly schemaVersion: typeof TEST_CATALOG_VERSION;
+  readonly version: string;
+  readonly total: number;
+  readonly runs: readonly RunSummary[];
+};
+```
+
+`GET /api/reports/runs`: runs, newest first.
+
+#### `RunResult`
+
+```ts
+export type RunResult = {
+  readonly key: string;
+  readonly id: string;
+  readonly title: string;
+  readonly specPath: string | null;
+  readonly environment: string | null;
+  readonly producer: string;
+  readonly status: EvidenceStatus;
+  readonly durationMs: number | null;
+  readonly at: number;
+  readonly layer: string;
+  readonly detail: string;
+};
+```
+
+One test's last result within one run.
+
+#### `RunDetail`
+
+```ts
+export type RunDetail = {
+  readonly schemaVersion: typeof TEST_CATALOG_VERSION;
+  readonly version: string;
+  readonly run: RunSummary;
+  readonly results: readonly RunResult[];
+};
+```
+
+`GET /api/reports/runs/detail`: one run and every result it recorded.
+
+#### `runKey`
+
+```ts
+export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'>): string
+```
+
+The run a layer belongs to: its run URL, else `branch@sha`, else `local`. Layers with the same key are one run.
+
+#### `TestHistory`
+
+```ts
+export class TestHistory
+```
+
+Every recorded result of every test (the newest `HISTORY_PER_TEST` per test, leaving out `running` progress) and the
+runs they came from. A run's results are read from that history, so memory follows the number of tests and not the age
+of the project: a run older than a test's last hundred results no longer lists that test. Add each layer once with
+`add`; the order layers arrive in does not change what it holds. It never decides a status.
+
+**Example**
+
+```ts
+const history = new TestHistory();
+for (const { layer, rows } of layers) history.add(layer, rows, specs, layer.backend);
+const catalog = testCatalog(catalogModel(layers, { history }));
+```
+
+- `get rev(): number { return this.#rev; }` — Changes each time a layer is added.
+- `get specs(): RecordedSpecs { return this.#specs; }` — The specs the added layers recorded.
+- `get layers(): number { return this.#seen.size; }` — How many layers were added.
+- `add(layer: LayerHeader, rows: readonly LayerRow[], specs: readonly SpecEntry[] = [], backend = layer.backend): void` — Takes in one layer: its header, its rows, the specs it recorded and the backend it was read from. A layer id already added is ignored.
+- `of(key: string): readonly TestResultEntry[]` — The recorded results of one test (by `TestSummary.key`), newest first. Empty when none.
+- `get runCount(): number { return this.#runs.size; }` — How many runs it knows of.
+- `runs(): RunSummary[]` — Every run, newest first.
+- `run(key: string): { readonly run: RunSummary; readonly results: RunResult[] } | null` — One run and its results (failed first, then by spec and title), or null.
+- `testsIn(key: string): ReadonlySet<string>` — The keys of the tests one run recorded.
+
+#### `durationStats`
+
+```ts
+export function durationStats(values: readonly number[]): DurationStats | null
+```
+
+Durations of a list of numbers (ms), or null when empty. `lastMs` is the first value, so give them newest first.
+
+#### `catalogSpec`
+
+```ts
+export function catalogSpec(path: string | null, known: (path: string) => SpecEntry | undefined): CatalogSpec | null
+```
+
+The spec a path names: the recorded one, or one derived from the path (`specs/<domain>/<name>.<ext>`).
+
+#### `CatalogSources`
+
+```ts
+export type CatalogSources = {
+  /** Recorded results; without it, statistics describe only the current results. */
+  readonly history?: TestHistory | null;
+  /** Specs by path, published or recorded. Defaults to those the history recorded. */
+  readonly specs?: readonly SpecEntry[];
+  /** The report's version, echoed in the documents. */
+  readonly version?: string;
+  readonly now?: number;
+};
+```
+
+Where the catalog's statistics and specs come from.
+
+#### `CatalogModel`
+
+```ts
+export type CatalogModel = {
+  readonly version: string;
+  readonly generatedAtMs: number;
+  readonly tests: readonly TestSummary[];
+  readonly byKey: ReadonlyMap<string, TestSummary>;
+  readonly summary: CatalogSummary;
+  readonly facets: CatalogFacets;
+  readonly haystacks: ReadonlyMap<string, string>;
+  readonly history: TestHistory | null;
+};
+```
+
+The tests of a report, built once and queried many times: what `testCatalog` and `testHistory` read from.
+
+#### `haystackOf`
+
+```ts
+export function haystackOf(test: TestSummary): string
+```
+
+The lowercase text a search matches a test against: title, id, spec, domain, tags, labels, environments and producers.
+
+#### `catalogModel`
+
+```ts
+export function catalogModel(layers: readonly LayerEvidence[], sources: CatalogSources = {}): CatalogModel
+```
+
+Builds the tests of a report from its winners (`layers`, as the effective report holds them: each layer with the rows
+that win) and, when given, a history. The model is what `testCatalog` and `testHistory` query; build it once per
+version and reuse it.
+
+#### `matchesQuery`
+
+```ts
+export function matchesQuery(model: CatalogModel, test: TestSummary, query: TestQuery, inRun?: ReadonlySet<string> | null): boolean
+```
+
+Whether one test matches a query (everything but sorting and paging).
+
+#### `testCatalog`
+
+```ts
+export function testCatalog(model: CatalogModel, query: TestQuery = {}): TestCatalog
+```
+
+The catalog document for a query: the model's summary and facets, and the matching tests, sorted and paged.
+
+#### `testHistory`
+
+```ts
+export function testHistory(model: CatalogModel, key: string): TestHistoryDocument | null
+```
+
+One test and its recorded results, or null when the report has no test with that key.
+
+#### `runList`
+
+```ts
+export function runList(history: TestHistory, version: string, limit = 100): RunList
+```
+
+Every run the history knows of, newest first, `limit` at most (default 100).
+
+#### `runDetail`
+
+```ts
+export function runDetail(history: TestHistory, version: string, key: string): RunDetail | null
+```
+
+One run with every result it recorded, or null when no run has that key.
+
+#### `parseTestQuery`
+
+```ts
+export function parseTestQuery(params: URLSearchParams): TestQuery
+```
+
+Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`.
+
+#### `formatMs`
+
+```ts
+export function formatMs(ms: number | null | undefined): string
+```
+
+A duration for a person: `850 ms`, `12.3 s`, `4m 05s`.
+
+#### `catalogMarkdown`
+
+```ts
+export function catalogMarkdown(catalog: TestCatalog): string
+```
+
+The catalog as Markdown: the summary, insights, groups and the listed tests as a table.
+
+#### `historyMarkdown`
+
+```ts
+export function historyMarkdown(document: TestHistoryDocument): string
+```
+
+One test's history as Markdown.
+
+#### `runsMarkdown`
+
+```ts
+export function runsMarkdown(list: RunList): string
+```
+
+The run list as Markdown.
+
+#### `runMarkdown`
+
+```ts
+export function runMarkdown(detail: RunDetail): string
+```
+
+One run as Markdown.
 
 ### Report viewer data
 

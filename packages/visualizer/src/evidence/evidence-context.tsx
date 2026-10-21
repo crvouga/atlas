@@ -51,6 +51,12 @@ export type EvidenceState = {
   readonly titleOf: (file: string) => string;
   readonly excluded: SourceSelection;
   readonly setExcluded: (excluded: SourceSelection) => void;
+  /** True when the server answers with the effective report (winners only), so history lives on the server. */
+  readonly effective: boolean;
+  /** The effective report's version when read from a server; null otherwise. Changes exactly when the report does. */
+  readonly version: string | null;
+  /** The specs the results are filed under: the server's outline, or the spec files found. */
+  readonly specs: readonly SpecEntry[];
 };
 
 const EvidenceContext = createContext<EvidenceState | null>(null);
@@ -220,7 +226,10 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
       return title && title !== name ? title : name.replace(/\.[^.]+$/, '').replace(/\.openslo$/, '');
     },
     excluded,
-    setExcluded
+    setExcluded,
+    effective,
+    version: effective ? overview.data?.version ?? null : null,
+    specs: outline.specs
   };
   return <EvidenceContext.Provider value={state}>{children}</EvidenceContext.Provider>;
 }

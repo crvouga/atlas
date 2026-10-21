@@ -10,7 +10,7 @@ import {
   ProjectSlugSchema, ProjectSchema, ProjectsSchema,
   ServerConfigSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema,
   CLI_RESULTS,
-  ProblemSchema, ServerInfoSchema, ReadySchema, EffectiveEvidenceSchema, EffectiveDeltaSchema, OutlineSchema, EvidencePageSchema, LayerRowsSchema, CheckDetailSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema,
+  ProblemSchema, ServerInfoSchema, ReadySchema, EffectiveEvidenceSchema, EffectiveDeltaSchema, OutlineSchema, EvidencePageSchema, LayerRowsSchema, CheckDetailSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, TestCatalogSchema, TestHistorySchema, RunListSchema, RunDetailSchema,
   PublishChecksSchema,
   ManifestEnvelopeSchema,
   PathRecordSchema,
@@ -66,6 +66,10 @@ export const SCHEMAS: Record<string, z.ZodType> = {
   'checks-result': ChecksResultSchema,
   'hello-event': HelloEventSchema,
   'report-event': ReportEventSchema,
+  'test-catalog': TestCatalogSchema,
+  'test-history': TestHistorySchema,
+  'report-runs': RunListSchema,
+  'report-run': RunDetailSchema,
   // What `atlas report … --format json` prints (docs/agents.md).
   ...Object.fromEntries(Object.values(CLI_RESULTS).map(result => [result.schemaName, result.schema]))
 };

@@ -223,3 +223,119 @@ export const ReportEventSchema = z.looseObject({
 
 /** The data of the `ping` event: sent every `heartbeatSeconds`, so a quiet server is told apart from a dead connection. */
 export const PingEventSchema = z.looseObject({});
+
+const StatusCountsSchema = z.record(EvidenceStatusSchema, z.number().int().nonnegative());
+
+/** One recorded result of a test in the test catalog: when, where, how it went and how long it took, and where it came from. */
+export const TestResultEntrySchema = z.looseObject({
+  at: z.number().describe('When it was recorded, epoch milliseconds'),
+  status: EvidenceStatusSchema,
+  durationMs: z.number().nullable().describe('How long it took, or null when the producer did not measure it'),
+  environment: z.string().nullable().describe('The client it checked, such as `desktop-web` or `ios`'),
+  producer: z.string(),
+  kind: z.string(),
+  parameters: z.record(z.string(), z.string()),
+  branch: z.string().nullable(),
+  sha: z.string().nullable(),
+  runUrl: z.string().nullable(),
+  run: z.string().describe('The key of the run it belongs to, as `GET /api/reports/runs` lists it'),
+  layer: z.string().describe('The id of the layer that recorded it'),
+  backend: z.string(),
+  detail: z.string().describe('Why it has its status, at most 500 characters'),
+  evidence: EvidenceSummarySchema.optional()
+});
+
+const DurationStatsSchema = z.looseObject({
+  count: z.number().int().nonnegative(), totalMs: z.number(), avgMs: z.number(), p50Ms: z.number(), p95Ms: z.number(), minMs: z.number(), maxMs: z.number(), lastMs: z.number()
+});
+
+const CatalogSpecSchema = z.looseObject({ path: z.string(), title: z.string(), domain: z.string(), kind: z.string() });
+
+/** One test of the catalog: what it is, its current result per environment, and how it has gone over its recorded history. */
+export const TestSummarySchema = z.looseObject({
+  key: z.string().describe('The test\'s identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`'),
+  id: z.string(),
+  title: z.string(),
+  specPath: z.string().nullable(),
+  spec: CatalogSpecSchema.nullable().describe('The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path'),
+  status: EvidenceStatusSchema.describe('The worst current result across environments: failed, then running, then not-run, then passed'),
+  environments: z.array(z.string()),
+  producers: z.array(z.string()),
+  outcomes: z.array(TestResultEntrySchema).describe('The current result per producer, environment and parameter set, newest first'),
+  stats: z.looseObject({
+    results: z.number().int().nonnegative(), passed: z.number().int().nonnegative(), failed: z.number().int().nonnegative(),
+    passRate: z.number().nullable().describe('passed / (passed + failed), or null with no completed result'),
+    flaky: z.boolean(), flakyReason: z.string(), flips: z.number().int().nonnegative(),
+    durations: DurationStatsSchema.nullable(),
+    firstSeenMs: z.number().nullable(), lastSeenMs: z.number().nullable(), lastPassedAtMs: z.number().nullable(), lastFailedAtMs: z.number().nullable(),
+    runs: z.number().int().nonnegative(), branches: z.array(z.string())
+  }),
+  tags: z.array(z.string()),
+  labels: z.record(z.string(), z.string()),
+  evidence: z.looseObject({ attachments: z.number().int().nonnegative(), steps: z.number().int().nonnegative(), attempts: z.number().int().nonnegative(), roles: z.array(z.string()) }),
+  lastRecordedAtMs: z.number(),
+  live: z.boolean()
+});
+
+const TestRefSchema = z.looseObject({ key: z.string(), title: z.string(), specPath: z.string().nullable(), status: EvidenceStatusSchema, value: z.number() });
+const CatalogGroupSchema = z.looseObject({ name: z.string(), tests: z.number().int().nonnegative(), counts: StatusCountsSchema, avgMs: z.number().nullable() });
+const FacetValueSchema = z.looseObject({ value: z.string(), count: z.number().int().nonnegative() });
+
+/**
+ * `GET /api/reports/tests`: every test of the report with a summary, insights and facets. The summary and facets cover
+ * every test; `tests` is the page of those the query matched.
+ */
+export const TestCatalogSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string().describe('Changes whenever the report or its history does'),
+  generatedAtMs: z.number(),
+  summary: z.looseObject({
+    tests: z.number().int().nonnegative(), counts: StatusCountsSchema, outcomes: z.number().int().nonnegative(), flaky: z.number().int().nonnegative(),
+    durations: DurationStatsSchema.nullable(), measured: z.number().int().nonnegative(), withAttachments: z.number().int().nonnegative(),
+    environments: z.array(CatalogGroupSchema), producers: z.array(CatalogGroupSchema), domains: z.array(CatalogGroupSchema),
+    slowest: z.array(TestRefSchema), flakiest: z.array(TestRefSchema), failing: z.array(TestRefSchema),
+    runs: z.number().int().nonnegative(), lastRecordedAtMs: z.number().nullable(), history: z.boolean()
+  }),
+  facets: z.looseObject({
+    statuses: z.array(FacetValueSchema), environments: z.array(FacetValueSchema), producers: z.array(FacetValueSchema), domains: z.array(FacetValueSchema),
+    specs: z.array(CatalogSpecSchema.extend({ tests: z.number().int().nonnegative(), counts: StatusCountsSchema })),
+    tags: z.array(FacetValueSchema), branches: z.array(FacetValueSchema), labels: z.record(z.string(), z.array(FacetValueSchema))
+  }),
+  total: z.number().int().nonnegative().describe('Tests the query matched, before offset and limit'),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative(),
+  tests: z.array(TestSummarySchema)
+});
+
+/** `GET /api/reports/tests/history`: one test and every result recorded for it (at most 100), newest first. */
+export const TestHistorySchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string(),
+  test: TestSummarySchema,
+  history: z.array(TestResultEntrySchema)
+});
+
+/** A run: the layers that share a run URL (else a branch and commit), with what they recorded. */
+export const ReportRunSchema = z.looseObject({
+  key: z.string().describe('The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`'),
+  runUrl: z.string().nullable(), branch: z.string().nullable(), sha: z.string().nullable(),
+  startedAtMs: z.number(), endedAtMs: z.number(), spanMs: z.number(),
+  producers: z.array(z.string()), environments: z.array(z.string()),
+  layers: z.number().int().nonnegative(), tests: z.number().int().nonnegative(), counts: StatusCountsSchema,
+  totalDurationMs: z.number().nullable(),
+  failing: z.array(z.looseObject({ key: z.string(), title: z.string(), environment: z.string().nullable(), detail: z.string() }))
+});
+
+/** `GET /api/reports/runs`: runs, newest first. */
+export const RunListSchema = z.looseObject({ schemaVersion: z.literal(1), version: z.string(), total: z.number().int().nonnegative(), runs: z.array(ReportRunSchema) });
+
+/** `GET /api/reports/runs/detail`: one run and its last result for every test, environment and producer it recorded. */
+export const RunDetailSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string(),
+  run: ReportRunSchema,
+  results: z.array(z.looseObject({
+    key: z.string(), id: z.string(), title: z.string(), specPath: z.string().nullable(), environment: z.string().nullable(), producer: z.string(),
+    status: EvidenceStatusSchema, durationMs: z.number().nullable(), at: z.number(), layer: z.string(), detail: z.string()
+  }))
+});

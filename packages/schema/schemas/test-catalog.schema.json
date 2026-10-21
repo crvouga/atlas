@@ -1,0 +1,1177 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/test-catalog.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "version": {
+      "description": "Changes whenever the report or its history does",
+      "type": "string"
+    },
+    "generatedAtMs": {
+      "type": "number"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "tests": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "counts": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "running",
+              "not-run"
+            ]
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "outcomes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "flaky": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "durations": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "totalMs": {
+                  "type": "number"
+                },
+                "avgMs": {
+                  "type": "number"
+                },
+                "p50Ms": {
+                  "type": "number"
+                },
+                "p95Ms": {
+                  "type": "number"
+                },
+                "minMs": {
+                  "type": "number"
+                },
+                "maxMs": {
+                  "type": "number"
+                },
+                "lastMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "count",
+                "totalMs",
+                "avgMs",
+                "p50Ms",
+                "p95Ms",
+                "minMs",
+                "maxMs",
+                "lastMs"
+              ],
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "measured": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "withAttachments": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "environments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tests": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "counts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "avgMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "tests",
+              "counts",
+              "avgMs"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tests": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "counts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "avgMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "tests",
+              "counts",
+              "avgMs"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tests": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "counts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "avgMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "tests",
+              "counts",
+              "avgMs"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "slowest": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "specPath": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "key",
+              "title",
+              "specPath",
+              "status",
+              "value"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "flakiest": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "specPath": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "key",
+              "title",
+              "specPath",
+              "status",
+              "value"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "failing": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "specPath": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "key",
+              "title",
+              "specPath",
+              "status",
+              "value"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "runs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lastRecordedAtMs": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "history": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "tests",
+        "counts",
+        "outcomes",
+        "flaky",
+        "durations",
+        "measured",
+        "withAttachments",
+        "environments",
+        "producers",
+        "domains",
+        "slowest",
+        "flakiest",
+        "failing",
+        "runs",
+        "lastRecordedAtMs",
+        "history"
+      ],
+      "additionalProperties": {}
+    },
+    "facets": {
+      "type": "object",
+      "properties": {
+        "statuses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "environments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "specs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "tests": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "counts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              }
+            },
+            "required": [
+              "path",
+              "title",
+              "domain",
+              "kind",
+              "tests",
+              "counts"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "labels": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "value",
+                "count"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        }
+      },
+      "required": [
+        "statuses",
+        "environments",
+        "producers",
+        "domains",
+        "specs",
+        "tags",
+        "branches",
+        "labels"
+      ],
+      "additionalProperties": {}
+    },
+    "total": {
+      "description": "Tests the query matched, before offset and limit",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "specPath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spec": {
+            "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "domain": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "title",
+                  "domain",
+                  "kind"
+                ],
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "description": "The worst current result across environments: failed, then running, then not-run, then passed",
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "running",
+              "not-run"
+            ]
+          },
+          "environments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "producers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outcomes": {
+            "description": "The current result per producer, environment and parameter set, newest first",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": {
+                  "description": "When it was recorded, epoch milliseconds",
+                  "type": "number"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                },
+                "durationMs": {
+                  "description": "How long it took, or null when the producer did not measure it",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "environment": {
+                  "description": "The client it checked, such as `desktop-web` or `ios`",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "producer": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "parameters": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "branch": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sha": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "runUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "run": {
+                  "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it",
+                  "type": "string"
+                },
+                "layer": {
+                  "description": "The id of the layer that recorded it",
+                  "type": "string"
+                },
+                "backend": {
+                  "type": "string"
+                },
+                "detail": {
+                  "description": "Why it has its status, at most 500 characters",
+                  "type": "string"
+                },
+                "evidence": {
+                  "type": "object",
+                  "properties": {
+                    "attachments": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "steps": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "annotations": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "links": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "labels": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "attachments",
+                    "steps",
+                    "annotations",
+                    "attempts",
+                    "links",
+                    "tags",
+                    "labels",
+                    "roles"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "at",
+                "status",
+                "durationMs",
+                "environment",
+                "producer",
+                "kind",
+                "parameters",
+                "branch",
+                "sha",
+                "runUrl",
+                "run",
+                "layer",
+                "backend",
+                "detail"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "results": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "passed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "passRate": {
+                "description": "passed / (passed + failed), or null with no completed result",
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "flaky": {
+                "type": "boolean"
+              },
+              "flakyReason": {
+                "type": "string"
+              },
+              "flips": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "durations": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "count": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "totalMs": {
+                        "type": "number"
+                      },
+                      "avgMs": {
+                        "type": "number"
+                      },
+                      "p50Ms": {
+                        "type": "number"
+                      },
+                      "p95Ms": {
+                        "type": "number"
+                      },
+                      "minMs": {
+                        "type": "number"
+                      },
+                      "maxMs": {
+                        "type": "number"
+                      },
+                      "lastMs": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "count",
+                      "totalMs",
+                      "avgMs",
+                      "p50Ms",
+                      "p95Ms",
+                      "minMs",
+                      "maxMs",
+                      "lastMs"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "firstSeenMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastSeenMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastPassedAtMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastFailedAtMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "runs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "branches": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "results",
+              "passed",
+              "failed",
+              "passRate",
+              "flaky",
+              "flakyReason",
+              "flips",
+              "durations",
+              "firstSeenMs",
+              "lastSeenMs",
+              "lastPassedAtMs",
+              "lastFailedAtMs",
+              "runs",
+              "branches"
+            ],
+            "additionalProperties": {}
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "labels": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "attachments": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "attempts": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "attachments",
+              "steps",
+              "attempts",
+              "roles"
+            ],
+            "additionalProperties": {}
+          },
+          "lastRecordedAtMs": {
+            "type": "number"
+          },
+          "live": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "id",
+          "title",
+          "specPath",
+          "spec",
+          "status",
+          "environments",
+          "producers",
+          "outcomes",
+          "stats",
+          "tags",
+          "labels",
+          "evidence",
+          "lastRecordedAtMs",
+          "live"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "version",
+    "generatedAtMs",
+    "summary",
+    "facets",
+    "total",
+    "offset",
+    "limit",
+    "tests"
+  ],
+  "additionalProperties": {}
+}

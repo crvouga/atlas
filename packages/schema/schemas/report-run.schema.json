@@ -1,0 +1,251 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/report-run.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "version": {
+      "type": "string"
+    },
+    "run": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`",
+          "type": "string"
+        },
+        "runUrl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "startedAtMs": {
+          "type": "number"
+        },
+        "endedAtMs": {
+          "type": "number"
+        },
+        "spanMs": {
+          "type": "number"
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "environments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "layers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "tests": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "counts": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "running",
+              "not-run"
+            ]
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "totalDurationMs": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failing": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "environment": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "detail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "title",
+              "environment",
+              "detail"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "key",
+        "runUrl",
+        "branch",
+        "sha",
+        "startedAtMs",
+        "endedAtMs",
+        "spanMs",
+        "producers",
+        "environments",
+        "layers",
+        "tests",
+        "counts",
+        "totalDurationMs",
+        "failing"
+      ],
+      "additionalProperties": {}
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "specPath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "producer": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "running",
+              "not-run"
+            ]
+          },
+          "durationMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "type": "number"
+          },
+          "layer": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "id",
+          "title",
+          "specPath",
+          "environment",
+          "producer",
+          "status",
+          "durationMs",
+          "at",
+          "layer",
+          "detail"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "version",
+    "run",
+    "results"
+  ],
+  "additionalProperties": {}
+}
