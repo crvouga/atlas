@@ -10,6 +10,7 @@ Given only the repository link, start at docs/agents.md: install `@crvouga/atlas
 - [Verify Atlas locally](https://raw.githubusercontent.com/crvouga/atlas/main/docs/quickstart.md): Prove that the installed Atlas can publish, combine and gate evidence before connecting your project's real suites.
 - [Integrating Atlas into a project](https://raw.githubusercontent.com/crvouga/atlas/main/docs/integrating.md): This guide takes a project from nothing to a layered, gated report of its specs.
 - [Native test runner reporters](https://raw.githubusercontent.com/crvouga/atlas/main/docs/runners.md): Projects upload results to a shared Atlas node under their own project slug.
+- [Send rich evidence](https://raw.githubusercontent.com/crvouga/atlas/main/docs/rich-evidence.md): A check that says only its title and passed answers one question:
 
 ## Run and use the server
 
@@ -43,6 +44,7 @@ Given only the repository link, start at docs/agents.md: install `@crvouga/atlas
 - [TypeScript API: detox](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/detox.md): The Detox driver for statechart runs of React Native apps.
 - [TypeScript API: runners](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/runners.md): Native reporters that upload to the project server.
 - [TypeScript API: vitest](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/vitest.md): Run a statechart plan as Vitest tests.
+- [TypeScript API: playwright-reporter](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reference/playwright-reporter.md): A Playwright Test reporter that streams every test to Atlas with its duration, device labels, steps, retries, videos, screenshots and traces.
 - [JSON Schemas](https://unpkg.com/@crvouga/atlas/packages/schema/schemas/): the layer format, checks file, report status, command results, server responses, server configuration.
 
 ## Optional
