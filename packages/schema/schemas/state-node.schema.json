@@ -26,11 +26,11 @@
           "type": "string"
         },
         "events": {
-          "description": "Business events that happen on entering the state",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "Business events that happen on entering the state"
         },
         "confidence": {
           "type": "string",
@@ -73,18 +73,17 @@
           "type": "string"
         },
         "quint": {
-          "description": "Quint model reference",
-          "type": "string"
+          "type": "string",
+          "description": "Quint model reference"
         },
         "gherkin": {
-          "description": "Feature files or scenarios that cover the state",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "Feature files or scenarios that cover the state"
         },
         "contracts": {
-          "description": "Business rules and their exact Given/When/Then examples, copied from the authoritative source",
           "type": "array",
           "items": {
             "type": "object",
@@ -142,15 +141,16 @@
               "source",
               "steps"
             ]
-          }
+          },
+          "description": "Business rules and their exact Given/When/Then examples, copied from the authoritative source"
         },
         "design": {
           "type": "object",
           "properties": {
             "image": {
-              "description": "URL or spec-relative path of a design frame",
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "description": "URL or spec-relative path of a design frame"
             },
             "url": {
               "description": "Where the design lives, for example a Figma frame link",
@@ -165,14 +165,13 @@
           ]
         },
         "hints": {
-          "description": "What the screen shows, for the placeholder sketch",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "What the screen shows, for the placeholder sketch"
         },
         "eventKinds": {
-          "description": "Chart-level: who or what sends each event; overrides the runner and the guess",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -185,17 +184,18 @@
               "time",
               "hand-off"
             ]
-          }
+          },
+          "description": "Chart-level: who or what sends each event; overrides the runner and the guess"
         },
         "timeEvents": {
-          "description": "Chart-level: time events and the span each one jumps, for example \"5 minutes\"",
           "type": "object",
           "propertyNames": {
             "type": "string"
           },
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "Chart-level: time events and the span each one jumps, for example \"5 minutes\""
         }
       }
     },

@@ -4,8 +4,8 @@
   "type": "object",
   "properties": {
     "ok": {
-      "description": "False when `verification` was asked for and failed (the exit code is then 1)",
-      "type": "boolean"
+      "type": "boolean",
+      "description": "False when `verification` was asked for and failed (the exit code is then 1)"
     },
     "directory": {
       "type": "string"
@@ -14,13 +14,9 @@
       "type": "object",
       "properties": {
         "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "packageManager": {
@@ -57,18 +53,14 @@
       "type": "object",
       "properties": {
         "branch": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "defaultBranch": {
-          "description": "`main` unless the repository says otherwise",
-          "type": "string"
+          "type": "string",
+          "description": "`main` unless the repository says otherwise"
         }
       },
       "required": [
@@ -90,13 +82,9 @@
       "type": "object",
       "properties": {
         "url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "tokenEnv": {
@@ -115,17 +103,12 @@
       "properties": {
         "directory": {
           "description": "The folder to pass as `--specs`, relative to the project; null when no spec files were found",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "kinds": {
-          "description": "Spec files by kind: `gherkin`, `quint`, `dmn`, `alloy`, `openslo`, `scxml`, …",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -134,7 +117,8 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
-          }
+          },
+          "description": "Spec files by kind: `gherkin`, `quint`, `dmn`, `alloy`, `openslo`, `scxml`, …"
         }
       },
       "required": [
@@ -149,66 +133,58 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "A stable name for the suite, lowercase: `vitest`, `playwright`, `pytest`, … Used as the default `--producer`",
-            "type": "string"
+            "type": "string",
+            "description": "A stable name for the suite, lowercase: `vitest`, `playwright`, `pytest`, … Used as the default `--producer`"
           },
           "runner": {
-            "description": "What runs it: `vitest`, `jest`, `playwright`, `bun-test`, `mocha`, `cypress`, `cucumber`, `pytest`, `go-test`, `atlas-statecharts`",
-            "type": "string"
+            "type": "string",
+            "description": "What runs it: `vitest`, `jest`, `playwright`, `bun-test`, `mocha`, `cypress`, `cucumber`, `pytest`, `go-test`, `atlas-statecharts`"
           },
           "evidence": {
-            "description": "Where the detection came from, such as `package.json devDependencies: vitest`",
-            "type": "string"
+            "type": "string",
+            "description": "Where the detection came from, such as `package.json devDependencies: vitest`"
           },
           "run": {
-            "description": "A command that runs the suite and writes its results to `output`. Its exit code is the suite's; publish regardless",
-            "type": "string"
+            "type": "string",
+            "description": "A command that runs the suite and writes its results to `output`. Its exit code is the suite's; publish regardless"
           },
           "output": {
-            "description": "The file the results are written to",
-            "type": "string"
+            "type": "string",
+            "description": "The file the results are written to"
           },
           "format": {
-            "description": "How `publish` should read `output`: `--junit`, `--ctrf` or `--manifest`",
             "type": "string",
             "enum": [
               "junit",
               "ctrf",
               "manifest"
-            ]
+            ],
+            "description": "How `publish` should read `output`: `--junit`, `--ctrf` or `--manifest`"
           },
           "environment": {
             "description": "The client the suite checks (`desktop-web`, `ios`, …) when that is known; null when it should be chosen",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "publish": {
-            "description": "The command that sends `output` to the server",
-            "type": "string"
+            "type": "string",
+            "description": "The command that sends `output` to the server"
           },
           "stream": {
             "description": "The command that streams checks as they finish, when the runner can print them as JSON lines; else null",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "prerequisites": {
-            "description": "What must be installed or configured first, as commands (`bun add -d jest-junit`)",
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "What must be installed or configured first, as commands (`bun add -d jest-junit`)"
           }
         },
         "required": [
@@ -232,24 +208,24 @@
         "type": "object",
         "properties": {
           "path": {
-            "description": "Relative to the project directory",
-            "type": "string"
+            "type": "string",
+            "description": "Relative to the project directory"
           },
           "action": {
-            "description": "`unchanged`: already what it would write, so applying changes nothing",
             "type": "string",
             "enum": [
               "create",
               "update",
               "unchanged"
-            ]
+            ],
+            "description": "`unchanged`: already what it would write, so applying changes nothing"
           },
           "purpose": {
             "type": "string"
           },
           "content": {
-            "description": "The whole file as it would be written",
-            "type": "string"
+            "type": "string",
+            "description": "The whole file as it would be written"
           }
         },
         "required": [
@@ -262,14 +238,13 @@
       }
     },
     "written": {
-      "description": "The files `--write` wrote; empty without it",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "The files `--write` wrote; empty without it"
     },
     "verification": {
-      "description": "Present with `--verify` (and a server): whether the server answers, and what the token in `ATLAS_TOKEN` may do",
       "anyOf": [
         {
           "type": "object",
@@ -278,26 +253,18 @@
               "type": "boolean"
             },
             "role": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "type": [
+                "string",
+                "null"
               ]
             },
             "canPublish": {
               "type": "boolean"
             },
             "error": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "type": [
+                "string",
+                "null"
               ]
             }
           },
@@ -312,14 +279,15 @@
         {
           "type": "null"
         }
-      ]
+      ],
+      "description": "Present with `--verify` (and a server): whether the server answers, and what the token in `ATLAS_TOKEN` may do"
     },
     "nextSteps": {
-      "description": "What to do next, in order, as plain instructions an agent can follow",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "What to do next, in order, as plain instructions an agent can follow"
     },
     "warnings": {
       "type": "array",

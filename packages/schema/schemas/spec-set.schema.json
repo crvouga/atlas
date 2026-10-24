@@ -8,34 +8,26 @@
       "const": 1
     },
     "id": {
-      "description": "SHA-256 of the branch, commit, freshness and the digest of every file: the same specs from the same commit are the same set",
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of the branch, commit, freshness and the digest of every file: the same specs from the same commit are the same set"
     },
     "branch": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "sha": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "recordedAtMs": {
-      "description": "For a clean checkout, the commit time; for a modified one, when it was published",
       "type": "number",
-      "minimum": 0
+      "minimum": 0,
+      "description": "For a clean checkout, the commit time; for a modified one, when it was published"
     },
     "freshness": {
       "type": "string",
@@ -50,18 +42,18 @@
         "type": "object",
         "properties": {
           "path": {
-            "description": "`specs/<path inside the specs directory>`, the name a check uses in `specPath`",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "`specs/<path inside the specs directory>`, the name a check uses in `specPath`"
           },
           "digest": {
-            "description": "SHA-256 of the file. Its text is at layers/specs/blobs/<digest>.txt",
             "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the file. Its text is at layers/specs/blobs/<digest>.txt"
           },
           "fingerprint": {
-            "description": "The advisory fingerprint layers record, to warn when a spec changed since they ran",
-            "type": "string"
+            "type": "string",
+            "description": "The advisory fingerprint layers record, to warn when a spec changed since they ran"
           },
           "kind": {
             "type": "string"

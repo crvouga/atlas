@@ -4,36 +4,36 @@
   "type": "object",
   "properties": {
     "ready": {
-      "description": "True once the first pass over the backends is done and at least one backend answers",
-      "type": "boolean"
+      "type": "boolean",
+      "description": "True once the first pass over the backends is done and at least one backend answers"
     },
     "layers": {
-      "description": "Distinct layers read",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Distinct layers read"
     },
     "slots": {
-      "description": "Distinct checks (slots) the report holds a winner for",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Distinct checks (slots) the report holds a winner for"
     },
     "holding": {
-      "description": "Layers that still hold at least one winner",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Layers that still hold at least one winner"
     },
     "failed": {
-      "description": "Layers or backends that could not be read right now",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Layers or backends that could not be read right now"
     },
     "refreshedAt": {
-      "description": "When a pass over the backends last finished, epoch milliseconds; 0 before the first",
-      "type": "number"
+      "type": "number",
+      "description": "When a pass over the backends last finished, epoch milliseconds; 0 before the first"
     },
     "backends": {
       "type": "array",

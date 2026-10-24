@@ -4,11 +4,10 @@
   "type": "object",
   "properties": {
     "version": {
-      "description": "Changes exactly when the report does",
-      "type": "string"
+      "type": "string",
+      "description": "Changes exactly when the report does"
     },
     "layers": {
-      "description": "Layers that are new or changed since `base`, whole",
       "type": "array",
       "items": {
         "type": "object",
@@ -22,12 +21,12 @@
               "type": "object",
               "properties": {
                 "kind": {
-                  "description": "The kind of the part holding the check. Part of the slot",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The kind of the part holding the check. Part of the slot"
                 },
                 "id": {
-                  "description": "The check id. Part of the slot",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The check id. Part of the slot"
                 },
                 "title": {
                   "type": "string"
@@ -43,18 +42,14 @@
                 },
                 "specPath": {
                   "description": "The spec the check belongs to, `specs/<path>`, or null",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "detail": {
-                  "description": "Why it has this status; empty when there is nothing to add",
-                  "type": "string"
+                  "type": "string",
+                  "description": "Why it has this status; empty when there is nothing to add"
                 },
                 "measurements": {
                   "type": "array",
@@ -83,13 +78,9 @@
                   }
                 },
                 "testId": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "variant": {
@@ -102,13 +93,9 @@
                   }
                 },
                 "durationMs": {
-                  "anyOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "number",
+                    "null"
                   ]
                 },
                 "evidence": {
@@ -190,96 +177,76 @@
             }
           },
           "fingerprints": {
-            "description": "Spec path to the fingerprint the layer recorded for it",
             "type": "object",
             "propertyNames": {
               "type": "string"
             },
             "additionalProperties": {
               "type": "string"
-            }
+            },
+            "description": "Spec path to the fingerprint the layer recorded for it"
           },
           "layer": {
             "type": "object",
             "properties": {
               "id": {
-                "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content",
-                "type": "string"
+                "type": "string",
+                "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content"
               },
               "backend": {
-                "description": "The backend it was read from; the one that sorts first when several hold it",
-                "type": "string"
+                "type": "string",
+                "description": "The backend it was read from; the one that sorts first when several hold it"
               },
               "producer": {
-                "description": "The suite or tool that made it. Part of the slot",
-                "type": "string"
+                "type": "string",
+                "description": "The suite or tool that made it. Part of the slot"
               },
               "packageDir": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "recordedAtMs": {
-                "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot",
-                "type": "number"
+                "type": "number",
+                "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot"
               },
               "sha": {
                 "description": "The commit it was recorded at. Provenance only",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "branch": {
                 "description": "The branch it was recorded on. Provenance only",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "environment": {
                 "description": "The client it checked, such as `ios`. Part of the slot",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "runUrl": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "parameters": {
-                "description": "Other choices that make a result its own slot",
                 "type": "object",
                 "propertyNames": {
                   "type": "string"
                 },
                 "additionalProperties": {
                   "type": "string"
-                }
+                },
+                "description": "Other choices that make a result its own slot"
               },
               "freshness": {
                 "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent: clean",
@@ -290,13 +257,13 @@
                 ]
               },
               "recording": {
-                "description": "Where recorded timelines are read from, or null",
                 "anyOf": [
                   {},
                   {
                     "type": "null"
                   }
-                ]
+                ],
+                "description": "Where recorded timelines are read from, or null"
               },
               "live": {
                 "type": "boolean"
@@ -316,7 +283,13 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
-                }
+                },
+                "required": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
               },
               "execution": {
                 "type": "string"
@@ -410,7 +383,8 @@
           "layer"
         ],
         "additionalProperties": {}
-      }
+      },
+      "description": "Layers that are new or changed since `base`, whole"
     },
     "backends": {
       "type": "array",
@@ -424,12 +398,12 @@
             "type": "string"
           },
           "live": {
-            "description": "Always false on a server",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Always false on a server"
           },
           "available": {
-            "description": "False when the backend could not be read; its results are then unknown, never passed",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "False when the backend could not be read; its results are then unknown, never passed"
           }
         },
         "required": [
@@ -442,37 +416,37 @@
       }
     },
     "notices": {
-      "description": "What could not be read. A gate treats any notice as unknown, never as passed",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "What could not be read. A gate treats any notice as unknown, never as passed"
     },
     "totalLayers": {
-      "description": "Every layer read, whether or not it still wins anything",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Every layer read, whether or not it still wins anything"
     },
     "active": {
-      "description": "Always empty on a server; kept for viewers written for live spec runs",
       "type": "array",
-      "items": {}
+      "items": {},
+      "description": "Always empty on a server; kept for viewers written for live spec runs"
     },
     "delta": {
       "type": "boolean",
       "const": true
     },
     "base": {
-      "description": "The version this applies to",
-      "type": "string"
+      "type": "string",
+      "description": "The version this applies to"
     },
     "removed": {
-      "description": "Ids of layers that no longer hold a winner",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "Ids of layers that no longer hold a winner"
     }
   },
   "required": [

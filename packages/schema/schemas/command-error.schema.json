@@ -11,13 +11,13 @@
       "type": "object",
       "properties": {
         "message": {
-          "description": "What is wrong, and usually what to do about it",
-          "type": "string"
+          "type": "string",
+          "description": "What is wrong, and usually what to do about it"
         },
         "code": {
-          "description": "`usage`: the command or its inputs were wrong. Nothing was written",
           "type": "string",
-          "const": "usage"
+          "const": "usage",
+          "description": "`usage`: the command or its inputs were wrong. Nothing was written"
         }
       },
       "required": [

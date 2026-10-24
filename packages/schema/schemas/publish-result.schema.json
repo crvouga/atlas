@@ -8,27 +8,23 @@
       "const": true
     },
     "store": {
-      "description": "Where it was written: a folder, `s3://…` or a server URL",
-      "type": "string"
+      "type": "string",
+      "description": "Where it was written: a folder, `s3://…` or a server URL"
     },
     "layer": {
       "type": "object",
       "properties": {
         "id": {
-          "description": "The layer id: 64 hex digits, the SHA-256 of its content. Publishing the same input again gives the same id",
-          "type": "string"
+          "type": "string",
+          "description": "The layer id: 64 hex digits, the SHA-256 of its content. Publishing the same input again gives the same id"
         },
         "producer": {
           "type": "string"
         },
         "environment": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "checks": {
@@ -47,16 +43,16 @@
           "maximum": 9007199254740991
         },
         "notRun": {
-          "description": "Skipped, pending or otherwise not run",
           "type": "integer",
           "minimum": 0,
-          "maximum": 9007199254740991
+          "maximum": 9007199254740991,
+          "description": "Skipped, pending or otherwise not run"
         },
         "linkedToSpec": {
-          "description": "Checks that were matched to a spec file. The rest still count, but belong to no spec",
           "type": "integer",
           "minimum": 0,
-          "maximum": 9007199254740991
+          "maximum": 9007199254740991,
+          "description": "Checks that were matched to a spec file. The rest still count, but belong to no spec"
         },
         "freshness": {
           "description": "Set when the checkout had uncommitted changes (`modified`) or no git origin (`unknown`)",
@@ -104,13 +100,9 @@
           "maximum": 9007199254740991
         },
         "branch": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -151,11 +143,11 @@
       "additionalProperties": {}
     },
     "warnings": {
-      "description": "What was skipped and why, such as an attachment file that could not be read. Never fatal",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "What was skipped and why, such as an attachment file that could not be read. Never fatal"
     }
   },
   "required": [

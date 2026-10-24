@@ -11,13 +11,9 @@
     },
     "next": {
       "description": "Pass as `?after=` for the next page; null when there are no more",
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     }
   },
