@@ -3340,6 +3340,8 @@ export function layerExecutionKey(layer: LayerSummary): string
 ```
 
 A string equal for the mutable and the archived address of one execution: its producer, sha, time and parts.
+Object key order is ignored at every depth, including check evidence and extensions; array order is preserved.
+This is an advisory execution identity, not the content digest that addresses an immutable layer in storage.
 
 ### Archiving a recorded run as a layer
 

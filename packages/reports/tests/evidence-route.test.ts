@@ -3,11 +3,13 @@ import type { EvidencePage, LayerRows } from '../src/evidence-types';
 import { recordingPaths } from '../src/evidence-types';
 import { evidenceFile, exportEvidence } from '../src/export-evidence';
 import { publishLayerBundle } from '../src/layer-store';
+import { distinctHeaders } from '../src/layer-merge';
 import type { LayerSummary } from '../src/layer-types';
 import { readUtf8, writeUtf8 } from '../src/object-io';
 import type { ObjectStore } from '../src/object-store';
 import { createReportsApp } from '../src/reports-route';
 import type { RunReport } from '../src/report-types';
+import { openCommit, publishSource } from '../src/publish';
 import { memoryStore, testClock } from './memory-store';
 
 const SHA = 'a'.repeat(40);
@@ -143,4 +145,27 @@ test('a static export holds the collected layers, their checks and their recordi
   expect(rows.rows[0]).toMatchObject({ testId: 'join', variant: { runtime: 'gherkin' } });
   // The layer above has no bundle, so its recording is reported missing instead of invented.
   expect(exported.missing).toContain(recordingPaths({ type: 'layer', layer: stored.id }, 'join').report);
+});
+
+test('publishing a source exports one archived execution alongside its legacy mutable address', async () => {
+  const store = memoryStore(), bucket = memoryStore(), target = memoryStore();
+  await finish(bucket, 'join', 'passed');
+  await openCommit(store, { sha: SHA, branch: 'main', runUrl: null, startedAtMs: 0, frameCss: '' });
+  await publishSource(store, { sha: SHA, packageDir: 'libs/list-harness', bucket: 'all', local: bucket, recordedAtMs: 30 });
+  const app = createReportsApp({ store, outline: async () => ({ specs: [], sha: SHA, changedFiles: [], readSpec: async () => null }), ...testClock() });
+  const published = await page(app);
+  // Both storage layouts remain readable, but they identify the same execution.
+  const archived = published.layers.find(layer => /^[0-9a-f]{64}$/.test(layer.id))!;
+  const mutable = published.layers.find(layer => layer.id.startsWith(`source-${SHA}-`))!;
+  expect(archived).toBeDefined();
+  expect(mutable).toBeDefined();
+  expect(mutable.execution).toBe(archived.execution);
+  expect(distinctHeaders(published.layers)).toEqual([archived]);
+  const exported = await exportEvidence({ fetch: async path => app.request(path), target });
+  expect(exported).toEqual({ revisions: 1, layers: 1, missing: [] });
+  const index = JSON.parse((await readUtf8(target, evidenceFile('/evidence')))!) as EvidencePage;
+  expect(index.layers.map(layer => layer.id)).toEqual([archived.id]);
+  const paths = recordingPaths(archived.recording!, 'join');
+  const recording = JSON.parse((await readUtf8(target, evidenceFile(paths.report)))!) as RunReport;
+  expect(recording.meta.testId).toBe('join');
 });
