@@ -8,8 +8,8 @@
       "const": true
     },
     "id": {
-      "description": "The layer id",
-      "type": "string"
+      "type": "string",
+      "description": "The layer id"
     },
     "checks": {
       "type": "integer",

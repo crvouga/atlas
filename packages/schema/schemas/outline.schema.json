@@ -9,15 +9,15 @@
         "type": "object",
         "properties": {
           "path": {
-            "description": "`specs/<path>`",
-            "type": "string"
+            "type": "string",
+            "description": "`specs/<path>`"
           },
           "domain": {
             "type": "string"
           },
           "kind": {
-            "description": "The kind of spec: `gherkin`, `quint`, `dmn`, …",
-            "type": "string"
+            "type": "string",
+            "description": "The kind of spec: `gherkin`, `quint`, `dmn`, …"
           },
           "title": {
             "type": "string"
@@ -37,13 +37,9 @@
       }
     },
     "sha": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "changedFiles": {

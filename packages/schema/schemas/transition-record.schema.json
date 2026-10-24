@@ -10,13 +10,9 @@
       "type": "string"
     },
     "target": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "event": {
@@ -32,13 +28,9 @@
       ]
     },
     "how": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "client": {
@@ -101,13 +93,9 @@
       "items": {}
     },
     "reason": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "reachedBy": {

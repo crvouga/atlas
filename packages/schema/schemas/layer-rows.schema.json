@@ -12,12 +12,12 @@
         "type": "object",
         "properties": {
           "kind": {
-            "description": "The kind of the part holding the check. Part of the slot",
-            "type": "string"
+            "type": "string",
+            "description": "The kind of the part holding the check. Part of the slot"
           },
           "id": {
-            "description": "The check id. Part of the slot",
-            "type": "string"
+            "type": "string",
+            "description": "The check id. Part of the slot"
           },
           "title": {
             "type": "string"
@@ -33,18 +33,14 @@
           },
           "specPath": {
             "description": "The spec the check belongs to, `specs/<path>`, or null",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "detail": {
-            "description": "Why it has this status; empty when there is nothing to add",
-            "type": "string"
+            "type": "string",
+            "description": "Why it has this status; empty when there is nothing to add"
           },
           "measurements": {
             "type": "array",
@@ -73,13 +69,9 @@
             }
           },
           "testId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "variant": {
@@ -92,13 +84,9 @@
             }
           },
           "durationMs": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "number",
+              "null"
             ]
           },
           "evidence": {
@@ -180,14 +168,14 @@
       }
     },
     "fingerprints": {
-      "description": "Spec path to the fingerprint the layer recorded for it",
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {
         "type": "string"
-      }
+      },
+      "description": "Spec path to the fingerprint the layer recorded for it"
     }
   },
   "required": [

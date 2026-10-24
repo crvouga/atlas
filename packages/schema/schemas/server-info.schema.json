@@ -9,44 +9,40 @@
     },
     "version": {
       "description": "The @crvouga/atlas version the server runs, or null when it does not know",
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "role": {
-      "description": "What the token of this request may do. A server with no tokens treats everyone as admin",
       "type": "string",
       "enum": [
         "read",
         "publish",
         "admin"
-      ]
+      ],
+      "description": "What the token of this request may do. A server with no tokens treats everyone as admin"
     },
     "open": {
-      "description": "True when the server has no tokens at all",
-      "type": "boolean"
+      "type": "boolean",
+      "description": "True when the server has no tokens at all"
     },
     "write": {
-      "description": "The id of the backend uploads go to",
-      "type": "string"
+      "type": "string",
+      "description": "The id of the backend uploads go to"
     },
     "ready": {
       "type": "boolean"
     },
     "viewers": {
-      "description": "Viewers connected to /api/events right now",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Viewers connected to /api/events right now"
     },
     "time": {
-      "description": "The server clock, epoch milliseconds",
-      "type": "number"
+      "type": "number",
+      "description": "The server clock, epoch milliseconds"
     },
     "backends": {
       "type": "array",
@@ -86,14 +82,14 @@
       "maximum": 9007199254740991
     },
     "capabilities": {
-      "description": "Features this server has, by name: `events`, `ingest`, `store`, `checks`, `status`, `effective`. A client checks a name before using what it names",
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {
         "type": "boolean"
-      }
+      },
+      "description": "Features this server has, by name: `events`, `ingest`, `store`, `checks`, `status`, `effective`. A client checks a name before using what it names"
     }
   },
   "required": [

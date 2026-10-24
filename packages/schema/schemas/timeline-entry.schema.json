@@ -4,9 +4,9 @@
   "type": "object",
   "properties": {
     "atMs": {
-      "description": "Milliseconds from the start of the clip",
       "type": "number",
-      "minimum": 0
+      "minimum": 0,
+      "description": "Milliseconds from the start of the clip"
     },
     "kind": {
       "type": "string",

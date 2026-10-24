@@ -7,13 +7,9 @@
       "type": "string"
     },
     "chart": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "description": {
@@ -249,11 +245,11 @@
               }
             },
             "noSignal": {
-              "description": "No observable signal is mapped yet",
               "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "description": "No observable signal is mapped yet"
             },
             "events": {
               "description": "The CloudEvents observed during the step",

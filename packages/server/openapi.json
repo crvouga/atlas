@@ -6120,7 +6120,7 @@
           "id": {
             "type": "string",
             "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$"
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
           },
           "producer": {
             "type": "string",
@@ -6350,7 +6350,7 @@
           "id": {
             "type": "string",
             "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$"
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
           },
           "producer": {
             "type": "string",
@@ -6479,29 +6479,29 @@
         "type": "object",
         "properties": {
           "data": {
-            "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
             "default": "./atlas-data",
+            "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
             "type": "string"
           },
           "backends": {
-            "description": "Further backends, read together with the data folder: S3, another server, a device lab",
             "default": [],
+            "description": "Further backends, read together with the data folder: S3, another server, a device lab",
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "id": {
-                  "description": "Lowercase letters, digits and hyphens. Names where a result came from",
                   "type": "string",
-                  "pattern": "^[a-z0-9-]+$"
+                  "pattern": "^[a-z0-9-]+$",
+                  "description": "Lowercase letters, digits and hyphens. Names where a result came from"
                 },
                 "label": {
                   "type": "string"
                 },
                 "url": {
-                  "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)",
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)"
                 },
                 "write": {
                   "description": "Uploads go here instead of the data folder. At most one backend is the write target",
@@ -6542,8 +6542,8 @@
             "additionalProperties": false
           },
           "refreshSeconds": {
-            "description": "How often the backends are looked at for layers written by something other than this server",
             "default": 10,
+            "description": "How often the backends are looked at for layers written by something other than this server",
             "type": "number",
             "minimum": 1
           },
@@ -6556,20 +6556,20 @@
             "type": "object",
             "properties": {
               "maxObjectMiB": {
-                "description": "The largest object an upload may be",
                 "default": 256,
+                "description": "The largest object an upload may be",
                 "type": "number",
                 "exclusiveMinimum": 0
               },
               "maxJsonMiB": {
-                "description": "The largest JSON body (a manifest, a checks request)",
                 "default": 32,
+                "description": "The largest JSON body (a manifest, a checks request)",
                 "type": "number",
                 "exclusiveMinimum": 0
               },
               "maxStreams": {
-                "description": "Viewers that may be connected for live updates at once",
                 "default": 500,
+                "description": "Viewers that may be connected for live updates at once",
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
@@ -6578,28 +6578,28 @@
             "additionalProperties": false
           },
           "heartbeatSeconds": {
-            "description": "How often a live connection is touched, so proxies keep it open",
             "default": 15,
+            "description": "How often a live connection is touched, so proxies keep it open",
             "type": "number",
             "minimum": 1
           },
           "runTimeoutSeconds": {
-            "description": "Interrupt a live run after this many seconds without a producer heartbeat",
             "default": 30,
+            "description": "Interrupt a live run after this many seconds without a producer heartbeat",
             "type": "number",
             "minimum": 10,
             "maximum": 3600
           },
           "runStallSeconds": {
-            "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
             "default": 900,
+            "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
             "type": "number",
             "minimum": 0,
             "maximum": 86400
           },
           "log": {
-            "description": "One JSON line per request",
             "default": true,
+            "description": "One JSON line per request",
             "type": "boolean"
           }
         },
@@ -6616,29 +6616,29 @@
             "type": "object",
             "properties": {
               "data": {
-                "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
                 "default": "./atlas-data",
+                "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
                 "type": "string"
               },
               "backends": {
-                "description": "Further backends, read together with the data folder: S3, another server, a device lab",
                 "default": [],
+                "description": "Further backends, read together with the data folder: S3, another server, a device lab",
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
                     "id": {
-                      "description": "Lowercase letters, digits and hyphens. Names where a result came from",
                       "type": "string",
-                      "pattern": "^[a-z0-9-]+$"
+                      "pattern": "^[a-z0-9-]+$",
+                      "description": "Lowercase letters, digits and hyphens. Names where a result came from"
                     },
                     "label": {
                       "type": "string"
                     },
                     "url": {
-                      "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)",
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)"
                     },
                     "write": {
                       "description": "Uploads go here instead of the data folder. At most one backend is the write target",
@@ -6679,8 +6679,8 @@
                 "additionalProperties": false
               },
               "refreshSeconds": {
-                "description": "How often the backends are looked at for layers written by something other than this server",
                 "default": 10,
+                "description": "How often the backends are looked at for layers written by something other than this server",
                 "type": "number",
                 "minimum": 1
               },
@@ -6693,20 +6693,20 @@
                 "type": "object",
                 "properties": {
                   "maxObjectMiB": {
-                    "description": "The largest object an upload may be",
                     "default": 256,
+                    "description": "The largest object an upload may be",
                     "type": "number",
                     "exclusiveMinimum": 0
                   },
                   "maxJsonMiB": {
-                    "description": "The largest JSON body (a manifest, a checks request)",
                     "default": 32,
+                    "description": "The largest JSON body (a manifest, a checks request)",
                     "type": "number",
                     "exclusiveMinimum": 0
                   },
                   "maxStreams": {
-                    "description": "Viewers that may be connected for live updates at once",
                     "default": 500,
+                    "description": "Viewers that may be connected for live updates at once",
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
@@ -6720,28 +6720,28 @@
                 "additionalProperties": false
               },
               "heartbeatSeconds": {
-                "description": "How often a live connection is touched, so proxies keep it open",
                 "default": 15,
+                "description": "How often a live connection is touched, so proxies keep it open",
                 "type": "number",
                 "minimum": 1
               },
               "runTimeoutSeconds": {
-                "description": "Interrupt a live run after this many seconds without a producer heartbeat",
                 "default": 30,
+                "description": "Interrupt a live run after this many seconds without a producer heartbeat",
                 "type": "number",
                 "minimum": 10,
                 "maximum": 3600
               },
               "runStallSeconds": {
-                "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
                 "default": 900,
+                "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
                 "type": "number",
                 "minimum": 0,
                 "maximum": 86400
               },
               "log": {
-                "description": "One JSON line per request",
                 "default": true,
+                "description": "One JSON line per request",
                 "type": "boolean"
               }
             },
@@ -6751,29 +6751,29 @@
             "type": "object",
             "properties": {
               "data": {
-                "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
                 "default": "./atlas-data",
+                "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
                 "type": "string"
               },
               "backends": {
-                "description": "Further backends, read together with the data folder: S3, another server, a device lab",
                 "default": [],
+                "description": "Further backends, read together with the data folder: S3, another server, a device lab",
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
                     "id": {
-                      "description": "Lowercase letters, digits and hyphens. Names where a result came from",
                       "type": "string",
-                      "pattern": "^[a-z0-9-]+$"
+                      "pattern": "^[a-z0-9-]+$",
+                      "description": "Lowercase letters, digits and hyphens. Names where a result came from"
                     },
                     "label": {
                       "type": "string"
                     },
                     "url": {
-                      "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)",
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)"
                     },
                     "write": {
                       "description": "Uploads go here instead of the data folder. At most one backend is the write target",
@@ -6814,8 +6814,8 @@
                 "additionalProperties": false
               },
               "refreshSeconds": {
-                "description": "How often the backends are looked at for layers written by something other than this server",
                 "default": 10,
+                "description": "How often the backends are looked at for layers written by something other than this server",
                 "type": "number",
                 "minimum": 1
               },
@@ -6828,20 +6828,20 @@
                 "type": "object",
                 "properties": {
                   "maxObjectMiB": {
-                    "description": "The largest object an upload may be",
                     "default": 256,
+                    "description": "The largest object an upload may be",
                     "type": "number",
                     "exclusiveMinimum": 0
                   },
                   "maxJsonMiB": {
-                    "description": "The largest JSON body (a manifest, a checks request)",
                     "default": 32,
+                    "description": "The largest JSON body (a manifest, a checks request)",
                     "type": "number",
                     "exclusiveMinimum": 0
                   },
                   "maxStreams": {
-                    "description": "Viewers that may be connected for live updates at once",
                     "default": 500,
+                    "description": "Viewers that may be connected for live updates at once",
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
@@ -6855,28 +6855,28 @@
                 "additionalProperties": false
               },
               "heartbeatSeconds": {
-                "description": "How often a live connection is touched, so proxies keep it open",
                 "default": 15,
+                "description": "How often a live connection is touched, so proxies keep it open",
                 "type": "number",
                 "minimum": 1
               },
               "runTimeoutSeconds": {
-                "description": "Interrupt a live run after this many seconds without a producer heartbeat",
                 "default": 30,
+                "description": "Interrupt a live run after this many seconds without a producer heartbeat",
                 "type": "number",
                 "minimum": 10,
                 "maximum": 3600
               },
               "runStallSeconds": {
-                "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
                 "default": 900,
+                "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
                 "type": "number",
                 "minimum": 0,
                 "maximum": 86400
               },
               "log": {
-                "description": "One JSON line per request",
                 "default": true,
+                "description": "One JSON line per request",
                 "type": "boolean"
               }
             },
@@ -6902,27 +6902,27 @@
         "type": "object",
         "properties": {
           "type": {
-            "description": "A URI naming the kind of problem. `about:blank` means the status code says it all",
             "default": "about:blank",
+            "description": "A URI naming the kind of problem. `about:blank` means the status code says it all",
             "type": "string"
           },
           "title": {
-            "description": "The status in words, such as \"Unauthorized\"",
-            "type": "string"
+            "type": "string",
+            "description": "The status in words, such as \"Unauthorized\""
           },
           "status": {
-            "description": "The HTTP status code",
             "type": "integer",
             "minimum": -9007199254740991,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "The HTTP status code"
           },
           "detail": {
-            "description": "What went wrong and what to do about it, in a sentence an agent or a person can act on",
-            "type": "string"
+            "type": "string",
+            "description": "What went wrong and what to do about it, in a sentence an agent or a person can act on"
           },
           "error": {
-            "description": "The same as `detail`. Kept for clients that read `error`",
-            "type": "string"
+            "type": "string",
+            "description": "The same as `detail`. Kept for clients that read `error`"
           }
         },
         "required": [
@@ -6951,36 +6951,36 @@
         "type": "object",
         "properties": {
           "ready": {
-            "description": "True once the first pass over the backends is done and at least one backend answers",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True once the first pass over the backends is done and at least one backend answers"
           },
           "layers": {
-            "description": "Distinct layers read",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Distinct layers read"
           },
           "slots": {
-            "description": "Distinct checks (slots) the report holds a winner for",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Distinct checks (slots) the report holds a winner for"
           },
           "holding": {
-            "description": "Layers that still hold at least one winner",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Layers that still hold at least one winner"
           },
           "failed": {
-            "description": "Layers or backends that could not be read right now",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Layers or backends that could not be read right now"
           },
           "refreshedAt": {
-            "description": "When a pass over the backends last finished, epoch milliseconds; 0 before the first",
-            "type": "number"
+            "type": "number",
+            "description": "When a pass over the backends last finished, epoch milliseconds; 0 before the first"
           },
           "backends": {
             "type": "array",
@@ -7022,44 +7022,40 @@
           },
           "version": {
             "description": "The @crvouga/atlas version the server runs, or null when it does not know",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "role": {
-            "description": "What the token of this request may do. A server with no tokens treats everyone as admin",
             "type": "string",
             "enum": [
               "read",
               "publish",
               "admin"
-            ]
+            ],
+            "description": "What the token of this request may do. A server with no tokens treats everyone as admin"
           },
           "open": {
-            "description": "True when the server has no tokens at all",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the server has no tokens at all"
           },
           "write": {
-            "description": "The id of the backend uploads go to",
-            "type": "string"
+            "type": "string",
+            "description": "The id of the backend uploads go to"
           },
           "ready": {
             "type": "boolean"
           },
           "viewers": {
-            "description": "Viewers connected to /api/events right now",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Viewers connected to /api/events right now"
           },
           "time": {
-            "description": "The server clock, epoch milliseconds",
-            "type": "number"
+            "type": "number",
+            "description": "The server clock, epoch milliseconds"
           },
           "backends": {
             "type": "array",
@@ -7099,14 +7095,14 @@
             "maximum": 9007199254740991
           },
           "capabilities": {
-            "description": "Features this server has, by name: `events`, `ingest`, `store`, `checks`, `status`, `effective`. A client checks a name before using what it names",
             "type": "object",
             "propertyNames": {
               "type": "string"
             },
             "additionalProperties": {
               "type": "boolean"
-            }
+            },
+            "description": "Features this server has, by name: `events`, `ingest`, `store`, `checks`, `status`, `effective`. A client checks a name before using what it names"
           }
         },
         "required": [
@@ -7129,8 +7125,8 @@
         "type": "object",
         "properties": {
           "version": {
-            "description": "Changes exactly when the report does",
-            "type": "string"
+            "type": "string",
+            "description": "Changes exactly when the report does"
           },
           "layers": {
             "type": "array",
@@ -7146,12 +7142,12 @@
                     "type": "object",
                     "properties": {
                       "kind": {
-                        "description": "The kind of the part holding the check. Part of the slot",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The kind of the part holding the check. Part of the slot"
                       },
                       "id": {
-                        "description": "The check id. Part of the slot",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The check id. Part of the slot"
                       },
                       "title": {
                         "type": "string"
@@ -7167,18 +7163,14 @@
                       },
                       "specPath": {
                         "description": "The spec the check belongs to, `specs/<path>`, or null",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "detail": {
-                        "description": "Why it has this status; empty when there is nothing to add",
-                        "type": "string"
+                        "type": "string",
+                        "description": "Why it has this status; empty when there is nothing to add"
                       },
                       "measurements": {
                         "type": "array",
@@ -7207,13 +7199,9 @@
                         }
                       },
                       "testId": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "variant": {
@@ -7226,13 +7214,9 @@
                         }
                       },
                       "durationMs": {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       },
                       "evidence": {
@@ -7314,96 +7298,76 @@
                   }
                 },
                 "fingerprints": {
-                  "description": "Spec path to the fingerprint the layer recorded for it",
                   "type": "object",
                   "propertyNames": {
                     "type": "string"
                   },
                   "additionalProperties": {
                     "type": "string"
-                  }
+                  },
+                  "description": "Spec path to the fingerprint the layer recorded for it"
                 },
                 "layer": {
                   "type": "object",
                   "properties": {
                     "id": {
-                      "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content",
-                      "type": "string"
+                      "type": "string",
+                      "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content"
                     },
                     "backend": {
-                      "description": "The backend it was read from; the one that sorts first when several hold it",
-                      "type": "string"
+                      "type": "string",
+                      "description": "The backend it was read from; the one that sorts first when several hold it"
                     },
                     "producer": {
-                      "description": "The suite or tool that made it. Part of the slot",
-                      "type": "string"
+                      "type": "string",
+                      "description": "The suite or tool that made it. Part of the slot"
                     },
                     "packageDir": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "recordedAtMs": {
-                      "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot",
-                      "type": "number"
+                      "type": "number",
+                      "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot"
                     },
                     "sha": {
                       "description": "The commit it was recorded at. Provenance only",
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "branch": {
                       "description": "The branch it was recorded on. Provenance only",
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "environment": {
                       "description": "The client it checked, such as `ios`. Part of the slot",
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "runUrl": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "parameters": {
-                      "description": "Other choices that make a result its own slot",
                       "type": "object",
                       "propertyNames": {
                         "type": "string"
                       },
                       "additionalProperties": {
                         "type": "string"
-                      }
+                      },
+                      "description": "Other choices that make a result its own slot"
                     },
                     "freshness": {
                       "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent: clean",
@@ -7414,13 +7378,13 @@
                       ]
                     },
                     "recording": {
-                      "description": "Where recorded timelines are read from, or null",
                       "anyOf": [
                         {},
                         {
                           "type": "null"
                         }
-                      ]
+                      ],
+                      "description": "Where recorded timelines are read from, or null"
                     },
                     "live": {
                       "type": "boolean"
@@ -7440,7 +7404,13 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
-                      }
+                      },
+                      "required": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
                     },
                     "execution": {
                       "type": "string"
@@ -7548,12 +7518,12 @@
                   "type": "string"
                 },
                 "live": {
-                  "description": "Always false on a server",
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Always false on a server"
                 },
                 "available": {
-                  "description": "False when the backend could not be read; its results are then unknown, never passed",
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "False when the backend could not be read; its results are then unknown, never passed"
                 }
               },
               "required": [
@@ -7566,22 +7536,22 @@
             }
           },
           "notices": {
-            "description": "What could not be read. A gate treats any notice as unknown, never as passed",
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "What could not be read. A gate treats any notice as unknown, never as passed"
           },
           "totalLayers": {
-            "description": "Every layer read, whether or not it still wins anything",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Every layer read, whether or not it still wins anything"
           },
           "active": {
-            "description": "Always empty on a server; kept for viewers written for live spec runs",
             "type": "array",
-            "items": {}
+            "items": {},
+            "description": "Always empty on a server; kept for viewers written for live spec runs"
           }
         },
         "required": [
@@ -7598,11 +7568,10 @@
         "type": "object",
         "properties": {
           "version": {
-            "description": "Changes exactly when the report does",
-            "type": "string"
+            "type": "string",
+            "description": "Changes exactly when the report does"
           },
           "layers": {
-            "description": "Layers that are new or changed since `base`, whole",
             "type": "array",
             "items": {
               "type": "object",
@@ -7616,12 +7585,12 @@
                     "type": "object",
                     "properties": {
                       "kind": {
-                        "description": "The kind of the part holding the check. Part of the slot",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The kind of the part holding the check. Part of the slot"
                       },
                       "id": {
-                        "description": "The check id. Part of the slot",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The check id. Part of the slot"
                       },
                       "title": {
                         "type": "string"
@@ -7637,18 +7606,14 @@
                       },
                       "specPath": {
                         "description": "The spec the check belongs to, `specs/<path>`, or null",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "detail": {
-                        "description": "Why it has this status; empty when there is nothing to add",
-                        "type": "string"
+                        "type": "string",
+                        "description": "Why it has this status; empty when there is nothing to add"
                       },
                       "measurements": {
                         "type": "array",
@@ -7677,13 +7642,9 @@
                         }
                       },
                       "testId": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "variant": {
@@ -7696,13 +7657,9 @@
                         }
                       },
                       "durationMs": {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       },
                       "evidence": {
@@ -7784,96 +7741,76 @@
                   }
                 },
                 "fingerprints": {
-                  "description": "Spec path to the fingerprint the layer recorded for it",
                   "type": "object",
                   "propertyNames": {
                     "type": "string"
                   },
                   "additionalProperties": {
                     "type": "string"
-                  }
+                  },
+                  "description": "Spec path to the fingerprint the layer recorded for it"
                 },
                 "layer": {
                   "type": "object",
                   "properties": {
                     "id": {
-                      "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content",
-                      "type": "string"
+                      "type": "string",
+                      "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content"
                     },
                     "backend": {
-                      "description": "The backend it was read from; the one that sorts first when several hold it",
-                      "type": "string"
+                      "type": "string",
+                      "description": "The backend it was read from; the one that sorts first when several hold it"
                     },
                     "producer": {
-                      "description": "The suite or tool that made it. Part of the slot",
-                      "type": "string"
+                      "type": "string",
+                      "description": "The suite or tool that made it. Part of the slot"
                     },
                     "packageDir": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "recordedAtMs": {
-                      "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot",
-                      "type": "number"
+                      "type": "number",
+                      "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot"
                     },
                     "sha": {
                       "description": "The commit it was recorded at. Provenance only",
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "branch": {
                       "description": "The branch it was recorded on. Provenance only",
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "environment": {
                       "description": "The client it checked, such as `ios`. Part of the slot",
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "runUrl": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "parameters": {
-                      "description": "Other choices that make a result its own slot",
                       "type": "object",
                       "propertyNames": {
                         "type": "string"
                       },
                       "additionalProperties": {
                         "type": "string"
-                      }
+                      },
+                      "description": "Other choices that make a result its own slot"
                     },
                     "freshness": {
                       "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent: clean",
@@ -7884,13 +7821,13 @@
                       ]
                     },
                     "recording": {
-                      "description": "Where recorded timelines are read from, or null",
                       "anyOf": [
                         {},
                         {
                           "type": "null"
                         }
-                      ]
+                      ],
+                      "description": "Where recorded timelines are read from, or null"
                     },
                     "live": {
                       "type": "boolean"
@@ -7910,7 +7847,13 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
-                      }
+                      },
+                      "required": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
                     },
                     "execution": {
                       "type": "string"
@@ -8004,7 +7947,8 @@
                 "layer"
               ],
               "additionalProperties": {}
-            }
+            },
+            "description": "Layers that are new or changed since `base`, whole"
           },
           "backends": {
             "type": "array",
@@ -8018,12 +7962,12 @@
                   "type": "string"
                 },
                 "live": {
-                  "description": "Always false on a server",
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Always false on a server"
                 },
                 "available": {
-                  "description": "False when the backend could not be read; its results are then unknown, never passed",
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "False when the backend could not be read; its results are then unknown, never passed"
                 }
               },
               "required": [
@@ -8036,37 +7980,37 @@
             }
           },
           "notices": {
-            "description": "What could not be read. A gate treats any notice as unknown, never as passed",
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "What could not be read. A gate treats any notice as unknown, never as passed"
           },
           "totalLayers": {
-            "description": "Every layer read, whether or not it still wins anything",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Every layer read, whether or not it still wins anything"
           },
           "active": {
-            "description": "Always empty on a server; kept for viewers written for live spec runs",
             "type": "array",
-            "items": {}
+            "items": {},
+            "description": "Always empty on a server; kept for viewers written for live spec runs"
           },
           "delta": {
             "type": "boolean",
             "const": true
           },
           "base": {
-            "description": "The version this applies to",
-            "type": "string"
+            "type": "string",
+            "description": "The version this applies to"
           },
           "removed": {
-            "description": "Ids of layers that no longer hold a winner",
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Ids of layers that no longer hold a winner"
           }
         },
         "required": [
@@ -8093,11 +8037,11 @@
             "type": "boolean"
           },
           "reasons": {
-            "description": "Why `ok` is false, in words. Empty when it is true",
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Why `ok` is false, in words. Empty when it is true"
           },
           "checks": {
             "type": "object",
@@ -8182,10 +8126,10 @@
             }
           },
           "layers": {
-            "description": "Distinct layers read, across all backends",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Distinct layers read, across all backends"
           },
           "backends": {
             "type": "array",
@@ -8211,34 +8155,29 @@
             }
           },
           "notices": {
-            "description": "What could not be read. Any notice fails the gate: unknown is not passed",
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "What could not be read. Any notice fails the gate: unknown is not passed"
           },
           "specsWithoutEvidence": {
-            "description": "Specs of the outline with no result at all. The outline is `--specs <dir>`, or else the specs the layers recorded",
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Specs of the outline with no result at all. The outline is `--specs <dir>`, or else the specs the layers recorded"
           },
           "specs": {
-            "description": "The outcome of each spec, so a dashboard needs nothing else",
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "path": {
                   "description": "Null for checks that name no spec in the outline",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "title": {
@@ -8338,22 +8277,18 @@
                 "byEnvironment"
               ],
               "additionalProperties": {}
-            }
+            },
+            "description": "The outcome of each spec, so a dashboard needs nothing else"
           },
           "failing": {
-            "description": "Each slot whose newest completed result failed, or that is still running",
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "spec": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "check": {
@@ -8370,36 +8305,24 @@
                   ]
                 },
                 "environment": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "producer": {
                   "type": "string"
                 },
                 "branch": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "sha": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "layer": {
@@ -8409,13 +8332,9 @@
                   "type": "string"
                 },
                 "runUrl": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "detail": {
@@ -8437,7 +8356,8 @@
                 "detail"
               ],
               "additionalProperties": {}
-            }
+            },
+            "description": "Each slot whose newest completed result failed, or that is still running"
           }
         },
         "required": [
@@ -8468,9 +8388,9 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another",
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another"
                 },
                 "title": {
                   "type": "string"
@@ -8485,8 +8405,8 @@
                   ]
                 },
                 "detail": {
-                  "description": "Why it failed, or what was measured",
                   "default": "",
+                  "description": "Why it failed, or what was measured",
                   "type": "string"
                 },
                 "specPath": {
@@ -8504,8 +8424,8 @@
                         "minLength": 1
                       },
                       "value": {
-                        "description": "A finite number",
-                        "type": "number"
+                        "type": "number",
+                        "description": "A finite number"
                       },
                       "unit": {
                         "type": "string"
@@ -8680,9 +8600,9 @@
                     "type": "object",
                     "properties": {
                       "type": {
-                        "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                         "type": "string",
-                        "minLength": 1
+                        "minLength": 1,
+                        "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                       },
                       "message": {
                         "type": "string"
@@ -8917,9 +8837,9 @@
                           "type": "object",
                           "properties": {
                             "type": {
-                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                             },
                             "message": {
                               "type": "string"
@@ -9191,9 +9111,9 @@
                                 "type": "object",
                                 "properties": {
                                   "type": {
-                                    "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                                   },
                                   "message": {
                                     "type": "string"
@@ -9401,9 +9321,9 @@
                           "type": "object",
                           "properties": {
                             "type": {
-                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                             },
                             "message": {
                               "type": "string"
@@ -9523,45 +9443,29 @@
           },
           "sha": {
             "default": null,
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "branch": {
             "default": null,
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "runUrl": {
             "default": null,
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "environment": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "parameters": {
@@ -9767,9 +9671,9 @@
               "type": "object",
               "properties": {
                 "type": {
-                  "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                 },
                 "message": {
                   "type": "string"
@@ -9873,8 +9777,8 @@
             "const": true
           },
           "id": {
-            "description": "The layer id",
-            "type": "string"
+            "type": "string",
+            "description": "The layer id"
           },
           "checks": {
             "type": "integer",
@@ -9900,13 +9804,9 @@
           },
           "next": {
             "description": "Pass as `?after=` for the next page; null when there are no more",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           }
         },
@@ -9927,8 +9827,8 @@
             "type": "string"
           },
           "kind": {
-            "description": "What the server recognised the key as: `layer`, `layer-catalog`, `blob`, `spec-body`, `spec-set`, `spec-catalog`, `run-manifest`, `run-catalog`, `run-file` or `scratch`",
-            "type": "string"
+            "type": "string",
+            "description": "What the server recognised the key as: `layer`, `layer-catalog`, `blob`, `spec-body`, `spec-set`, `spec-catalog`, `run-manifest`, `run-catalog`, `run-file` or `scratch`"
           },
           "created": {
             "type": "boolean"
@@ -9951,15 +9851,15 @@
               "type": "object",
               "properties": {
                 "path": {
-                  "description": "`specs/<path>`",
-                  "type": "string"
+                  "type": "string",
+                  "description": "`specs/<path>`"
                 },
                 "domain": {
                   "type": "string"
                 },
                 "kind": {
-                  "description": "The kind of spec: `gherkin`, `quint`, `dmn`, …",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The kind of spec: `gherkin`, `quint`, `dmn`, …"
                 },
                 "title": {
                   "type": "string"
@@ -9979,13 +9879,9 @@
             }
           },
           "sha": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "changedFiles": {
@@ -10011,83 +9907,63 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The layer id: 64 lowercase hex digits, the SHA-256 of its content"
                 },
                 "backend": {
-                  "description": "The backend it was read from; the one that sorts first when several hold it",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The backend it was read from; the one that sorts first when several hold it"
                 },
                 "producer": {
-                  "description": "The suite or tool that made it. Part of the slot",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The suite or tool that made it. Part of the slot"
                 },
                 "packageDir": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "recordedAtMs": {
-                  "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot",
-                  "type": "number"
+                  "type": "number",
+                  "description": "When the checks ran, epoch milliseconds. The newest completed result wins its slot"
                 },
                 "sha": {
                   "description": "The commit it was recorded at. Provenance only",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "branch": {
                   "description": "The branch it was recorded on. Provenance only",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "environment": {
                   "description": "The client it checked, such as `ios`. Part of the slot",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "runUrl": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "parameters": {
-                  "description": "Other choices that make a result its own slot",
                   "type": "object",
                   "propertyNames": {
                     "type": "string"
                   },
                   "additionalProperties": {
                     "type": "string"
-                  }
+                  },
+                  "description": "Other choices that make a result its own slot"
                 },
                 "freshness": {
                   "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent: clean",
@@ -10098,13 +9974,13 @@
                   ]
                 },
                 "recording": {
-                  "description": "Where recorded timelines are read from, or null",
                   "anyOf": [
                     {},
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Where recorded timelines are read from, or null"
                 },
                 "live": {
                   "type": "boolean"
@@ -10124,7 +10000,13 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
-                  }
+                  },
+                  "required": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
                 },
                 "execution": {
                   "type": "string"
@@ -10213,13 +10095,9 @@
           },
           "cursor": {
             "description": "Pass as `?cursor=` for the next page; null at the end",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "notices": {
@@ -10240,12 +10118,12 @@
                   "type": "string"
                 },
                 "live": {
-                  "description": "Always false on a server",
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Always false on a server"
                 },
                 "available": {
-                  "description": "False when the backend could not be read; its results are then unknown, never passed",
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "False when the backend could not be read; its results are then unknown, never passed"
                 }
               },
               "required": [
@@ -10283,12 +10161,12 @@
               "type": "object",
               "properties": {
                 "kind": {
-                  "description": "The kind of the part holding the check. Part of the slot",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The kind of the part holding the check. Part of the slot"
                 },
                 "id": {
-                  "description": "The check id. Part of the slot",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The check id. Part of the slot"
                 },
                 "title": {
                   "type": "string"
@@ -10304,18 +10182,14 @@
                 },
                 "specPath": {
                   "description": "The spec the check belongs to, `specs/<path>`, or null",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "detail": {
-                  "description": "Why it has this status; empty when there is nothing to add",
-                  "type": "string"
+                  "type": "string",
+                  "description": "Why it has this status; empty when there is nothing to add"
                 },
                 "measurements": {
                   "type": "array",
@@ -10344,13 +10218,9 @@
                   }
                 },
                 "testId": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "variant": {
@@ -10363,13 +10233,9 @@
                   }
                 },
                 "durationMs": {
-                  "anyOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "number",
+                    "null"
                   ]
                 },
                 "evidence": {
@@ -10451,14 +10317,14 @@
             }
           },
           "fingerprints": {
-            "description": "Spec path to the fingerprint the layer recorded for it",
             "type": "object",
             "propertyNames": {
               "type": "string"
             },
             "additionalProperties": {
               "type": "string"
-            }
+            },
+            "description": "Spec path to the fingerprint the layer recorded for it"
           }
         },
         "required": [
@@ -10481,9 +10347,9 @@
             "type": "object",
             "properties": {
               "id": {
-                "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another",
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another"
               },
               "title": {
                 "type": "string"
@@ -10498,8 +10364,8 @@
                 ]
               },
               "detail": {
-                "description": "Why it failed, or what was measured",
                 "default": "",
+                "description": "Why it failed, or what was measured",
                 "type": "string"
               },
               "specPath": {
@@ -10517,8 +10383,8 @@
                       "minLength": 1
                     },
                     "value": {
-                      "description": "A finite number",
-                      "type": "number"
+                      "type": "number",
+                      "description": "A finite number"
                     },
                     "unit": {
                       "type": "string"
@@ -10683,9 +10549,9 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                     },
                     "message": {
                       "type": "string"
@@ -10911,9 +10777,9 @@
                         "type": "object",
                         "properties": {
                           "type": {
-                            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                           },
                           "message": {
                             "type": "string"
@@ -11176,9 +11042,9 @@
                               "type": "object",
                               "properties": {
                                 "type": {
-                                  "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                                   "type": "string",
-                                  "minLength": 1
+                                  "minLength": 1,
+                                  "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                                 },
                                 "message": {
                                   "type": "string"
@@ -11376,9 +11242,9 @@
                         "type": "object",
                         "properties": {
                           "type": {
-                            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                           },
                           "message": {
                             "type": "string"
@@ -11486,10 +11352,10 @@
             "additionalProperties": {}
           },
           "run": {
-            "description": "What the run as a whole carries: its logs, links, labels, annotations and extensions",
             "type": "object",
             "properties": {},
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "description": "What the run as a whole carries: its logs, links, labels, annotations and extensions"
           }
         },
         "required": [
@@ -11508,8 +11374,8 @@
             "const": 1
           },
           "version": {
-            "description": "Changes whenever the report or its history does",
-            "type": "string"
+            "type": "string",
+            "description": "Changes whenever the report or its history does"
           },
           "generatedAtMs": {
             "type": "number"
@@ -11537,7 +11403,13 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
-                }
+                },
+                "required": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
               },
               "outcomes": {
                 "type": "integer",
@@ -11636,16 +11508,18 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
-                      }
+                      },
+                      "required": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
                     },
                     "avgMs": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     }
                   },
@@ -11686,16 +11560,18 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
-                      }
+                      },
+                      "required": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
                     },
                     "avgMs": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     }
                   },
@@ -11736,16 +11612,18 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
-                      }
+                      },
+                      "required": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
                     },
                     "avgMs": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     }
                   },
@@ -11770,13 +11648,9 @@
                       "type": "string"
                     },
                     "specPath": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "status": {
@@ -11814,13 +11688,9 @@
                       "type": "string"
                     },
                     "specPath": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "status": {
@@ -11858,13 +11728,9 @@
                       "type": "string"
                     },
                     "specPath": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "status": {
@@ -11896,13 +11762,9 @@
                 "maximum": 9007199254740991
               },
               "lastRecordedAtMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "history": {
@@ -12053,7 +11915,13 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
-                      }
+                      },
+                      "required": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
                     }
                   },
                   "required": [
@@ -12150,10 +12018,10 @@
             "additionalProperties": {}
           },
           "total": {
-            "description": "Tests the query matched, before offset and limit",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Tests the query matched, before offset and limit"
           },
           "offset": {
             "type": "integer",
@@ -12171,8 +12039,8 @@
               "type": "object",
               "properties": {
                 "key": {
-                  "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`"
                 },
                 "id": {
                   "type": "string"
@@ -12181,17 +12049,12 @@
                   "type": "string"
                 },
                 "specPath": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "spec": {
-                  "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path",
                   "anyOf": [
                     {
                       "type": "object",
@@ -12220,17 +12083,18 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path"
                 },
                 "status": {
-                  "description": "The worst current result across environments: failed, then running, then not-run, then passed",
                   "type": "string",
                   "enum": [
                     "passed",
                     "failed",
                     "running",
                     "not-run"
-                  ]
+                  ],
+                  "description": "The worst current result across environments: failed, then running, then not-run, then passed"
                 },
                 "environments": {
                   "type": "array",
@@ -12245,14 +12109,13 @@
                   }
                 },
                 "outcomes": {
-                  "description": "The current result per producer, environment and parameter set, newest first",
                   "type": "array",
                   "items": {
                     "type": "object",
                     "properties": {
                       "at": {
-                        "description": "When it was recorded, epoch milliseconds",
-                        "type": "number"
+                        "type": "number",
+                        "description": "When it was recorded, epoch milliseconds"
                       },
                       "status": {
                         "type": "string",
@@ -12265,24 +12128,16 @@
                       },
                       "durationMs": {
                         "description": "How long it took, or null when the producer did not measure it",
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       },
                       "environment": {
                         "description": "The client it checked, such as `desktop-web` or `ios`",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "producer": {
@@ -12301,49 +12156,37 @@
                         }
                       },
                       "branch": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "sha": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "runUrl": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "run": {
-                        "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it"
                       },
                       "layer": {
-                        "description": "The id of the layer that recorded it",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The id of the layer that recorded it"
                       },
                       "backend": {
                         "type": "string"
                       },
                       "detail": {
-                        "description": "Why it has its status, at most 500 characters",
-                        "type": "string"
+                        "type": "string",
+                        "description": "Why it has its status, at most 500 characters"
                       },
                       "evidence": {
                         "type": "object",
@@ -12425,7 +12268,8 @@
                       "detail"
                     ],
                     "additionalProperties": {}
-                  }
+                  },
+                  "description": "The current result per producer, environment and parameter set, newest first"
                 },
                 "stats": {
                   "type": "object",
@@ -12447,13 +12291,9 @@
                     },
                     "passRate": {
                       "description": "passed / (passed + failed), or null with no completed result",
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
                     "flaky": {
@@ -12517,43 +12357,27 @@
                       ]
                     },
                     "firstSeenMs": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
                     "lastSeenMs": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
                     "lastPassedAtMs": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
                     "lastFailedAtMs": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
                     "runs": {
@@ -12689,8 +12513,8 @@
             "type": "object",
             "properties": {
               "key": {
-                "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`",
-                "type": "string"
+                "type": "string",
+                "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`"
               },
               "id": {
                 "type": "string"
@@ -12699,17 +12523,12 @@
                 "type": "string"
               },
               "specPath": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "spec": {
-                "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path",
                 "anyOf": [
                   {
                     "type": "object",
@@ -12738,17 +12557,18 @@
                   {
                     "type": "null"
                   }
-                ]
+                ],
+                "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path"
               },
               "status": {
-                "description": "The worst current result across environments: failed, then running, then not-run, then passed",
                 "type": "string",
                 "enum": [
                   "passed",
                   "failed",
                   "running",
                   "not-run"
-                ]
+                ],
+                "description": "The worst current result across environments: failed, then running, then not-run, then passed"
               },
               "environments": {
                 "type": "array",
@@ -12763,14 +12583,13 @@
                 }
               },
               "outcomes": {
-                "description": "The current result per producer, environment and parameter set, newest first",
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
                     "at": {
-                      "description": "When it was recorded, epoch milliseconds",
-                      "type": "number"
+                      "type": "number",
+                      "description": "When it was recorded, epoch milliseconds"
                     },
                     "status": {
                       "type": "string",
@@ -12783,24 +12602,16 @@
                     },
                     "durationMs": {
                       "description": "How long it took, or null when the producer did not measure it",
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
                     "environment": {
                       "description": "The client it checked, such as `desktop-web` or `ios`",
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "producer": {
@@ -12819,49 +12630,37 @@
                       }
                     },
                     "branch": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "sha": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "runUrl": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "run": {
-                      "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it",
-                      "type": "string"
+                      "type": "string",
+                      "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it"
                     },
                     "layer": {
-                      "description": "The id of the layer that recorded it",
-                      "type": "string"
+                      "type": "string",
+                      "description": "The id of the layer that recorded it"
                     },
                     "backend": {
                       "type": "string"
                     },
                     "detail": {
-                      "description": "Why it has its status, at most 500 characters",
-                      "type": "string"
+                      "type": "string",
+                      "description": "Why it has its status, at most 500 characters"
                     },
                     "evidence": {
                       "type": "object",
@@ -12943,7 +12742,8 @@
                     "detail"
                   ],
                   "additionalProperties": {}
-                }
+                },
+                "description": "The current result per producer, environment and parameter set, newest first"
               },
               "stats": {
                 "type": "object",
@@ -12965,13 +12765,9 @@
                   },
                   "passRate": {
                     "description": "passed / (passed + failed), or null with no completed result",
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   },
                   "flaky": {
@@ -13035,43 +12831,27 @@
                     ]
                   },
                   "firstSeenMs": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   },
                   "lastSeenMs": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   },
                   "lastPassedAtMs": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   },
                   "lastFailedAtMs": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   },
                   "runs": {
@@ -13184,8 +12964,8 @@
               "type": "object",
               "properties": {
                 "at": {
-                  "description": "When it was recorded, epoch milliseconds",
-                  "type": "number"
+                  "type": "number",
+                  "description": "When it was recorded, epoch milliseconds"
                 },
                 "status": {
                   "type": "string",
@@ -13198,24 +12978,16 @@
                 },
                 "durationMs": {
                   "description": "How long it took, or null when the producer did not measure it",
-                  "anyOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "number",
+                    "null"
                   ]
                 },
                 "environment": {
                   "description": "The client it checked, such as `desktop-web` or `ios`",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "producer": {
@@ -13234,49 +13006,37 @@
                   }
                 },
                 "branch": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "sha": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "runUrl": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "run": {
-                  "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it"
                 },
                 "layer": {
-                  "description": "The id of the layer that recorded it",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The id of the layer that recorded it"
                 },
                 "backend": {
                   "type": "string"
                 },
                 "detail": {
-                  "description": "Why it has its status, at most 500 characters",
-                  "type": "string"
+                  "type": "string",
+                  "description": "Why it has its status, at most 500 characters"
                 },
                 "evidence": {
                   "type": "object",
@@ -13390,37 +13150,25 @@
               "type": "object",
               "properties": {
                 "key": {
-                  "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
                 },
                 "runUrl": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "branch": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "sha": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "startedAtMs": {
@@ -13469,16 +13217,18 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
-                  }
+                  },
+                  "required": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
                 },
                 "totalDurationMs": {
-                  "anyOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "number",
+                    "null"
                   ]
                 },
                 "failing": {
@@ -13493,13 +13243,9 @@
                         "type": "string"
                       },
                       "environment": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       },
                       "detail": {
@@ -13558,37 +13304,25 @@
             "type": "object",
             "properties": {
               "key": {
-                "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`",
-                "type": "string"
+                "type": "string",
+                "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
               },
               "runUrl": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "branch": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "sha": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "startedAtMs": {
@@ -13637,16 +13371,18 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
-                }
+                },
+                "required": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
               },
               "totalDurationMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "failing": {
@@ -13661,13 +13397,9 @@
                       "type": "string"
                     },
                     "environment": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "detail": {
@@ -13717,23 +13449,15 @@
                   "type": "string"
                 },
                 "specPath": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "environment": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "producer": {
@@ -13749,13 +13473,9 @@
                   ]
                 },
                 "durationMs": {
-                  "anyOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "number",
+                    "null"
                   ]
                 },
                 "at": {
@@ -13804,13 +13524,9 @@
             "type": "string"
           },
           "ref": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "files": {
@@ -13951,7 +13667,7 @@
           "id": {
             "type": "string",
             "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$"
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
           },
           "producer": {
             "type": "string",
@@ -14203,8 +13919,8 @@
         "type": "object",
         "properties": {
           "version": {
-            "description": "The report version after these layers",
-            "type": "string"
+            "type": "string",
+            "description": "The report version after these layers"
           },
           "totalLayers": {
             "type": "integer",
@@ -14212,7 +13928,6 @@
             "maximum": 9007199254740991
           },
           "added": {
-            "description": "At most the 20 newest of the layers that arrived",
             "type": "array",
             "items": {
               "type": "object",
@@ -14224,33 +13939,21 @@
                   "type": "string"
                 },
                 "environment": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "branch": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "sha": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "recordedAtMs": {
@@ -14271,7 +13974,13 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
-                  }
+                  },
+                  "required": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
                 }
               },
               "required": [
@@ -14280,13 +13989,14 @@
                 "recordedAtMs"
               ],
               "additionalProperties": {}
-            }
+            },
+            "description": "At most the 20 newest of the layers that arrived"
           },
           "addedTotal": {
-            "description": "How many layers arrived, including those not listed",
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "How many layers arrived, including those not listed"
           }
         },
         "required": [

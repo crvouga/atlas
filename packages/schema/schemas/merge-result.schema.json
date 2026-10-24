@@ -11,22 +11,22 @@
       "type": "string"
     },
     "copied": {
-      "description": "Objects that were missing in the destination and were copied",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Objects that were missing in the destination and were copied"
     },
     "skipped": {
-      "description": "Objects the destination already had",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Objects the destination already had"
     },
     "ignored": {
-      "description": "Objects outside `layers/`, which are never merged",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Objects outside `layers/`, which are never merged"
     }
   },
   "required": [

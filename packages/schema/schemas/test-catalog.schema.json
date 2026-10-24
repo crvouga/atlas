@@ -8,8 +8,8 @@
       "const": 1
     },
     "version": {
-      "description": "Changes whenever the report or its history does",
-      "type": "string"
+      "type": "string",
+      "description": "Changes whenever the report or its history does"
     },
     "generatedAtMs": {
       "type": "number"
@@ -37,7 +37,13 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
-          }
+          },
+          "required": [
+            "passed",
+            "failed",
+            "running",
+            "not-run"
+          ]
         },
         "outcomes": {
           "type": "integer",
@@ -136,16 +142,18 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
-                }
+                },
+                "required": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
               },
               "avgMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               }
             },
@@ -186,16 +194,18 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
-                }
+                },
+                "required": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
               },
               "avgMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               }
             },
@@ -236,16 +246,18 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
-                }
+                },
+                "required": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
               },
               "avgMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               }
             },
@@ -270,13 +282,9 @@
                 "type": "string"
               },
               "specPath": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "status": {
@@ -314,13 +322,9 @@
                 "type": "string"
               },
               "specPath": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "status": {
@@ -358,13 +362,9 @@
                 "type": "string"
               },
               "specPath": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "status": {
@@ -396,13 +396,9 @@
           "maximum": 9007199254740991
         },
         "lastRecordedAtMs": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "history": {
@@ -553,7 +549,13 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
-                }
+                },
+                "required": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ]
               }
             },
             "required": [
@@ -650,10 +652,10 @@
       "additionalProperties": {}
     },
     "total": {
-      "description": "Tests the query matched, before offset and limit",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Tests the query matched, before offset and limit"
     },
     "offset": {
       "type": "integer",
@@ -671,8 +673,8 @@
         "type": "object",
         "properties": {
           "key": {
-            "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`",
-            "type": "string"
+            "type": "string",
+            "description": "The test's identity, `JSON.stringify([specPath, id])`. Pass it to `/api/reports/tests/history?key=`"
           },
           "id": {
             "type": "string"
@@ -681,17 +683,12 @@
             "type": "string"
           },
           "specPath": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "spec": {
-            "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path",
             "anyOf": [
               {
                 "type": "object",
@@ -720,17 +717,18 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The spec it belongs to: recorded by its layers, published in a spec set, or derived from the path"
           },
           "status": {
-            "description": "The worst current result across environments: failed, then running, then not-run, then passed",
             "type": "string",
             "enum": [
               "passed",
               "failed",
               "running",
               "not-run"
-            ]
+            ],
+            "description": "The worst current result across environments: failed, then running, then not-run, then passed"
           },
           "environments": {
             "type": "array",
@@ -745,14 +743,13 @@
             }
           },
           "outcomes": {
-            "description": "The current result per producer, environment and parameter set, newest first",
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "at": {
-                  "description": "When it was recorded, epoch milliseconds",
-                  "type": "number"
+                  "type": "number",
+                  "description": "When it was recorded, epoch milliseconds"
                 },
                 "status": {
                   "type": "string",
@@ -765,24 +762,16 @@
                 },
                 "durationMs": {
                   "description": "How long it took, or null when the producer did not measure it",
-                  "anyOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "number",
+                    "null"
                   ]
                 },
                 "environment": {
                   "description": "The client it checked, such as `desktop-web` or `ios`",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "producer": {
@@ -801,49 +790,37 @@
                   }
                 },
                 "branch": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "sha": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "runUrl": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "run": {
-                  "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The key of the run it belongs to, as `GET /api/reports/runs` lists it"
                 },
                 "layer": {
-                  "description": "The id of the layer that recorded it",
-                  "type": "string"
+                  "type": "string",
+                  "description": "The id of the layer that recorded it"
                 },
                 "backend": {
                   "type": "string"
                 },
                 "detail": {
-                  "description": "Why it has its status, at most 500 characters",
-                  "type": "string"
+                  "type": "string",
+                  "description": "Why it has its status, at most 500 characters"
                 },
                 "evidence": {
                   "type": "object",
@@ -925,7 +902,8 @@
                 "detail"
               ],
               "additionalProperties": {}
-            }
+            },
+            "description": "The current result per producer, environment and parameter set, newest first"
           },
           "stats": {
             "type": "object",
@@ -947,13 +925,9 @@
               },
               "passRate": {
                 "description": "passed / (passed + failed), or null with no completed result",
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "flaky": {
@@ -1017,43 +991,27 @@
                 ]
               },
               "firstSeenMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "lastSeenMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "lastPassedAtMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "lastFailedAtMs": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "runs": {

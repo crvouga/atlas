@@ -4,72 +4,56 @@
   "type": "object",
   "properties": {
     "schemaVersion": {
-      "description": "The major version of this contract",
       "type": "number",
-      "const": 1
+      "const": 1,
+      "description": "The major version of this contract"
     },
     "id": {
-      "description": "64 lowercase hex digits. Opaque to readers",
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "64 lowercase hex digits. Opaque to readers"
     },
     "producer": {
-      "description": "A stable name for the suite or tool. With the check id, environment and parameters it picks the slot a layer fills",
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "A stable name for the suite or tool. With the check id, environment and parameters it picks the slot a layer fills"
     },
     "recordedAtMs": {
-      "description": "When the checks ran, in epoch milliseconds. The newest completed result wins its slot",
       "type": "number",
-      "minimum": 0
+      "minimum": 0,
+      "description": "When the checks ran, in epoch milliseconds. The newest completed result wins its slot"
     },
     "sha": {
       "description": "The commit the checks ran against. Provenance only; it never partitions a report",
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "branch": {
       "description": "Provenance only",
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "runUrl": {
       "description": "Where to read the CI run that produced it",
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "environment": {
       "description": "The client that was checked: desktop-web, mobile-web, ios, android, or any other lowercase name",
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+      "type": [
+        "string",
+        "null"
       ]
     },
     "parameters": {
-      "description": "Other choices that make a result its own slot, such as a device size",
       "default": {},
+      "description": "Other choices that make a result its own slot, such as a device size",
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -141,8 +125,8 @@
             }
           },
           "sha": {
-            "description": "Repeats the layer sha; readers use the layer",
             "default": "",
+            "description": "Repeats the layer sha; readers use the layer",
             "type": "string"
           },
           "id": {
@@ -150,9 +134,9 @@
             "minLength": 1
           },
           "kind": {
-            "description": "An open category: behavior, performance, accessibility… A new kind needs no change to a reader",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "An open category: behavior, performance, accessibility… A new kind needs no change to a reader"
           },
           "title": {
             "type": "string"
@@ -167,9 +151,9 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another",
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another"
                 },
                 "title": {
                   "type": "string"
@@ -184,8 +168,8 @@
                   ]
                 },
                 "detail": {
-                  "description": "Why it failed, or what was measured",
                   "default": "",
+                  "description": "Why it failed, or what was measured",
                   "type": "string"
                 },
                 "specPath": {
@@ -203,8 +187,8 @@
                         "minLength": 1
                       },
                       "value": {
-                        "description": "A finite number",
-                        "type": "number"
+                        "type": "number",
+                        "description": "A finite number"
                       },
                       "unit": {
                         "type": "string"
@@ -369,9 +353,9 @@
                     "type": "object",
                     "properties": {
                       "type": {
-                        "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                         "type": "string",
-                        "minLength": 1
+                        "minLength": 1,
+                        "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                       },
                       "message": {
                         "type": "string"
@@ -597,9 +581,9 @@
                           "type": "object",
                           "properties": {
                             "type": {
-                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                             },
                             "message": {
                               "type": "string"
@@ -862,9 +846,9 @@
                                 "type": "object",
                                 "properties": {
                                   "type": {
-                                    "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                                   },
                                   "message": {
                                     "type": "string"
@@ -1062,9 +1046,9 @@
                           "type": "object",
                           "properties": {
                             "type": {
-                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                             },
                             "message": {
                               "type": "string"
@@ -1312,9 +1296,9 @@
               "type": "object",
               "properties": {
                 "type": {
-                  "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                 },
                 "message": {
                   "type": "string"
@@ -1471,9 +1455,9 @@
                       "type": "object",
                       "properties": {
                         "id": {
-                          "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another",
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "description": "The check's stable identity within its producer. The same check must keep the same id in every layer, or layers cannot replace one another"
                         },
                         "title": {
                           "type": "string"
@@ -1488,8 +1472,8 @@
                           ]
                         },
                         "detail": {
-                          "description": "Why it failed, or what was measured",
                           "default": "",
+                          "description": "Why it failed, or what was measured",
                           "type": "string"
                         },
                         "specPath": {
@@ -1507,8 +1491,8 @@
                                 "minLength": 1
                               },
                               "value": {
-                                "description": "A finite number",
-                                "type": "number"
+                                "type": "number",
+                                "description": "A finite number"
                               },
                               "unit": {
                                 "type": "string"
@@ -1673,9 +1657,9 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                                 "type": "string",
-                                "minLength": 1
+                                "minLength": 1,
+                                "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                               },
                               "message": {
                                 "type": "string"
@@ -1901,9 +1885,9 @@
                                   "type": "object",
                                   "properties": {
                                     "type": {
-                                      "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                                       "type": "string",
-                                      "minLength": 1
+                                      "minLength": 1,
+                                      "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                                     },
                                     "message": {
                                       "type": "string"
@@ -2166,9 +2150,9 @@
                                         "type": "object",
                                         "properties": {
                                           "type": {
-                                            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                                             "type": "string",
-                                            "minLength": 1
+                                            "minLength": 1,
+                                            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                                           },
                                           "message": {
                                             "type": "string"
@@ -2366,9 +2350,9 @@
                                   "type": "object",
                                   "properties": {
                                     "type": {
-                                      "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
                                       "type": "string",
-                                      "minLength": 1
+                                      "minLength": 1,
+                                      "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
                                     },
                                     "message": {
                                       "type": "string"
@@ -2782,9 +2766,9 @@
         "type": "object",
         "properties": {
           "type": {
-            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "An open vocabulary: note, warning, deprecation, issue, accessibility, coverage…"
           },
           "message": {
             "type": "string"

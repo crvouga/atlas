@@ -11,8 +11,8 @@
       "type": "string"
     },
     "kind": {
-      "description": "What the server recognised the key as: `layer`, `layer-catalog`, `blob`, `spec-body`, `spec-set`, `spec-catalog`, `run-manifest`, `run-catalog`, `run-file` or `scratch`",
-      "type": "string"
+      "type": "string",
+      "description": "What the server recognised the key as: `layer`, `layer-catalog`, `blob`, `spec-body`, `spec-set`, `spec-catalog`, `run-manifest`, `run-catalog`, `run-file` or `scratch`"
     },
     "created": {
       "type": "boolean"

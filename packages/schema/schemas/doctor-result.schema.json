@@ -4,8 +4,8 @@
   "type": "object",
   "properties": {
     "ok": {
-      "description": "True when every check of every store passed (otherwise the exit code is 1)",
-      "type": "boolean"
+      "type": "boolean",
+      "description": "True when every check of every store passed (otherwise the exit code is 1)"
     },
     "stores": {
       "type": "array",
@@ -21,8 +21,8 @@
               "type": "object",
               "properties": {
                 "name": {
-                  "description": "`store`, `list`, `contents`, `write`, …",
-                  "type": "string"
+                  "type": "string",
+                  "description": "`store`, `list`, `contents`, `write`, …"
                 },
                 "ok": {
                   "type": "boolean"

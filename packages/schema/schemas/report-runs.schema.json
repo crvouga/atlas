@@ -21,37 +21,25 @@
         "type": "object",
         "properties": {
           "key": {
-            "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`",
-            "type": "string"
+            "type": "string",
+            "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
           },
           "runUrl": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "branch": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "sha": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "startedAtMs": {
@@ -100,16 +88,18 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 9007199254740991
-            }
+            },
+            "required": [
+              "passed",
+              "failed",
+              "running",
+              "not-run"
+            ]
           },
           "totalDurationMs": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "number",
+              "null"
             ]
           },
           "failing": {
@@ -124,13 +114,9 @@
                   "type": "string"
                 },
                 "environment": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "detail": {

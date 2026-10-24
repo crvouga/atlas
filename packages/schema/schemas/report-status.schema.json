@@ -11,11 +11,11 @@
       "type": "boolean"
     },
     "reasons": {
-      "description": "Why `ok` is false, in words. Empty when it is true",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "Why `ok` is false, in words. Empty when it is true"
     },
     "checks": {
       "type": "object",
@@ -98,10 +98,10 @@
       }
     },
     "layers": {
-      "description": "Distinct layers read, across all backends",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Distinct layers read, across all backends"
     },
     "backends": {
       "type": "array",
@@ -126,34 +126,29 @@
       }
     },
     "notices": {
-      "description": "What could not be read. Any notice fails the gate: unknown is not passed",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "What could not be read. Any notice fails the gate: unknown is not passed"
     },
     "specsWithoutEvidence": {
-      "description": "Specs of the outline with no result at all. The outline is `--specs <dir>`, or else the specs the layers recorded",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "Specs of the outline with no result at all. The outline is `--specs <dir>`, or else the specs the layers recorded"
     },
     "specs": {
-      "description": "The outcome of each spec, so a dashboard needs nothing else",
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "path": {
             "description": "Null for checks that name no spec in the outline",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "title": {
@@ -251,22 +246,18 @@
           "byEnvironment"
         ],
         "additionalProperties": {}
-      }
+      },
+      "description": "The outcome of each spec, so a dashboard needs nothing else"
     },
     "failing": {
-      "description": "Each slot whose newest completed result failed, or that is still running",
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "spec": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "check": {
@@ -283,36 +274,24 @@
             ]
           },
           "environment": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "producer": {
             "type": "string"
           },
           "branch": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "sha": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "layer": {
@@ -322,13 +301,9 @@
             "type": "string"
           },
           "runUrl": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "detail": {
@@ -350,7 +325,8 @@
           "detail"
         ],
         "additionalProperties": {}
-      }
+      },
+      "description": "Each slot whose newest completed result failed, or that is still running"
     }
   },
   "required": [

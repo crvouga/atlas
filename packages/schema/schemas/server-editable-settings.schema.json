@@ -4,29 +4,29 @@
   "type": "object",
   "properties": {
     "data": {
-      "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
       "default": "./atlas-data",
+      "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
       "type": "string"
     },
     "backends": {
-      "description": "Further backends, read together with the data folder: S3, another server, a device lab",
       "default": [],
+      "description": "Further backends, read together with the data folder: S3, another server, a device lab",
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "id": {
-            "description": "Lowercase letters, digits and hyphens. Names where a result came from",
             "type": "string",
-            "pattern": "^[a-z0-9-]+$"
+            "pattern": "^[a-z0-9-]+$",
+            "description": "Lowercase letters, digits and hyphens. Names where a result came from"
           },
           "label": {
             "type": "string"
           },
           "url": {
-            "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)"
           },
           "write": {
             "description": "Uploads go here instead of the data folder. At most one backend is the write target",
@@ -67,8 +67,8 @@
       "additionalProperties": false
     },
     "refreshSeconds": {
-      "description": "How often the backends are looked at for layers written by something other than this server",
       "default": 10,
+      "description": "How often the backends are looked at for layers written by something other than this server",
       "type": "number",
       "minimum": 1
     },
@@ -81,20 +81,20 @@
       "type": "object",
       "properties": {
         "maxObjectMiB": {
-          "description": "The largest object an upload may be",
           "default": 256,
+          "description": "The largest object an upload may be",
           "type": "number",
           "exclusiveMinimum": 0
         },
         "maxJsonMiB": {
-          "description": "The largest JSON body (a manifest, a checks request)",
           "default": 32,
+          "description": "The largest JSON body (a manifest, a checks request)",
           "type": "number",
           "exclusiveMinimum": 0
         },
         "maxStreams": {
-          "description": "Viewers that may be connected for live updates at once",
           "default": 500,
+          "description": "Viewers that may be connected for live updates at once",
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
@@ -103,28 +103,28 @@
       "additionalProperties": false
     },
     "heartbeatSeconds": {
-      "description": "How often a live connection is touched, so proxies keep it open",
       "default": 15,
+      "description": "How often a live connection is touched, so proxies keep it open",
       "type": "number",
       "minimum": 1
     },
     "runTimeoutSeconds": {
-      "description": "Interrupt a live run after this many seconds without a producer heartbeat",
       "default": 30,
+      "description": "Interrupt a live run after this many seconds without a producer heartbeat",
       "type": "number",
       "minimum": 10,
       "maximum": 3600
     },
     "runStallSeconds": {
-      "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
       "default": 900,
+      "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
       "type": "number",
       "minimum": 0,
       "maximum": 86400
     },
     "log": {
-      "description": "One JSON line per request",
       "default": true,
+      "description": "One JSON line per request",
       "type": "boolean"
     }
   },
