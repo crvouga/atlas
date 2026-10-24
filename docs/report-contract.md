@@ -178,6 +178,9 @@ Consequences you can rely on:
   was removed keeps its evidence, outside the outline.
 - An immutable layer held by several backends is **one** layer, reported by the backend whose id sorts
   first.
+- The mutable address of an execution already held as an immutable layer is suppressed by the
+  de-duplication helpers and static export. Execution identity compares producer, commit, time and
+  parts; object key order at any depth does not matter, while array order does.
 
 Leaving a layer, backend, environment, branch or version out of the input is how earlier outcomes are
 inspected.

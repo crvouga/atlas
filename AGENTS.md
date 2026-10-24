@@ -30,6 +30,16 @@ Keep consumer-specific specs, configuration, fixtures and generated runs in the 
 repository. Change Atlas only for reusable library, driver, schema, documentation or tooling
 improvements.
 
+## Resolve all open GitHub issues in one PR
+
+When asked to resolve the whole issue backlog in a single PR, use the repository skill at
+[`.agents/skills/resolve-open-issues/SKILL.md`](.agents/skills/resolve-open-issues/SKILL.md).
+It keeps the work in one branch and worktree, inventories every open issue, tracks per-issue
+evidence and blockers, and handles PR attestations autonomously. It applies to a requested issue
+sweep, not ordinary single-issue work or creating the skill itself. See
+[the portable invocation](docs/agents.md#resolve-this-repositorys-open-issues) for agents that do not
+discover repository skills automatically.
+
 ## One package, many entry points
 
 The folders under `packages/` are source folders of the one package, not packages: there is one

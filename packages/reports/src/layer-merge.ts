@@ -304,7 +304,20 @@ export function distinctLayers(layers: readonly LayerSummary[]): LayerSummary[] 
   return [...new Map(layers.filter(layer => archived(layer.id) || !kept.has(layerExecutionKey(layer))).map(layer => [layer.id, layer])).values()];
 }
 
-/** A string equal for the mutable and the archived address of one execution: its producer, sha, time and parts. */
+/**
+ * A string equal for the mutable and the archived address of one execution: its producer, sha, time and parts.
+ * Object key order is ignored at every depth, including check evidence and extensions; array order is preserved.
+ * This is an advisory execution identity, not the content digest that addresses an immutable layer in storage.
+ */
 export function layerExecutionKey(layer: LayerSummary): string {
-  return JSON.stringify([layer.producer, layer.sha, layer.recordedAtMs, layer.parts]);
+  return JSON.stringify([layer.producer, layer.sha, layer.recordedAtMs, orderedValue(layer.parts)]);
+}
+
+/** Sort JSON objects recursively without changing array order or interpreting extension keys as prototypes. */
+function orderedValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(orderedValue);
+  if (value === null || typeof value !== 'object') return value;
+  const ordered: Record<string, unknown> = Object.create(null);
+  for (const key of Object.keys(value).sort()) ordered[key] = orderedValue((value as Record<string, unknown>)[key]);
+  return ordered;
 }

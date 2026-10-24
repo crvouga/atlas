@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { normalizeEnvironment } from '../src/layer-axes';
-import { combineEvidence, distinctLayers, layerEvidence, textFingerprint } from '../src/layer-merge';
+import { combineEvidence, distinctHeaders, distinctLayers, layerEvidence, layerExecutionKey, textFingerprint } from '../src/layer-merge';
 import type { LayerSummary, ReportOutline } from '../src/layer-types';
 
 const spec = { path: 'specs/list.feature', title: 'List', domain: 'list', kind: 'feature', fingerprint: textFingerprint('Feature: List') };
@@ -49,6 +49,55 @@ test('archived parameterized execution suppresses its historical address without
   const another = layer('b'.repeat(64), 1, [{ id: 'join', status: 'passed' }], 'tablet');
   expect(distinctLayers([historical, archived, another])).toEqual([archived, another]);
   expect(combine(outline, [historical, archived, another]).specs[0]!.results).toHaveLength(2);
+});
+
+// Reverse every object's insertion order, including objects inside arrays; keep array order intact.
+function reverseKeys<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(reverseKeys) as T;
+  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reverseKeys(item)])) as T;
+  return value;
+}
+
+test('execution identity ignores object key order at every depth and suppresses both mutable representations', () => {
+  const base = layer('a'.repeat(64), 1, [{ id: 'join', status: 'passed' }]);
+  const archived: LayerSummary = { ...base, parts: [{ ...base.parts[0]!, checks: [{ ...base.parts[0]!.checks[0]!,
+    extensions: { 'example/nested': JSON.parse('{"z":[{"b":2,"a":1}],"__proto__":{"kept":true}}') },
+    steps: [{ title: 'Join', annotations: [{ type: 'note', description: 'Nested evidence' }] }],
+  }] }] };
+  const mutable = { ...reverseKeys(archived), id: `source-${archived.sha}-list` };
+  expect(mutable.parts).toEqual(archived.parts);
+  expect(layerExecutionKey(mutable)).toBe(layerExecutionKey(archived));
+  const header = layerEvidence(archived, 'shared').layer;
+  const mutableHeader = layerEvidence(mutable, 'local').layer;
+  expect(mutableHeader.execution).toBe(header.execution);
+  for (const order of [[archived, mutable], [mutable, archived]]) {
+    expect(distinctLayers(order)).toEqual([archived]);
+  }
+  for (const order of [[header, mutableHeader], [mutableHeader, header]]) {
+    expect(distinctHeaders(order)).toEqual([header]);
+  }
+});
+
+test('execution identity preserves array order and different execution content', () => {
+  const archived = layer('a'.repeat(64), 1, [{ id: 'join', status: 'passed' }, { id: 'leave', status: 'failed' }]);
+  const part = archived.parts[0]!;
+  const variants: LayerSummary[] = [
+    { ...archived, producer: 'other' },
+    { ...archived, sha: 'c'.repeat(40) },
+    { ...archived, recordedAtMs: 2 },
+    { ...archived, parts: [{ ...part, checks: [...part.checks].reverse() }] },
+    { ...archived, parts: [{ ...part, checks: [{ ...part.checks[0]!, status: 'failed' }, part.checks[1]!] }] },
+    { ...archived, parts: [{ ...part, checks: [{ ...part.checks[0]!, extensions: { 'example/order': [1, 2] } }] }] },
+    { ...archived, parts: [{ ...part, checks: [{ ...part.checks[0]!, extensions: { 'example/order': [2, 1] } }] }] },
+    { ...archived, parts: [{ ...part, checks: [{ ...part.checks[0]!, extensions: { 'example/keys': JSON.parse('{"__proto__":{"kept":true}}') } }] }] },
+    { ...archived, parts: [{ ...part, checks: [{ ...part.checks[0]!, extensions: { 'example/keys': {} } }] }] },
+  ];
+  expect(new Set([archived, ...variants].map(layerExecutionKey)).size).toBe(variants.length + 1);
+  for (const variant of variants) {
+    const mutable = { ...variant, id: `source-${archived.sha}-list` };
+    expect(distinctLayers([archived, mutable])).toHaveLength(2);
+    expect(distinctHeaders([layerEvidence(archived, 'shared').layer, layerEvidence(mutable, 'shared').layer])).toHaveLength(2);
+  }
 });
 
 test('environment names the known clients and keeps any other recorded name', () => {
