@@ -22,6 +22,7 @@ commands provide JSON results with published schemas; the HTTP API is described 
 - [Standards used](#standards-used)
 - [Where the documentation comes from](#where-the-documentation-comes-from)
 - [An integration brief you can give an agent](#an-integration-brief-you-can-give-an-agent)
+- [Resolve this repository's open issues](#resolve-this-repositorys-open-issues)
 
 ## Given only this repository link
 
@@ -296,6 +297,30 @@ docs/reporting-issues.md; do not edit node_modules or vendor Atlas into this pro
 If server access or CI secrets are unavailable, finish the local integration and report exactly which shared
 server/CI checks remain unverified. A synthetic pass, a generated plan, or an unavailable backend is not proof
 that the product's real suites are integrated.
+
+## Resolve this repository's open issues
+
+For contributors working in this Atlas checkout, the
+[resolve-open-issues skill](https://github.com/crvouga/atlas/blob/main/.agents/skills/resolve-open-issues/SKILL.md)
+handles the entire open GitHub issue inventory in one PR, branch and worktree. It uses the
+[Agent Skills format](https://agentskills.io/specification) in the
+[shared `.agents/skills/` location](https://agentskills.io/integrate-skills#where-to-scan).
+Discovery varies by agent; any coding agent with repository file access and GitHub access can use
+the same instructions by reading the file directly:
+
+```text
+Read .agents/skills/resolve-open-issues/SKILL.md and follow it to resolve all open GitHub issues
+in this repository in a single PR, using one branch and the current worktree. Continue through
+implementation, validation and PR checks. Track evidence for every issue, handle attestations
+autonomously, and report precise blockers without claiming unresolved issues are fixed.
+```
+
+Use the agent's native skill invocation when it discovers `resolve-open-issues`; the file-reading
+prompt is the portable fallback. The skill can also be copied as a whole directory into another
+repository's skill location; it reads that repository's instructions and validation requirements.
+Keep this workflow in the repository being fixed. Atlas consumer integrations still follow the
+playbook above and report Atlas defects as issues. The contributor skill lives in the Git checkout;
+it is not part of the npm package.
 </doc>
 
 <doc path="docs/quickstart.md">
