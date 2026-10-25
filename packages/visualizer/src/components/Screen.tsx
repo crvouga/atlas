@@ -1,10 +1,7 @@
+import { Badge, Button, Image, List, Paper, Skeleton, Stack, Text } from '@mantine/core';
 import { useRef, useState, type ReactNode } from 'react';
-
 import type { ImageMedia, ItemStatus, StateView } from '../data/model';
-import styles from './Screen.module.css';
-
-export type PlaceholderReason = 'not-captured' | 'not-reached' | 'processing' | 'not-run' | 'spec-only';
-
+type PlaceholderReason = 'not-captured' | 'not-reached' | 'processing' | 'not-run' | 'spec-only';
 const REASON_LABEL: Record<PlaceholderReason, string> = {
   'not-captured': 'Not captured yet',
   'not-reached': 'Not reached in this run',
@@ -12,19 +9,18 @@ const REASON_LABEL: Record<PlaceholderReason, string> = {
   'not-run': 'Not in this run',
   'spec-only': 'Not captured yet'
 };
-
 export function placeholderReason(status: ItemStatus, media: ImageMedia | null): PlaceholderReason {
-  if (media?.state === 'processing') return 'processing';
-  if (status === 'not-reached') return 'not-reached';
-  if (status === 'not-yet-run') return 'not-run';
-  if (status === 'spec-only') return 'spec-only';
-  return 'not-captured';
+  return media?.state === 'processing'
+    ? 'processing'
+    : status === 'not-reached'
+      ? 'not-reached'
+      : status === 'not-yet-run'
+        ? 'not-run'
+        : status === 'spec-only'
+          ? 'spec-only'
+          : 'not-captured';
 }
-
-/**
- * What a screen should look like, sketched from the spec: its name, description, and the checks
- * or hints that say what it shows. Clearly not a screenshot.
- */
+/** A specification preview is explicitly labeled; it never pretends to be a recorded screenshot. */
 export function ScreenPlaceholder({
   state,
   reason,
@@ -41,84 +37,80 @@ export function ScreenPlaceholder({
   caption?: boolean;
 }) {
   const sketch = lines ? (state.hints.length ? state.hints : state.specChecks).slice(0, size === 'thumb' ? 3 : 8) : [];
-  if (state.design) {
-    return (
-      <div className={styles.phone} data-size={size} data-variant="design">
-        <img className={styles.design} src={state.design.image} alt={`Design for ${state.name}`} loading="lazy" />
-        <span className={styles.designTag}>Design, not a screenshot</span>
-      </div>
-    );
-  }
   return (
-    <div className={styles.phone} data-size={size} data-variant="sketch" role="img" aria-label={`${state.name}: ${REASON_LABEL[reason]}`}>
-      <div className={styles.notch} aria-hidden="true" />
-      <div className={styles.sketch} aria-hidden="true">
-        {description && state.description && <span className={styles.description}>{state.description}</span>}
-        {sketch.length > 0 && (
-          <span className={styles.lines}>
-            {sketch.map((line) => (
-              <span key={line} className={styles.line}>
-                <span className={styles.tick} />
-                <span>{line}</span>
-              </span>
-            ))}
-          </span>
-        )}
-        {caption && <span className={styles.missing}>{REASON_LABEL[reason]}</span>}
-        <span className={styles.bars}>
-          <span className={styles.card} />
-          <span className={styles.barWide} />
-          <span className={styles.barNarrow} />
-          <span className={styles.barWide} />
-          <span className={styles.button} />
-        </span>
-      </div>
-    </div>
+    <Paper withBorder p={size === 'thumb' ? 'xs' : 'lg'} w="100%" role="img" aria-label={`${state.name}: ${REASON_LABEL[reason]}`}>
+      {state.design ? (
+        <Stack gap="xs">
+          <Image src={state.design.image} alt={`Design for ${state.name}`} fit="contain" mah="60vh" />
+          <Badge color="gray">Design, not a screenshot</Badge>
+        </Stack>
+      ) : (
+        <Stack gap="xs">
+          {description && state.description && (
+            <Text size={size === 'thumb' ? 'xs' : 'sm'} c="dimmed">
+              {state.description}
+            </Text>
+          )}
+          {sketch.length > 0 && (
+            <List size="xs" spacing="xs">
+              {sketch.map((line) => (
+                <List.Item key={line}>{line}</List.Item>
+              ))}
+            </List>
+          )}
+          {caption && (
+            <Text size="xs" c="dimmed">
+              {REASON_LABEL[reason]}
+            </Text>
+          )}
+          <Skeleton height="4rem" animate={false} />
+        </Stack>
+      )}
+    </Paper>
   );
 }
-
-/** A screenshot that fades in over a same-sized skeleton, with a quiet retry if it fails. */
+/** Screenshot load and retry state, without a broken-image surface or lost placeholder. */
 export function Screenshot({ src, alt, size, underlay }: { src: string; alt: string; size: 'thumb' | 'full'; underlay?: ReactNode }) {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const url = attempt ? `${src}${src.includes('?') ? '&' : '?'}retry=${attempt}` : src;
   return (
-    <div className={styles.phone} data-size={size} data-variant="shot" data-state={state}>
-      {state !== 'loaded' && (underlay ? <div className={styles.underlay}>{underlay}</div> : <div className={styles.skeleton} aria-hidden="true" />)}
+    <Stack gap="xs">
+      {state !== 'loaded' && (underlay ?? <Skeleton height={size === 'thumb' ? '6rem' : '18rem'} />)}
       {state === 'failed' ? (
-        <div className={styles.failed} role="status">
-          <span>Couldn’t load the screenshot.</span>
-          <button
-            type="button"
-            className={styles.retry}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
+        <Stack gap="xs" role="status">
+          <Text>Couldn’t load the screenshot.</Text>
+          <Button
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
               setState('loading');
               setAttempt((n) => n + 1);
             }}
           >
             Try again
-          </button>
-        </div>
+          </Button>
+        </Stack>
       ) : (
-        <img
+        <Image
           key={url}
-          className={styles.img}
           src={url}
           alt={alt}
+          fit="contain"
+          maw="100%"
+          mah="60vh"
           loading="lazy"
           decoding="async"
           draggable={false}
+          display={state === 'loaded' ? 'block' : 'none'}
           onLoad={() => setState('loaded')}
           onError={() => setState('failed')}
         />
       )}
-    </div>
+    </Stack>
   );
 }
-
-/** The real screenshot when there is one, the placeholder otherwise. */
+/** Prefer real captured evidence; otherwise render the specification's preview. */
 export function ScreenImage({
   state,
   size,
@@ -133,9 +125,26 @@ export function ScreenImage({
   caption?: boolean;
 }) {
   const media = state.result?.screenshot ?? null;
-  const src = media?.state === 'available' ? (size === 'thumb' ? media.thumb ?? media.full : media.full ?? media.thumb) : null;
+  const src = media?.state === 'available' ? (size === 'thumb' ? (media.thumb ?? media.full) : (media.full ?? media.thumb)) : null;
   const startedAsPlaceholder = useRef(src === null);
-  const placeholder = <ScreenPlaceholder state={state} reason={placeholderReason(state.status, media)} size={size} description={description} lines={lines} caption={caption} />;
-  if (src) return <Screenshot src={src} alt={`Screenshot of ${state.name}`} size={size} underlay={startedAsPlaceholder.current ? placeholder : undefined} />;
-  return placeholder;
+  const placeholder = (
+    <ScreenPlaceholder
+      state={state}
+      reason={placeholderReason(state.status, media)}
+      size={size}
+      description={description}
+      lines={lines}
+      caption={caption}
+    />
+  );
+  return src ? (
+    <Screenshot
+      src={src}
+      alt={`Screenshot of ${state.name}`}
+      size={size}
+      underlay={startedAsPlaceholder.current ? placeholder : undefined}
+    />
+  ) : (
+    placeholder
+  );
 }

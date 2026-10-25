@@ -1,18 +1,17 @@
-import { Command } from 'cmdk';
+import { Badge, Group, Kbd, List, Modal, Text } from '@mantine/core';
+import { Spotlight, useSpotlight } from '@mantine/spotlight';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-
 import { useAtlas } from '../app/atlas-context';
 import { keys, specKey, useAdapter } from '../data/queries';
-import { StatusMark } from '../evidence/marks';
 import { useEvidence } from '../evidence/evidence-context';
+import { StatusMark } from '../evidence/marks';
 import { kindOfFile } from '../spec-kind';
 import { corpusFrom } from './corpus';
-import { commandKey, setFinderOpen, setHelpOpen, toggleFinder, useFinderOpen, useHelpOpen, isHelpOpen } from './open';
-import { FIND_GROUPS, indexCorpus, notationOf, rankIndex, splitQuery, type FindDoc, type FindKind, type FindTarget, type Ranked } from './rank';
+import { finderStore, isHelpOpen, setFinderOpen, setHelpOpen, toggleFinder, useFinderOpen, useHelpOpen } from './open';
+import { FIND_GROUPS, indexCorpus, notationOf, rankIndex, splitQuery, type FindDoc, type FindKind, type FindTarget } from './rank';
 import { applySemantic, createWorkerEmbedder, embeddingsAvailable, embedText, textHash, type Embedder } from './semantic';
-import styles from './Finder.module.css';
 
 const KIND_WORD: Record<FindKind, string> = {
   journey: 'Journey',
@@ -23,8 +22,10 @@ const KIND_WORD: Record<FindKind, string> = {
   action: 'Action',
   run: 'Run'
 };
-
-const SHORTCUTS: readonly { readonly keys: string; readonly does: string }[] = [
+const SHORTCUTS: readonly {
+  readonly keys: string;
+  readonly does: string;
+}[] = [
   { keys: '⌘K  or  Ctrl+K', does: 'Find a flow' },
   { keys: '/', does: 'Find a flow' },
   { keys: '↑  ↓', does: 'Move through the list' },
@@ -35,13 +36,11 @@ const SHORTCUTS: readonly { readonly keys: string; readonly does: string }[] = [
   { keys: '←  →', does: 'Previous and next moment' },
   { keys: 'Home  End', does: 'Start and end of a recording' }
 ];
-
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
   return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A';
 }
-
 function useSpecTexts(files: readonly string[]) {
   const adapter = useAdapter();
   const client = useQueryClient();
@@ -84,10 +83,8 @@ function useSpecTexts(files: readonly string[]) {
   }, [adapter, client, key, source]);
   return { texts, pending };
 }
-
 /** The vector cache outlives a keystroke, so a live run does not embed the suite again. */
 const vectorCache = new Map<string, Float32Array>();
-
 function vectorsFor(docs: readonly FindDoc[]): ReadonlyMap<string, Float32Array> {
   const vectors = new Map<string, Float32Array>();
   for (const doc of docs) {
@@ -96,7 +93,6 @@ function vectorsFor(docs: readonly FindDoc[]): ReadonlyMap<string, Float32Array>
   }
   return vectors;
 }
-
 export function Finder() {
   const open = useFinderOpen();
   const help = useHelpOpen();
@@ -106,12 +102,20 @@ export function Finder() {
   const routeSearch = useSearch({ strict: false });
   const readable = useMemo(() => evidence.files.filter((file) => kindOfFile(file)), [evidence.files]);
   const { texts, pending } = useSpecTexts(readable);
-  const docs = useMemo(() => corpusFrom(view, evidence.files, evidence.titleOf, evidence.view, texts), [view, evidence.files, evidence.titleOf, evidence.view, texts]);
+  const docs = useMemo(
+    () => corpusFrom(view, evidence.files, evidence.titleOf, evidence.view, texts),
+    [view, evidence.files, evidence.titleOf, evidence.view, texts]
+  );
   const index = useMemo(() => indexCorpus(docs), [docs]);
   const [query, setQuery] = useState('');
-  const [picked, setPicked] = useState('');
+  const store = finderStore;
+  const spotlightState = useSpotlight(store);
+
   const lexical = useMemo(() => rankIndex(index, query), [index, query]);
-  const [embedded, setEmbedded] = useState<{ readonly query: string; readonly vector: Float32Array } | null>(null);
+  const [embedded, setEmbedded] = useState<{
+    readonly query: string;
+    readonly vector: Float32Array;
+  } | null>(null);
   const [vectors, setVectors] = useState<ReadonlyMap<string, Float32Array>>(() => new Map());
   const queryVector = embedded !== null && embedded.query === query.trim() ? embedded.vector : null;
   const searchable = useMemo(() => {
@@ -119,18 +123,23 @@ export function Finder() {
     if (notations.size === 0) return docs;
     return docs.filter((doc) => notations.has(notationOf(doc)));
   }, [docs, query]);
-  const shown = queryVector ? applySemantic(searchable, lexical, queryVector, vectors) : lexical;
+  const shown = useMemo(
+    () => (queryVector ? applySemantic(searchable, lexical, queryVector, vectors) : lexical),
+    [queryVector, searchable, lexical, vectors]
+  );
   const ordered = useMemo(() => FIND_GROUPS.flatMap((group) => shown.filter((hit) => hit.doc.group === group)), [shown]);
-  const selected = ordered.some((hit) => hit.doc.id === picked) ? picked : (ordered[0]?.doc.id ?? '');
+
+  // Rank results ourselves, then let Spotlight own keyboard selection and scrolling.
+  // Compound Spotlight does not initialize a selection when asynchronous results arrive.
+  useEffect(() => {
+    if (open) store.setState((state) => ({ ...state, selected: 0 }));
+  }, [open, query, store]);
   const embedder = useRef<Embedder | null>(null);
   const embedFailed = useRef(false);
-
   useEffect(() => {
     if (open) return;
     setQuery('');
-    setPicked('');
   }, [open]);
-
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !event.altKey && !event.shiftKey) {
@@ -157,7 +166,6 @@ export function Finder() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-
   useEffect(() => {
     if (!open || embedFailed.current || !embeddingsAvailable() || query.trim().length === 0) return;
     let cancelled = false;
@@ -192,7 +200,6 @@ export function Finder() {
       cancelled = true;
     };
   }, [open, query, docs, lexical]);
-
   const openTarget = (target: FindTarget) => {
     const run = typeof routeSearch.run === 'string' ? routeSearch.run : undefined;
     if (target.to === '/chart/$chartId' && target.chartId) {
@@ -214,86 +221,95 @@ export function Finder() {
     }
     setFinderOpen(false);
   };
-
   const onCommandKey = (event: ReactKeyboardEvent) => {
     if (event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey)) return;
     event.preventDefault();
-    const hit = shown.find((item) => item.doc.id === selected);
+    event.stopPropagation();
+    const hit = ordered[Math.max(0, store.getState().selected)];
     if (hit) openTarget(hit.doc.recording ?? hit.doc.target);
   };
-
   return (
     <>
-      <Command.Dialog
-        open={open}
-        onOpenChange={setFinderOpen}
-        label="Find"
-        shouldFilter={false}
-        loop
-        vimBindings={false}
-        overlayClassName={styles.overlay}
-        contentClassName={styles.content}
-        className={styles.command}
-        value={selected}
-        onValueChange={setPicked}
-        onKeyDown={onCommandKey}
+      <Spotlight.Root
+        store={store}
+        shortcut={null}
+        query={query}
+        onQueryChange={setQuery}
+        title="Find"
+        attributes={{ content: { 'aria-label': 'Find' } }}
+        onKeyDownCapture={onCommandKey}
+        scrollable
+        maxHeight="60vh"
       >
-        <Command.Input className={styles.input} placeholder='Try "add a todo" or "gherkin"' value={query} onValueChange={(value) => { setQuery(value); setPicked(''); }} />
-        <Command.List className={styles.list} label="Flows, specs and runs">
-          {shown.length === 0 && <p className={styles.empty}>{query.trim() ? 'Nothing close to that.' : 'Type what someone does. For example, add a todo.'}</p>}
+        {/* Spotlight updates selection silently; notify its public store after keyboard handling so ARIA follows it. */}
+        <Spotlight.Search
+          onKeyDown={() => queueMicrotask(() => store.setState(store.getState()))}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls="atlas-finder-actions"
+          aria-activedescendant={ordered[Math.max(0, spotlightState.selected)]?.doc.id}
+          aria-label="Find a flow"
+          placeholder='Try "add a todo" or "gherkin"'
+        />
+        <Spotlight.ActionsList id="atlas-finder-actions" role="listbox" aria-label="Flows, specs and runs">
+          {shown.length === 0 && (
+            <Spotlight.Empty>
+              {query.trim() ? 'Nothing close to that.' : 'Type what someone does. For example, add a todo.'}
+            </Spotlight.Empty>
+          )}
           {FIND_GROUPS.map((group) => {
             const hits = shown.filter((hit) => hit.doc.group === group);
-            if (hits.length === 0) return null;
-            return (
-              <Command.Group key={group} heading={group} value={group}>
+            return hits.length ? (
+              <Spotlight.ActionsGroup key={group} label={group}>
                 {hits.map((hit) => (
-                  <Command.Item key={hit.doc.id} className={styles.item} value={hit.doc.id} onSelect={() => openTarget(hit.doc.target)}>
-                    <Row hit={hit} />
-                  </Command.Item>
+                  <Spotlight.Action
+                    key={hit.doc.id}
+                    id={hit.doc.id}
+                    ref={(node) => {
+                      if (node) node.id = hit.doc.id;
+                    }}
+                    role="option"
+                    data-selected={ordered[Math.max(0, spotlightState.selected)]?.doc.id === hit.doc.id || undefined}
+                    aria-selected={ordered[Math.max(0, spotlightState.selected)]?.doc.id === hit.doc.id}
+                    onClick={() => openTarget(hit.doc.target)}
+                    label={hit.doc.title}
+                    description={[hit.snippet !== hit.doc.subtitle ? hit.snippet : '', hit.doc.subtitle].filter(Boolean).join(' · ')}
+                    leftSection={hit.doc.status ? <StatusMark status={hit.doc.status} size={16} /> : undefined}
+                    rightSection={<Badge color="gray">{KIND_WORD[hit.doc.kind]}</Badge>}
+                  />
                 ))}
-              </Command.Group>
-            );
+              </Spotlight.ActionsGroup>
+            ) : null;
           })}
-        </Command.List>
-        <footer className={styles.footer}>
-          <span>{pending ? 'Reading specs…' : '↑↓ move'}</span>
-          <span>↵ open</span>
-          <span>esc close</span>
-        </footer>
-      </Command.Dialog>
-      {help && (
-        <div className={styles.overlay} onClick={() => setHelpOpen(false)}>
-          <div className={styles.help} role="dialog" aria-label="Keyboard shortcuts" onClick={(event) => event.stopPropagation()}>
-            <h2>Keyboard shortcuts</h2>
-            <ul>
-              {SHORTCUTS.map((shortcut) => (
-                <li key={shortcut.keys}>
-                  <kbd>{shortcut.keys}</kbd>
-                  <span>{shortcut.does}</span>
-                </li>
-              ))}
-            </ul>
-            <button type="button" onClick={() => setHelpOpen(false)}>Close</button>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-function Row({ hit }: { hit: Ranked }) {
-  const { doc, snippet } = hit;
-  return (
-    <>
-      {doc.status && <StatusMark status={doc.status} size={14} />}
-      <span className={styles.text}>
-        <span className={styles.title}>{doc.title}</span>
-        {snippet && snippet !== doc.subtitle && <span className={styles.snippet}>{snippet}</span>}
-      </span>
-      <span className={styles.meta}>
-        {doc.subtitle && <span className={styles.subtitle}>{doc.subtitle}</span>}
-        <span className={styles.kind}>{KIND_WORD[doc.kind]}</span>
-      </span>
+        </Spotlight.ActionsList>
+        <Spotlight.Footer>
+          <Group gap="md" justify="space-between">
+            <Text size="xs" c="dimmed">
+              {pending ? 'Reading specs…' : '↑↓ move'}
+            </Text>
+            <Text size="xs" c="dimmed">
+              ↵ open · esc close
+            </Text>
+          </Group>
+        </Spotlight.Footer>
+      </Spotlight.Root>
+      <Modal
+        opened={help}
+        onClose={() => setHelpOpen(false)}
+        title="Keyboard shortcuts"
+        attributes={{ content: { 'aria-label': 'Keyboard shortcuts' } }}
+      >
+        <List spacing="md" listStyleType="none">
+          {SHORTCUTS.map((shortcut) => (
+            <List.Item key={shortcut.keys}>
+              <Group justify="space-between">
+                <Kbd>{shortcut.keys}</Kbd>
+                <Text>{shortcut.does}</Text>
+              </Group>
+            </List.Item>
+          ))}
+        </List>
+      </Modal>
     </>
   );
 }

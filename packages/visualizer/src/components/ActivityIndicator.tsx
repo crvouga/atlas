@@ -1,6 +1,5 @@
-import styles from './ActivityIndicator.module.css';
-
-/** A quiet indication of active work; reduced motion keeps a static ring. */
-export function ActivityIndicator({ label = 'Working' }: { label?: string }) {
-  return <span className={styles.activity} role="status" aria-label={label} title={label}><span className={styles.ring} aria-hidden="true" /></span>;
+import { Loader } from '@mantine/core';
+/** A named, reduced-motion-aware indicator for work in progress. */
+export function ActivityIndicator({ label }: { label: string }) {
+  return <Loader size="xs" aria-label={label} role="status" />;
 }

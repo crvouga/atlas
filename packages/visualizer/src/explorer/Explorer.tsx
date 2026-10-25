@@ -1,3 +1,27 @@
+import { SpecLogo } from '../components/SpecLogo';
+import { IconX } from '@tabler/icons-react';
+import {
+  Accordion,
+  Alert,
+  Anchor,
+  Badge,
+  Box,
+  Button,
+  Container,
+  Drawer,
+  Flex,
+  Group,
+  List,
+  NativeSelect,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Tabs,
+  Text,
+  TextInput,
+  Title,
+  VisuallyHidden
+} from '@mantine/core';
 /**
  * @module Test explorer
  *
@@ -6,33 +30,54 @@
  * how it went there, how long it takes, how often it passes, how many runs it was in. Above the list, the report in
  * numbers; beside it, the open test; in a second tab, the CI runs that produced the results.
  */
-import { durationStats, formatMs, matchesQuery, testCatalog, TEST_SORTS, type CatalogModel, type TestQuery, type TestSort, type TestSummary } from '@crvouga/atlas/reports/test-catalog';
 import type { CheckSlot } from '@crvouga/atlas/reports/evidence-view';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
+import {
+  durationStats,
+  formatMs,
+  matchesQuery,
+  TEST_SORTS,
+  testCatalog,
+  type CatalogModel,
+  type TestQuery,
+  type TestSort,
+  type TestSummary
+} from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-
 import { useEvidence } from '../evidence/evidence-context';
 import { ago, plural, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
 import { SPEC_KINDS } from '../spec-kind';
 import { useRunDetail, useTestCatalog } from './catalog';
-import styles from './explorer.module.css';
 import { groupTests, tally, type TestGroupView } from './groups';
-import { Badges, EnvironmentChips, projectTitle, runName } from './parts';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
+import { Badges, EnvironmentChips, projectTitle, runName } from './parts';
 import { RunsView } from './RunsView';
-import { narrowed, queryOf, toggled, values, TEST_GROUPS, type ExplorerSearch, type TestGroup } from './search';
+import { narrowed, queryOf, TEST_GROUPS, toggled, values, type ExplorerSearch, type TestGroup } from './search';
 import { TestDetail } from './TestDetail';
-
 /** Groups start closed when there are more of them than this, unless the list is short. */
 const OPEN_GROUPS = 40;
 const OPEN_TESTS = 300;
 /** Rows a group shows before "Show more". */
 const GROUP_ROWS = 50;
-
-const GROUP_LABEL: Record<TestGroup, string> = { spec: 'Spec', domain: 'Domain', environment: 'Environment', status: 'Status', producer: 'Producer', none: 'None' };
-const SORT_LABEL: Record<TestSort, string> = { spec: 'Spec', title: 'Title', recent: 'Most recent', slowest: 'Slowest', failures: 'Most failures', flaky: 'Flakiest', runs: 'Most runs' };
+const GROUP_LABEL: Record<TestGroup, string> = {
+  spec: 'Spec',
+  domain: 'Domain',
+  environment: 'Environment',
+  status: 'Status',
+  producer: 'Producer',
+  none: 'None'
+};
+const SORT_LABEL: Record<TestSort, string> = {
+  spec: 'Spec',
+  title: 'Title',
+  recent: 'Most recent',
+  slowest: 'Slowest',
+  failures: 'Most failures',
+  flaky: 'Flakiest',
+  runs: 'Most runs'
+};
 const STATUS_FILTERS = [
   { id: '', label: 'All' },
   { id: 'failed', label: 'Failed' },
@@ -41,27 +86,34 @@ const STATUS_FILTERS = [
   { id: 'not-run', label: 'Not run' },
   { id: 'running', label: 'Running' }
 ] as const;
-
 function percent(rate: number | null): string {
   return rate === null ? '—' : `${Math.round(rate * 100)}%`;
 }
-
 /** What the explorer lists for an address: the tests shown, and the scope the insight strip and filter counts describe. */
 function useListing(model: CatalogModel | null, search: ExplorerSearch, q: string | undefined) {
   const run = useRunDetail(search.inRun);
-  const inRun = useMemo(() => (search.inRun ? new Set(run.data?.results.map((result) => result.key) ?? []) : null), [search.inRun, run.data]);
+  const inRun = useMemo(
+    () => (search.inRun ? new Set(run.data?.results.map((result) => result.key) ?? []) : null),
+    [search.inRun, run.data]
+  );
   return useMemo(() => {
     if (!model) return null;
     const query: TestQuery = { ...queryOf(search), ...(q ? { q } : { q: undefined }) };
-    const shown = testCatalog(model, { ...query, limit: 20_000 }).tests.filter((test) => !inRun || inRun.has(test.key));
+    const shown = testCatalog(model, { ...query, limit: 20000 }).tests.filter((test) => !inRun || inRun.has(test.key));
     // The strip and the status and environment counts describe what the other filters leave.
     const scope = model.tests.filter((test) => matchesQuery(model, test, { ...query, status: [], environment: [] }, inRun));
     const byEnvironment = scope.filter((test) => matchesQuery(model, test, { environment: query.environment }));
     const byStatus = scope.filter((test) => matchesQuery(model, test, { status: query.status }));
-    return { shown, scope, byEnvironment, byStatus, runPending: !!search.inRun && run.isPending, runMissing: !!search.inRun && run.isSuccess && run.data === null };
+    return {
+      shown,
+      scope,
+      byEnvironment,
+      byStatus,
+      runPending: !!search.inRun && run.isPending,
+      runMissing: !!search.inRun && run.isSuccess && run.data === null
+    };
   }, [model, search, q, inRun, run.isPending, run.isSuccess, run.data]);
 }
-
 /** The project home: the published spec kinds, the insight strip, the toolbar, the grouped list and the open test. */
 export function Explorer() {
   const evidence = useEvidence();
@@ -78,63 +130,150 @@ export function Explorer() {
     return map;
   }, [evidence.view]);
   const model = catalog.model;
-  const selected = search.test ? model?.byKey.get(search.test) ?? null : null;
+  const selected = search.test ? (model?.byKey.get(search.test) ?? null) : null;
   const empty = model !== null && model.tests.length === 0;
   const split = !!search.test && search.tab !== 'runs';
-
   return (
-    <div className={styles.explorer} data-split={split || undefined}>
-      <article className={styles.main} aria-label="Test explorer">
-        <header className={styles.head}>
-          <h1 className={styles.title}>{projectTitle()}</h1>
+    <Container size="xl" py="xl">
+      <Box aria-label="Test explorer" component="article" miw={0}>
+        <Box component="header" mb="lg">
+          <Title order={1} mb="sm">
+            {projectTitle()}
+          </Title>
           {model && model.tests.length > 0 && (
-            <div className={styles.tabs} role="tablist" aria-label="Explorer view">
-              <Link role="tab" aria-selected={search.tab !== 'runs'} to="/" search={patched({ tab: undefined, openRun: undefined })} resetScroll={false} activeOptions={{ exact: true }}>Tests <span>{model.tests.length}</span></Link>
-              <Link role="tab" aria-selected={search.tab === 'runs'} to="/" search={patched({ tab: 'runs', test: undefined })} resetScroll={false} activeOptions={{ exact: true }}>Runs <span>{model.summary.runs}</span></Link>
-            </div>
+            <Tabs
+              value={search.tab ?? 'tests'}
+              onChange={(value) => go({ tab: value === 'runs' ? 'runs' : undefined, test: undefined, openRun: undefined })}
+            >
+              <Tabs.List aria-label="Explorer view">
+                <Tabs.Tab
+                  value="tests"
+                  rightSection={
+                    <Text span c="dimmed">
+                      {model.tests.length}
+                    </Text>
+                  }
+                >
+                  Tests
+                </Tabs.Tab>
+                <Tabs.Tab
+                  value="runs"
+                  rightSection={
+                    <Text span c="dimmed">
+                      {model.summary.runs}
+                    </Text>
+                  }
+                >
+                  Runs
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs>
           )}
-        </header>
-        {evidence.unavailable && <p role="alert" className={styles.notice}>{evidence.unavailable}</p>}
-        {catalog.notice && <p role="status" className={styles.notice}>The server’s test history could not be read ({catalog.notice}). Showing what this page holds.</p>}
-        {kinds.length > 0 && (
-          <section className={styles.kinds} aria-label="Published specs">
-            <h2 className={styles.label}>Specs</h2>
-            <ul>
-              {kinds.map(({ kind, files }) => (
-                <li key={kind.id}>
-                  <Link to="/specs/$kind" params={{ kind: kind.id }} search={{}}><strong>{kind.label}</strong> <span>{files.length} {files.length === 1 ? kind.one : kind.many}</span></Link>
-                </li>
-              ))}
-            </ul>
-          </section>
+        </Box>
+        {evidence.unavailable && (
+          <Alert role="alert" color={'red'} my="sm">
+            {evidence.unavailable}
+          </Alert>
         )}
-        {!model && !evidence.unavailable && <p className={styles.quiet} role="status">Loading tests…</p>}
-        {empty && !kinds.length && <p className={styles.quiet}>No reports yet. Publish tests and specs to this project to populate its report.</p>}
-        {empty && kinds.length > 0 && <p className={styles.quiet}>No test results recorded yet.</p>}
-        {model && !empty && listing && (search.tab === 'runs'
-          ? <RunsView />
-          : <>
+        {catalog.notice && (
+          <Alert role="status" color={'blue'} my="sm">
+            The server’s test history could not be read ({catalog.notice}). Showing what this page holds.
+          </Alert>
+        )}
+        {kinds.length > 0 && (
+          <Box aria-label="Published specs" component="section" mb="lg">
+            <Title order={2} mb="sm" c="dimmed">
+              Specs
+            </Title>
+            <List spacing="xs" listStyleType="none">
+              {kinds.map(({ kind, files }) => (
+                <List.Item key={kind.id}>
+                  <Anchor renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}>
+                    <Group component="span" display="inline-flex" gap="xs">
+                      <SpecLogo kind={kind} />
+                      <Text span inherit fw={600}>
+                        {kind.label}
+                      </Text>
+                      <Text span inherit>
+                        {files.length} {files.length === 1 ? kind.one : kind.many}
+                      </Text>
+                    </Group>
+                  </Anchor>
+                </List.Item>
+              ))}
+            </List>
+          </Box>
+        )}
+        {!model && !evidence.unavailable && (
+          <Text role="status" component="div" c="dimmed">
+            Loading tests…
+          </Text>
+        )}
+        {empty && !kinds.length && (
+          <Text component="div" c="dimmed">
+            No reports yet. Publish tests and specs to this project to populate its report.
+          </Text>
+        )}
+        {empty && kinds.length > 0 && (
+          <Text component="div" c="dimmed">
+            No test results recorded yet.
+          </Text>
+        )}
+        {model &&
+          !empty &&
+          listing &&
+          (search.tab === 'runs' ? (
+            <RunsView />
+          ) : (
+            <>
               <InsightStrip model={model} scope={listing.scope} search={search} />
-              <Toolbar model={model} search={search} listing={listing} onSearch={(value) => go({ q: value || undefined }, { replace: true })} />
-              {listing.runPending && <p className={styles.quiet} role="status">Reading the tests of this run…</p>}
-              {listing.runMissing && <p className={styles.notice} role="status">That run is not in the report any more.</p>}
+              <Toolbar
+                model={model}
+                search={search}
+                listing={listing}
+                onSearch={(value) => go({ q: value || undefined }, { replace: true })}
+              />
+              {listing.runPending && (
+                <Text role="status" component="div" c="dimmed">
+                  Reading the tests of this run…
+                </Text>
+              )}
+              {listing.runMissing && (
+                <Alert role="status" color={'blue'} my="sm">
+                  That run is not in the report any more.
+                </Alert>
+              )}
               <TestList tests={listing.shown} search={search} total={model.tests.length} />
-            </>)}
-      </article>
-      {split && (
-        <aside className={styles.side} aria-label="Test detail">
-          {selected ? <TestDetail test={selected} slot={slots.get(selected.key)} /> : model ? (
-            <div className={styles.detailEmpty}>
-              <p className={styles.notice}>This test is not in the report any more. A source may be switched off, or its results were removed.</p>
-              <Link to="/" search={patched({ test: undefined })} resetScroll={false} activeOptions={{ exact: true }}>Close</Link>
-            </div>
-          ) : <p className={styles.quiet} role="status">Loading the test…</p>}
-        </aside>
-      )}
-    </div>
+            </>
+          ))}
+      </Box>
+      <Drawer opened={split} onClose={() => go({ test: undefined })} title="Test detail" size="xl">
+        <Box aria-label="Test detail" component="aside">
+          {selected ? (
+            <TestDetail test={selected} slot={slots.get(selected.key)} />
+          ) : model ? (
+            <Stack gap="sm">
+              <Alert color={'blue'} my="sm">
+                This test is not in the report any more. A source may be switched off, or its results were removed.
+              </Alert>
+              <Anchor
+                renderRoot={(props) => (
+                  <Link {...props} to="/" search={patched({ test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+                )}
+              >
+                Close
+              </Anchor>
+            </Stack>
+          ) : (
+            <Text role="status" component="div" c="dimmed">
+              Loading the test…
+            </Text>
+          )}
+        </Box>
+      </Drawer>
+    </Container>
   );
 }
-
 function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: readonly TestSummary[]; search: ExplorerSearch }) {
   const now = useNow();
   const go = useExplorerNavigate();
@@ -148,111 +287,219 @@ function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: re
   const last = scope.reduce((latest, test) => Math.max(latest, test.lastRecordedAtMs), 0);
   const status = (id: string) => go({ status: statuses.length === 1 && statuses[0] === id ? undefined : id });
   return (
-    <section className={styles.insights} aria-label="Insights">
-      <div className={styles.tile}>
-        <span className={styles.tileLabel}>Tests</span>
-        <strong className={styles.tileValue}>{scope.length.toLocaleString()}</strong>
-        <Meter counts={counts} />
-        <span className={styles.tileCounts}>
-          <button type="button" aria-pressed={statuses.includes('failed')} data-status="failed" disabled={!counts.failed} onClick={() => status('failed')}>{counts.failed} failed</button>
-          <button type="button" aria-pressed={statuses.includes('passed')} onClick={() => status('passed')}>{counts.passed} passed</button>
-          {counts['not-run'] > 0 && <button type="button" aria-pressed={statuses.includes('not-run')} onClick={() => status('not-run')}>{counts['not-run']} not run</button>}
-          {counts.running > 0 && <button type="button" aria-pressed={statuses.includes('running')} data-status="running" onClick={() => status('running')}>{counts.running} running</button>}
-        </span>
-      </div>
-      <button type="button" className={styles.tile} aria-pressed={statuses.includes('flaky')} aria-label={`${flaky} flaky tests`} onClick={() => status('flaky')}>
-        <span className={styles.tileLabel}>Flaky</span>
-        <strong className={styles.tileValue} data-warn={flaky > 0 || undefined}>{flaky}</strong>
-        <span className={styles.tileNote}>{flaky ? 'Passed and failed on one commit, or needed a retry' : 'None recorded'}</span>
-      </button>
-      <div className={styles.tile}>
-        <span className={styles.tileLabel}>Duration</span>
-        {durations ? (
-          <>
-            <strong className={styles.tileValue}>{formatMs(durations.avgMs)}</strong>
-            <span className={styles.tileNote}>average · p95 {formatMs(durations.p95Ms)} · {averages.length.toLocaleString()} measured</span>
-          </>
-        ) : (
-          <>
-            <strong className={styles.tileValue} data-none>—</strong>
-            <span className={styles.tileNote}>No durations recorded. Producers can send <code>durationMs</code> with each check.</span>
-          </>
-        )}
-      </div>
-      <div className={styles.tile} data-wide>
-        <span className={styles.tileLabel}>Environments</span>
-        <ul className={styles.envList}>
-          {environments.map((group) => (
-            <li key={group.key}>
-              <button type="button" aria-pressed={envs.includes(group.key)} onClick={() => go({ env: toggled(search.env, group.key) })} title={`Show only ${group.label}`}>
-                <span className={styles.envName}>{group.label}</span>
-                <span>{plural(group.tests.length, 'test', 'tests')}</span>
-                {group.counts.failed > 0 && <span data-status="failed">{group.counts.failed} failed</span>}
-                <span>{group.counts.passed} passed</span>
-                {group.counts['not-run'] > 0 && <span>{group.counts['not-run']} not run</span>}
-                {group.avgMs !== null && <span>avg {formatMs(group.avgMs)}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <Link className={styles.tile} to="/" search={patched({ tab: 'runs', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} aria-label={`${model.summary.runs} runs`}>
-        <span className={styles.tileLabel}>Runs</span>
-        <strong className={styles.tileValue}>{model.summary.runs.toLocaleString()}</strong>
-        <span className={styles.tileNote}>{last ? `Last recorded ${ago(last, now)}` : 'Nothing recorded yet'}</span>
-      </Link>
-      <MoreInsights scope={scope} />
-    </section>
+    <Box component="section" aria-label="Insights" mb="lg">
+      <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+        <Paper withBorder>
+          <Stack gap="xs">
+            <Text c="dimmed">Tests</Text>
+            <Title order={2}>{scope.length.toLocaleString()}</Title>
+            <Meter counts={counts} />
+            <Group gap="xs">
+              <Button
+                color="red"
+                variant={statuses.includes('failed') ? 'light' : 'subtle'}
+                aria-pressed={statuses.includes('failed')}
+                disabled={!counts.failed}
+                onClick={() => status('failed')}
+              >
+                {counts.failed} failed
+              </Button>
+              <Button
+                color="green"
+                variant={statuses.includes('passed') ? 'light' : 'subtle'}
+                aria-pressed={statuses.includes('passed')}
+                onClick={() => status('passed')}
+              >
+                {counts.passed} passed
+              </Button>
+              {counts['not-run'] > 0 && (
+                <Button aria-pressed={statuses.includes('not-run')} onClick={() => status('not-run')}>
+                  {counts['not-run']} not run
+                </Button>
+              )}
+              {counts.running > 0 && (
+                <Button aria-pressed={statuses.includes('running')} onClick={() => status('running')}>
+                  {counts.running} running
+                </Button>
+              )}
+            </Group>
+          </Stack>
+        </Paper>
+        <Paper withBorder>
+          <Stack gap="xs">
+            <Text c="dimmed">Flaky</Text>
+            <Title order={2}>{flaky}</Title>
+            <Text size="xs" c="dimmed">
+              {flaky ? 'Passed and failed on one commit, or needed a retry' : 'None recorded'}
+            </Text>
+            <Button
+              color="orange"
+              variant={statuses.includes('flaky') ? 'light' : 'subtle'}
+              aria-pressed={statuses.includes('flaky')}
+              aria-label={`${flaky} flaky tests`}
+              onClick={() => status('flaky')}
+            >
+              View flaky tests
+            </Button>
+          </Stack>
+        </Paper>
+        <Paper withBorder>
+          <Stack gap="xs">
+            <Text c="dimmed">Duration</Text>
+            <Title order={2}>{durations ? formatMs(durations.avgMs) : '—'}</Title>
+            <Text size="xs" c="dimmed">
+              {durations
+                ? `average · p95 ${formatMs(durations.p95Ms)} · ${averages.length.toLocaleString()} measured`
+                : 'No durations recorded. Producers can send durationMs with each check.'}
+            </Text>
+            <Anchor
+              aria-label={`${model.summary.runs} runs`}
+              renderRoot={(props) => (
+                <Link
+                  {...props}
+                  to="/"
+                  search={patched({ tab: 'runs', test: undefined })}
+                  resetScroll={false}
+                  activeOptions={{ exact: true }}
+                />
+              )}
+            >
+              {model.summary.runs.toLocaleString()} runs
+            </Anchor>
+            <Text size="xs" c="dimmed">
+              {last ? `Last recorded ${ago(last, now)}` : 'Nothing recorded yet'}
+            </Text>
+          </Stack>
+        </Paper>
+        <Paper withBorder>
+          <Stack gap="xs">
+            <Text c="dimmed">Environments</Text>
+            {environments.map((group) => (
+              <Button
+                key={group.key}
+                variant={envs.includes(group.key) ? 'light' : 'subtle'}
+                fullWidth
+                h="auto"
+                py="xs"
+                justify="flex-start"
+                aria-pressed={envs.includes(group.key)}
+                onClick={() => go({ env: toggled(search.env, group.key) })}
+                title={`Show only ${group.label}`}
+              >
+                <Stack align="flex-start" gap="xs">
+                  <Text fw={500}>{group.label}</Text>
+                  <Text size="xs" c="dimmed">
+                    {plural(group.tests.length, 'test', 'tests')} · {group.counts.failed} failed · {group.counts.passed} passed
+                    {group.counts['not-run'] ? ` · ${group.counts['not-run']} not run` : ''}
+                    {group.avgMs !== null ? ` · avg ${formatMs(group.avgMs)}` : ''}
+                  </Text>
+                </Stack>
+              </Button>
+            ))}
+          </Stack>
+        </Paper>
+      </SimpleGrid>
+      <Box mt="md">
+        <MoreInsights scope={scope} />
+      </Box>
+    </Box>
   );
 }
-
 /** The slowest, flakiest and failing tests of the scope, each one click from its detail. */
 function MoreInsights({ scope }: { scope: readonly TestSummary[] }) {
-  const slowest = useMemo(() => scope.filter((test) => test.stats.durations).sort((a, b) => b.stats.durations!.avgMs - a.stats.durations!.avgMs).slice(0, 5), [scope]);
-  const flakiest = useMemo(() => scope.filter((test) => test.stats.flaky).sort((a, b) => b.stats.flips - a.stats.flips).slice(0, 5), [scope]);
-  const failing = useMemo(() => scope.filter((test) => test.status === 'failed').sort((a, b) => b.lastRecordedAtMs - a.lastRecordedAtMs).slice(0, 5), [scope]);
-  if (!slowest.length && !flakiest.length && !failing.length) return null;
-  const list = (title: string, tests: readonly TestSummary[], value: (test: TestSummary) => string) => tests.length > 0 && (
-    <div>
-      <h3 className={styles.label}>{title}</h3>
-      <ol>
-        {tests.map((test) => (
-          <li key={test.key}>
-            <Link to="/" search={patched({ test: test.key })} resetScroll={false} activeOptions={{ exact: true }}>
-              <StatusMark status={test.status} size={12} />
-              <span className={styles.insightName}>{test.title}</span>
-              <span className={styles.insightValue}>{value(test)}</span>
-            </Link>
-          </li>
-        ))}
-      </ol>
-    </div>
+  const slowest = useMemo(
+    () =>
+      scope
+        .filter((test) => test.stats.durations)
+        .sort((a, b) => b.stats.durations!.avgMs - a.stats.durations!.avgMs)
+        .slice(0, 5),
+    [scope]
   );
+  const flakiest = useMemo(
+    () =>
+      scope
+        .filter((test) => test.stats.flaky)
+        .sort((a, b) => b.stats.flips - a.stats.flips)
+        .slice(0, 5),
+    [scope]
+  );
+  const failing = useMemo(
+    () =>
+      scope
+        .filter((test) => test.status === 'failed')
+        .sort((a, b) => b.lastRecordedAtMs - a.lastRecordedAtMs)
+        .slice(0, 5),
+    [scope]
+  );
+  if (!slowest.length && !flakiest.length && !failing.length) return null;
+  const list = (title: string, tests: readonly TestSummary[], value: (test: TestSummary) => string) =>
+    tests.length > 0 && (
+      <Stack gap="sm">
+        <Title order={3} mb="sm" c="dimmed">
+          {title}
+        </Title>
+        <List spacing="xs" listStyleType="none" type="ordered">
+          {tests.map((test) => (
+            <List.Item key={test.key}>
+              <Anchor
+                renderRoot={(props) => (
+                  <Link {...props} to="/" search={patched({ test: test.key })} resetScroll={false} activeOptions={{ exact: true }} />
+                )}
+              >
+                <StatusMark status={test.status} size={12} />
+                <Flex component="span" direction="column" gap="xs" miw={0}>
+                  {test.title}
+                </Flex>
+                <Text span inherit>
+                  {value(test)}
+                </Text>
+              </Anchor>
+            </List.Item>
+          ))}
+        </List>
+      </Stack>
+    );
   return (
-    <details className={styles.more}>
-      <summary>Slowest, flakiest and failing tests</summary>
-      <div className={styles.moreLists}>
-        {list('Failing', failing, (test) => plural(test.stats.failed, 'failure', 'failures'))}
-        {list('Flakiest', flakiest, (test) => (test.stats.flips ? plural(test.stats.flips, 'flip', 'flips') : 'flaky'))}
-        {list('Slowest', slowest, (test) => formatMs(test.stats.durations?.avgMs))}
-      </div>
-    </details>
+    <Accordion variant="separated" my="sm">
+      <Accordion.Item value="content">
+        <Accordion.Control>Slowest, flakiest and failing tests</Accordion.Control>
+        <Accordion.Panel>
+          <SimpleGrid cols={{ base: 1, md: 3 }}>
+            {list('Failing', failing, (test) => plural(test.stats.failed, 'failure', 'failures'))}
+            {list('Flakiest', flakiest, (test) => (test.stats.flips ? plural(test.stats.flips, 'flip', 'flips') : 'flaky'))}
+            {list('Slowest', slowest, (test) => formatMs(test.stats.durations?.avgMs))}
+          </SimpleGrid>
+        </Accordion.Panel>
+      </Accordion.Item>
+    </Accordion>
   );
 }
-
 type Listing = NonNullable<ReturnType<typeof useListing>>;
-
-function Toolbar({ model, search, listing, onSearch }: { model: CatalogModel; search: ExplorerSearch; listing: Listing; onSearch: (value: string) => void }) {
+function Toolbar({
+  model,
+  search,
+  listing,
+  onSearch
+}: {
+  model: CatalogModel;
+  search: ExplorerSearch;
+  listing: Listing;
+  onSearch: (value: string) => void;
+}) {
   const go = useExplorerNavigate();
   const [draft, setDraft] = useState(search.q ?? '');
   // The address may change from elsewhere (a link, the index, back): follow it.
-  useEffect(() => setDraft((current) => (current.trim() === (search.q ?? '').trim() ? current : search.q ?? '')), [search.q]);
+  useEffect(() => setDraft((current) => (current.trim() === (search.q ?? '').trim() ? current : (search.q ?? ''))), [search.q]);
   const statuses = values(search.status);
   const envs = values(search.env);
-  const statusCount = (id: string) => (id === '' ? listing.byEnvironment.length : listing.byEnvironment.filter((test) => (id === 'flaky' ? test.stats.flaky : test.status === id)).length);
+  const statusCount = (id: string) =>
+    id === ''
+      ? listing.byEnvironment.length
+      : listing.byEnvironment.filter((test) => (id === 'flaky' ? test.stats.flaky : test.status === id)).length;
   const envCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const test of listing.byStatus) for (const env of test.environments.length ? test.environments : ['(none)']) counts.set(env, (counts.get(env) ?? 0) + 1);
+    for (const test of listing.byStatus)
+      for (const env of test.environments.length ? test.environments : ['(none)']) counts.set(env, (counts.get(env) ?? 0) + 1);
     return counts;
   }, [listing.byStatus]);
   const specTitle = (path: string) => model.facets.specs.find((spec) => spec.path === path)?.title ?? path;
@@ -262,81 +509,168 @@ function Toolbar({ model, search, listing, onSearch }: { model: CatalogModel; se
     ...(search.inRun ? [{ label: `Run: ${runName(search.inRun)}`, clear: { inRun: undefined } }] : [])
   ];
   return (
-    <section className={styles.toolbar} aria-label="Find tests">
-      <div className={styles.searchRow}>
-        <input
+    <Box aria-label="Find tests" component="section" mb="xl">
+      <Flex gap="sm" align="flex-end" wrap="wrap" mb="md">
+        <TextInput
+          flex={1}
+          miw={{ base: '100%', sm: '15rem' }}
           type="search"
-          className={styles.searchBox}
           aria-label="Search tests"
           placeholder="Search titles, specs, domains, tags, environments…"
           value={draft}
-          onChange={(event) => { setDraft(event.target.value); onSearch(event.target.value.trim()); }}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            onSearch(event.target.value.trim());
+          }}
         />
-        <label className={styles.select}>
-          <span>Group by</span>
-          <select aria-label="Group by" value={search.group ?? 'spec'} onChange={(event) => go({ group: event.target.value === 'spec' ? undefined : (event.target.value as TestGroup) })}>
-            {TEST_GROUPS.map((group) => <option key={group} value={group}>{GROUP_LABEL[group]}</option>)}
-          </select>
-        </label>
-        <label className={styles.select}>
-          <span>Sort</span>
-          <select aria-label="Sort" value={search.sort ?? 'spec'} onChange={(event) => go({ sort: event.target.value === 'spec' ? undefined : (event.target.value as TestSort) })}>
-            {TEST_SORTS.map((sort) => <option key={sort} value={sort}>{SORT_LABEL[sort]}</option>)}
-          </select>
-        </label>
-      </div>
-      <div className={styles.segments} role="group" aria-label="Test status">
+        <Box component="label">
+          <Text span inherit>
+            Group by
+          </Text>
+          <NativeSelect
+            aria-label="Group by"
+            value={search.group ?? 'spec'}
+            onChange={(event) => go({ group: event.target.value === 'spec' ? undefined : (event.target.value as TestGroup) })}
+          >
+            {TEST_GROUPS.map((group) => (
+              <option key={group} value={group}>
+                {GROUP_LABEL[group]}
+              </option>
+            ))}
+          </NativeSelect>
+        </Box>
+        <Box component="label">
+          <Text span inherit>
+            Sort
+          </Text>
+          <NativeSelect
+            aria-label="Sort"
+            value={search.sort ?? 'spec'}
+            onChange={(event) => go({ sort: event.target.value === 'spec' ? undefined : (event.target.value as TestSort) })}
+          >
+            {TEST_SORTS.map((sort) => (
+              <option key={sort} value={sort}>
+                {SORT_LABEL[sort]}
+              </option>
+            ))}
+          </NativeSelect>
+        </Box>
+      </Flex>
+      <Flex role="group" aria-label="Test status" gap="xs" align="center" wrap="wrap" mb="sm">
         {STATUS_FILTERS.map((filter) => {
           const count = statusCount(filter.id);
           if (filter.id === 'running' && count === 0 && !statuses.includes('running')) return null;
           const pressed = filter.id === '' ? statuses.length === 0 : statuses.length === 1 && statuses[0] === filter.id;
           return (
-            <button key={filter.id || 'all'} type="button" aria-pressed={pressed} data-status={(count > 0 && filter.id) || undefined} onClick={() => go({ status: filter.id || undefined })}>
-              {filter.label} <span>{count.toLocaleString()}</span>
-            </button>
+            <Button
+              key={filter.id || 'all'}
+              type="button"
+              aria-pressed={pressed}
+              data-status={(count > 0 && filter.id) || undefined}
+              onClick={() => go({ status: filter.id || undefined })}
+              variant={pressed ? 'light' : 'subtle'}
+            >
+              {filter.label}{' '}
+              <Text span inherit>
+                {count.toLocaleString()}
+              </Text>
+            </Button>
           );
         })}
-      </div>
-      <div className={styles.filterRow}>
+      </Flex>
+      <Flex gap="xs" align="center" wrap="wrap">
         {model.facets.environments.length > 0 && (
-          <div className={styles.chips} role="group" aria-label="Environments">
+          <Flex role="group" aria-label="Environments" gap="xs" align="center" wrap="wrap">
             {model.facets.environments.map(({ value }) => (
-              <button key={value} type="button" aria-pressed={envs.includes(value)} onClick={() => go({ env: toggled(search.env, value) })}>
-                {environmentLabel(value)} <span>{(envCounts.get(value) ?? 0).toLocaleString()}</span>
-              </button>
+              <Button
+                key={value}
+                type="button"
+                aria-pressed={envs.includes(value)}
+                onClick={() => go({ env: toggled(search.env, value) })}
+                variant={envs.includes(value) ? 'light' : 'subtle'}
+              >
+                {environmentLabel(value)}{' '}
+                <Text span inherit>
+                  {(envCounts.get(value) ?? 0).toLocaleString()}
+                </Text>
+              </Button>
             ))}
-          </div>
+          </Flex>
         )}
         {model.facets.producers.length > 1 && (
-          <label className={styles.select}>
-            <span className="sr-only">Producer</span>
-            <select aria-label="Producer" value={values(search.producer)[0] ?? ''} onChange={(event) => go({ producer: event.target.value || undefined })}>
+          <Box component="label">
+            <VisuallyHidden>Producer</VisuallyHidden>
+            <NativeSelect
+              aria-label="Producer"
+              value={values(search.producer)[0] ?? ''}
+              onChange={(event) => go({ producer: event.target.value || undefined })}
+            >
               <option value="">All producers</option>
-              {model.facets.producers.map(({ value, count }) => <option key={value} value={value}>{value} ({count})</option>)}
-            </select>
-          </label>
+              {model.facets.producers.map(({ value, count }) => (
+                <option key={value} value={value}>
+                  {value} ({count})
+                </option>
+              ))}
+            </NativeSelect>
+          </Box>
         )}
         {model.facets.domains.length > 1 && (
-          <label className={styles.select}>
-            <span className="sr-only">Domain</span>
-            <select aria-label="Domain" value={values(search.domain)[0] ?? ''} onChange={(event) => go({ domain: event.target.value || undefined, spec: undefined })}>
+          <Box component="label">
+            <VisuallyHidden>Domain</VisuallyHidden>
+            <NativeSelect
+              aria-label="Domain"
+              value={values(search.domain)[0] ?? ''}
+              onChange={(event) => go({ domain: event.target.value || undefined, spec: undefined })}
+            >
               <option value="">All domains</option>
-              {model.facets.domains.map(({ value, count }) => <option key={value} value={value}>{value === '(no spec)' ? 'No spec' : value} ({count})</option>)}
-            </select>
-          </label>
+              {model.facets.domains.map(({ value, count }) => (
+                <option key={value} value={value}>
+                  {value === '(no spec)' ? 'No spec' : value} ({count})
+                </option>
+              ))}
+            </NativeSelect>
+          </Box>
         )}
-      </div>
-      <p className={styles.showing} role="status">
-        <span>{listing.shown.length === model.tests.length ? plural(model.tests.length, 'test', 'tests') : `${listing.shown.length.toLocaleString()} of ${plural(model.tests.length, 'test', 'tests')}`}</span>
+      </Flex>
+      <Flex role="status" gap="xs" align="center" wrap="wrap">
+        <Text span inherit>
+          {listing.shown.length === model.tests.length
+            ? plural(model.tests.length, 'test', 'tests')
+            : `${listing.shown.length.toLocaleString()} of ${plural(model.tests.length, 'test', 'tests')}`}
+        </Text>
         {chips.map((chip) => (
-          <button key={chip.label} type="button" className={styles.activeChip} onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`}>{chip.label} <span aria-hidden="true">×</span></button>
+          <Button key={chip.label} type="button" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light">
+            {chip.label}{' '}
+            <Text aria-hidden="true" span inherit>
+              <IconX size={16} aria-hidden="true" />
+            </Text>
+          </Button>
         ))}
-        {narrowed(search) && <button type="button" className={styles.link} onClick={() => { setDraft(''); go({ q: undefined, status: undefined, env: undefined, producer: undefined, domain: undefined, spec: undefined, tag: undefined, inRun: undefined }); }}>Clear filters</button>}
-      </p>
-    </section>
+        {narrowed(search) && (
+          <Button
+            type="button"
+            onClick={() => {
+              setDraft('');
+              go({
+                q: undefined,
+                status: undefined,
+                env: undefined,
+                producer: undefined,
+                domain: undefined,
+                spec: undefined,
+                tag: undefined,
+                inRun: undefined
+              });
+            }}
+            variant="subtle"
+          >
+            Clear filters
+          </Button>
+        )}
+      </Flex>
+    </Box>
   );
 }
-
 function TestList({ tests, search, total }: { tests: readonly TestSummary[]; search: ExplorerSearch; total: number }) {
   const by = search.group ?? 'spec';
   const groups = useMemo(() => groupTests(tests, by, (search.sort ?? 'spec') === 'spec'), [tests, by, search.sort]);
@@ -344,90 +678,183 @@ function TestList({ tests, search, total }: { tests: readonly TestSummary[]; sea
   const defaultOpen = groups.length <= OPEN_GROUPS || tests.length <= OPEN_TESTS;
   const isOpen = (group: TestGroupView) => by === 'none' || (overrides.get(`${by}|${group.key}`) ?? defaultOpen);
   const setAll = (open: boolean) => setOverrides(new Map(groups.map((group) => [`${by}|${group.key}`, open])));
-  if (!tests.length) return <p className={styles.quiet} role="status">{total ? 'No test matches these filters.' : 'No tests recorded yet.'}</p>;
+  if (!tests.length)
+    return (
+      <Text role="status" component="div" c="dimmed">
+        {total ? 'No test matches these filters.' : 'No tests recorded yet.'}
+      </Text>
+    );
   let parent: string | null = null;
   return (
-    <section className={styles.list} aria-label="Tests">
-      <div className={styles.listHead}>
-        <span>{by === 'none' ? '' : `${plural(groups.length, GROUP_LABEL[by].toLowerCase(), by === 'status' ? 'statuses' : `${GROUP_LABEL[by].toLowerCase()}s`)}`}</span>
+    <Box aria-label="Tests" component="section" mb="lg">
+      <Flex gap="xs" align="center" wrap="wrap">
+        <Text span inherit>
+          {by === 'none'
+            ? ''
+            : `${plural(groups.length, GROUP_LABEL[by].toLowerCase(), by === 'status' ? 'statuses' : `${GROUP_LABEL[by].toLowerCase()}s`)}`}
+        </Text>
         {by !== 'none' && (
-          <span className={styles.listTools}>
-            <button type="button" className={styles.link} onClick={() => setAll(true)}>Expand all</button>
-            <button type="button" className={styles.link} onClick={() => setAll(false)}>Collapse all</button>
-          </span>
+          <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
+            <Button type="button" onClick={() => setAll(true)} variant="subtle">
+              Expand all
+            </Button>
+            <Button type="button" onClick={() => setAll(false)} variant="subtle">
+              Collapse all
+            </Button>
+          </Flex>
         )}
-        <span className={styles.columns} aria-hidden="true"><span>Avg</span><span>Pass</span><span>Runs</span><span>Last</span></span>
-      </div>
+        <Group aria-hidden="true" gap="md" ml="auto" visibleFrom="sm">
+          <Text span inherit>
+            Avg
+          </Text>
+          <Text span inherit>
+            Pass
+          </Text>
+          <Text span inherit>
+            Runs
+          </Text>
+          <Text span inherit>
+            Last
+          </Text>
+        </Group>
+      </Flex>
       {groups.map((group) => {
         const heading = by === 'spec' && group.parent !== parent ? group.parent : null;
         parent = group.parent;
         return (
-          <div key={group.key} className={styles.groupWrap}>
-            {heading && <h3 className={styles.domainHeading}>{heading === '(no spec)' ? 'No spec' : heading}</h3>}
-            <TestGroupSection group={group} by={by} open={isOpen(group)} selected={search.test} onToggle={() => setOverrides(new Map(overrides).set(`${by}|${group.key}`, !isOpen(group)))} />
-          </div>
+          <Stack key={group.key} gap="sm">
+            {heading && (
+              <Title order={3} mb="sm">
+                {heading === '(no spec)' ? 'No spec' : heading}
+              </Title>
+            )}
+            <TestGroupSection
+              group={group}
+              by={by}
+              open={isOpen(group)}
+              selected={search.test}
+              onToggle={() => setOverrides(new Map(overrides).set(`${by}|${group.key}`, !isOpen(group)))}
+            />
+          </Stack>
         );
       })}
-    </section>
+    </Box>
   );
 }
-
-function TestGroupSection({ group, by, open, selected, onToggle }: { group: TestGroupView; by: TestGroup; open: boolean; selected: string | undefined; onToggle: () => void }) {
+function TestGroupSection({
+  group,
+  by,
+  open,
+  selected,
+  onToggle
+}: {
+  group: TestGroupView;
+  by: TestGroup;
+  open: boolean;
+  selected: string | undefined;
+  onToggle: () => void;
+}) {
   const [shown, setShown] = useState(by === 'none' ? 100 : GROUP_ROWS);
   const now = useNow();
+  const rows = (
+    <List spacing="xs" listStyleType="none">
+      {group.tests.slice(0, shown).map((test) => (
+        <TestRow key={test.key} test={test} selected={selected === test.key} now={now} />
+      ))}
+      {group.tests.length > shown && (
+        <List.Item>
+          <Button variant="subtle" onClick={() => setShown(shown + (by === 'none' ? 100 : GROUP_ROWS))}>
+            Show more ({group.tests.length - shown} more)
+          </Button>
+        </List.Item>
+      )}
+    </List>
+  );
   return (
-    <section className={styles.group} data-open={open || undefined} aria-label={group.label}>
-      {by !== 'none' && (
-        <button type="button" className={styles.groupHead} aria-expanded={open} onClick={onToggle}>
-          <span className={styles.chevron} aria-hidden="true" />
-          <span className={styles.groupName}>
-            <span>{group.label}</span>
-            {group.detail && <code>{group.detail}</code>}
-          </span>
-          <span className={styles.groupMeter}><Meter counts={group.counts} /></span>
-          <span className={styles.groupTally}>
-            {group.counts.failed > 0 && <strong>{group.counts.failed} failed</strong>}
-            {group.counts['not-run'] > 0 && <span>{group.counts['not-run']} not run</span>}
-            <span>{plural(group.tests.length, 'test', 'tests')}</span>
-            {group.avgMs !== null && <span>avg {formatMs(group.avgMs)}</span>}
-          </span>
-        </button>
+    <Box component="section" aria-label={group.label} mb="md">
+      {by === 'none' ? (
+        rows
+      ) : (
+        <Accordion variant="separated" value={open ? 'tests' : null} onChange={onToggle}>
+          <Accordion.Item value="tests">
+            <Accordion.Control>
+              <Group gap="md" justify="space-between">
+                <Stack gap="xs" miw={0}>
+                  <Text fw={600}>{group.label}</Text>
+                  {group.detail && (
+                    <Text ff="monospace" size="xs" c="dimmed">
+                      {group.detail}
+                    </Text>
+                  )}
+                </Stack>
+                <Group gap="xs">
+                  {group.counts.failed > 0 && <Badge color="red">{group.counts.failed} failed</Badge>}
+                  {group.counts['not-run'] > 0 && <Badge color="gray">{group.counts['not-run']} not run</Badge>}
+                  <Text size="xs" c="dimmed">
+                    {plural(group.tests.length, 'test', 'tests')}
+                    {group.avgMs !== null ? ` · avg ${formatMs(group.avgMs)}` : ''}
+                  </Text>
+                </Group>
+              </Group>
+            </Accordion.Control>
+            <Accordion.Panel>{open && rows}</Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
       )}
-      {open && (
-        <ul className={styles.rows}>
-          {group.tests.slice(0, shown).map((test) => <TestRow key={test.key} test={test} selected={selected === test.key} now={now} />)}
-          {group.tests.length > shown && (
-            <li className={styles.moreRow}>
-              <button type="button" className={styles.link} onClick={() => setShown(shown + (by === 'none' ? 100 : GROUP_ROWS))}>Show more ({group.tests.length - shown} more)</button>
-            </li>
-          )}
-        </ul>
-      )}
-    </section>
+    </Box>
   );
 }
-
 function TestRow({ test, selected, now }: { test: TestSummary; selected: boolean; now: number }) {
   const failure = test.status === 'failed' ? test.outcomes.find((outcome) => outcome.status === 'failed')?.detail.split('\n')[0] : '';
   return (
-    <li className={styles.row} data-status={test.status}>
-      <Link to="/" search={patched({ test: selected ? undefined : test.key })} resetScroll={false} activeOptions={{ exact: true }} aria-current={selected ? 'true' : undefined} className={styles.rowLink}>
-        <StatusMark status={test.status} size={14} />
-        <span className={styles.rowMain}>
-          <span className={styles.rowTitle}>{test.title}</span>
-          <span className={styles.rowMeta}>
-            <EnvironmentChips test={test} />
-            <Badges test={test} />
-          </span>
-          {failure && <span className={styles.rowError}>{failure}</span>}
-        </span>
-        <span className={styles.columns}>
-          <span title="Average duration">{formatMs(test.stats.durations?.avgMs)}</span>
-          <span title="Pass rate" data-low={test.stats.passRate !== null && test.stats.passRate < 1 || undefined}>{percent(test.stats.passRate)}</span>
-          <span title="Runs">{test.stats.runs || '—'}</span>
-          <span title="Last recorded">{test.live ? 'now' : test.lastRecordedAtMs ? ago(test.lastRecordedAtMs, now).replace(' ago', '') : '—'}</span>
-        </span>
-      </Link>
-    </li>
+    <List.Item data-status={test.status}>
+      <Anchor
+        underline="never"
+        aria-current={selected ? 'true' : undefined}
+        display="block"
+        bg={selected ? 'blue.0' : undefined}
+        p="sm"
+        c="text"
+        renderRoot={(props) => (
+          <Link
+            {...props}
+            to="/"
+            search={patched({ test: selected ? undefined : test.key })}
+            resetScroll={false}
+            activeOptions={{ exact: true }}
+          />
+        )}
+      >
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <StatusMark status={test.status} size={16} />
+          <Stack gap="xs" flex={1} miw={0}>
+            <Text fw={500}>{test.title}</Text>
+            <Group gap="xs">
+              <EnvironmentChips test={test} />
+              <Badges test={test} />
+            </Group>
+            {failure && (
+              <Text size="xs" c="red.7" lineClamp={2}>
+                {failure}
+              </Text>
+            )}
+          </Stack>
+          <Group gap="md" visibleFrom="sm">
+            <Text title="Average duration" size="xs" c="dimmed">
+              {formatMs(test.stats.durations?.avgMs)}
+            </Text>
+            <Text title="Pass rate" size="xs" c="dimmed">
+              {percent(test.stats.passRate)}
+            </Text>
+            <Text title="Runs" size="xs" c="dimmed">
+              {test.stats.runs || '—'}
+            </Text>
+            <Text title="Last recorded" size="xs" c="dimmed">
+              {test.live ? 'now' : test.lastRecordedAtMs ? ago(test.lastRecordedAtMs, now).replace(' ago', '') : '—'}
+            </Text>
+          </Group>
+        </Group>
+      </Anchor>
+    </List.Item>
   );
 }

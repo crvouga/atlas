@@ -1,40 +1,46 @@
-import { MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type Node, type ReactFlowInstance, type Viewport } from '@xyflow/react';
+import { ActionIcon, Alert, Box, Button, Center, Group, Loader, Paper, Stack, Text, useMantineTheme } from '@mantine/core';
+import {
+  Background,
+  MiniMap,
+  Panel,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  type Node,
+  type ReactFlowInstance,
+  type Viewport
+} from '@xyflow/react';
 import { useCallback, useMemo, useRef } from 'react';
-
-import type { AtlasView, ItemStatus } from '../data/model';
-import { FitIcon, MinusIcon, PlusIcon } from '../components/icons';
+import { IconArrowsMaximize as FitIcon, IconMinus as MinusIcon, IconPlus as PlusIcon } from '@tabler/icons-react';
 import { Legend } from '../components/Legend';
+import type { AtlasView, ItemStatus } from '../data/model';
 import { chartGraph } from '../layout/graph';
 import type { ChartLayout } from '../layout/layout';
 import { useChartLayout } from '../layout/use-chart-layout';
 import { useUiStore } from '../state/ui-store';
 import { EdgeMarkers, edgeTypes, type EventEdgeType } from './EventEdge';
-import styles from './map.module.css';
-import { nodeTypes, type ChartLinkNodeType, type ContextNodeType, type GroupNodeType, type ScreenNodeType, type SummaryNodeType } from './nodes';
 
+import {
+  nodeTypes,
+  type ChartLinkNodeType,
+  type ContextNodeType,
+  type GroupNodeType,
+  type ScreenNodeType,
+  type SummaryNodeType
+} from './nodes';
 type MapNode = ScreenNodeType | GroupNodeType | ChartLinkNodeType | ContextNodeType | SummaryNodeType;
-
-export type MapSelection = { screen?: string; event?: string; journey?: string };
-
-const MINIMAP_COLOR: Record<ItemStatus, string> = {
-  passed: '#86efac',
-  flaky: '#fdba74',
-  failed: '#fca5a5',
-  'not-reached': '#e2e8f0',
-  'not-yet-run': '#e2e8f0',
-  'spec-only': '#ddd6fe'
+export type MapSelection = {
+  screen?: string;
+  event?: string;
+  journey?: string;
 };
-
 const START_ZOOM = 0.7;
-
 function fitPadding() {
-  const narrow = typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches;
+  const narrow = typeof window !== 'undefined' && window.matchMedia('(max-width: 62em)').matches;
   if (narrow) return { top: '180px', right: '64px', bottom: '16px', left: '16px' } as const;
   return { top: '16px', right: '72px', bottom: '120px', left: '16px' } as const;
 }
-
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout | undefined, selection: MapSelection) {
   return useMemo(() => {
     if (!layout) return { nodes: [] as MapNode[], edges: [] as EventEdgeType[] };
@@ -61,7 +67,6 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout |
       const state = view.states.get(id);
       return Boolean(state?.children.some((child) => coversJourney(child)));
     };
-
     const nodes: MapNode[] = layout.nodes.flatMap((n): MapNode[] => {
       const state = view.states.get(n.id);
       if (!state) return [];
@@ -81,9 +86,18 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout |
         case 'parallel':
           return [{ ...base, type: 'group', zIndex: 0, data: { state, variant: n.kind, dimmed: false } }];
         case 'chart-link':
-          return [{ ...base, type: 'chartLink', zIndex: 2, data: { state, chart: state.childChartId ? view.charts.get(state.childChartId) ?? null : null, dimmed: dim(n.id) } }];
+          return [
+            {
+              ...base,
+              type: 'chartLink',
+              zIndex: 2,
+              data: { state, chart: state.childChartId ? (view.charts.get(state.childChartId) ?? null) : null, dimmed: dim(n.id) }
+            }
+          ];
         case 'context':
-          return [{ ...base, type: 'context', zIndex: 2, data: { state, chart: view.charts.get(state.chartId) ?? null, dimmed: dim(n.id) } }];
+          return [
+            { ...base, type: 'context', zIndex: 2, data: { state, chart: view.charts.get(state.chartId) ?? null, dimmed: dim(n.id) } }
+          ];
         case 'summary':
           return [
             {
@@ -97,7 +111,6 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout |
           return [{ ...base, type: 'screen', zIndex: 2, data: { state, chartId, selected: selection.screen === n.id, dimmed: dim(n.id) } }];
       }
     });
-
     const edges: EventEdgeType[] = layout.edges.flatMap((e): EventEdgeType[] => {
       const transition = e.transitionId ? (view.transitions.get(e.transitionId) ?? null) : null;
       if (!transition && !e.bundle) return [];
@@ -111,33 +124,55 @@ function useFlowElements(view: AtlasView, chartId: string, layout: ChartLayout |
           type: 'event',
           zIndex: 1,
           selectable: false,
-          data: { placed: e, transition, bundle: e.bundle, chartId, selected: Boolean(e.transitionId) && selection.event === e.transitionId, step, dimmed }
+          data: {
+            placed: e,
+            transition,
+            bundle: e.bundle,
+            chartId,
+            selected: Boolean(e.transitionId) && selection.event === e.transitionId,
+            step,
+            dimmed
+          }
         }
       ];
     });
     return { nodes, edges };
   }, [view, chartId, layout, selection.screen, selection.event, selection.journey]);
 }
-
 function ZoomControls() {
   const flow = useReactFlow();
   const duration = reducedMotion() ? 0 : 250;
   return (
-    <div className={styles.zoom} role="group" aria-label="Zoom">
-      <button type="button" className={styles.zoomButton} onClick={() => void flow.zoomIn({ duration })} aria-label="Zoom in">
-        <PlusIcon size={16} />
-      </button>
-      <button type="button" className={styles.zoomButton} onClick={() => void flow.zoomOut({ duration })} aria-label="Zoom out">
-        <MinusIcon size={16} />
-      </button>
-      <button type="button" className={styles.zoomButton} onClick={() => void flow.fitView({ duration, padding: fitPadding() })} aria-label="Fit the whole map">
-        <FitIcon size={16} />
-      </button>
-    </div>
+    <Paper shadow="xs" p="xs">
+      <Group gap="xs" role="group" aria-label="Zoom">
+        <ActionIcon variant="default" onClick={() => void flow.zoomIn({ duration })} aria-label="Zoom in">
+          <PlusIcon aria-hidden="true" size={16} />
+        </ActionIcon>
+        <ActionIcon variant="default" onClick={() => void flow.zoomOut({ duration })} aria-label="Zoom out">
+          <MinusIcon aria-hidden="true" size={16} />
+        </ActionIcon>
+        <ActionIcon variant="default" onClick={() => void flow.fitView({ duration, padding: fitPadding() })} aria-label="Fit the whole map">
+          <FitIcon aria-hidden="true" size={16} />
+        </ActionIcon>
+      </Group>
+    </Paper>
   );
 }
 
-function Flow({ view, chartId, scopeKey, layout, selection }: { view: AtlasView; chartId: string; scopeKey: string; layout: ChartLayout; selection: MapSelection }) {
+function Flow({
+  view,
+  chartId,
+  scopeKey,
+  layout,
+  selection
+}: {
+  view: AtlasView;
+  chartId: string;
+  scopeKey: string;
+  layout: ChartLayout;
+  selection: MapSelection;
+}) {
+  const theme = useMantineTheme();
   const { nodes, edges } = useFlowElements(view, chartId, layout, selection);
   const saved = useRef<Viewport | undefined>(useUiStore.getState().viewports[scopeKey]);
   const saveViewport = useUiStore((s) => s.saveViewport);
@@ -155,7 +190,11 @@ function Flow({ view, chartId, scopeKey, layout, selection }: { view: AtlasView;
       const focus = layout.nodes.find((n) => n.id === selection.screen);
       if (focus) {
         const zoom = START_ZOOM;
-        flow.setViewport({ x: width / 2 - (focus.absX + focus.width / 2) * zoom, y: height / 2 - (focus.absY + focus.height / 2) * zoom, zoom });
+        flow.setViewport({
+          x: width / 2 - (focus.absX + focus.width / 2) * zoom,
+          y: height / 2 - (focus.absY + focus.height / 2) * zoom,
+          zoom
+        });
         return;
       }
       const start = layout.nodes.find((n) => n.id === view.charts.get(chartId)?.initial) ?? layout.nodes[0]!;
@@ -182,71 +221,88 @@ function Flow({ view, chartId, scopeKey, layout, selection }: { view: AtlasView;
       edgesFocusable={false}
       elementsSelectable={false}
       onlyRenderVisibleElements
-      className={styles.flow}
       aria-label="Map of screens and events. Drag to move, scroll or pinch to zoom."
     >
       <EdgeMarkers />
-      <ZoomControls />
-      <div className={styles.legendSlot}>
-        <Legend showTime={hasTime} />
-      </div>
+      <Background color={theme.colors.gray[3]} />
+      <Panel position="top-right">
+        <ZoomControls />
+      </Panel>
+      <Panel position="bottom-left">
+        <Paper p="xs" shadow="xs" maw="70vw">
+          <Legend showTime={hasTime} />
+        </Paper>
+      </Panel>
       <MiniMap<MapNode>
         pannable
         zoomable
         ariaLabel="Overview of the whole map"
-        className={styles.minimap}
         nodeColor={(n: Node) => {
           if (n.type === 'group') return 'transparent';
-          const data = n.data as { status?: ItemStatus; state?: { status: ItemStatus } };
-          return MINIMAP_COLOR[data.status ?? data.state?.status ?? 'spec-only'];
+          const data = n.data as {
+            status?: ItemStatus;
+            state?: {
+              status: ItemStatus;
+            };
+          };
+          const status = data.status ?? data.state?.status;
+          return theme.colors[status === 'passed' ? 'green' : status === 'failed' ? 'red' : status === 'flaky' ? 'orange' : 'gray'][3];
         }}
-        nodeStrokeColor={(n: Node) => (n.type === 'group' ? '#ddd6fe' : 'transparent')}
+        nodeStrokeColor={(n: Node) => (n.type === 'group' ? theme.colors.gray[3] : 'transparent')}
         nodeBorderRadius={8}
-        maskColor="rgba(248, 250, 252, 0.7)"
+        maskColor="var(--mantine-color-gray-0)"
       />
     </ReactFlow>
   );
 }
-
 function MapSkeleton({ label }: { label: string }) {
   return (
-    <div className={styles.skeleton} role="status">
-      <div className={styles.skeletonRow}>
-        {Array.from({ length: 5 }, (_, i) => (
-          <span key={i} className={styles.skeletonPhone} style={{ animationDelay: `${i * 120}ms` }} />
-        ))}
-      </div>
-      <span className={styles.skeletonLabel}>{label}</span>
-    </div>
+    <Center h="60vh">
+      <Stack align="center">
+        <Loader />
+        <Text role="status" c="dimmed">
+          {label}
+        </Text>
+      </Stack>
+    </Center>
   );
 }
-
 /** One chart's map. Positions come from the cached layout, statuses and media from the view. */
-export function ChartMap({ view, chartId, selection, group }: { view: AtlasView; chartId: string; selection: MapSelection; group?: string }) {
+export function ChartMap({
+  view,
+  chartId,
+  selection,
+  group
+}: {
+  view: AtlasView;
+  chartId: string;
+  selection: MapSelection;
+  group?: string;
+}) {
   const input = useMemo(() => chartGraph(view, chartId, group ?? null), [view, chartId, group]);
   const chart = view.charts.get(chartId);
   const layout = useChartLayout(input, input?.scoped ? null : (chart?.layout ?? null));
   if (layout.error) {
     return (
-      <div className={styles.mapMessage} role="alert">
+      <Alert color="red" title="Map unavailable">
         <p>The map for this chart couldn’t be laid out.</p>
-        <button type="button" className={styles.retryButton} onClick={() => void layout.refetch()}>
-          Try again
-        </button>
-      </div>
+        <Button onClick={() => void layout.refetch()}>Try again</Button>
+      </Alert>
     );
   }
   if (!layout.data) return <MapSkeleton label={`Laying out ${chart?.name ?? 'the map'}…`} />;
   if (layout.data.nodes.length === 0) {
     return (
-      <div className={styles.mapMessage}>
+      <Alert>
         <p>This chart has no states yet.</p>
-      </div>
+      </Alert>
     );
   }
   return (
     <ReactFlowProvider>
-      <Flow view={view} chartId={chartId} scopeKey={`${chartId}:${input?.focus ?? ''}`} layout={layout.data} selection={selection} />
+      <Box h="70vh" mih="24rem">
+        <Flow view={view} chartId={chartId} scopeKey={`${chartId}:${input?.focus ?? ''}`} layout={layout.data} selection={selection} />
+      </Box>
     </ReactFlowProvider>
   );
 }

@@ -23,6 +23,9 @@ Object.assign(globalThis, {
   history: browser.history,
   location: browser.location,
   HTMLElement: browser.HTMLElement,
+  SVGElement: browser.SVGElement,
+  ShadowRoot: browser.ShadowRoot,
+  ResizeObserver: browser.ResizeObserver,
   Element: browser.Element,
   Node: browser.Node,
   DOMParser: browser.DOMParser,
@@ -44,3 +47,9 @@ Object.assign(globalThis, {
   scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true
 });
+
+// Mantine's overlays and Spotlight use these browser APIs; happy-dom has no layout or scrolling.
+window.HTMLElement.prototype.scrollIntoView = () => {};
+
+// The font loading API is absent in happy-dom. Textarea observes it to recompute height.
+Object.defineProperty(document, 'fonts', { value: new window.EventTarget(), configurable: true });

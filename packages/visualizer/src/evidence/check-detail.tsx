@@ -1,27 +1,27 @@
 import { recordingPaths } from '@crvouga/atlas/reports/evidence-types';
 import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
+import { flattenFrames } from '@crvouga/atlas/reports/frames';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
-import { flattenFrames } from '@crvouga/atlas/reports/frames';
 import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
+import { Accordion, Alert, Anchor, Box, Button, Code, Flex, Group, List, Stack, Table, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
-
+import { TestProgress, useTestProgress } from '../live/test-progress';
 import { reportJson } from './api';
 import { ResultEvidence } from './artifacts';
 import { useEvidence } from './evidence-context';
-import styles from './evidence.module.css';
 import { ago, duration, plural, statusWord, useNow } from './format';
 import type { FeatureExamples, FeatureStep } from './gherkin';
 import { Bounded, Origin, StatusMark } from './marks';
 import { ModelTrace } from './model-trace';
 import { recordedModelStates } from './quint';
-import { TestProgress, useTestProgress } from '../live/test-progress';
-
 /** What the address says is open: a check, and optionally one particular layer's record of it. */
-export type CheckSelection = { readonly check?: string; readonly layer?: string };
+export type CheckSelection = {
+  readonly check?: string;
+  readonly layer?: string;
+};
 export type SelectCheck = (patch: { check?: string | null; layer?: string | null; view?: 'recording' | null }) => void;
-
 /** The recorded timeline of one result, read only when someone opens it. */
 export function useRecordedReport(entry: HistoryEntry | null, enabled = true) {
   const address = entry?.layer.recording ?? null;
@@ -36,10 +36,8 @@ export function useRecordedReport(entry: HistoryEntry | null, enabled = true) {
   });
   return { paths, report };
 }
-
 /** One check in a list: its outcome at a glance, and everything recorded for it when opened. */
 const ENV_RANK = { passed: 0, 'not-run': 1, running: 2, failed: 3 } as const;
-
 /** One mark per client when the same check was recorded on more than one. */
 function environmentMarks(slot: CheckSlot) {
   const seen = new Map<string, CheckSlot['status']>();
@@ -51,147 +49,216 @@ function environmentMarks(slot: CheckSlot) {
   if (seen.size < 2) return [];
   return [...seen].map(([id, status]) => ({ id, status }));
 }
-
 function outcomeName(outcome: EvidenceResult) {
   const environment = outcome.layer.environment ? environmentLabel(outcome.layer.environment) : '';
-  const parameters = Object.entries(outcome.parameters).map(([name, value]) => `${name}: ${value}`).join(', ');
+  const parameters = Object.entries(outcome.parameters)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join(', ');
   return [environment, parameters].filter(Boolean).join(' · ') || outcome.layer.producer;
 }
-
-export function ResultRow({ label, slot, open, onToggle, children }: { label: string; slot: CheckSlot | null; open: boolean; onToggle: () => void; children: ReactNode }) {
+export function ResultRow({
+  label,
+  slot,
+  open,
+  onToggle,
+  children
+}: {
+  label: string;
+  slot: CheckSlot | null;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
   const now = useNow();
   const progress = useTestProgress(slot);
   const current = progress.tests.find(({ run, check }) => run.status === 'running' && check.status === 'running');
   const interrupted = !current && progress.tests.find(({ run, check }) => run.status === 'interrupted' && check.status === 'not-run');
   const newest = slot?.outcomes[0];
   const marks = slot && !current ? environmentMarks(slot) : [];
-  const failure = slot?.status === 'failed' ? slot.outcomes.find((outcome) => outcome.row.status === 'failed')?.row.detail.split('\n')[0] : '';
+  const failure =
+    slot?.status === 'failed' ? slot.outcomes.find((outcome) => outcome.row.status === 'failed')?.row.detail.split('\n')[0] : '';
   return (
-    <li className={styles.result} data-status={slot?.status ?? 'none'} data-open={open || undefined}>
-      <button type="button" className={styles.resultHead} aria-expanded={open} onClick={onToggle}>
-        <StatusMark status={slot?.status ?? 'none'} />
-        <span className={styles.resultName}>
-          {label}
-          {marks.length > 0 && (
-            <span className={styles.envMarks}>
-              {marks.map((mark) => (
-                <span key={mark.id || 'unspecified'} data-status={mark.status}>{environmentLabel(mark.id || null)}</span>
-              ))}
-            </span>
-          )}
-        </span>
-        {slot?.live && <span className={styles.liveTag}>Running now</span>}
-        {interrupted && <span className={styles.liveTag}>Interrupted</span>}
-        <span className={styles.resultAside}>
-          {current ? duration(current.check.durationMs ?? null) || 'In progress' : interrupted ? 'No completed result' : newest ? [newest.row.evidence?.attachments ? plural(newest.row.evidence.attachments, 'attachment', 'attachments') : '', duration(newest.row.durationMs), slot.live ? '' : ago(slot.latestAtMs, now)].filter(Boolean).join(' · ') : 'No result'}
-        </span>
-        <span className={styles.chevron} aria-hidden="true" />
-      </button>
-      {!open && current && <p className={styles.excerpt} data-progress="true" role="status">{current.check.detail || current.check.steps?.at(-1)?.name || 'Test in progress…'}{progress.error ? ` · ${progress.error}` : ''}</p>}
-      {!open && interrupted && <p className={styles.excerpt} data-progress="true" role="status">{interrupted.run.reason ?? 'The test run was interrupted.'}</p>}
-      {!open && !current && failure && <p className={styles.excerpt}>{failure}</p>}
-      {open && <div className={styles.resultBody}>{children}</div>}
-    </li>
+    <List.Item data-result-row data-status={slot?.status ?? 'none'} data-open={open || undefined}>
+      <Accordion variant="separated" value={open ? 'result' : null} onChange={onToggle}>
+        <Accordion.Item value="result">
+          <Accordion.Control>
+            <Group gap="sm" wrap="nowrap">
+              <StatusMark status={slot?.status ?? 'none'} />
+              <Text data-result-label span inherit>
+                {label}
+                {marks.length > 0 && (
+                  <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
+                    {marks.map((mark) => (
+                      <Text key={mark.id || 'unspecified'} data-status={mark.status} span inherit>
+                        {environmentLabel(mark.id || null)}
+                      </Text>
+                    ))}
+                  </Flex>
+                )}
+              </Text>
+              {slot?.live && (
+                <Text span inherit>
+                  Running now
+                </Text>
+              )}
+              {interrupted && (
+                <Text span inherit>
+                  Interrupted
+                </Text>
+              )}
+              <Text span inherit c="dimmed">
+                {current
+                  ? duration(current.check.durationMs ?? null) || 'In progress'
+                  : interrupted
+                    ? 'No completed result'
+                    : newest
+                      ? [
+                          newest.row.evidence?.attachments ? plural(newest.row.evidence.attachments, 'attachment', 'attachments') : '',
+                          duration(newest.row.durationMs),
+                          slot.live ? '' : ago(slot.latestAtMs, now)
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : 'No result'}
+              </Text>
+              <Text aria-hidden="true" span />
+            </Group>
+          </Accordion.Control>
+          <Accordion.Panel>{open && children}</Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
+      {!open && current && (
+        <Text component="p" data-progress="true" role="status" c="dimmed">
+          {current.check.detail || current.check.steps?.at(-1)?.name || 'Test in progress…'}
+          {progress.error ? ` · ${progress.error}` : ''}
+        </Text>
+      )}
+      {!open && interrupted && (
+        <Text component="p" data-progress="true" role="status" c="dimmed">
+          {interrupted.run.reason ?? 'The test run was interrupted.'}
+        </Text>
+      )}
+      {!open && !current && failure && (
+        <Text component="p" c="red.7">
+          {failure}
+        </Text>
+      )}
+    </List.Item>
   );
 }
-
 const KEYWORD = /^(Given|When|Then|And|But|\*)\s+/;
-
 function StepLine({ title }: { title: string }) {
   const keyword = KEYWORD.exec(title)?.[1];
   return keyword ? (
-    <span className={styles.stepText}>
-      <span className={styles.keyword}>{keyword}</span> {title.slice(keyword.length + 1)}
-    </span>
+    <Text span inherit>
+      <Text span inherit>
+        {keyword}
+      </Text>{' '}
+      {title.slice(keyword.length + 1)}
+    </Text>
   ) : (
-    <span className={styles.stepText}>{title}</span>
+    <Text span inherit>
+      {title}
+    </Text>
   );
 }
-
 /** The steps a test recorded, each with what happened to it. */
 export function RecordedSteps({ steps, nested = false }: { steps: readonly ReportStep[]; nested?: boolean }) {
   return (
-    <ol className={styles.steps} data-nested={nested || undefined}>
+    <List data-nested={nested || undefined} spacing="xs" listStyleType="none" type="ordered">
       {steps.map((step) => (
-        <li key={step.index} data-status={step.status}>
-          <div className={styles.stepRow}>
+        <List.Item key={step.index} data-status={step.status}>
+          <Flex gap="xs" align="center" wrap="wrap">
             <StatusMark status={step.status} size={14} />
             <StepLine title={step.title} />
-            <span className={styles.stepTime}>{duration(step.durationMs)}</span>
-          </div>
-          {step.error && !step.steps.some((inner) => inner.status === 'failed' && inner.error) && <pre className={styles.error}>{step.error}</pre>}
-          {step.steps.length > 0 && (
-            <details className={styles.actions} open={step.status === 'failed'}>
-              <summary>{plural(step.steps.length, 'recorded action', 'recorded actions')}</summary>
-              <RecordedSteps steps={step.steps} nested />
-            </details>
+            <Text span inherit c="dimmed">
+              {duration(step.durationMs)}
+            </Text>
+          </Flex>
+          {step.error && !step.steps.some((inner) => inner.status === 'failed' && inner.error) && (
+            <Code block c="red.7">
+              {step.error}
+            </Code>
           )}
-        </li>
+          {step.steps.length > 0 && (
+            <Accordion variant="separated" my="sm" defaultValue={step.status === 'failed' ? 'content' : null}>
+              <Accordion.Item value="content">
+                <Accordion.Control>{plural(step.steps.length, 'recorded action', 'recorded actions')}</Accordion.Control>
+                <Accordion.Panel>
+                  <RecordedSteps steps={step.steps} nested />
+                </Accordion.Panel>
+              </Accordion.Item>
+            </Accordion>
+          )}
+        </List.Item>
       ))}
-    </ol>
+    </List>
   );
 }
-
 /** A scenario as written, for when nothing has been recorded against it. */
 export function PlainSteps({ steps, examples = [] }: { steps: readonly FeatureStep[]; examples?: readonly FeatureExamples[] }) {
   return (
     <>
-      <ol className={styles.steps}>
+      <List spacing="xs" listStyleType="none" type="ordered">
         {steps.map((step, index) => (
-          <li key={index}>
-            <div className={styles.stepRow}>
-              <span className={styles.stepText}>
-                <span className={styles.keyword}>{step.keyword}</span> {step.text}
-              </span>
-            </div>
-            {step.docString !== null && <pre className={styles.pre}>{step.docString}</pre>}
+          <List.Item key={index}>
+            <Flex gap="xs" align="center" wrap="wrap">
+              <Text span inherit>
+                <Text span inherit>
+                  {step.keyword}
+                </Text>{' '}
+                {step.text}
+              </Text>
+            </Flex>
+            {step.docString !== null && <Code block>{step.docString}</Code>}
             {step.table.length > 0 && <Cells rows={step.table} />}
-          </li>
+          </List.Item>
         ))}
-      </ol>
+      </List>
       {examples.map((example, index) => (
-        <div key={index} className={styles.examples}>
-          <p className={styles.aside}>Examples{example.name ? `: ${example.name}` : ''}</p>
+        <Stack key={index} gap="sm" miw={0}>
+          <Text component="div" c="dimmed">
+            Examples{example.name ? `: ${example.name}` : ''}
+          </Text>
           <Cells header={example.header} rows={example.rows} />
-        </div>
+        </Stack>
       ))}
     </>
   );
 }
-
 function Cells({ header, rows }: { header?: readonly string[]; rows: readonly (readonly string[])[] }) {
   return (
-    <div className={styles.tableScroll}>
-      <table className={styles.table}>
+    <Table.ScrollContainer minWidth={600}>
+      <Table>
         {header && (
-          <thead>
-            <tr>
+          <Table.Thead>
+            <Table.Tr>
               {header.map((cell, index) => (
-                <th key={index} scope="col">{cell}</th>
+                <Table.Th key={index} scope="col">
+                  {cell}
+                </Table.Th>
               ))}
-            </tr>
-          </thead>
+            </Table.Tr>
+          </Table.Thead>
         )}
-        <tbody>
+        <Table.Tbody>
           {rows.map((row, index) => (
-            <tr key={index}>
+            <Table.Tr key={index}>
               {row.map((cell, at) => (
-                <td key={at}>{cell}</td>
+                <Table.Td key={at}>{cell}</Table.Td>
               ))}
-            </tr>
+            </Table.Tr>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
   );
 }
-
 function qualification(warning: string | null) {
   // The origin line already says a checkout had local changes or an unknown origin.
   if (!warning || warning.includes('modified checkout') || warning.includes('origin was not captured')) return null;
   return warning;
 }
-
 type Props = {
   slot: CheckSlot;
   /** The layer whose record to read. Without it, the result that won the combined report. */
@@ -202,16 +269,35 @@ type Props = {
   /** The check as written, shown until a recording is read or when there is none. */
   written?: ReactNode;
 };
-
 /** Everything recorded for one check: the chosen result, how it went, and every other run of it. */
 export function CheckDetail(props: Props) {
   const progress = useTestProgress(props.slot);
-  const inProgress = progress.tests.some(({ run, check }) => check.status === 'running' && run.status === 'running' || check.status === 'not-run' && run.status === 'interrupted');
-  return <><TestProgress {...progress} />{props.slot.outcomes.length > 0
-    ? inProgress && !props.layerId ? <details className={styles.actions}><summary>Previous recorded result</summary><RecordedCheckDetail {...props} /></details> : <RecordedCheckDetail {...props} />
-    : props.written}</>;
+  const inProgress = progress.tests.some(
+    ({ run, check }) =>
+      (check.status === 'running' && run.status === 'running') || (check.status === 'not-run' && run.status === 'interrupted')
+  );
+  return (
+    <>
+      <TestProgress {...progress} />
+      {props.slot.outcomes.length > 0 ? (
+        inProgress && !props.layerId ? (
+          <Accordion variant="separated" my="sm">
+            <Accordion.Item value="content">
+              <Accordion.Control>Previous recorded result</Accordion.Control>
+              <Accordion.Panel>
+                <RecordedCheckDetail {...props} />
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        ) : (
+          <RecordedCheckDetail {...props} />
+        )
+      ) : (
+        props.written
+      )}
+    </>
+  );
 }
-
 function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
   const { evidence, backends } = useEvidence();
   const now = useNow();
@@ -228,79 +314,137 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
   const states = reads === 'trace' && report.data ? recordedModelStates(report.data.steps).map((entry) => entry.state) : [];
   const stepsShown = report.data !== undefined && report.data.steps.length > 0 && (reads === 'steps' || states.length === 0);
   // The failed step carries its own message when the steps are on screen.
-  const failure = chosen.row.status === 'failed' && !(stepsShown && report.data?.steps.some((step) => step.error)) ? (report.data?.meta.error ?? chosen.row.detail) : '';
-
+  const failure =
+    chosen.row.status === 'failed' && !(stepsShown && report.data?.steps.some((step) => step.error))
+      ? (report.data?.meta.error ?? chosen.row.detail)
+      : '';
   return (
-    <div className={styles.detail}>
+    <Stack gap="sm" miw={0}>
       {slot.outcomes.length > 1 && !earlier && (
-        <div className={styles.variants} role="group" aria-label="Environments">
+        <Flex role="group" aria-label="Environments" gap="xs" align="center" wrap="wrap">
           {slot.outcomes.map((outcome, index) => (
-            <button key={outcome.key} type="button" aria-pressed={index === variant} onClick={() => setVariant(index)}>
+            <Button key={outcome.key} type="button" aria-pressed={index === variant} onClick={() => setVariant(index)} variant="light">
               <StatusMark status={outcome.row.status} size={12} />
               {outcomeName(outcome)}
-            </button>
+            </Button>
           ))}
-        </div>
+        </Flex>
       )}
-      <p className={styles.detailMeta}>
-        <strong data-status={chosen.row.status}>{statusWord(chosen.row.status)}</strong>
-        {chosen.row.durationMs !== null && <span>{duration(chosen.row.durationMs)}</span>}
+      <Flex gap="xs" align="center" wrap="wrap" c="dimmed">
+        <Text data-status={chosen.row.status} span inherit fw={600}>
+          {statusWord(chosen.row.status)}
+        </Text>
+        {chosen.row.durationMs !== null && (
+          <Text span inherit>
+            {duration(chosen.row.durationMs)}
+          </Text>
+        )}
         <Origin layer={chosen.layer} backends={backends} now={now} />
-      </p>
-      {note && <p className={styles.note}>{note}</p>}
-      {failure && <pre className={styles.error}>{failure}</pre>}
-      {report.isLoading && <p className={styles.aside} role="status">Loading what was recorded…</p>}
+      </Flex>
+      {note && (
+        <Alert color={'blue'} my="sm">
+          {note}
+        </Alert>
+      )}
+      {failure && (
+        <Code block c="red.7">
+          {failure}
+        </Code>
+      )}
+      {report.isLoading && (
+        <Text role="status" component="div" c="dimmed">
+          Loading what was recorded…
+        </Text>
+      )}
       {report.isError && (
-        <p className={styles.notice} role="alert">
+        <Alert role="alert" color={'red'} my="sm">
           The recording could not be read. {report.error.message}{' '}
-          <button type="button" className={styles.link} onClick={() => void report.refetch()}>Try again</button>
-        </p>
+          <Button type="button" onClick={() => void report.refetch()} variant="subtle">
+            Try again
+          </Button>
+        </Alert>
       )}
       {report.data && stepsShown && <RecordedSteps steps={report.data.steps} />}
       {states.length > 0 && <ModelTrace states={states} />}
       {!report.data && written}
-      {!paths && !written && <p className={styles.aside}>This check has an outcome and no recorded timeline.</p>}
-      {timings.flatMap((entry) => entry.row.measurements.map((measurement, index) => {
-        const over = measurement.limit !== undefined && measurement.value > measurement.limit;
-        return (
-          <p key={`${entry.key}:${index}`} className={styles.timingLine} data-over={over || undefined}>
-            {measurement.name}: <strong>{Number(measurement.value.toFixed(1))} {measurement.unit}</strong>
-            {measurement.limit !== undefined && <span> against an allowance of {measurement.limit} {measurement.unit}</span>}
-          </p>
-        );
-      }))}
+      {!paths && !written && (
+        <Text component="div" c="dimmed">
+          This check has an outcome and no recorded timeline.
+        </Text>
+      )}
+      {timings.flatMap((entry) =>
+        entry.row.measurements.map((measurement, index) => {
+          const over = measurement.limit !== undefined && measurement.value > measurement.limit;
+          return (
+            <Text key={`${entry.key}:${index}`} data-over={over || undefined} component="div">
+              {measurement.name}:{' '}
+              <Text span inherit fw={600}>
+                {Number(measurement.value.toFixed(1))} {measurement.unit}
+              </Text>
+              {measurement.limit !== undefined && (
+                <Text span inherit>
+                  {' '}
+                  against an allowance of {measurement.limit} {measurement.unit}
+                </Text>
+              )}
+            </Text>
+          );
+        })
+      )}
       <ResultEvidence layer={chosen.layer} row={chosen.row} />
       {(moments > 0 || chosen.layer.runUrl) && (
-        <p className={styles.actionsLine}>
+        <Flex gap="xs" align="center" wrap="wrap">
           {moments > 0 && (
-            <button type="button" className={styles.primary} onClick={() => select({ view: 'recording', check: slot.id, layer: earlier ? chosen.layer.id : null })}>
-              Open recording <span>{plural(moments, 'moment', 'moments')}</span>
-            </button>
+            <Button
+              type="button"
+              onClick={() => select({ view: 'recording', check: slot.id, layer: earlier ? chosen.layer.id : null })}
+              variant="filled"
+            >
+              Open recording{' '}
+              <Text span inherit>
+                {plural(moments, 'moment', 'moments')}
+              </Text>
+            </Button>
           )}
-          {chosen.layer.runUrl && <a className={styles.link} href={chosen.layer.runUrl} target="_blank" rel="noreferrer">Open the run</a>}
-        </p>
+          {chosen.layer.runUrl && (
+            <Anchor href={chosen.layer.runUrl} target="_blank" rel="noreferrer">
+              Open the run
+            </Anchor>
+          )}
+        </Flex>
       )}
       {history.length > 1 && (
-        <section className={styles.history} aria-label="Other runs of this check">
-          <h4>Recorded in {plural(history.length, 'run', 'runs')}</h4>
-          <ul>
+        <Box aria-label="Other runs of this check" component="section" mb="lg">
+          <Title order={4} mb="sm">
+            Recorded in {plural(history.length, 'run', 'runs')}
+          </Title>
+          <List spacing="xs" listStyleType="none">
             <Bounded items={history} size={6} more="Earlier runs">
               {(entry) => {
                 const current = entry.layer.id === chosen.layer.id && entry.row.kind === chosen.row.kind;
                 return (
-                  <li key={`${entry.layer.backend}|${entry.layer.id}|${entry.row.kind}`}>
-                    <button type="button" aria-current={current || undefined} onClick={() => select({ layer: slot.outcomes.some((outcome) => outcome.layer.id === entry.layer.id) ? null : entry.layer.id })}>
+                  <List.Item key={`${entry.layer.backend}|${entry.layer.id}|${entry.row.kind}`}>
+                    <Button
+                      type="button"
+                      aria-current={current || undefined}
+                      onClick={() =>
+                        select({ layer: slot.outcomes.some((outcome) => outcome.layer.id === entry.layer.id) ? null : entry.layer.id })
+                      }
+                      variant="light"
+                    >
                       <StatusMark status={entry.row.status} size={14} />
-                      <span>{statusWord(entry.row.status)}</span>
+                      <Text span inherit>
+                        {statusWord(entry.row.status)}
+                      </Text>
                       <Origin layer={entry.layer} backends={backends} now={now} />
-                    </button>
-                  </li>
+                    </Button>
+                  </List.Item>
                 );
               }}
             </Bounded>
-          </ul>
-        </section>
+          </List>
+        </Box>
       )}
-    </div>
+    </Stack>
   );
 }

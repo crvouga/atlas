@@ -1,3 +1,4 @@
+import { AtlasThemeProvider } from '../src/ui/theme';
 import { afterEach, expect, test } from 'bun:test';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -18,7 +19,7 @@ async function render(node: ReactNode) {
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root!.render(node);
+    root!.render(<AtlasThemeProvider env="test">{node}</AtlasThemeProvider>);
   });
   return host;
 }
@@ -36,7 +37,17 @@ test('a single still is the whole stage', async () => {
 test('pictures, video, and a timeline are peers and each fills the stage', async () => {
   const looks: Looks = {
     pictures: [picture('before', 'Before'), picture('after', 'After')],
-    films: [{ id: 'clip', label: 'Start', src: '/start.mp4', poster: '/start.webp', captions: null, durationMs: 4000, chapters: [{ atMs: 0, label: 'Tap start' }] }],
+    films: [
+      {
+        id: 'clip',
+        label: 'Start',
+        src: '/start.mp4',
+        poster: '/start.webp',
+        captions: null,
+        durationMs: 4000,
+        chapters: [{ atMs: 0, label: 'Tap start' }]
+      }
+    ],
     moments: [
       { id: 'm1', label: 'Tap start', caption: 'tap', status: null, thumb: null, pauseMs: null },
       { id: 'm2', label: 'Working', caption: 'screen', status: 'passed', thumb: null, pauseMs: null }
@@ -68,6 +79,8 @@ test('pictures, video, and a timeline are peers and each fills the stage', async
 });
 
 test('a run with no capture says so', async () => {
-  const host = await render(<Stage looks={{ pictures: [], films: [], moments: [] }} prefer="pictures" empty={<p>No picture of this screen.</p>} />);
+  const host = await render(
+    <Stage looks={{ pictures: [], films: [], moments: [] }} prefer="pictures" empty={<p>No picture of this screen.</p>} />
+  );
   expect(host.textContent).toContain('No picture of this screen.');
 });

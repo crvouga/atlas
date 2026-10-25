@@ -1,6 +1,11 @@
 import type { EventKind } from '@crvouga/atlas/schema';
 
-import { BoltIcon, ClockIcon, HandOffIcon, PlayIcon } from './icons';
+import {
+  IconBoltFilled as BoltIcon,
+  IconClock as ClockIcon,
+  IconArrowBackUp as HandOffIcon,
+  IconPlayerPlayFilled as PlayIcon
+} from '@tabler/icons-react';
 
 export const KIND_LABEL: Record<EventKind, string> = {
   user: 'User action',
@@ -16,7 +21,7 @@ export const KIND_ICON = {
   'hand-off': HandOffIcon
 } satisfies Record<EventKind, unknown>;
 
-export function KindIcon({ kind, size }: { kind: EventKind; size?: number }) {
+export function KindIcon({ kind, size = 16 }: { kind: EventKind; size?: number }) {
   const Icon = KIND_ICON[kind];
-  return <Icon size={size} />;
+  return <Icon size={size} aria-hidden="true" />;
 }

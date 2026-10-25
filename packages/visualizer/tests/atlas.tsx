@@ -9,7 +9,8 @@ import { ALL_SOURCES } from '@crvouga/atlas/reports/evidence-view';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { expect } from 'bun:test';
-import { act } from 'react';
+import { act, Fragment, StrictMode } from 'react';
+import { AtlasThemeProvider } from '../src/ui/theme';
 import { createRoot } from 'react-dom/client';
 
 import { createAtlasRouter } from '../src/app/router';
@@ -48,25 +49,64 @@ export const FEATURE = `Feature: Share a list
 export const SPECS: Record<string, string> = {
   'lists/add.feature': FEATURE,
   'lists/empty.feature': 'Feature: Empty the list\n  Scenario: Clear\n    When clearing\n',
-  'lists/list.qnt': 'module list {\n  var size: int\n  action add = size\' = size + 1\n}\n'
+  'lists/list.qnt': "module list {\n  var size: int\n  action add = size' = size + 1\n}\n"
 };
 
-export type Check = { test: string; title: string; status: 'passed' | 'failed'; spec?: string; steps?: RunReport['steps']; artifacts?: RunReport['artifacts']; error?: string };
+export type Check = {
+  test: string;
+  title: string;
+  status: 'passed' | 'failed';
+  spec?: string;
+  steps?: RunReport['steps'];
+  artifacts?: RunReport['artifacts'];
+  error?: string;
+};
 
-export function step(index: number, title: string, status: 'passed' | 'failed' = 'passed', extra: Partial<RunReport['steps'][number]> = {}): RunReport['steps'][number] {
+export function step(
+  index: number,
+  title: string,
+  status: 'passed' | 'failed' = 'passed',
+  extra: Partial<RunReport['steps'][number]> = {}
+): RunReport['steps'][number] {
   return { index, title, kind: 'when', status, startedAtMs: index, endedAtMs: index + 1, durationMs: 1, frames: [], steps: [], ...extra };
 }
 
 export function recorded(check: Check): RunReport {
   return {
-    meta: { testId: check.test, runId: 'latest', title: check.title, system: 'list', runtime: 'gherkin', seed: check.test, status: check.status, actorIds: [], startedAtMs: 0, endedAtMs: 3, durationMs: 3, sourceFile: check.spec ?? 'specs/lists/add.feature', ...(check.error ? { error: check.error } : {}) },
+    meta: {
+      testId: check.test,
+      runId: 'latest',
+      title: check.title,
+      system: 'list',
+      runtime: 'gherkin',
+      seed: check.test,
+      status: check.status,
+      actorIds: [],
+      startedAtMs: 0,
+      endedAtMs: 3,
+      durationMs: 3,
+      sourceFile: check.spec ?? 'specs/lists/add.feature',
+      ...(check.error ? { error: check.error } : {})
+    },
     steps: check.steps ?? [],
     ...(check.artifacts?.length ? { artifacts: check.artifacts } : {})
   };
 }
 
 /** Publish one run of a package as a layer, each check with its recorded timeline. */
-export async function publishRun(store: ObjectStore, args: { producer?: string; at: number; branch?: string; sha?: string; environment?: string; parameters?: Record<string, string>; checks: readonly Check[]; fingerprint?: boolean }) {
+export async function publishRun(
+  store: ObjectStore,
+  args: {
+    producer?: string;
+    at: number;
+    branch?: string;
+    sha?: string;
+    environment?: string;
+    parameters?: Record<string, string>;
+    checks: readonly Check[];
+    fingerprint?: boolean;
+  }
+) {
   const producer = args.producer ?? 'lists';
   const reports = args.checks.map(recorded);
   const summary: Omit<LayerSummary, 'id'> = {
@@ -77,13 +117,50 @@ export async function publishRun(store: ObjectStore, args: { producer?: string; 
     ...(args.environment ? { environment: args.environment } : {}),
     runUrl: null,
     parameters: args.parameters ?? {},
-    specs: args.fingerprint === false ? [] : Object.entries(SPECS).map(([file, text]) => ({ path: `specs/${file}`, domain: 'lists', kind: 'feature', title: file, fingerprint: textFingerprint(text) })),
+    specs:
+      args.fingerprint === false
+        ? []
+        : Object.entries(SPECS).map(([file, text]) => ({
+            path: `specs/${file}`,
+            domain: 'lists',
+            kind: 'feature',
+            title: file,
+            fingerprint: textFingerprint(text)
+          })),
     recording: { type: 'layer' },
-    source: { source: producer, packageDir: `libs/${producer}`, bucket: 'all', status: 'passed', updatedAtMs: args.at, tests: reports.map((report) => report.meta) },
-    parts: [{ sha: SHA, id: producer, kind: 'behavior', title: producer, recordedAtMs: args.at, checks: args.checks.map((check) => ({ id: `${producer}/${check.test}`, title: check.title, status: check.status, detail: check.error ?? '', specPath: check.spec ?? 'specs/lists/add.feature', measurements: [] })) }]
+    source: {
+      source: producer,
+      packageDir: `libs/${producer}`,
+      bucket: 'all',
+      status: 'passed',
+      updatedAtMs: args.at,
+      tests: reports.map((report) => report.meta)
+    },
+    parts: [
+      {
+        sha: SHA,
+        id: producer,
+        kind: 'behavior',
+        title: producer,
+        recordedAtMs: args.at,
+        checks: args.checks.map((check) => ({
+          id: `${producer}/${check.test}`,
+          title: check.title,
+          status: check.status,
+          detail: check.error ?? '',
+          specPath: check.spec ?? 'specs/lists/add.feature',
+          measurements: []
+        }))
+      }
+    ]
   };
   async function* entries() {
-    for (const report of reports) yield { key: `tests/${report.meta.testId}/report.json`, bytes: new TextEncoder().encode(JSON.stringify(report)), contentType: 'application/json' };
+    for (const report of reports)
+      yield {
+        key: `tests/${report.meta.testId}/report.json`,
+        bytes: new TextEncoder().encode(JSON.stringify(report)),
+        contentType: 'application/json'
+      };
   }
   return publishLayer(store, summary, entries());
 }
@@ -91,13 +168,34 @@ export async function publishRun(store: ObjectStore, args: { producer?: string; 
 export type Atlas = Awaited<ReturnType<typeof openAtlas>>;
 
 /** The whole viewer at an address, reading specs from `specs` and reports from an in-memory reports API. */
-export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps>; specs?: Record<string, string>; down?: { value: boolean }; live?: () => readonly LiveRun[] | Promise<readonly LiveRun[]>; projects?: () => Response; events?: boolean; /** An Atlas node to answer `/evidence/effective`, as a deployed one does. */ node?: { fetch: (request: Request) => Promise<Response> } }) {
+export async function openAtlas(args: {
+  at: string;
+  strict?: boolean;
+  deps: Partial<ReportsAppDeps>;
+  specs?: Record<string, string>;
+  down?: { value: boolean };
+  live?: () => readonly LiveRun[] | Promise<readonly LiveRun[]>;
+  projects?: () => Response;
+  events?: boolean;
+  /** An Atlas node to answer `/evidence/effective`, as a deployed one does. */ node?: { fetch: (request: Request) => Promise<Response> };
+}) {
   const specs = args.specs ?? SPECS;
   const time = testClock(1_000_000);
   const app = createReportsApp({
     store: null,
     ...time,
-    outline: async () => ({ specs: Object.entries(specs).map(([file, text]) => ({ path: `specs/${file}`, domain: file.split('/')[0]!, kind: file.split('.').at(-1)!, title: /Feature:\s*(.+)/.exec(text)?.[1] ?? file.split('/').at(-1)!, fingerprint: textFingerprint(text) })), sha: SHA, changedFiles: [], readSpec: async (path) => specs[path.replace(/^specs\//, '')] ?? null }),
+    outline: async () => ({
+      specs: Object.entries(specs).map(([file, text]) => ({
+        path: `specs/${file}`,
+        domain: file.split('/')[0]!,
+        kind: file.split('.').at(-1)!,
+        title: /Feature:\s*(.+)/.exec(text)?.[1] ?? file.split('/').at(-1)!,
+        fingerprint: textFingerprint(text)
+      })),
+      sha: SHA,
+      changedFiles: [],
+      readSpec: async (path) => specs[path.replace(/^specs\//, '')] ?? null
+    }),
     ...args.deps
   });
   const requests: string[] = [];
@@ -110,7 +208,8 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
     if (args.down?.value) return new Response('{"error":"reports_unavailable"}', { status: 503 });
     // What a node answers beyond the report itself: one result's evidence, the files it points to, and the test catalog,
     // a test's history and the runs, which only a node keeps.
-    if (args.node && /^\/(evidence\/(effective|detail)|layers\/|(tests|runs)(\/|\?|$))/.test(url.slice(REPORTS_URL.length))) return args.node.fetch(new Request(url));
+    if (args.node && /^\/(evidence\/(effective|detail)|layers\/|(tests|runs)(\/|\?|$))/.test(url.slice(REPORTS_URL.length)))
+      return args.node.fetch(new Request(url));
     return app.request(url.slice(REPORTS_URL.length));
   }) as typeof fetch;
   const adapter: AtlasAdapter = {
@@ -128,20 +227,34 @@ export async function openAtlas(args: { at: string; deps: Partial<ReportsAppDeps
     mediaUrl: (_, path) => path,
     subscribe: null
   };
-  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = args.node || args.live || args.projects ? { reportsUrl: REPORTS_URL, effective: !!args.node, ...(args.live || args.projects ? { api: 'http://atlas.test/api' } : {}), ...(args.events ? { eventsUrl: 'http://atlas.test/api/events' } : {}), ...(args.projects ? { projectsUrl: 'http://atlas.test/api/projects' } : {}) } : undefined;
+  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ =
+    args.node || args.live || args.projects
+      ? {
+          reportsUrl: REPORTS_URL,
+          effective: !!args.node,
+          ...(args.live || args.projects ? { api: 'http://atlas.test/api' } : {}),
+          ...(args.events ? { eventsUrl: 'http://atlas.test/api/events' } : {}),
+          ...(args.projects ? { projectsUrl: 'http://atlas.test/api/projects' } : {})
+        }
+      : undefined;
   useUiStore.setState({ excluded: ALL_SOURCES, resultFilter: 'all', sourcesOpen: false });
   const router = createAtlasRouter(createMemoryHistory({ initialEntries: [args.at] }));
   const client = createQueryClient();
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
+  const Wrapper = args.strict ? StrictMode : Fragment;
   await act(async () =>
     root.render(
-      <AdapterContext.Provider value={adapter}>
-        <QueryClientProvider client={client}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-      </AdapterContext.Provider>
+      <Wrapper>
+        <AtlasThemeProvider env="test">
+          <AdapterContext.Provider value={adapter}>
+            <QueryClientProvider client={client}>
+              <RouterProvider router={router} />
+            </QueryClientProvider>
+          </AdapterContext.Provider>
+        </AtlasThemeProvider>
+      </Wrapper>
     )
   );
   const text = () => document.body.textContent ?? '';

@@ -33,20 +33,39 @@ const KEY = (check: { id: string; specPath: string }) => JSON.stringify([check.s
 /** Two CI runs of two producers on two environments, with durations, a failure, a flip and a test marked flaky. */
 async function publish(store: ObjectStore) {
   const one = { recordedAtMs: 100_000, sha: 'a'.repeat(40), branch: 'main', runUrl: RUN(1) };
-  await publishChecks(store, { ...one, producer: 'gherkin-api', environment: 'api', checks: [
-    { ...FIND, status: 'passed', durationMs: 100 },
-    { ...ESCALATE, status: 'failed', durationMs: 300, detail: 'Expected 200, got 500' },
-    { ...PAY, status: 'passed', durationMs: 80 }
-  ] });
-  await publishChecks(store, { ...one, recordedAtMs: 101_000, producer: 'gherkin-web', environment: 'desktop-web', checks: [
-    { ...FIND, status: 'passed', durationMs: 2_000 },
-    { ...ESCALATE, status: 'passed', durationMs: 2_500 },
-    { ...REFUND, status: 'passed', durationMs: 1_500 }
-  ] });
-  await publishChecks(store, { recordedAtMs: 200_000, sha: 'b'.repeat(40), branch: 'main', runUrl: RUN(2), producer: 'gherkin-api', environment: 'api', checks: [
-    { ...FIND, status: 'failed', durationMs: 140, detail: 'Timed out waiting for the inbox' },
-    { ...ESCALATE, status: 'passed', durationMs: 320 }
-  ] });
+  await publishChecks(store, {
+    ...one,
+    producer: 'gherkin-api',
+    environment: 'api',
+    checks: [
+      { ...FIND, status: 'passed', durationMs: 100 },
+      { ...ESCALATE, status: 'failed', durationMs: 300, detail: 'Expected 200, got 500' },
+      { ...PAY, status: 'passed', durationMs: 80 }
+    ]
+  });
+  await publishChecks(store, {
+    ...one,
+    recordedAtMs: 101_000,
+    producer: 'gherkin-web',
+    environment: 'desktop-web',
+    checks: [
+      { ...FIND, status: 'passed', durationMs: 2_000 },
+      { ...ESCALATE, status: 'passed', durationMs: 2_500 },
+      { ...REFUND, status: 'passed', durationMs: 1_500 }
+    ]
+  });
+  await publishChecks(store, {
+    recordedAtMs: 200_000,
+    sha: 'b'.repeat(40),
+    branch: 'main',
+    runUrl: RUN(2),
+    producer: 'gherkin-api',
+    environment: 'api',
+    checks: [
+      { ...FIND, status: 'failed', durationMs: 140, detail: 'Timed out waiting for the inbox' },
+      { ...ESCALATE, status: 'passed', durationMs: 320 }
+    ]
+  });
 }
 
 const rows = () => [...document.querySelectorAll<HTMLElement>('section[aria-label="Tests"] li a')].map((row) => row.textContent ?? '');
@@ -65,7 +84,10 @@ async function choose(label: string, value: string) {
   const select = document.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
   expect(select).not.toBeNull();
   await act(async () => {
-    Object.getOwnPropertyDescriptor((window as unknown as { HTMLSelectElement: typeof HTMLSelectElement }).HTMLSelectElement.prototype, 'value')?.set?.call(select, value);
+    Object.getOwnPropertyDescriptor(
+      (window as unknown as { HTMLSelectElement: typeof HTMLSelectElement }).HTMLSelectElement.prototype,
+      'value'
+    )?.set?.call(select, value);
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
@@ -82,8 +104,8 @@ test('the project home is a test explorer: insights, groups by spec, search, sta
   expect(insights()).toContain('1 failed');
   expect(insights()).toContain('3 passed');
   expect(document.querySelector('[aria-label="1 flaky tests"]')).not.toBeNull();
-  expect(insights()).toContain('Api3 tests1 failed2 passed');
-  expect(insights()).toContain('Desktop web3 tests3 passed');
+  expect(insights()).toContain('Api3 tests · 1 failed · 2 passed');
+  expect(insights()).toContain('Desktop web3 tests · 0 failed · 3 passed');
   expect(document.querySelector('[aria-label="2 runs"]')).not.toBeNull();
   expect(insights()).toMatch(/average · p95/);
 
@@ -92,12 +114,15 @@ test('the project home is a test explorer: insights, groups by spec, search, sta
   expect(group('Finding a persons trouble')?.textContent).toContain('Escalate a ticket');
   expect(group('Pay an invoice')?.textContent).toContain('Refund a payment');
   expect(group('Finding a persons trouble')?.textContent).toContain('1 failed');
-  expect([...document.querySelectorAll('section[aria-label="Tests"] h3')].map((heading) => heading.textContent)).toEqual(['billing', 'support']);
+  expect([...document.querySelectorAll('section[aria-label="Tests"] h3')].map((heading) => heading.textContent)).toEqual([
+    'billing',
+    'support'
+  ]);
   const find = atlas.find('section[aria-label="Tests"] li a', 'Find a person’s trouble')!;
   expect(find.textContent).toContain('Api');
   expect(find.textContent).toContain('Desktop web');
-  expect(find.querySelector('span[title^="Api"]')?.getAttribute('data-status')).toBe('failed');
-  expect(find.querySelector('span[title^="Desktop web"]')?.getAttribute('data-status')).toBe('passed');
+  expect(find.querySelector('[title^="Api"]')?.getAttribute('data-status')).toBe('failed');
+  expect(find.querySelector('[title^="Desktop web"]')?.getAttribute('data-status')).toBe('passed');
   expect(find.textContent).toContain('Timed out waiting for the inbox');
   expect(atlas.find('section[aria-label="Tests"] li a', 'Refund a payment')?.textContent).toContain('Flaky');
 
@@ -147,7 +172,10 @@ test('a link opens one test with its results per environment, statistics, trend 
   await publish(localStore);
   atlas = await openAtlas({ at: `/?test=${encodeURIComponent(KEY(FIND))}`, specs: {}, deps: { localStore } });
   const detail = () => document.querySelector<HTMLElement>('aside[aria-label="Test detail"]');
-  await atlas.until(() => (detail()?.querySelectorAll('[aria-label="History"] tbody tr').length ?? 0) === 3, 'the open test and its history');
+  await atlas.until(
+    () => (detail()?.querySelectorAll('[aria-label="History"] tbody tr').length ?? 0) === 3,
+    'the open test and its history'
+  );
   const text = detail()!.textContent!;
   expect(detail()!.querySelector('h2')?.textContent).toBe('Find a person’s trouble');
   expect(text).toContain('Finding a persons trouble');
@@ -163,7 +191,9 @@ test('a link opens one test with its results per environment, statistics, trend 
   expect(stats).toContain('Pass rate67%');
   expect(stats).toContain('Runs2');
   expect(stats).toContain('Flips1');
-  expect(detail()!.querySelector('[aria-label^="Outcomes, oldest first"]')?.getAttribute('aria-label')).toBe('Outcomes, oldest first: Passed, Passed, Failed');
+  expect(detail()!.querySelector('[aria-label^="Outcomes, oldest first"]')?.getAttribute('aria-label')).toBe(
+    'Outcomes, oldest first: Passed, Passed, Failed'
+  );
   expect(detail()!.querySelector('svg[aria-label^="Durations from"]')).not.toBeNull();
   // The history, newest first.
   const history = [...detail()!.querySelectorAll('[aria-label="History"] tbody tr')].map((row) => row.textContent ?? '');
@@ -182,7 +212,7 @@ test('the runs view lists CI runs, opens one, and shows its tests in the explore
   await publish(localStore);
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
   await atlas.until(() => shows('Refund a payment'), 'the tests');
-  await atlas.click('[role="tablist"] a', 'Runs');
+  await atlas.click('[role="tablist"] button', 'Runs');
   await atlas.until(() => document.querySelectorAll('section[aria-label="Runs"] tbody tr').length === 2, 'two runs');
   const table = document.querySelector('section[aria-label="Runs"] table')!.textContent!;
   expect(table).toContain('Api, Desktop web');
@@ -207,13 +237,22 @@ test('the left index lists domains and specs from the recorded tests and filters
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
   await atlas.until(() => !!atlas!.find('nav[aria-label="Project specs"] a', 'Pay an invoice'), 'the spec index');
   expect(atlas.find('nav[aria-label="Project specs"] a', 'support')?.textContent).toContain('1 failed');
+  const disclosure = () => document.querySelector<HTMLButtonElement>('button[aria-label$=" support"]')!;
+  expect(disclosure().getAttribute('aria-expanded')).toBe('true');
+  expect(disclosure().querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  await act(async () => disclosure().click());
+  expect(disclosure().getAttribute('aria-label')).toBe('Expand support');
+  expect(atlas.find('nav[aria-label="Project specs"] a', 'Find a person’s trouble')).toBeUndefined();
+  await act(async () => disclosure().click());
+  expect(disclosure().getAttribute('aria-expanded')).toBe('true');
+
   await atlas.click('nav[aria-label="Project specs"] a', 'Pay an invoice');
   await atlas.until(() => rows().length === 2, 'the tests of one spec');
   expect(atlas.router.state.location.search).toMatchObject({ spec: INVOICE });
   await atlas.click('nav[aria-label="Project specs"] a', 'support');
   await atlas.until(() => rows().length === 2 && shows('Escalate a ticket'), 'the tests of one domain');
   // The header names what this project is made of.
-  expect(document.querySelector('header summary[aria-label="Spec type"]')?.textContent).toContain('Tests');
+  expect(document.querySelector('header button[aria-label="Spec type"]')?.textContent).toContain('Tests');
 });
 
 test('the finder opens a recorded test in the explorer', async () => {
@@ -221,17 +260,27 @@ test('the finder opens a recorded test in the explorer', async () => {
   await publish(localStore);
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
   await atlas.until(() => shows('Refund a payment'), 'the tests');
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true })); });
-  await atlas.until(() => document.querySelector('[cmdk-input]') !== null, 'the finder');
-  const input = document.querySelector<HTMLInputElement>('[cmdk-input]')!;
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }));
+  });
+  await atlas.until(() => document.querySelector('input[aria-label="Find a flow"]') !== null, 'the finder');
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="Find a flow"]')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'refund a payment');
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await atlas.until(() => document.querySelector('[cmdk-item][aria-selected="true"]')?.textContent?.includes('Refund a payment') ?? false, 'the test in the finder');
-  await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+  await atlas.until(
+    () => document.querySelector('[role="option"][aria-selected="true"]')?.textContent?.includes('Refund a payment') ?? false,
+    'the test in the finder'
+  );
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+  });
   await atlas.until(() => atlas!.router.state.location.search.test === KEY(REFUND), 'the test in the address');
-  await atlas.until(() => document.querySelector('aside[aria-label="Test detail"] h2')?.textContent === 'Refund a payment', 'the open test');
+  await atlas.until(
+    () => document.querySelector('aside[aria-label="Test detail"] h2')?.textContent === 'Refund a payment',
+    'the open test'
+  );
 });
 
 test('on a node the explorer asks the server for the catalog and still works without those routes', async () => {
@@ -244,8 +293,37 @@ test('on a node the explorer asks the server for the catalog and still works wit
   expect(atlas.requests.some((request) => request.startsWith('/tests?limit=20000'))).toBe(true);
   // The whole report came in one request; no layer was read on its own.
   expect(atlas.requests.some((request) => request.startsWith('/evidence/rows/'))).toBe(false);
-  await atlas.until(() => (document.querySelector('aside[aria-label="Test detail"]')?.textContent ?? '').includes('Current result per environment'), 'the open test');
+  await atlas.until(
+    () => (document.querySelector('aside[aria-label="Test detail"]')?.textContent ?? '').includes('Current result per environment'),
+    'the open test'
+  );
   await atlas.click('[aria-label="Test status"] button', 'Failed');
   await atlas.until(() => rows().length === 1, 'the failing test');
   node.close();
+});
+
+test('every supported spec has a bundled SVG mark and retains a named navigation link', async () => {
+  atlas = await openAtlas({
+    at: '/',
+    specs: {
+      'sample.feature': 'Feature: Sample',
+      'sample.qnt': 'module sample {}',
+      'sample.dmn': '<definitions />',
+      'sample.als': 'module sample',
+      'sample.openslo.yaml': 'apiVersion: openslo/v1\nkind: SLO'
+    }
+  });
+  await atlas.until(() => !!atlas!.find('nav[aria-label="Project specs"] a', 'OpenSLO'), 'the spec navigation');
+  for (const label of ['Gherkin', 'Quint', 'DMN', 'Alloy', 'OpenSLO']) {
+    const link = atlas.find('nav[aria-label="Project specs"] a', label)!;
+    const logo = link.querySelector<HTMLImageElement>('img[data-spec-logo]')!;
+    expect(logo).not.toBeNull();
+    expect(logo.getAttribute('src')).toEndWith('.svg');
+    expect(logo.getAttribute('alt')).toBe('');
+    expect(logo.getAttribute('aria-hidden')).toBe('true');
+    expect(link.textContent).toBe(label);
+  }
+  await atlas.click('nav[aria-label="Project specs"] a', 'Quint');
+  await atlas.until(() => atlas!.router.state.location.pathname === '/specs/quint', 'the Quint route');
+  expect(document.querySelector('button[aria-label="Spec type"] img[data-spec-logo="quint"]')).not.toBeNull();
 });

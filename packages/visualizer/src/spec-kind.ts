@@ -1,6 +1,6 @@
 /** A kind of spec document with its own tab: what it is called, and which files belong to it. */
 export type SpecKind = {
-  readonly id: string;
+  readonly id: 'gherkin' | 'quint' | 'dmn' | 'alloy' | 'openslo';
   /** The tab, named after the notation. */
   readonly label: string;
   readonly one: string;
@@ -20,7 +20,7 @@ export const SPEC_KINDS: readonly SpecKind[] = [
   { id: 'quint', label: 'Quint', one: 'model', many: 'models', check: 'trace', accepts: ending(/\.qnt$/i) },
   { id: 'dmn', label: 'DMN', one: 'decision table', many: 'decision tables', check: 'check', accepts: ending(/\.dmn$/i) },
   { id: 'alloy', label: 'Alloy', one: 'structure', many: 'structures', check: 'check', accepts: ending(/\.als$/i) },
-  { id: 'openslo', label: 'OpenSLO', one: 'objective', many: 'objectives', check: 'check', accepts: ending(/\.openslo\.ya?ml$/i) },
+  { id: 'openslo', label: 'OpenSLO', one: 'objective', many: 'objectives', check: 'check', accepts: ending(/\.openslo\.ya?ml$/i) }
 ];
 
 export function specKind(id: string | undefined): SpecKind | null {

@@ -1,16 +1,14 @@
 import { flattenSteps, neighborFailure, orderedUiBlobs, selectedFrame, testFrames } from '@crvouga/atlas/reports/frames';
 import { performanceFrameIndex, performanceRows, type PerformanceRow } from '@crvouga/atlas/reports/performance';
 import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
+import { Accordion, Box, Button, Code, List, NativeSelect, Progress, Stack, Tabs, Text, VisuallyHidden } from '@mantine/core';
 import { useMemo, useState } from 'react';
-
 import { reportLooks } from '../looks/collect';
 import { Stage, type LookMode } from '../looks/Stage';
 import { reportAssetUrl } from './api';
 import { duration } from './format';
 import { StatusMark } from './marks';
-import styles from './recording.module.css';
 import { Snapshot, SnapshotData } from './snapshot';
-
 type Props = {
   report: RunReport;
   /** Where a captured file of this test is read from. */
@@ -20,7 +18,6 @@ type Props = {
   moment: number | null;
   onMoment: (moment: number, replace: boolean) => void;
 };
-
 /** A recorded test, one captured moment at a time. */
 export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
   const [actor, setActor] = useState('all');
@@ -30,7 +27,11 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
   const frames = useMemo(() => testFrames(test), [test]);
   const looks = useMemo(() => reportLooks(report, (file) => reportAssetUrl(fileUrl(file))), [report, fileUrl]);
   const extras = (report.artifacts ?? []).filter((artifact) => artifact.media !== 'png' && artifact.media !== 'video');
-  const frame = selectedFrame(frames, { view: 'test', testId: report.meta.testId, params: { frame: moment === null ? '' : String(moment) } });
+  const frame = selectedFrame(frames, {
+    view: 'test',
+    testId: report.meta.testId,
+    params: { frame: moment === null ? '' : String(moment) }
+  });
   const index = frame?.index ?? 0;
   const last = frames.length - 1;
   const go = (target: number) => {
@@ -53,53 +54,67 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
       go(failure.index);
     }
   };
-
   return (
-    <div className={styles.recording}>
+    <Stack gap="sm">
       {report.meta.error && (
-        <div className={styles.error} role="alert">
+        <Stack role="alert" gap="sm" c="red.7">
           {report.meta.error}
           {report.meta.errorStack && (
-            <details>
-              <summary>Where it failed</summary>
-              {report.meta.errorStack}
-            </details>
+            <Accordion variant="separated" my="sm">
+              <Accordion.Item value="content">
+                <Accordion.Control>Where it failed</Accordion.Control>
+                <Accordion.Panel>{report.meta.errorStack}</Accordion.Panel>
+              </Accordion.Item>
+            </Accordion>
           )}
-        </div>
+        </Stack>
       )}
-      <div className={styles.tabs} role="tablist" aria-label="Recording">
-        <button type="button" role="tab" aria-selected={tab === 'moments'} onClick={() => setTab('moments')}>Moments</button>
-        <button type="button" role="tab" aria-selected={tab === 'timing'} onClick={() => setTab('timing')}>Timing</button>
-      </div>
+      <Tabs value={tab} onChange={(value) => setTab(value as typeof tab)} mb="md">
+        <Tabs.List aria-label="Recording">
+          <Tabs.Tab value="moments">Moments</Tabs.Tab>
+          <Tabs.Tab value="timing">Timing</Tabs.Tab>
+        </Tabs.List>
+      </Tabs>
       {tab === 'timing' ? (
         <Timing rows={rows} canOpen={(step) => byStep.has(step)} open={jump} />
       ) : (
-        <div className={styles.split}>
-          <ol className={styles.steps} aria-label="Recorded steps">
+        <Stack gap="sm">
+          <List aria-label="Recorded steps" spacing="xs" listStyleType="none" type="ordered">
             {steps.map((entry) => {
               const current = frame?.step === entry.step;
               return (
-                <li key={entry.index} style={{ paddingLeft: entry.depth * 14 }}>
-                  <button type="button" data-status={entry.step.status} aria-current={current ? 'step' : undefined} disabled={!byStep.has(entry.step)} onClick={() => jump(entry.step)}>
+                <List.Item key={entry.index} pl={entry.depth ? 'md' : 0}>
+                  <Button
+                    type="button"
+                    data-status={entry.step.status}
+                    aria-current={current ? 'step' : undefined}
+                    disabled={!byStep.has(entry.step)}
+                    onClick={() => jump(entry.step)}
+                    variant="light"
+                  >
                     <StatusMark status={entry.step.status} size={14} />
-                    <span className={styles.stepTitle}>{entry.step.title}</span>
-                    <span className={styles.stepTime}>{duration(entry.step.durationMs)}</span>
-                  </button>
-                </li>
+                    <Text span inherit>
+                      {entry.step.title}
+                    </Text>
+                    <Text span inherit c="dimmed">
+                      {duration(entry.step.durationMs)}
+                    </Text>
+                  </Button>
+                </List.Item>
               );
             })}
-          </ol>
-          <section className={styles.stage} aria-label="Recorded moment">
+          </List>
+          <Box aria-label="Recorded moment" component="section" mb="lg">
             {report.meta.actorIds.length > 1 && (
-              <label className={styles.actor}>
-                <span className="sr-only">Person</span>
-                <select value={actor} onChange={(event) => setActor(event.target.value)}>
+              <Box component="label">
+                <VisuallyHidden>Person</VisuallyHidden>
+                <NativeSelect value={actor} onChange={(event) => setActor(event.target.value)}>
                   <option value="all">Everyone</option>
                   {report.meta.actorIds.map((id) => (
                     <option key={id}>{id}</option>
                   ))}
-                </select>
-              </label>
+                </NativeSelect>
+              </Box>
             )}
             <Stage
               looks={looks}
@@ -110,79 +125,131 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
               onMoment={go}
               failure={frames.some((entry) => entry.step.status === 'failed')}
               onFailure={nextFailure}
-              empty={extras.length > 0
-                ? <p className={styles.quietLine}>This runner attached files instead of a step-by-step timeline. They are below.</p>
-                : <p className={styles.quietLine}>This test recorded no picture, video, or timeline. Its steps and outcome are on the left.</p>}
+              empty={
+                extras.length > 0 ? (
+                  <Text c="dimmed">This runner attached files instead of a step-by-step timeline. They are below.</Text>
+                ) : (
+                  <Text c="dimmed">This test recorded no picture, video, or timeline. Its steps and outcome are on the left.</Text>
+                )
+              }
               renderMoment={(at) => {
                 const current = frames[at];
                 if (!current) return null;
                 const ui = orderedUiBlobs(current, test);
-                const pictures = ui.filter((entry) => entry.blob && entry.blob.media !== 'video' && (actor === 'all' || entry.nodeId === actor));
+                const pictures = ui.filter(
+                  (entry) => entry.blob && entry.blob.media !== 'video' && (actor === 'all' || entry.nodeId === actor)
+                );
                 const absent = ui.filter((entry) => !entry.blob && (actor === 'all' || !entry.nodeId || entry.nodeId === actor));
-                const observations = current.frame.snapshots.filter((blob) => blob.media !== 'html' && blob.media !== 'png' && blob.media !== 'video' && (actor === 'all' || !blob.nodeId || blob.nodeId === actor));
+                const observations = current.frame.snapshots.filter(
+                  (blob) =>
+                    blob.media !== 'html' &&
+                    blob.media !== 'png' &&
+                    blob.media !== 'video' &&
+                    (actor === 'all' || !blob.nodeId || blob.nodeId === actor)
+                );
                 return (
                   <>
-                    <p className={styles.quietLine}>
-                      {current.step.status === 'failed' ? 'Failed' : 'Passed'} · at {duration(Math.max(0, current.frame.capturedAtMs - report.meta.startedAtMs)) || '0 ms'}
+                    <Text c="dimmed">
+                      {current.step.status === 'failed' ? 'Failed' : 'Passed'} · at{' '}
+                      {duration(Math.max(0, current.frame.capturedAtMs - report.meta.startedAtMs)) || '0 ms'}
                       {current.frame.hit && <> · acted on {current.frame.hit.path.join(' › ')}</>}
-                    </p>
-                    {current.step.error && <pre className={styles.error} role="alert">{current.step.error}</pre>}
-                    {current.step.detail && (
-                      <div className={styles.observed}>
-                        <SnapshotData text={current.step.detail} />
-                      </div>
+                    </Text>
+                    {current.step.error && (
+                      <Code role="alert" c="dimmed">
+                        {current.step.error}
+                      </Code>
                     )}
-                    <div className={styles.pictures} aria-label="Recorded snapshots">
+                    {current.step.detail && (
+                      <Stack>
+                        <SnapshotData text={current.step.detail} />
+                      </Stack>
+                    )}
+                    <Stack aria-label="Recorded snapshots">
                       {pictures.map((entry) => (
-                        <Snapshot key={entry.blob!.file} url={fileUrl(entry.blob!.file)} blob={entry.blob!} css={css} hit={entry.stale ? null : current.frame.hit ?? null} earlier={entry.stale} />
+                        <Snapshot
+                          key={entry.blob!.file}
+                          url={fileUrl(entry.blob!.file)}
+                          blob={entry.blob!}
+                          css={css}
+                          hit={entry.stale ? null : (current.frame.hit ?? null)}
+                          earlier={entry.stale}
+                        />
                       ))}
                       {absent.map((entry) => (
-                        <p key={entry.nodeId} className={styles.quietLine}>No picture of {entry.nodeId} had been recorded by this moment.</p>
+                        <Text key={entry.nodeId} c="dimmed">
+                          No picture of {entry.nodeId} had been recorded by this moment.
+                        </Text>
                       ))}
                       {observations.map((blob) => (
                         <Snapshot key={blob.file} url={fileUrl(blob.file)} blob={blob} css={css} hit={null} />
                       ))}
-                    </div>
+                    </Stack>
                   </>
                 );
               }}
             />
             {extras.length > 0 && (
-              <div className={styles.pictures} aria-label="Other attachments">
+              <Stack aria-label="Other attachments" gap="sm">
                 {extras.map((artifact) => (
-                  <Snapshot key={artifact.file} url={fileUrl(artifact.file)} blob={{ name: artifact.name, media: artifact.media, file: artifact.file }} css={css} hit={null} />
+                  <Snapshot
+                    key={artifact.file}
+                    url={fileUrl(artifact.file)}
+                    blob={{ name: artifact.name, media: artifact.media, file: artifact.file }}
+                    css={css}
+                    hit={null}
+                  />
                 ))}
-              </div>
+              </Stack>
             )}
-          </section>
-        </div>
+          </Box>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
-
 /** Where the recorded time went. A step without a measurement is never shown as quick. */
-function Timing({ rows, canOpen, open }: { rows: readonly PerformanceRow[]; canOpen: (step: ReportStep) => boolean; open: (step: ReportStep) => void }) {
+function Timing({
+  rows,
+  canOpen,
+  open
+}: {
+  rows: readonly PerformanceRow[];
+  canOpen: (step: ReportStep) => boolean;
+  open: (step: ReportStep) => void;
+}) {
   const measured = rows.filter((row) => row.band !== 'unmeasured');
-  if (!measured.length) return <p className={styles.quietLine}>Measurements are unavailable for this recording.</p>;
+  if (!measured.length)
+    return (
+      <Text component="div" c="dimmed">
+        Measurements are unavailable for this recording.
+      </Text>
+    );
   const longest = Math.max(...measured.map((row) => row.step.performance?.selfMs ?? 0), 1);
   return (
-    <ol className={styles.timing} aria-label="Recorded time per step">
+    <List aria-label="Recorded time per step" spacing="xs" listStyleType="none" type="ordered">
       {rows.map((row) => {
         const own = row.step.performance?.selfMs;
         return (
-          <li key={row.index} data-band={row.band}>
-            <button type="button" disabled={!canOpen(row.step)} onClick={() => open(row.step)} style={{ paddingLeft: 8 + row.depth * 14 }}>
-              <span className={styles.stepTitle}>{row.step.title}</span>
-              {row.band === 'slow' && <span className={styles.slow}>Slow</span>}
-              <span className={styles.bar} aria-hidden="true">
-                <span style={{ width: `${own === undefined ? 0 : Math.max(2, (own / longest) * 100)}%` }} />
-              </span>
-              <span className={styles.stepTime}>{own === undefined ? 'Not measured' : `${own.toFixed(1)} ms`}</span>
-            </button>
-          </li>
+          <List.Item key={row.index} data-band={row.band}>
+            <Button type="button" disabled={!canOpen(row.step)} onClick={() => open(row.step)} pl={row.depth ? 'lg' : 'sm'} variant="light">
+              <Text span inherit>
+                {row.step.title}
+              </Text>
+              {row.band === 'slow' && (
+                <Text span inherit c="red.7">
+                  Slow
+                </Text>
+              )}
+              <Text aria-hidden="true" span inherit>
+                <Progress value={own === undefined ? 0 : (own / longest) * 100} w="6rem" size="sm" />
+              </Text>
+              <Text span inherit c="dimmed">
+                {own === undefined ? 'Not measured' : `${own.toFixed(1)} ms`}
+              </Text>
+            </Button>
+          </List.Item>
         );
       })}
-    </ol>
+    </List>
   );
 }

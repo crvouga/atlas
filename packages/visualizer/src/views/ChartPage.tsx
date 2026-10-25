@@ -1,26 +1,32 @@
+import { Anchor, Container, Flex, Stack, Text, Title } from '@mantine/core';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
-
 import { useAtlas } from '../app/atlas-context';
 import { mapFrame } from '../layout/graph';
 import { ChartMap } from '../map/ChartMap';
-import { SidePanel } from './SidePanel';
-import styles from './views.module.css';
 import { ChartTests } from './ChartTests';
-
+import { ChartSource } from '../evidence/chart-source';
+import { SidePanel } from './SidePanel';
 export function ChartPage() {
   const { chartId } = useParams({ from: '/chart/$chartId' });
   const search = useSearch({ from: '/chart/$chartId' });
   const { view } = useAtlas();
-  if (!view) return <div className={styles.plateScroll} role="status">Loading the spec…</div>;
+  if (!view)
+    return (
+      <Container role="status" component="article" size="xl" w="100%" py="xl">
+        Loading the spec…
+      </Container>
+    );
   if (!view.charts.has(chartId)) {
     return (
-      <div className={styles.plateScroll}>
-        <h1 className={styles.plateTitle}>This chart isn’t in the spec</h1>
-        <p className={styles.lead}>It may have been renamed or removed since this link was shared.</p>
-        <Link to="/" search={(prev) => ({ run: prev.run })} className={styles.button}>
-          Back to the product map
-        </Link>
-      </div>
+      <Container component="article" size="xl" w="100%" py="xl">
+        <Title order={1} mb="sm">
+          This chart isn’t in the spec
+        </Title>
+        <Text component="div" c="dimmed">
+          It may have been renamed or removed since this link was shared.
+        </Text>
+        <Anchor renderRoot={(props) => <Link {...props} to="/" search={(prev) => ({ run: prev.run })} />}>Back to the product map</Anchor>
+      </Container>
     );
   }
   const selection = { screen: search.screen, event: search.event, journey: search.journey };
@@ -30,25 +36,39 @@ export function ChartPage() {
   const frame = mapFrame(view, chartId, search.group ?? null);
   const homeFocus = mapFrame(view, chartId, null).focus;
   return (
-    <div className={styles.mapPlate}>
-      <div className={styles.mapHeading}>
-        <h1>{chart.name}</h1>
-        {chart.description && <p>{chart.description}</p>}
+    <Stack gap="sm" p="md">
+      <Flex gap="xs" align="center" wrap="wrap">
+        <Title order={1} mb="sm">
+          {chart.name}
+        </Title>
+        {chart.description && <Text component="div">{chart.description}</Text>}
         {frame.focus && (
-          <p className={styles.mapScope}>
-            <span>{frame.focus}</span>
+          <Text component="div">
+            <Text span inherit>
+              {frame.focus}
+            </Text>
             {frame.wider && (
-              <Link to="/chart/$chartId" params={{ chartId }} search={(prev) => ({ run: prev.run, group: frame.wider && frame.wider !== homeFocus ? frame.wider : undefined })}>
+              <Anchor
+                renderRoot={(props) => (
+                  <Link
+                    {...props}
+                    to="/chart/$chartId"
+                    params={{ chartId }}
+                    search={(prev) => ({ run: prev.run, group: frame.wider && frame.wider !== homeFocus ? frame.wider : undefined })}
+                  />
+                )}
+              >
                 Wider map
-              </Link>
+              </Anchor>
             )}
-          </p>
+          </Text>
         )}
-      </div>
-      <div className={styles.mapArea}>
+      </Flex>
+      <ChartSource file={chart.file} />
+      <Stack gap="sm">
         <ChartMap key={`${chartId}:${search.group ?? ''}`} view={view} chartId={chartId} selection={selection} group={search.group} />
-      </div>
-      <ChartTests view={view} chartId={chartId} compact />
-    </div>
+      </Stack>
+      <ChartTests view={view} chartId={chartId} />
+    </Stack>
   );
 }

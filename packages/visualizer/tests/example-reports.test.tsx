@@ -4,7 +4,14 @@ import path from 'node:path';
 import { afterEach, expect, test } from 'bun:test';
 
 import { APP_ROOT } from '../vite/atlas-files';
-import { EXAMPLE_BRANCH, EXAMPLE_CURRENT, EXAMPLE_PREVIOUS, exampleReports, readExampleSpecs, servesExampleReports } from '../vite/example-reports';
+import {
+  EXAMPLE_BRANCH,
+  EXAMPLE_CURRENT,
+  EXAMPLE_PREVIOUS,
+  exampleReports,
+  readExampleSpecs,
+  servesExampleReports
+} from '../vite/example-reports';
 import { openAtlas, type Atlas } from './atlas';
 
 const coffeeRoot = path.join(APP_ROOT, 'example/specs');
@@ -18,7 +25,9 @@ afterEach(async () => {
 });
 
 function scenario(label: string) {
-  return [...atlas!.host.querySelectorAll('li[data-status]')].find((item) => item.querySelector(':scope > button')?.textContent?.includes(label));
+  return [...atlas!.host.querySelectorAll('li[data-status]')].find((item) =>
+    item.querySelector('[data-result-label]')?.textContent?.includes(label)
+  );
 }
 
 test('the example reports are served only for the coffee and todo specs', async () => {
@@ -34,7 +43,10 @@ test('the coffee example shows each environment, and a focused layer leaves the 
   const deps = await exampleReports(specs);
   expect(deps).not.toBeNull();
   atlas = await openAtlas({ at: '/specs/gherkin', deps: deps!, specs });
-  await atlas.until(() => atlas!.find('nav[aria-label="Gherkin features"] a', 'Order a drink')?.getAttribute('data-result') === 'failed', 'recorded results for Order a drink');
+  await atlas.until(
+    () => atlas!.find('nav[aria-label="Gherkin features"] a', 'Order a drink')?.getAttribute('data-result') === 'failed',
+    'recorded results for Order a drink'
+  );
   expect(atlas.find('nav[aria-label="Gherkin features"] a', 'Loyalty stamps')!.getAttribute('data-result')).toBe('none');
   expect(atlas.find('button', 'Sources')!.textContent).toContain('5 layers');
 
@@ -58,9 +70,19 @@ test('the coffee example shows each environment, and a focused layer leaves the 
 
   await atlas.click('button', 'Pays by card');
   await atlas.sees('The card form never appeared');
-  expect([...atlas.host.querySelectorAll('[aria-label="Environments"] button')].map((button) => button.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Desktop web'), expect.stringContaining('iOS'), expect.stringContaining('Mobile web'), expect.stringContaining('device: phone')]));
+  expect([...atlas.host.querySelectorAll('[aria-label="Environments"] button')].map((button) => button.textContent)).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining('Desktop web'),
+      expect.stringContaining('iOS'),
+      expect.stringContaining('Mobile web'),
+      expect.stringContaining('device: phone')
+    ])
+  );
   await atlas.click('[aria-label="Environments"] button', 'Desktop web');
-  await atlas.until(() => atlas!.find('[aria-label="Environments"] button', 'Desktop web')?.getAttribute('aria-pressed') === 'true', 'the desktop web result');
+  await atlas.until(
+    () => atlas!.find('[aria-label="Environments"] button', 'Desktop web')?.getAttribute('aria-pressed') === 'true',
+    'the desktop web result'
+  );
   await atlas.sees('Then the barista can start the drink');
 
   await atlas.click('button', 'Card declined, then a wallet works');
