@@ -1,3 +1,4 @@
+import { AtlasThemeProvider } from '../src/ui/theme';
 import { afterEach, expect, test } from 'bun:test';
 import { writeUtf8 } from '@crvouga/atlas/reports/object-io';
 import type { RunReport } from '@crvouga/atlas/reports/report-types';
@@ -20,8 +21,18 @@ afterEach(async () => {
   atlas = null;
 });
 
-const ADD = { test: 'add', title: 'Share a list: Add an item', status: 'passed' as const, steps: [step(1, 'Given a list'), step(2, 'When adding tea'), step(3, 'Then the list includes tea')] };
-const ADD_FAILED = { ...ADD, status: 'failed' as const, error: 'Expected tea in the list', steps: [step(1, 'Given a list'), step(2, 'When adding tea', 'failed', { error: 'Expected tea in the list' })] };
+const ADD = {
+  test: 'add',
+  title: 'Share a list: Add an item',
+  status: 'passed' as const,
+  steps: [step(1, 'Given a list'), step(2, 'When adding tea'), step(3, 'Then the list includes tea')]
+};
+const ADD_FAILED = {
+  ...ADD,
+  status: 'failed' as const,
+  error: 'Expected tea in the list',
+  steps: [step(1, 'Given a list'), step(2, 'When adding tea', 'failed', { error: 'Expected tea in the list' })]
+};
 const TEA = { test: 'several-tea', title: 'Share a list: Add several — Tea', status: 'passed' as const };
 const MILK = { test: 'several-milk', title: 'Share a list: Add several — Milk', status: 'passed' as const };
 
@@ -56,15 +67,27 @@ test('the index says which specs have results, and a spec without evidence says 
 
 test('a feature shows each scenario with what was recorded for it, including each example of an outline', async () => {
   const localStore = memoryStore();
-  await publishRun(localStore, { at: 20, checks: [ADD_FAILED, TEA, MILK, { test: 'gone', title: 'Share a list: A renamed scenario', status: 'passed' }] });
+  await publishRun(localStore, {
+    at: 20,
+    checks: [ADD_FAILED, TEA, MILK, { test: 'gone', title: 'Share a list: A renamed scenario', status: 'passed' }]
+  });
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: { localStore } });
   await atlas.sees('1 failed');
   expect(atlas.text()).toContain('Owners add items');
   expect(atlas.text()).toContain('3 passed');
   // The unrecorded scenario counts as missing, never as a pass.
   expect(atlas.text()).toContain('1 without a result');
-  const rows = [...atlas.host.querySelectorAll('li[data-status]')].map((row) => [row.querySelector('span:nth-of-type(1)')?.textContent, row.getAttribute('data-status')]);
-  expect(rows).toEqual([['Add an item', 'failed'], ['Add several — Tea', 'passed'], ['Add several — Milk', 'passed'], ['Remove an item', 'none'], ['A renamed scenario', 'passed']]);
+  const rows = [...atlas.host.querySelectorAll('li[data-status]')].map((row) => [
+    row.querySelector('[data-result-label]')?.textContent,
+    row.getAttribute('data-status')
+  ]);
+  expect(rows).toEqual([
+    ['Add an item', 'failed'],
+    ['Add several — Tea', 'passed'],
+    ['Add several — Milk', 'passed'],
+    ['Remove an item', 'none'],
+    ['A renamed scenario', 'passed']
+  ]);
   expect(atlas.text()).toContain('Other recorded results');
   // The failure reads in the list before anything is opened.
   expect(atlas.host.querySelector('li[data-status="failed"] p')?.textContent).toBe('Expected tea in the list');
@@ -79,7 +102,8 @@ test('a feature shows each scenario with what was recorded for it, including eac
 test('results from different backends and branches combine, and switching a newer source off reveals the earlier result', async () => {
   // regression: report-revisions-crowded
   // regression: report-root-navigation-missing
-  const localStore = memoryStore(), store = memoryStore();
+  const localStore = memoryStore(),
+    store = memoryStore();
   await publishRun(store, { at: 10, branch: 'main', checks: [ADD, TEA] });
   await publishRun(localStore, { at: 20, branch: 'feat/lists', checks: [ADD_FAILED] });
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: { localStore, store } });
@@ -88,7 +112,9 @@ test('results from different backends and branches combine, and switching a newe
   expect(atlas.text()).toContain('1 passed');
   await atlas.click('button', 'Add an item');
   await atlas.sees('Recorded in 2 runs');
-  const history = [...atlas.host.querySelectorAll('section[aria-label="Other runs of this check"] li button')].map((row) => row.textContent);
+  const history = [...atlas.host.querySelectorAll('section[aria-label="Other runs of this check"] li button')].map(
+    (row) => row.textContent
+  );
   expect(history[0]).toContain('FailedThis machinefeat/lists');
   expect(history[1]).toContain('PassedShared reportsmain');
 
@@ -101,20 +127,24 @@ test('results from different backends and branches combine, and switching a newe
   await atlas.sees('2 of 2 layers contribute');
   expect(atlas.text()).toContain('This machine1 layer');
   expect(atlas.text()).toContain('Shared reports1 layer');
-  const branch = atlas.find('label', 'feat/lists')!.querySelector('input')!;
+  const branch = document.getElementById(atlas.find('label', 'feat/lists')!.getAttribute('for')!) as HTMLInputElement;
   await atlas.click('label', 'feat/lists');
   expect(branch.checked).toBe(false);
   await atlas.sees('1 of 2 layers contribute');
   const row = () => atlas!.find('nav[aria-label="Gherkin features"] a', 'Share a list')!;
   await atlas.until(() => row().getAttribute('data-result') === 'passed', 'the earlier pass');
   expect(atlas.host.querySelector('li[data-open]')!.getAttribute('data-status')).toBe('passed');
+  await atlas.click('button', 'Close sources');
+  await atlas.click('button', 'View options');
   expect(atlas.find('button', 'Sources')!.textContent).toContain('1 off');
+  await atlas.click('button', 'Sources');
   await atlas.click('button', 'Use every source');
   await atlas.until(() => row().getAttribute('data-result') === 'failed', 'the newer failure again');
 });
 
 test('the same scenario stays visible on each environment, and a focused layer leaves the other checks in place', async () => {
-  const localStore = memoryStore(), store = memoryStore();
+  const localStore = memoryStore(),
+    store = memoryStore();
   await publishRun(store, { at: 10, environment: 'desktop-web', checks: [ADD, TEA] });
   await publishRun(localStore, { at: 20, environment: 'iOS', checks: [ADD_FAILED] });
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: { localStore, store } });
@@ -141,7 +171,19 @@ test('the same scenario stays visible on each environment, and a focused layer l
 test('a recording opens at its first failure and its address names the moment', async () => {
   const localStore = memoryStore();
   const frames = (index: number) => ({ frames: [{ index, capturedAtMs: index, snapshots: [] }] });
-  await publishRun(localStore, { at: 20, checks: [{ ...ADD_FAILED, steps: [step(1, 'Given a list', 'passed', frames(1)), step(2, 'When adding tea', 'failed', { error: 'Expected tea in the list', ...frames(2) }), step(3, 'Then the list includes tea', 'passed', frames(3))] }] });
+  await publishRun(localStore, {
+    at: 20,
+    checks: [
+      {
+        ...ADD_FAILED,
+        steps: [
+          step(1, 'Given a list', 'passed', frames(1)),
+          step(2, 'When adding tea', 'failed', { error: 'Expected tea in the list', ...frames(2) }),
+          step(3, 'Then the list includes tea', 'passed', frames(3))
+        ]
+      }
+    ]
+  });
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: { localStore } });
   await atlas.sees('1 failed');
   await atlas.click('button', 'Add an item');
@@ -165,17 +207,21 @@ test('a recording opens at its first failure and its address names the moment', 
 
 test('a recording plays an attached video and keeps a log the runner could not turn into frames', async () => {
   const localStore = memoryStore();
-  const shot = (index: number, file: string) => ({ frames: [{ index, capturedAtMs: index, snapshots: [{ name: 'screen', media: 'png' as const, file }] }] });
+  const shot = (index: number, file: string) => ({
+    frames: [{ index, capturedAtMs: index, snapshots: [{ name: 'screen', media: 'png' as const, file }] }]
+  });
   await publishRun(localStore, {
     at: 20,
-    checks: [{
-      ...ADD,
-      steps: [step(1, 'Given a list', 'passed', shot(1, 'frames/1.png')), step(2, 'When adding tea', 'passed', shot(2, 'frames/2.png'))],
-      artifacts: [
-        { name: 'Recording', media: 'video', file: 'recording.webm' },
-        { name: 'Browser log', media: 'text', file: 'log.txt' }
-      ]
-    }]
+    checks: [
+      {
+        ...ADD,
+        steps: [step(1, 'Given a list', 'passed', shot(1, 'frames/1.png')), step(2, 'When adding tea', 'passed', shot(2, 'frames/2.png'))],
+        artifacts: [
+          { name: 'Recording', media: 'video', file: 'recording.webm' },
+          { name: 'Browser log', media: 'text', file: 'log.txt' }
+        ]
+      }
+    ]
   });
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature&check=lists/add&view=recording', deps: { localStore } });
   await atlas.sees('Moment 2 of 2');
@@ -187,12 +233,21 @@ test('a recording plays an attached video and keeps a log the runner could not t
 });
 
 test('a running suite shows each finished test before its package is collected', async () => {
-  const localStore = memoryStore(), bucket = memoryStore();
+  const localStore = memoryStore(),
+    bucket = memoryStore();
   await publishRun(localStore, { at: 20, checks: [ADD] });
-  atlas = await openAtlas({ at: '/specs/gherkin', deps: { localStore, live: { bucket: () => bucket, origin: async () => ({ sha: 'b'.repeat(40), branch: 'feat/lists' }) } } });
+  atlas = await openAtlas({
+    at: '/specs/gherkin',
+    deps: { localStore, live: { bucket: () => bucket, origin: async () => ({ sha: 'b'.repeat(40), branch: 'feat/lists' }) } }
+  });
   await atlas.sees('1 with results');
   expect(atlas.host.querySelector('[aria-label="Running"]')).toBeNull();
-  await writeUtf8(localStore, 'active/lists.json', JSON.stringify({ packageDir: 'libs/lists', bucket: 'all', startedAtMs: atlas.time.clock.at, plannedChecks: 2 }), 'application/json');
+  await writeUtf8(
+    localStore,
+    'active/lists.json',
+    JSON.stringify({ packageDir: 'libs/lists', bucket: 'all', startedAtMs: atlas.time.clock.at, plannedChecks: 2 }),
+    'application/json'
+  );
   await atlas.poll();
   await atlas.sees('Running lists · 0 results');
   await writeUtf8(bucket, 'runs/latest/tests/add/report.json', JSON.stringify(recorded(ADD_FAILED)), 'application/json');
@@ -226,7 +281,10 @@ test('unavailable reports say why and offer another attempt; the specs stay read
 test('a model lists its recorded traces beside its declarations', async () => {
   const localStore = memoryStore();
   const trace = [0, 1].map((count) => step(count + 1, `add(${count})`, 'passed', { kind: 'quint', detail: `size = ${count}` }));
-  await publishRun(localStore, { at: 20, checks: [{ test: 'list.trace-1', title: 'list · trace 1', status: 'passed', spec: 'specs/lists/list.qnt', steps: trace }] });
+  await publishRun(localStore, {
+    at: 20,
+    checks: [{ test: 'list.trace-1', title: 'list · trace 1', status: 'passed', spec: 'specs/lists/list.qnt', steps: trace }]
+  });
   atlas = await openAtlas({ at: '/specs/quint?spec=lists/list.qnt', deps: { localStore } });
   await atlas.sees('1 trace');
   expect(atlas.host.querySelector('h1')!.textContent).toBe('list');
@@ -241,7 +299,15 @@ test('a model lists its recorded traces beside its declarations', async () => {
 test('a spec with far more results than fit a page shows them a page at a time', async () => {
   // regression: report-unbounded-parts
   const localStore = memoryStore();
-  await publishRun(localStore, { at: 20, checks: Array.from({ length: 130 }, (_, i) => ({ test: `list.trace-${i + 1}`, title: `list · trace ${i + 1}`, status: 'passed' as const, spec: 'specs/lists/list.qnt' })) });
+  await publishRun(localStore, {
+    at: 20,
+    checks: Array.from({ length: 130 }, (_, i) => ({
+      test: `list.trace-${i + 1}`,
+      title: `list · trace ${i + 1}`,
+      status: 'passed' as const,
+      spec: 'specs/lists/list.qnt'
+    }))
+  });
   atlas = await openAtlas({ at: '/specs/quint?spec=lists/list.qnt', deps: { localStore } });
   await atlas.sees('130 traces');
   expect(atlas.host.querySelectorAll('li[data-status]')).toHaveLength(40);
@@ -260,10 +326,18 @@ test('a feature reads as rules and scenarios, and each result is filed under the
   const feature = featureModel(FEATURE)!;
   expect(feature.name).toBe('Share a list');
   expect(feature.description).toBe('People keep one list together.');
-  expect(feature.rules.map((rule) => [rule.name, rule.scenarios.map((scenario) => scenario.name)])).toEqual([['Owners add items', ['Add an item', 'Add several', 'Remove an item']]]);
+  expect(feature.rules.map((rule) => [rule.name, rule.scenarios.map((scenario) => scenario.name)])).toEqual([
+    ['Owners add items', ['Add an item', 'Add several', 'Remove an item']]
+  ]);
   expect(feature.rules[0]!.scenarios[1]!.examples[0]).toEqual({ name: '', header: ['item'], rows: [['Tea'], ['Milk']] });
   const slot = (title: string) => ({ title }) as Parameters<typeof slotsByScenario>[1][number];
-  const filed = slotsByScenario(feature, [slot('Share a list: Add an item'), slot('Share a list: Add several — Tea'), slot('Share a list: Add several — Milk'), slot('Share a list: Add an item again'), slot('Something else')]);
+  const filed = slotsByScenario(feature, [
+    slot('Share a list: Add an item'),
+    slot('Share a list: Add several — Tea'),
+    slot('Share a list: Add several — Milk'),
+    slot('Share a list: Add an item again'),
+    slot('Something else')
+  ]);
   expect(filed.byScenario.get('Add an item')!.map((entry) => entry.title)).toEqual(['Share a list: Add an item']);
   expect(filed.byScenario.get('Add several')).toHaveLength(2);
   expect(filed.byScenario.has('Remove an item')).toBe(false);
@@ -272,17 +346,34 @@ test('a feature reads as rules and scenarios, and each result is filed under the
 
 test('Quint outlines identify declarations without treating source as verification', () => {
   const source = "module list {\n var size: int\n action add = size' = size + 1\n val invSize = size >= 0\n}";
-  expect(quintOutline(source).map((item) => [item.kind, item.name])).toEqual([['module', 'list'], ['var', 'size'], ['action', 'add'], ['val', 'invSize']]);
+  expect(quintOutline(source).map((item) => [item.kind, item.name])).toEqual([
+    ['module', 'list'],
+    ['var', 'size'],
+    ['action', 'add'],
+    ['val', 'invSize']
+  ]);
 });
 
 test('DMN displays conditions and outcomes together', () => {
   // regression: atlas-dmn-namespace-parser
-  const dmn = '<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"><decision><decisionTable id="access"><input label="Owner"/><output name="Allowed"/><rule><inputEntry><text>true</text></inputEntry><outputEntry><text>true</text></outputEntry></rule></decisionTable></decision></definitions>';
+  const dmn =
+    '<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"><decision><decisionTable id="access"><input label="Owner"/><output name="Allowed"/><rule><inputEntry><text>true</text></inputEntry><outputEntry><text>true</text></outputEntry></rule></decisionTable></decision></definitions>';
   expect(decisionTables(dmn)[0]).toMatchObject({ columns: ['Owner', 'Allowed'], inputs: 1, rows: [['true', 'true']] });
-  const html = renderToStaticMarkup(<DecisionTables text={dmn} />);
-  expect(html).toContain('<th scope="col">Owner</th>');
-  expect(html).toContain('<td data-output="true">true</td>');
-  expect(renderToStaticMarkup(<DecisionTables text="<definitions" />)).toContain('could not be read');
+  const html = renderToStaticMarkup(
+    <AtlasThemeProvider env="test">
+      <DecisionTables text={dmn} />
+    </AtlasThemeProvider>
+  );
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  expect(parsed.querySelector('th[scope="col"]')?.textContent).toBe('Owner');
+  expect(parsed.querySelector('td[data-output="true"]')?.textContent).toBe('true');
+  expect(
+    renderToStaticMarkup(
+      <AtlasThemeProvider env="test">
+        <DecisionTables text="<definitions" />
+      </AtlasThemeProvider>
+    )
+  ).toContain('could not be read');
 });
 
 const cleanups: (() => void)[] = [];
@@ -293,7 +384,7 @@ async function mount(element: React.ReactNode) {
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  await act(async () => root.render(element));
+  await act(async () => root.render(<AtlasThemeProvider env="test">{element}</AtlasThemeProvider>));
   cleanups.push(() => {
     root.unmount();
     host.remove();
@@ -301,12 +392,22 @@ async function mount(element: React.ReactNode) {
   return host;
 }
 async function press(host: HTMLElement, label: string) {
-  const button = [...host.querySelectorAll('button')].find((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent) === label);
+  const button = [...host.querySelectorAll('button')].find(
+    (candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent) === label
+  );
   expect(button, label).toBeDefined();
   await act(async () => button!.click());
 }
-function timeline(statuses: readonly ('passed' | 'failed')[], extra: (index: number) => Partial<RunReport['steps'][number]> = () => ({})): RunReport {
-  return { ...recorded({ test: 'list', title: 'Adds tea', status: statuses.includes('failed') ? 'failed' : 'passed' }), steps: statuses.map((status, index) => step(index, `Step ${index + 1}`, status, { frames: [{ index, capturedAtMs: index, snapshots: [] }], ...extra(index) })) };
+function timeline(
+  statuses: readonly ('passed' | 'failed')[],
+  extra: (index: number) => Partial<RunReport['steps'][number]> = () => ({})
+): RunReport {
+  return {
+    ...recorded({ test: 'list', title: 'Adds tea', status: statuses.includes('failed') ? 'failed' : 'passed' }),
+    steps: statuses.map((status, index) =>
+      step(index, `Step ${index + 1}`, status, { frames: [{ index, capturedAtMs: index, snapshots: [] }], ...extra(index) })
+    )
+  };
 }
 /** The recording as its page holds it: the address is where the moment lives. */
 function Recording({ report, at = null }: { report: RunReport; at?: number | null }) {
@@ -352,11 +453,16 @@ test('a recording without moments keeps its steps and says no moment was recorde
 });
 
 test('timing marks a step over the allowance as slow and opens its moment; no measurement is never quick', async () => {
-  const measured = timeline(['passed', 'passed'], (index) => ({ performance: { executionMs: index ? 80 : 5, selfMs: index ? 80 : 5, snapshotMs: 0 } }));
+  const measured = timeline(['passed', 'passed'], (index) => ({
+    performance: { executionMs: index ? 80 : 5, selfMs: index ? 80 : 5, snapshotMs: 0 }
+  }));
   const host = await mount(<Recording report={measured} at={1} />);
   await press(host, 'Timing');
   const rows = [...host.querySelectorAll('ol[aria-label="Recorded time per step"] li')];
-  expect(rows.map((row) => [row.getAttribute('data-band'), row.textContent])).toEqual([['cool', 'Step 15.0 ms'], ['slow', 'Step 2Slow80.0 ms']]);
+  expect(rows.map((row) => [row.getAttribute('data-band'), row.textContent])).toEqual([
+    ['cool', 'Step 15.0 ms'],
+    ['slow', 'Step 2Slow80.0 ms']
+  ]);
   await act(async () => rows[1]!.querySelector('button')!.click());
   expect(host.textContent).toContain('Moment 2 of 2');
   const unmeasured = await mount(<Recording report={timeline(['passed'])} />);
@@ -365,25 +471,41 @@ test('timing marks a step over the allowance as slow and opens its moment; no me
 });
 
 test('a model trace shows the prior state and what each step changed', async () => {
-  const states = traceStates({ states: [{ count: 0, name: 'a' }, { count: 1, name: 'a' }] })!;
+  const states = traceStates({
+    states: [
+      { count: 0, name: 'a' },
+      { count: 1, name: 'a' }
+    ]
+  })!;
   const host = await mount(<ModelTrace states={states} />);
   expect(host.textContent).not.toContain('Changed');
   await press(host, 'State 2');
-  const rows = [...host.querySelectorAll('tbody tr')].map((row) => [row.querySelector('th')!.textContent, row.hasAttribute('data-changed')]);
-  expect(rows).toEqual([['countChanged', true], ['name', false]]);
+  const rows = [...host.querySelectorAll('tbody tr')].map((row) => [
+    row.querySelector('th')!.textContent,
+    row.hasAttribute('data-changed')
+  ]);
+  expect(rows).toEqual([
+    ['countChanged', true],
+    ['name', false]
+  ]);
   expect(traceStates({ states: [1] })).toBeNull();
 });
 
 test('a recorded model replay exposes the assignments and actions it captured', () => {
-  const steps = [0, 1].map((index) => step(index, `add(item: ${index})`, 'passed', { kind: 'quint', detail: `count = ${index}\nitems = Set(${index})` }));
+  const steps = [0, 1].map((index) =>
+    step(index, `add(item: ${index})`, 'passed', { kind: 'quint', detail: `count = ${index}\nitems = Set(${index})` })
+  );
   expect(recordedModelStates(steps)[1]!.state).toEqual({ '#action': 'add(item: 1)', count: '1', items: 'Set(1)' });
   expect(recordedModelStates([step(0, 'When adding tea')])).toEqual([]);
 });
 
 test('a captured picture is placed in the page as recorded, without a frame, and marks only the control it recorded', async () => {
   // regression: atlas-snapshot-preserved
-  const html = '<!DOCTYPE html><html><head><style>body{margin:0}</style></head><body><div class="dom-root"><button data-testid="join">Join</button><script>window.ran = true</script></div></body></html>';
-  const host = await mount(<SnapshotPicture file="frames/f-1.html" html={html} css="button{color:red}" hit={{ path: ['join'] }} who="alice" />);
+  const html =
+    '<!DOCTYPE html><html><head><style>body{margin:0}</style></head><body><div class="dom-root"><button data-testid="join">Join</button><script>window.ran = true</script></div></body></html>';
+  const host = await mount(
+    <SnapshotPicture file="frames/f-1.html" html={html} css="button{color:red}" hit={{ path: ['join'] }} who="alice" />
+  );
   expect(host.querySelector('iframe')).toBeNull();
   const picture = host.querySelector('.sr-snap')!.shadowRoot!;
   expect(picture.querySelector('button')!.textContent).toBe('Join');

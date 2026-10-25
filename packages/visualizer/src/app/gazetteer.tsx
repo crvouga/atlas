@@ -1,10 +1,8 @@
-import { Link, useLocation, useParams, useSearch } from '@tanstack/react-router';
-
-import { ScreenImage } from '../components/Screen';
+import { Badge, Box, Divider, NavLink, Stack, Text, Title } from '@mantine/core';
+import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { STATUS_LABEL, type AtlasView, type StateView } from '../data/model';
+import { statusColor } from '../ui/theme';
 import { useAtlas } from './atlas-context';
-import styles from './gazetteer.module.css';
-
 function openingScreen(view: AtlasView, steps: readonly { transitionIds: readonly string[] }[]) {
   for (const step of steps) {
     const transition = view.transitions.get(step.transitionIds[0] ?? '');
@@ -13,105 +11,114 @@ function openingScreen(view: AtlasView, steps: readonly { transitionIds: readonl
   }
   return undefined;
 }
-
 function screensOf(view: AtlasView, chartId: string) {
-  const chart = view.charts.get(chartId);
-  if (!chart) return [];
-  return chart.states
+  return (view.charts.get(chartId)?.states ?? [])
     .map((key) => view.states.get(key))
-    .filter((state): state is StateView => Boolean(state && (state.kind === 'screen' || state.kind === 'final')));
+    .filter((state): state is StateView => !!state && (state.kind === 'screen' || state.kind === 'final'));
 }
-
 export function Gazetteer() {
   const { view } = useAtlas();
   const params = useParams({ strict: false });
   const search = useSearch({ strict: false });
-  const { pathname } = useLocation();
   const screen = typeof search.screen === 'string' ? search.screen : undefined;
   const journeyId = typeof search.journey === 'string' ? search.journey : undefined;
   const group = typeof search.group === 'string' ? search.group : undefined;
   const journeys = (view?.journeys ?? []).filter((journey) => journey.chartIds.length > 0);
   return (
-    <nav className={styles.index} aria-label="Places">
-      <h2>Places</h2>
-      {!view && <p className={styles.empty}>Loading the spec…</p>}
-      {view?.contexts.map((context) => (
-        <section key={context.id}>
-          <h3>{context.name}</h3>
-          {context.chartIds.map((chartId) => {
-            const chart = view.charts.get(chartId);
-            if (!chart) return null;
-            const screens = screensOf(view, chartId);
-            return (
-              <div key={chartId}>
-                <Link className={styles.chart} to="/chart/$chartId" params={{ chartId }} search={(prev) => ({ run: prev.run, screen: undefined, journey: undefined, group: undefined })} activeOptions={{ includeSearch: true, explicitUndefined: true }} aria-current={params.chartId === chartId && !screen && !journeyId && !group ? 'page' : undefined}>
-                  {chart.name}
-                </Link>
-                <ul>
-                  {screens.map((state) => (
-                    <li key={state.key}>
+    <Box component="nav" aria-label="Places" p="md">
+      <Stack gap="lg">
+        <Title order={2}>Places</Title>
+        {!view && <Text c="dimmed">Loading the spec…</Text>}
+        {view?.contexts.map((context) => (
+          <Stack key={context.id} gap="xs">
+            <Text size="xs" fw={600} c="dimmed">
+              {context.name}
+            </Text>
+            {context.chartIds.map((chartId) => {
+              const chart = view.charts.get(chartId);
+              if (!chart) return null;
+              return (
+                <Box key={chartId}>
+                  <NavLink
+                    label={chart.name}
+                    fw={600}
+                    active={params.chartId === chartId && !screen && !journeyId && !group}
+                    renderRoot={(props) => (
                       <Link
-                        className={styles.row}
-                        data-status={state.status}
+                        {...props}
                         to="/chart/$chartId"
                         params={{ chartId }}
-                        search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey })}
-                        aria-current={params.chartId === chartId && screen === state.name ? 'page' : undefined}
-                      >
-                        <span className={styles.thumb} aria-hidden="true">
-                          <ScreenImage state={state} size="thumb" description={false} lines={false} caption={false} />
-                        </span>
-                        <span className={styles.name}>{state.name}</span>
-                        <span className={styles.status}>{STATUS_LABEL[state.status]}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </section>
-      ))}
-      {journeys.length > 0 && (
-        <section>
-          <h3>Journeys</h3>
-          <ul>
-            {journeys.map((journey) => {
-              const opening = view ? openingScreen(view, journey.steps) : undefined;
-              return (
-                <li key={journey.id}>
-                  <Link
-                    className={styles.row}
-                    data-status={journey.status}
-                    to="/chart/$chartId"
-                    params={{ chartId: journey.chartIds[0] ?? '' }}
-                    search={(prev) => ({ run: prev.run, journey: journey.id })}
-                    aria-current={journeyId === journey.id && pathname.startsWith('/chart') ? 'page' : undefined}
-                  >
-                    {opening && (
-                      <span className={styles.thumb} aria-hidden="true">
-                        <ScreenImage state={opening} size="thumb" description={false} lines={false} caption={false} />
-                      </span>
+                        search={(prev) => ({ run: prev.run, screen: undefined, journey: undefined, group: undefined })}
+                      />
                     )}
-                    <span className={styles.name}>{journey.name}</span>
-                    <span className={styles.status}>{STATUS_LABEL[journey.status]}</span>
-                  </Link>
-                </li>
+                  />
+                  {screensOf(view, chartId).map((state) => (
+                    <NavLink
+                      key={state.key}
+                      label={state.name}
+                      active={params.chartId === chartId && screen === state.name}
+                      aria-current={params.chartId === chartId && screen === state.name ? 'page' : undefined}
+                      rightSection={
+                        <Badge color={statusColor(state.status)} size="xs">
+                          {STATUS_LABEL[state.status]}
+                        </Badge>
+                      }
+                      renderRoot={(props) => (
+                        <Link
+                          {...props}
+                          to="/chart/$chartId"
+                          params={{ chartId }}
+                          search={(prev) => ({ run: prev.run, screen: state.name, journey: prev.journey })}
+                        />
+                      )}
+                    />
+                  ))}
+                </Box>
               );
             })}
-          </ul>
-        </section>
-      )}
-      {view && view.excluded.length > 0 && (
-        <section>
-          <h2>Not in the spec yet</h2>
-          <ul>
+          </Stack>
+        ))}
+        {journeys.length > 0 && (
+          <Stack gap="xs">
+            <Divider />
+            <Title order={3}>Journeys</Title>
+            {journeys.map((journey) => {
+              const chartId = journey.chartIds[0]!;
+              const start = view && openingScreen(view, journey.steps);
+              return (
+                <NavLink
+                  key={journey.id}
+                  label={journey.name}
+                  active={journeyId === journey.id}
+                  rightSection={
+                    <Badge size="xs" color={statusColor(journey.status)}>
+                      {STATUS_LABEL[journey.status]}
+                    </Badge>
+                  }
+                  renderRoot={(props) => (
+                    <Link
+                      {...props}
+                      to="/chart/$chartId"
+                      params={{ chartId }}
+                      search={(prev) => ({ run: prev.run, journey: journey.id, screen: start?.name })}
+                    />
+                  )}
+                />
+              );
+            })}
+          </Stack>
+        )}
+        {!!view?.excluded.length && (
+          <Stack gap="xs">
+            <Title order={3}>Not in the spec yet</Title>
             {view.excluded.map((item) => (
-              <li key={item} className={styles.excluded}>{item}</li>
+              <Text key={item} c="dimmed">
+                {item}
+              </Text>
             ))}
-          </ul>
-        </section>
-      )}
-    </nav>
+          </Stack>
+        )}
+      </Stack>
+    </Box>
   );
 }

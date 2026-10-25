@@ -7,7 +7,8 @@ let atlas: Atlas | undefined;
 
 const originalFetch = globalThis.fetch;
 afterEach(async () => {
-  await atlas?.close(); atlas = undefined;
+  await atlas?.close();
+  atlas = undefined;
   globalThis.fetch = originalFetch;
   history.replaceState({}, '', '/');
   (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = undefined;
@@ -24,22 +25,45 @@ test('a project with only Gherkin opens a report home with spec navigation inste
 
 test('a runner-only project displays test reports even with no specification documents', async () => {
   const localStore = memoryStore();
-  await publishRun(localStore, { at: 20, checks: [{ test: 'native-test', title: 'Runs without statecharts', spec: 'tests/native.test.ts', status: 'passed' }] });
+  await publishRun(localStore, {
+    at: 20,
+    checks: [{ test: 'native-test', title: 'Runs without statecharts', spec: 'tests/native.test.ts', status: 'passed' }]
+  });
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
   await atlas.sees('Runs without statecharts');
   expect(atlas.text()).not.toContain('This spec has no screens yet.');
   await atlas.click('section[aria-label="Tests"] li a', 'Runs without statecharts');
-  await atlas.until(() => atlas!.host.querySelector('aside[aria-label="Test detail"]')?.textContent?.includes('Passed') ?? false, 'the open test');
+  await atlas.until(
+    () => document.querySelector('aside[aria-label="Test detail"]')?.textContent?.includes('Passed') ?? false,
+    'the open test'
+  );
 });
 
 test('the selected project scopes every data, evidence, media and stream address while discovery stays node-wide', async () => {
-  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = { api: './api', dataUrl: './api/data/', reportsUrl: './api/reports', eventsUrl: './api/events', projectsUrl: './api/projects', effective: true };
+  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = {
+    api: './api',
+    dataUrl: './api/data/',
+    reportsUrl: './api/reports',
+    eventsUrl: './api/events',
+    projectsUrl: './api/projects',
+    effective: true
+  };
   history.replaceState({}, '', '/?project=alpha#/specs/gherkin');
   expect(currentProject()).toBe('alpha');
-  expect(runtimeConfig()).toEqual({ api: 'http://atlas.test/api/projects/alpha', dataUrl: 'http://atlas.test/api/projects/alpha/data/', reportsUrl: 'http://atlas.test/api/projects/alpha/reports', eventsUrl: 'http://atlas.test/api/projects/alpha/events', projectsUrl: './api/projects', effective: true });
+  expect(runtimeConfig()).toEqual({
+    api: 'http://atlas.test/api/projects/alpha',
+    dataUrl: 'http://atlas.test/api/projects/alpha/data/',
+    reportsUrl: 'http://atlas.test/api/projects/alpha/reports',
+    eventsUrl: 'http://atlas.test/api/projects/alpha/events',
+    projectsUrl: './api/projects',
+    effective: true
+  });
   expect(reportAssetUrl('/layers/shared/picture.png')).toBe('http://atlas.test/api/projects/alpha/reports/layers/shared/picture.png');
   const requests: string[] = [];
-  globalThis.fetch = (async (url: string | URL | Request) => { requests.push(String(url)); return Response.json({ schemaVersion: 1, files: [], generatedAt: new Date().toISOString() }); }) as typeof fetch;
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    requests.push(String(url));
+    return Response.json({ schemaVersion: 1, files: [], generatedAt: new Date().toISOString() });
+  }) as typeof fetch;
   await createAdapter().specIndex();
   expect(requests).toEqual(['http://atlas.test/api/projects/alpha/data/specs/index.json']);
   history.replaceState({}, '', '/?project=beta#/');
@@ -47,7 +71,11 @@ test('the selected project scopes every data, evidence, media and stream address
 });
 
 test('unqualified addresses retain the default project protocol and unrelated origins remain unchanged', () => {
-  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = { api: './api', reportsUrl: 'https://external.test/reports', projectsUrl: './api/projects' };
+  (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ = {
+    api: './api',
+    reportsUrl: 'https://external.test/reports',
+    projectsUrl: './api/projects'
+  };
   expect(currentProject()).toBeNull();
   expect(runtimeConfig()?.api).toBe('./api');
   history.replaceState({}, '', '/?project=alpha#/');

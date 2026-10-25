@@ -62,6 +62,8 @@ export const GUIDES: readonly { readonly file: string; readonly section: string 
   { file: 'docs/extending.md', section: 'Formats and rules' },
   { file: 'docs/report-backends.md', section: 'Formats and rules' },
   { file: 'docs/statecharts.md', section: 'Formats and rules' },
+  { file: 'docs/workspaces.md', section: 'Working with this project' },
+  { file: 'docs/ui.md', section: 'Working with this project' },
   { file: 'docs/dogfooding.md', section: 'Working with this project' },
   { file: 'docs/reporting-issues.md', section: 'Working with this project' },
   { file: 'docs/releasing.md', section: 'Optional' }

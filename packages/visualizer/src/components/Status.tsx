@@ -1,32 +1,23 @@
+import { Badge, Box, Progress, Stack, Text } from '@mantine/core';
 import { ITEM_STATUSES, STATUS_LABEL, type ItemStatus, type StatusCounts } from '../data/model';
-import styles from './Status.module.css';
-
+import { statusColor } from '../ui/theme';
 export function StatusDot({ status }: { status: ItemStatus }) {
-  return <span className={styles.dot} data-status={status} aria-hidden="true" />;
+  return <Box component="span" display="inline-block" w="0.5rem" h="0.5rem" bg={`${statusColor(status)}.6`} bdrs="xl" aria-hidden="true" />;
 }
-
 export function StatusBadge({ status, label }: { status: ItemStatus; label?: string }) {
   return (
-    <span className={styles.badge} data-status={status}>
-      <StatusDot status={status} />
+    <Badge color={statusColor(status)} leftSection={<StatusDot status={status} />}>
       {label ?? STATUS_LABEL[status]}
-    </span>
+    </Badge>
   );
 }
-
 const BAR_ORDER: ItemStatus[] = ['passed', 'flaky', 'failed', 'not-reached', 'not-yet-run', 'spec-only'];
-
 function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`;
 }
-
-/**
- * A segmented bar: working, unreliable, broken, not reached, then whatever the run didn't cover.
- * With no run at all it shows the spec's count in the same shape.
- */
+/** The same outcome proportions and accessible description wherever a chart is summarized. */
 export function SummaryBar({ noun, nounPlural, counts, verb }: { noun: string; nounPlural: string; counts: StatusCounts; verb: string }) {
   const unrun = counts['spec-only'] === counts.total;
-  const pct = (n: number) => (counts.total ? (n / counts.total) * 100 : 0);
   const description = unrun
     ? `${plural(counts.total, noun, nounPlural)}, not yet run`
     : `${counts.passed} of ${counts.total} ${nounPlural} ${verb}` +
@@ -35,26 +26,21 @@ export function SummaryBar({ noun, nounPlural, counts, verb }: { noun: string; n
       (counts['not-reached'] ? `, ${counts['not-reached']} not reached` : '') +
       (counts['not-yet-run'] ? `, ${counts['not-yet-run']} not in this run` : '');
   return (
-    <div className={styles.summary}>
-      <div className={styles.summaryLabel}>
-        {unrun ? (
-          <>
-            <strong>{plural(counts.total, noun, nounPlural)}</strong> · not yet run
-          </>
-        ) : (
-          <>
-            <strong>{nounPlural[0]!.toUpperCase() + nounPlural.slice(1)}</strong> {counts.passed + counts.flaky}/{counts.total} {verb}
-          </>
+    <Stack gap="xs">
+      <Text size="xs">
+        {unrun
+          ? `${plural(counts.total, noun, nounPlural)} · not yet run`
+          : `${nounPlural[0]!.toUpperCase() + nounPlural.slice(1)} ${counts.passed + counts.flaky}/${counts.total} ${verb}`}
+      </Text>
+      <Progress.Root size="sm" role="img" aria-label={description}>
+        {BAR_ORDER.map(
+          (status) =>
+            counts[status] > 0 && (
+              <Progress.Section key={status} value={counts.total ? (counts[status] / counts.total) * 100 : 0} color={statusColor(status)} />
+            )
         )}
-      </div>
-      <div className={styles.bar} role="img" aria-label={description} data-unrun={unrun}>
-        {!unrun &&
-          BAR_ORDER.map((status) =>
-            counts[status] ? <span key={status} className={styles.seg} data-status={status} style={{ width: `${pct(counts[status])}%` }} /> : null
-          )}
-      </div>
-    </div>
+      </Progress.Root>
+    </Stack>
   );
 }
-
 export { ITEM_STATUSES };

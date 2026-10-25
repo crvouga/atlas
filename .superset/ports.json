@@ -1,0 +1,6 @@
+{
+  "ports": [
+    { "port": 5180, "label": "Atlas · API, viewer and settings" },
+    { "port": 5181, "label": "Atlas · viewer examples" }
+  ]
+}

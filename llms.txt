@@ -26,6 +26,8 @@ Given only the repository link, start at docs/agents.md: install `@crvouga/atlas
 
 ## Working with this project
 
+- [Atlas in agent IDEs](https://raw.githubusercontent.com/crvouga/atlas/main/docs/workspaces.md): This guide is for developing this repository in Superset, super.engineering or Orca.
+- [Viewer UI conventions](https://raw.githubusercontent.com/crvouga/atlas/main/docs/ui.md): Read this before changing the Atlas viewer or settings UI.
 - [Dogfooding Atlas from another project](https://raw.githubusercontent.com/crvouga/atlas/main/docs/dogfooding.md): Atlas is developed by using it in real projects.
 - [Reporting issues](https://raw.githubusercontent.com/crvouga/atlas/main/docs/reporting-issues.md): How people and coding agents in a project that uses Atlas report a bug or a missing feature.
 

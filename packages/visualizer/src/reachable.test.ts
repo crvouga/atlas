@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'bun:test';
 
 const SRC = path.dirname(fileURLToPath(import.meta.url));
-const ENTRY = path.join(SRC, 'main.tsx');
+const ENTRIES = [path.join(SRC, 'main.tsx'), path.join(SRC, 'admin/main.tsx')];
 const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|@import\s+(?:url\(\s*)?|\burl\(\s*|new URL\(\s*)['"]([^'"]+)['"]/g;
 const SUFFIXES = ['', '.ts', '.tsx', '.css', '/index.ts', '/index.tsx'];
 
@@ -45,7 +45,8 @@ function isExempt(file: string): boolean {
 it('every module of the viewer is part of the page it serves', () => {
   // regression: atlas-explorer-old-shell
   // A merge that keeps one side's shell leaves the other side's interface in the tree, unused and unseen.
-  const reachable = reachableFrom(ENTRY);
+  // /admin is independently bundled by the server from its own React entry point.
+  const reachable = new Set(ENTRIES.flatMap((entry) => [...reachableFrom(entry)]));
   const unused = filesUnder(SRC)
     .filter((file) => !isExempt(file) && !reachable.has(file))
     .map((file) => path.relative(SRC, file).split(path.sep).join('/'))

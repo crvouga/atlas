@@ -56,6 +56,29 @@ or publish a second package.
 - A new import path goes in both `exports` (the source) and `publishConfig.exports` (the build).
   See [docs/releasing.md](docs/releasing.md#one-package-many-entry-points).
 
+## Agent IDE workspaces
+
+Read [workspace development](docs/workspaces.md) for Superset, super.engineering and Orca. Shared
+commands are `bun run workspace:setup`, `workspace:run`, `workspace:preview`, `workspace:status`,
+`workspace:stop` and `workspace:check`. Discover the actual URL from status; default ports may be busy.
+Keep `.atlas-data/`, `.atlas-workspace/` and dependencies private to each checkout. Setup needs no
+credentials and must stay idempotent. Preserve the three IDE configs when changing lifecycle commands;
+run `bun test scripts/workspace.test.ts`. Use documented IDE CLIs for app-owned configuration. Setup
+must not launch agents, change their permissions or silently install a different Bun version.
+
+## UI changes: React and Mantine
+
+Read [the UI conventions](docs/ui.md) before changing the viewer or settings. Use Mantine's installed
+component inventory and official documentation for unfamiliar interactions. `packages/visualizer/src/ui/theme.tsx`
+is the only theme/provider setup. Compose Mantine directly using its defaults and existing product compositions;
+do not invent sizes, colors, primitives, token systems, styling dependencies or per-screen CSS. Use
+`@tabler/icons-react` for UI glyphs and `SpecLogo` for sourced spec marks; never hand-draw icons or use
+text glyphs as icon controls. Layouts use
+AppShell/Container, Stack/Group and responsive Mantine props. Keep labels, focus, keyboard behavior, error/retry,
+loading and empty states accessible. New CSS or inline styling needs a concrete limitation documented in the
+conventions' exception list. Run the UI type check, DOM suite, architecture test and client build listed there,
+regenerate docs, and inspect desktop/mobile behavior. `scripts/ui-architecture.test.ts` enforces these boundaries.
+
 ## The report contract is stable
 
 The layer document, the way layers compose, the `ObjectStore` interface and the `atlas report status`

@@ -1,0 +1,9 @@
+scripts:
+  setup: bun run workspace:setup
+  archive: bun run workspace:stop
+setupAgentStartupPolicy: wait-for-setup
+defaultTabs:
+  - title: Agent
+  - title: Atlas
+    command: bun run workspace:run
+# Keep dependencies, .atlas-data and .atlas-workspace private to each checkout.

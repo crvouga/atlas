@@ -1,18 +1,16 @@
-import './styles/global.css';
-import '@xyflow/react/dist/base.css';
-
-import * as Tooltip from '@radix-ui/react-tooltip';
+import '@mantine/core/styles.css';
+import '@mantine/code-highlight/styles.css';
+import '@mantine/spotlight/styles.css';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
+import '@xyflow/react/dist/base.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-
-import { router } from './app/router';
 import { ReportSourcesProvider } from './app/report-sources';
-import { AdapterContext } from './data/queries';
+import { router } from './app/router';
 import { createAdapter } from './data/adapters';
-import { createQueryClient } from './data/queries';
-
+import { AdapterContext, createQueryClient } from './data/queries';
+import { AtlasThemeProvider } from './ui/theme';
 const root = document.getElementById('root');
 if (root) {
   createRoot(root).render(
@@ -20,9 +18,9 @@ if (root) {
       <AdapterContext.Provider value={createAdapter()}>
         <QueryClientProvider client={createQueryClient()}>
           <ReportSourcesProvider>
-            <Tooltip.Provider delayDuration={300}>
+            <AtlasThemeProvider>
               <RouterProvider router={router} />
-            </Tooltip.Provider>
+            </AtlasThemeProvider>
           </ReportSourcesProvider>
         </QueryClientProvider>
       </AdapterContext.Provider>

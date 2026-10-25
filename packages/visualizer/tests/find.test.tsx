@@ -26,7 +26,7 @@ function finder() {
 }
 
 function finderInput() {
-  const input = document.querySelector<HTMLInputElement>('[cmdk-input]');
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="Find a flow"]');
   expect(input).not.toBeNull();
   return input!;
 }
@@ -55,13 +55,13 @@ test('the finder opens a flow from ordinary words and gets out of the way', asyn
   await typeQuery('add');
   await atlas.until(() => (finder()?.textContent ?? '').includes('Add an item'), 'Add an item');
   const input = finderInput();
-  const selectedRow = () => document.querySelector<HTMLElement>('[cmdk-item][aria-selected="true"]');
+  const selectedRow = () => document.querySelector<HTMLElement>('[role="option"][aria-selected="true"]');
   await atlas.until(() => selectedRow() !== null, 'a selected row');
   const first = selectedRow()!;
   expect(first.textContent).toContain('Add an item');
   const press = async (key: string) => {
     await act(async () => {
-      input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true }));
     });
   };
   await press('ArrowDown');
@@ -79,7 +79,7 @@ test('the finder opens a flow from ordinary words and gets out of the way', asyn
   });
   await atlas.until(() => finder() !== null, 'finder from slash');
   await act(async () => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   });
   await atlas.until(() => finder() === null, 'finder closed');
 
@@ -99,17 +99,19 @@ test('recording keys stay put while the finder is open', async () => {
   const frames = (index: number) => ({ frames: [{ index, capturedAtMs: index, snapshots: [] }] });
   await publishRun(localStore, {
     at: 20,
-    checks: [{
-      test: 'add',
-      title: 'Share a list: Add an item',
-      status: 'failed',
-      error: 'Expected tea in the list',
-      steps: [
-        step(1, 'Given a list', 'passed', frames(1)),
-        step(2, 'When adding tea', 'failed', { error: 'Expected tea in the list', ...frames(2) }),
-        step(3, 'Then the list includes tea', 'passed', frames(3))
-      ]
-    }]
+    checks: [
+      {
+        test: 'add',
+        title: 'Share a list: Add an item',
+        status: 'failed',
+        error: 'Expected tea in the list',
+        steps: [
+          step(1, 'Given a list', 'passed', frames(1)),
+          step(2, 'When adding tea', 'failed', { error: 'Expected tea in the list', ...frames(2) }),
+          step(3, 'Then the list includes tea', 'passed', frames(3))
+        ]
+      }
+    ]
   });
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature&check=lists/add&view=recording', deps: { localStore } });
   await atlas.sees('Moment 2 of 3');
@@ -120,7 +122,7 @@ test('recording keys stay put while the finder is open', async () => {
   });
   expect(atlas.text()).toContain('Moment 2 of 3');
   await act(async () => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   });
   await atlas.until(() => finder() === null, 'finder closed');
   await act(async () => {
@@ -136,4 +138,13 @@ test('recording keys stay put while the finder is open', async () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
   });
   expect(atlas.text()).toContain('Moment 3 of 3');
+});
+
+test('the header opens and closes Spotlight under the application’s StrictMode', async () => {
+  atlas = await openAtlas({ at: '/', deps: {}, strict: true });
+  await atlas.sees('Gherkin');
+  await atlas.click('button[aria-label="Find a flow"]', 'Find a flow');
+  await atlas.until(() => !!document.querySelector('input[aria-label="Find a flow"]'), 'finder opened from header');
+  await act(async () => finderInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await atlas.until(() => finder() === null, 'finder dismissed');
 });

@@ -607,7 +607,7 @@ Wrap the single-project protocol in project selection. Auth, upload validation a
 Source: `packages/server/src/settings-page.ts`
 
 @module Settings page
-A standalone administrator form, styled with the Atlas client's shared design tokens.
+The administrator's React and Mantine entry point, bundled lazily for API-only servers too.
 Credentials remain in page memory; the settings API owns authorization and validation.
 
 #### `SETTINGS_PAGE`
@@ -616,7 +616,7 @@ Credentials remain in page memory; the settings API owns authorization and valid
 export const SETTINGS_PAGE = …
 ```
 
-The settings form and its browser controller, also usable without a built client.
+Document shell for the shared React settings UI. No configuration or credentials are embedded.
 
 #### `renderSettingsPage`
 
@@ -624,8 +624,8 @@ The settings form and its browser controller, also usable without a built client
 export function renderSettingsPage(): Promise<string>
 ```
 
-Render Settings using the exact design tokens shipped with the Atlas client. Loads and caches the stylesheet
-on first request, never at import time. Minimal neutral tokens keep embedded API-only servers usable too.
+Render the settings UI with the same provider and theme as the viewer. Bundle once on first request,
+without a prebuilt viewer, CDN, configuration data, or import-time work. A failed build can be retried.
 
 **Example**
 

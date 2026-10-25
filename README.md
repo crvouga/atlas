@@ -48,6 +48,13 @@ version, running without a server, connecting real suites, and proving completio
 is a copyable walkthrough with expected JSON and exit codes; it needs no credentials or existing test suite.
 The machine-readable index is [llms.txt](llms.txt), and [llms-full.txt](llms-full.txt) contains the guides in one file.
 
+## Develop in an agent IDE
+
+Superset, super.engineering and Orca lifecycle configuration is checked in. Run `bun run workspace:setup`,
+then use the IDE's Run target or `bun run workspace:run` for the API, settings and hot-reloading viewer.
+Use `bun run workspace:preview` for populated examples, and `bun run workspace:status` for this checkout's
+actual URLs. [Workspace development](docs/workspaces.md) covers ports, cleanup and agent workflows.
+
 ## Run this repository's example
 
 For contributors working in an Atlas checkout with dependencies installed (`bun install --frozen-lockfile`).
