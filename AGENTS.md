@@ -56,6 +56,16 @@ or publish a second package.
 - A new import path goes in both `exports` (the source) and `publishConfig.exports` (the build).
   See [docs/releasing.md](docs/releasing.md#one-package-many-entry-points).
 
+## Agent IDE workspaces
+
+Read [workspace development](docs/workspaces.md) for Superset, super.engineering and Orca. Shared
+commands are `bun run workspace:setup`, `workspace:run`, `workspace:preview`, `workspace:status`,
+`workspace:stop` and `workspace:check`. Discover the actual URL from status; default ports may be busy.
+Keep `.atlas-data/`, `.atlas-workspace/` and dependencies private to each checkout. Setup needs no
+credentials and must stay idempotent. Preserve the three IDE configs when changing lifecycle commands;
+run `bun test scripts/workspace.test.ts`. Use documented IDE CLIs for app-owned configuration. Setup
+must not launch agents, change their permissions or silently install a different Bun version.
+
 ## UI changes: React and Mantine
 
 Read [the UI conventions](docs/ui.md) before changing the viewer or settings. Use Mantine's installed

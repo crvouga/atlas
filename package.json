@@ -186,7 +186,8 @@
     "CHANGELOG.md",
     "docs/runners.md",
     "packages/runners/compat",
-    "docs/ui.md"
+    "docs/ui.md",
+    "docs/workspaces.md"
   ],
   "scripts": {
     "build": "bun scripts/build-package.ts",
@@ -215,7 +216,13 @@
     "health": "bun scripts/health/cli.ts",
     "prepare": "husky",
     "example:publish": "bun examples/todo/publish.ts",
-    "atlas": "bun scripts/atlas.mjs"
+    "atlas": "bun scripts/atlas.mjs",
+    "workspace:setup": "bun scripts/workspace.ts setup",
+    "workspace:run": "bun scripts/workspace.ts run",
+    "workspace:preview": "bun scripts/workspace.ts preview",
+    "workspace:status": "bun scripts/workspace.ts status",
+    "workspace:stop": "bun scripts/workspace.ts stop",
+    "workspace:check": "bun run docs:check && bun run type-check && bun run test && bun run build && bun run client:build --out .atlas-workspace/site && bun run release:smoke"
   },
   "dependencies": {
     "@cucumber/gherkin": "^42.0.1",

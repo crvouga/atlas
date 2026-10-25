@@ -1,0 +1,5 @@
+{
+  "setup": ["bun run workspace:setup"],
+  "run": ["bun run workspace:run"],
+  "teardown": ["bun run workspace:stop"]
+}

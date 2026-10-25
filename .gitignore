@@ -15,3 +15,8 @@ test-results/
 /atlas-data/
 # Previously generated example data.
 /examples/todo/.atlas-server/
+
+# Worktree-local IDE runtime URLs and private stop capabilities; never share these.
+/.atlas-workspace/
+/.superset/config.local.json
+/.orca/
