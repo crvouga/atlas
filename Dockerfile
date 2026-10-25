@@ -29,9 +29,10 @@ LABEL org.opencontainers.image.source="https://github.com/crvouga/atlas" \
 COPY --from=build /app/runtime-package.json ./package.json
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/packages/core/bin ./packages/core/bin
-# The standalone admin page reads the viewer's design tokens through visualizerRoot().
+# The standalone admin page bundles these shared React/Mantine sources on first request.
 COPY --from=build /app/packages/visualizer/bin ./packages/visualizer/bin
-COPY --from=build /app/packages/visualizer/src/styles/tokens.css ./packages/visualizer/src/styles/tokens.css
+COPY --from=build /app/packages/visualizer/src/admin ./packages/visualizer/src/admin
+COPY --from=build /app/packages/visualizer/src/ui/theme.tsx ./packages/visualizer/src/ui/theme.tsx
 COPY --from=build /app/site ./site
 # Leave ATLAS_PORT unset: Railway supplies PORT, and Atlas already defaults to 8080 otherwise.
 ENV ATLAS_HOST=0.0.0.0 ATLAS_DATA=/data ATLAS_SITE=/app/site

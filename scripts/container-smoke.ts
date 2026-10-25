@@ -60,7 +60,11 @@ try {
   assert.equal(saved.status, 200, 'The default user must be able to save server settings');
   const admin = await fetch(`${url}/admin`, { headers: authorization });
   assert.equal(admin.status, 200);
-  assert.match(await admin.text(), /--font: -apple-system, BlinkMacSystemFont/, 'Settings must use the viewer design tokens');
+  const adminHtml = await admin.text();
+  assert.match(adminHtml, /--mantine-/, 'Settings must include the shared Mantine styles');
+  const adminScript = /<script type="module">([\s\S]*?)<\/script>/.exec(adminHtml)?.[1];
+  assert.ok(adminScript, 'Settings must include the bundled React interface');
+  new Bun.Transpiler({ loader: 'js', target: 'browser' }).transformSync(adminScript, 'js');
   const healthcheck = JSON.parse(await must('docker', ['inspect', '--format', '{{json .Config.Healthcheck.Test}}', name])) as string[];
   assert.equal(healthcheck[0], 'CMD-SHELL');
   await must('docker', ['exec', name, 'sh', '-c', healthcheck[1]!]);
