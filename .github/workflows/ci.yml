@@ -128,7 +128,8 @@ jobs:
   example:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    # Browser/OS dependency downloads can consume five minutes before the example starts.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
