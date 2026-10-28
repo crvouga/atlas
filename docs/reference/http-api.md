@@ -467,6 +467,8 @@ Send `format=markdown` (or `Accept: text/markdown`) for the same as a Markdown r
 - `domain` (query): Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.
 - `spec` (query): Only tests of this spec path. Repeatable or comma-separated.
 - `tag` (query): Only tests with this tag. Repeatable or comma-separated.
+- `artifactTag` (query): Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.
+- `inherited` (query): With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.
 - `run` (query): Only tests recorded in this run (a `key` from `/api/reports/runs`).
 - `sort` (query): The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.
 - `offset` (query): Skip this many matching tests.
@@ -496,6 +498,8 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `domain` (query): Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.
 - `spec` (query): Only tests of this spec path. Repeatable or comma-separated.
 - `tag` (query): Only tests with this tag. Repeatable or comma-separated.
+- `artifactTag` (query): Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.
+- `inherited` (query): With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.
 - `run` (query): Only tests recorded in this run (a `key` from `/api/reports/runs`).
 - `sort` (query): The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.
 - `offset` (query): Skip this many matching tests.
@@ -503,6 +507,40 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `format` (query): `markdown` for a Markdown report instead of JSON.
 
 Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Why specs, domains and counts disagree
+
+`GET /api/reports/tests/health` · role: read
+
+Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.
+
+`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.
+
+Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.
+
+- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.
+- `format` (query): `markdown` for a Markdown report instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The diagnostics.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Why specs, domains and counts disagree
+
+`GET /api/projects/{project}/reports/tests/health` · role: read
+
+Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.
+
+`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.
+
+Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.
+- `format` (query): `markdown` for a Markdown report instead of JSON.
+
+Responses: `200` The diagnostics.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
 ### One test and every result recorded for it
 
@@ -530,13 +568,58 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `200` The test and its history.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No test in the report has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
+### Reviewer tags of attachments: every recorded edit
+
+`GET /api/reports/artifact-tags` · role: read
+
+The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer's own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The edits.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Reviewer tags of attachments: every recorded edit
+
+`GET /api/projects/{project}/reports/artifact-tags` · role: read
+
+The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer's own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The edits.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Tag or untag one attachment after upload
+
+`POST /api/reports/artifact-tags` · role: publish
+
+Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer's tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded entry.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.
+
+### Tag or untag one attachment after upload
+
+`POST /api/projects/{project}/reports/artifact-tags` · role: publish
+
+Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer's tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded entry.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.
+
 ### The runs that recorded the report
 
 `GET /api/reports/runs` · role: read
 
-Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.
+Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.
 
 - `limit` (query): At most this many runs (default 100).
+- `video` (query): `true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.
 - `format` (query): `markdown` for Markdown instead of JSON.
 - `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
@@ -546,12 +629,13 @@ Responses: `200` The runs.; `304` Unchanged since the `If-None-Match` ETag.; `40
 
 `GET /api/projects/{project}/reports/runs` · role: read
 
-Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.
+Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
 - `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `limit` (query): At most this many runs (default 100).
+- `video` (query): `true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.
 - `format` (query): `markdown` for Markdown instead of JSON.
 
 Responses: `200` The runs.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.

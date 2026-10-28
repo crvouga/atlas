@@ -120,6 +120,7 @@ export async function publishChecks(store: ObjectStore, input: PublishChecksInpu
     sha: args.sha,
     branch: args.branch,
     runUrl: args.runUrl,
+    ...(args.run ? { run: args.run } : {}),
     ...(environment ? { environment } : {}),
     parameters: Object.fromEntries(Object.entries(parameters).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
     specs: args.specs as LayerSummary['specs'],

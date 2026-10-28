@@ -26,6 +26,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `steps` (`parentId`, `offsetMs`, `durationMs`, `status`, `kind`) | check, attempt | Draws the check's timeline: nested steps, when each started, how long it took, which one failed. |
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
+| `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
 | `specPath` | check | The spec a check belongs to (a `.feature`, a test file), relative to the repository. Checks are grouped by it. |
 | `specs[]` (`path`, `domain`, `kind`, `title`) | layer | Names each spec and its group (`domain`), so a server can group checks by spec with a title even when no [spec set](integrating.md#tell-atlas-which-spec-a-check-belongs-to) has been published. |
@@ -33,6 +34,33 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 
 Send `sha`, `branch` and `runUrl` on every layer too. They never change a result, but they tie results to a commit
 and to the CI run that produced them.
+
+## Tagging artifacts and demos
+
+To mark one recording as a demo, tag the attachment itself. A tag on a check says something about the result; a tag on
+an attachment says something about that file, and no Gherkin tag, label, environment or producer name is needed:
+
+```ts
+{ name: 'checkout.webm', role: 'video', tags: ['demo'], labels: { audience: 'business' } }
+```
+
+The viewer shows it as a `#demo` chip on the artifact card. Selecting the chip filters the result's evidence to the
+attachments with that tag, and says how many match. Tags describe evidence; they never change a status or a slot.
+
+- **One spelling.** A tag is normalized before it is compared or stored: a leading `#` is dropped, letters are
+  lower-cased, each run of whitespace becomes `-`, and surrounding space is trimmed, so `demo`, `#demo` and `#Demo ` are
+  `demo`. Empty tags and tags over 64 characters are not tags and are ignored (or refused, when a reviewer enters them).
+  Everything else is a valid tag (`team/payments`, `release=2`), and repeats are shown once.
+- **Inherited.** An attachment is also searchable by the tags of its check and its run. The viewer says `inherited` on
+  such a chip, and a switch decides whether the filter counts them: a recording without a tag of its own under a run
+  tagged `demo` is found by the inherited query and not by the exact one. In the API,
+  `GET /api/reports/tests?artifactTag=demo` is exact and adding `&inherited=1` includes inherited tags.
+- **Reviewers.** After upload, a person with a publish token can add tags to an attachment (the viewer's *Add tag*
+  button) and remove the ones a reviewer added. Those tags are not written into the layer, which is immutable: the
+  server keeps them as an audit trail (who, when, which tags) and the viewer shows them as `added by <name>`, apart
+  from the producer's tags. See [Tagging artifacts](server.md#tagging-artifacts). A producer's own tags stay as uploaded.
+- **Older layers.** A layer without attachment tags reads exactly as before. Tags on an attachment that cannot be read
+  (not a list of strings) are dropped, and the attachment, check and layer stay.
 
 ## Labels describe, parameters split
 

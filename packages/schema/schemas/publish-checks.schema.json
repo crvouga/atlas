@@ -177,6 +177,13 @@
                   "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                   "type": "string"
                 },
+                "tags": {
+                  "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
                 "at": {
                   "type": "object",
                   "properties": {
@@ -417,6 +424,13 @@
                       "omitted": {
                         "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                         "type": "string"
+                      },
+                      "tags": {
+                        "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       },
                       "at": {
                         "type": "object",
@@ -696,6 +710,13 @@
                               "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                               "type": "string"
                             },
+                            "tags": {
+                              "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
                             "at": {
                               "type": "object",
                               "properties": {
@@ -909,6 +930,13 @@
                       "omitted": {
                         "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                         "type": "string"
+                      },
+                      "tags": {
+                        "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       },
                       "at": {
                         "type": "object",
@@ -1130,6 +1158,36 @@
         "modified"
       ]
     },
+    "run": {
+      "description": "Name the execution these checks belong to, so repeated local runs at one commit stay separate runs and shards of one execution stay together",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+        },
+        "title": {
+          "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+          "type": "string"
+        },
+        "startedAtMs": {
+          "description": "When the execution started, epoch milliseconds",
+          "type": "number",
+          "minimum": 0
+        },
+        "endedAtMs": {
+          "description": "When the execution ended, epoch milliseconds",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": {}
+    },
     "specs": {
       "default": [],
       "type": "array",
@@ -1263,6 +1321,13 @@
           "omitted": {
             "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
             "type": "string"
+          },
+          "tags": {
+            "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "at": {
             "type": "object",

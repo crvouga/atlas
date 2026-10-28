@@ -18,7 +18,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { PublishChecksSchema, ReportStatusSchema } from '../../schema/src/layer';
+import { PublishChecksSchema, ReportStatusSchema, type LayerRun } from '../../schema/src/layer';
 import type { HttpStore } from './http-store';
 import { readAttachmentFiles } from './attachment-files';
 import { backendsOf, layerFilter, value, values, writeStoreOf } from './cli-stores';
@@ -42,6 +42,7 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
   atlas report publish [--store <dir|s3://bucket/prefix>] [--producer <name>]
                        ( --ctrf <file> | --junit <file> | --manifest <file> | --checks <file.json> )
                        [--environment <name>] [--branch <b>] [--sha <s>] [--run-url <u>]
+                       [--run-id <id>] [--run-title <t>] [--run-started-at <iso|ms>] [--run-ended-at <iso|ms>]
                        [--spec <path> | --specs <dir>] [--upload-run]
                        [--param key=value]... [--kind <k>] [--title <t>] [--recorded-at <iso|ms>]
                        [--attach [role=]<file>]... [--label key=value]... [--link [name=]<url>]...
@@ -49,6 +50,7 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
                        [--require-recordings]
   atlas report stream  [--store <dir|s3://…|https://atlas.example.com>] --producer <name> [--environment <name>]
                        [--branch <b>] [--sha <s>] [--run-url <u>] [--kind <k>] [--param key=value]...
+                       [--run-id <id>] [--run-title <t>]
                        [--flush-ms 1000] [--batch 100]       (checks as JSON lines on standard input)
   atlas report status  [--store <dir|s3://…|id=url>]... [--backends <module>]
                        [--specs <dir>] [--format text|json|markdown]
@@ -69,6 +71,11 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
             --specs <dir>   link checks to the spec files in <dir> by path, or by the suite, class or
                             file name the report gives; also publishes the specs themselves, so the
                             node can show them without a checkout
+            --run-id <id>   name this execution (a local or manual run with no CI run URL; also ATLAS_RUN_ID).
+                            Layers that share an id are one run, however many shards or batches uploaded them;
+                            another invocation at the same commit gets another id. Never part of what a check is
+            --run-title <t> a human name for the run (also ATLAS_RUN_TITLE); --run-started-at and --run-ended-at
+                            record when it ran. Without --run-id a run is its CI run URL, else branch@sha
             --upload-run    with --manifest: also upload the run's screenshots and clips for the viewer
             --attach <file>   attach a file to the whole layer: a CI log, a coverage report, a trace archive
                               (screenshots, videos and traces of a single test go in its CTRF or checks file)
@@ -163,12 +170,28 @@ function linkSpec(spec: string): Record<string, unknown> {
   return named ? { name: named[1]!, url: named[2]! } : { url: spec };
 }
 
-function parseTime(text: string | undefined): number | null {
+function parseTime(text: string | undefined, flag = '--recorded-at'): number | null {
   if (text === undefined) return null;
   const numeric = Number(text);
   const parsed = Number.isFinite(numeric) ? numeric : Date.parse(text);
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`--recorded-at takes an ISO date or epoch milliseconds (got "${text}")`);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${flag} takes an ISO date or epoch milliseconds (got "${text}")`);
   return parsed;
+}
+
+/**
+ * The execution the producer named, from `--run-id`, `--run-title`, `--run-started-at`, `--run-ended-at` and then
+ * `ATLAS_RUN_ID` / `ATLAS_RUN_TITLE`, laid over a `run` the checks file gave. `undefined` when nothing names one, so the
+ * documented grouping (CI run URL, else branch@sha) applies. A title or time without an id is refused: it would have nothing to belong to.
+ */
+function executionOf(rest: readonly string[], env: Env, given?: unknown): LayerRun | undefined {
+  const file = typeof given === 'object' && given !== null && !Array.isArray(given) ? given as Record<string, unknown> : {};
+  const id = value(rest, 'run-id') ?? env.ATLAS_RUN_ID ?? (typeof file.id === 'string' ? file.id : undefined);
+  const title = value(rest, 'run-title') ?? env.ATLAS_RUN_TITLE;
+  const startedAtMs = parseTime(value(rest, 'run-started-at'), '--run-started-at');
+  const endedAtMs = parseTime(value(rest, 'run-ended-at'), '--run-ended-at');
+  if (id === undefined && (title !== undefined || startedAtMs !== null || endedAtMs !== null)) throw new Error('--run-title, --run-started-at and --run-ended-at go with --run-id <id> (or ATLAS_RUN_ID): a run needs an identity first');
+  if (id === undefined) return undefined;
+  return { ...file, id, ...(title !== undefined ? { title } : {}), ...(startedAtMs !== null ? { startedAtMs } : {}), ...(endedAtMs !== null ? { endedAtMs } : {}) };
 }
 
 function ingest(argv: readonly string[], base: string): { ingested: IngestedChecks; extra: Record<string, unknown>; modifiedAtMs: number; manifestFile?: string; sourceDir: string } {
@@ -260,6 +283,7 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
     for (const read of [fromFile, fromFlags]) { attachedFiles += read.attached; attachedBytes += read.bytes; warnings.push(...read.warnings); }
     const labels = { ...(ingested.labels ?? {}), ...((extra.labels as Record<string, string> | undefined) ?? {}), ...Object.fromEntries(values(rest, 'label').map(pair => keyValue(pair, '--label'))) };
     const links = [...((extra.links as unknown[] | undefined) ?? []), ...values(rest, 'link').map(linkSpec)];
+    const execution = executionOf(rest, env, extra.run);
     const layer = await publishChecks(target.store, {
       ...extra,
       producer,
@@ -274,6 +298,7 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
       ...(value(rest, 'title') ?? extra.title ? { title: (value(rest, 'title') ?? extra.title) as string } : {}),
       sha, branch,
       runUrl: value(rest, 'run-url') ?? (extra.runUrl as string | null | undefined) ?? origin.runUrl,
+      ...(execution ? { run: execution } : {}),
       ...(freshness ? { freshness } : {}),
       ...(value(rest, 'environment') ?? extra.environment ? { environment: (value(rest, 'environment') ?? extra.environment) as string } : {}),
       parameters: { ...((extra.parameters as Record<string, string> | undefined) ?? {}), ...parameters }
@@ -334,6 +359,7 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
     const branch = value(rest, 'branch') ?? origin.branch;
     const freshness = detectFreshness({ sha, ci: origin.ci && !value(rest, 'sha') }, io.git);
     const environment = value(rest, 'environment');
+    const execution = executionOf(rest, env);
     const warnings: string[] = [];
     const reporter = createReporter({
       producer,
@@ -341,6 +367,7 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
       ...(value(rest, 'title') ? { title: value(rest, 'title')! } : {}),
       sha, branch,
       runUrl: value(rest, 'run-url') ?? origin.runUrl,
+      ...(execution ? { run: execution } : {}),
       ...(freshness ? { freshness } : {}),
       ...(environment ? { environment } : {}),
       parameters: Object.fromEntries(values(rest, 'param').map(pair => keyValue(pair, '--param')))
