@@ -49,6 +49,8 @@ export type VideoRef = {
   readonly attempt?: number;
   /** The name of the step that holds it, when `owner` is `step`. */
   readonly step?: string;
+  /** The normalized tags of this attachment itself (`demo`), so a query can ask for a tagged video rather than a result that has a video and some tagged file. Absent when it has none (and in documents of older servers). */
+  readonly tags?: readonly string[];
   /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
   readonly recording?: string;
   /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */

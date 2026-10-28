@@ -15,8 +15,8 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, RunListSchema, RunDetailSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
-import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
+import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
 export const API_VERSION = '1.5.0';
@@ -59,13 +59,14 @@ function schemaOf(schema: z.ZodType, io: 'input' | 'output' = 'output'): JsonSch
 const COMPONENTS = {
   LiveRun: [LiveRunSchema, 'output'], LiveRunStart: [LiveRunStartSchema, 'input'], LiveRunUpdate: [LiveRunUpdateSchema, 'input'],
   ServerEditableSettings: [ServerEditableSettingsSchema, 'input'], ServerSettingsSnapshot: [ServerSettingsSnapshotSchema, 'output'],
+  GcPolicy: [GcPolicySchema, 'input'], GcSnapshot: [GcSnapshotSchema, 'output'], GcRunResult: [GcRunResultSchema, 'output'],
   Problem: [ProblemSchema, 'output'], Health: [HealthSchema, 'output'], Ready: [ReadySchema, 'output'], ServerInfo: [ServerInfoSchema, 'output'],
   EffectiveEvidence: [EffectiveEvidenceSchema, 'output'], EffectiveDelta: [EffectiveDeltaSchema, 'output'], ReportStatus: [ReportStatusSchema, 'output'],
   PublishChecks: [PublishChecksSchema.partial({ recordedAtMs: true }), 'input'], ChecksResult: [ChecksResultSchema, 'output'],
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
-  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -124,15 +125,33 @@ const BASE_OPERATIONS: readonly Operation[] = [
   },
   {
     route: 'GET /api/settings', path: '/api/settings', operationId: 'getSettings', tag: 'Operations', role: 'admin',
-    summary: 'Read server settings', description: 'Returns editable persisted storage/report settings, active settings, a revision, and configuration precedence. Authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.',
+    summary: 'Read server settings', description: 'Returns the editable report and live-run settings saved in the user state in S3, active settings, a revision, and configuration precedence. Storage and authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.',
     responses: { '200': json('Settings and revision.', 'ServerSettingsSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '503': problem('Configuration is managed by the embedding application.') }
   },
   {
     route: 'PUT /api/settings', path: '/api/settings', operationId: 'saveSettings', tag: 'Operations', role: 'admin',
-    summary: 'Save settings for the next restart', description: 'Replaces editable storage/report settings, preserving authentication and other file fields. Atomically persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.',
+    summary: 'Save settings for the next restart', description: 'Replaces the editable report and live-run settings in the user state in S3 (`server/state.json`), preserving the garbage collection policy and other fields. Persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.',
     parameters: [{ name: 'If-Match', in: 'header', required: true, description: 'The quoted revision returned by GET /api/settings.', schema: str }],
-    body: { description: 'Editable fields from ServerConfig, excluding authentication, host, port and site. Maximum 64 KiB.', contentType: 'application/json', required: true, schema: ref('ServerEditableSettings') },
+    body: { description: 'Editable fields from ServerConfig, excluding storage, authentication, host, port and site. Maximum 64 KiB.', contentType: 'application/json', required: true, schema: ref('ServerEditableSettings') },
     responses: { '200': json('Saved settings and new revision. Restart required.', 'ServerSettingsSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('Settings changed; reload before saving.'), '413': problem('Settings exceed the body limit.'), '422': problem('Invalid configuration.'), '428': problem('A quoted settings revision is required.'), '503': problem('Configuration is managed by the embedding application.') }
+  },
+  {
+    route: 'GET /api/settings/gc', path: '/api/settings/gc', operationId: 'getGarbageCollectionPolicy', tag: 'Operations', role: 'admin',
+    summary: 'Read the garbage collection policy', description: 'Returns the policy kept in the user state in S3 (`server/state.json`), or `policy: null, saved: false` when none has been saved yet, in which case garbage collection is off and nothing is deleted. Also returns the revision to send back when saving and the last pass over each project. Requires an admin Bearer token. If the stored user state is unreadable the answer is 503 and the stored object is left untouched.',
+    responses: { '200': json('The policy, its revision and the last passes.', 'GcSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '503': problem('The user state in S3 cannot be read, or settings are managed by the embedding application.') }
+  },
+  {
+    route: 'PUT /api/settings/gc', path: '/api/settings/gc', operationId: 'saveGarbageCollectionPolicy', tag: 'Operations', role: 'admin',
+    summary: 'Save the garbage collection policy', description: 'Replaces the policy in the user state in S3 and leaves the rest of that document alone. The server reads the policy from S3 each time it collects, so the new policy applies at the next pass, without a restart. Requires an admin Bearer token, same-origin requests in browsers, and the current revision.',
+    parameters: [{ name: 'If-Match', in: 'header', required: true, description: 'The quoted revision returned by GET /api/settings/gc.', schema: str }],
+    body: { description: 'The policy. Maximum 16 KiB.', contentType: 'application/json', required: true, schema: ref('GcPolicy') },
+    responses: { '200': json('The saved policy and the new revision.', 'GcSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('The state changed; reload before saving.'), '413': problem('The body exceeds the limit.'), '422': problem('Invalid policy.'), '428': problem('A quoted revision is required.'), '503': problem('The user state in S3 cannot be read, or settings are managed by the embedding application.') }
+  },
+  {
+    route: 'POST /api/settings/gc/run', path: '/api/settings/gc/run', operationId: 'runGarbageCollection', tag: 'Operations', role: 'admin',
+    summary: 'Collect garbage now, or preview it', description: 'Applies the policy saved in S3 to every project now, instead of waiting for the schedule. Only report layers that were read and no longer decide any result, older than the policy allows and beyond its `keepLatest`, are deleted, with the captured files only they used. With `dryRun=1` nothing is deleted and each run reports what it would delete (a disabled policy is previewed as if enabled). Answers 409 when no policy has been saved, and, without `dryRun`, when the saved policy is disabled. Requires an admin Bearer token and a same-origin request in browsers.',
+    parameters: [{ name: 'dryRun', in: 'query', required: false, description: '`1` or `true` to only count what would be deleted.', schema: str }],
+    responses: { '200': json('One run per project.', 'GcRunResult'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('No policy has been saved, or it is disabled.') }
   },
   {
     route: 'GET /healthz', path: '/healthz', operationId: 'getHealth', tag: 'Operations', role: 'none',
@@ -357,13 +376,51 @@ const BASE_OPERATIONS: readonly Operation[] = [
   {
     route: 'GET /api/reports/runs', path: '/api/reports/runs', operationId: 'getReportRuns', tag: 'Report', role: 'read',
     summary: 'The runs that recorded the report',
-    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.',
+    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures, their video counts (references, distinct playable recordings, unavailable) and the artifact tags, media types and labels their results carry. Filters narrow the list before `limit`: AND across the parameters, OR within one; `filters` in the answer names those that were applied and `facets` offers each dimension\'s values with counts. A server that does not know a filter ignores it and does not name it in `filters`. Send `format=markdown` for Markdown.',
     parameters: [
       { name: 'limit', in: 'query', description: 'At most this many runs (default 100).', schema: { type: 'integer', minimum: 0 } },
       { name: 'video', in: 'query', description: '`true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.', schema: { type: 'boolean' } },
+      { name: 'artifactTag', in: 'query', description: 'Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\\,` or `\\\\`. OR within the parameter, AND with the other filters.', schema: str },
+      { name: 'inherited', in: 'query', description: '`1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.', schema: { type: 'boolean' } },
+      { name: 'type', in: 'query', description: 'Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer\'s own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.', schema: str },
+      { name: 'label', in: 'query', description: '`key=value`, or `key` for any value.', schema: str },
+      { name: 'environment', in: 'query', description: 'Environments or devices (`ios`, `desktop-web`).', schema: str },
+      { name: 'producer', in: 'query', description: 'Producers.', schema: str },
+      { name: 'branch', in: 'query', description: 'Branches.', schema: str },
+      { name: 'sha', in: 'query', description: 'Revisions: a full commit id or a prefix of at least seven characters.', schema: str },
+      { name: 'outcome', in: 'query', description: 'Statuses: `passed`, `failed`, `running`, `not-run`. A run\'s outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.', schema: str },
+      { name: 'q', in: 'query', description: 'Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.', schema: str },
+      { name: 'since', in: 'query', description: 'Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result\'s recording time; a run\'s end.', schema: str },
+      { name: 'until', in: 'query', description: 'Only records at or before this time (same forms as `since`).', schema: str },
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The runs.', 'RunList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/artifacts', path: '/api/reports/artifacts', operationId: 'getReportArtifacts', tag: 'Report', role: 'read',
+    summary: 'Recorded results that carry evidence, across the whole history',
+    description: 'Every recorded result that has attachments (recordings, screenshots, traces), newest first, found in the history and not only among the current winners: a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged. Narrow it by artifact tag, media type, label, feature (`domain`, `spec`), environment or device, producer, branch, revision, outcome and time: AND across the parameters, OR within one; with both `artifactTag` and `type`, one artifact must be both. `filters` names the filters that were applied and `facets` offers each dimension\'s values with counts: the count beside a value is what the list would hold if that value alone were chosen in its dimension, every other filter applied. Tags written by reviewers after upload are not searched; only those in the layer are. Send `format=markdown` for Markdown.',
+    parameters: [
+      { name: 'limit', in: 'query', description: 'At most this many results (default 100).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'offset', in: 'query', description: 'Skip this many matches (default 0).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'video', in: 'query', description: '`true` for results with a playable video recording (the same as `type=video`).', schema: { type: 'boolean' } },
+      { name: 'domain', in: 'query', description: 'The feature domain of the result\'s spec.', schema: str },
+      { name: 'spec', in: 'query', description: 'Spec paths.', schema: str },
+      { name: 'artifactTag', in: 'query', description: 'Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\\,` or `\\\\`. OR within the parameter, AND with the other filters.', schema: str },
+      { name: 'inherited', in: 'query', description: '`1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.', schema: { type: 'boolean' } },
+      { name: 'type', in: 'query', description: 'Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer\'s own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.', schema: str },
+      { name: 'label', in: 'query', description: '`key=value`, or `key` for any value.', schema: str },
+      { name: 'environment', in: 'query', description: 'Environments or devices (`ios`, `desktop-web`).', schema: str },
+      { name: 'producer', in: 'query', description: 'Producers.', schema: str },
+      { name: 'branch', in: 'query', description: 'Branches.', schema: str },
+      { name: 'sha', in: 'query', description: 'Revisions: a full commit id or a prefix of at least seven characters.', schema: str },
+      { name: 'outcome', in: 'query', description: 'Statuses: `passed`, `failed`, `running`, `not-run`. A run\'s outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.', schema: str },
+      { name: 'q', in: 'query', description: 'Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.', schema: str },
+      { name: 'since', in: 'query', description: 'Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result\'s recording time; a run\'s end.', schema: str },
+      { name: 'until', in: 'query', description: 'Only records at or before this time (same forms as `since`).', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The matching results and the facets.', 'ArtifactList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',
@@ -471,7 +528,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
   }
 ];
 
-const NODE_OPERATIONS = new Set(['/api/projects', '/api/settings', '/api/server', '/api/openapi.json']);
+const NODE_OPERATIONS = new Set(['/api/projects', '/api/settings', '/api/settings/gc', '/api/settings/gc/run', '/api/server', '/api/openapi.json']);
 const PROJECT_PARAMETER: Param = { name: 'project', in: 'query', description: 'Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.', schema: { type: 'string', pattern: '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$', maxLength: 64 }, example: 'todo-app' };
 /** Every node operation and the same stable report protocol inside each project namespace. */
 export const OPERATIONS: readonly Operation[] = BASE_OPERATIONS.flatMap(operation => {

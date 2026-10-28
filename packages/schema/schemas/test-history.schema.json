@@ -243,6 +243,13 @@
                           "description": "The name of the step that holds it",
                           "type": "string"
                         },
+                        "tags": {
+                          "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
                         "recording": {
                           "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
                           "type": "string"
@@ -786,6 +793,13 @@
                     "step": {
                       "description": "The name of the step that holds it",
                       "type": "string"
+                    },
+                    "tags": {
+                      "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "recording": {
                       "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",

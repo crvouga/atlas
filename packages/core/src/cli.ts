@@ -33,7 +33,7 @@ export const USAGE = `atlas — executable statecharts
                [--no-retry] [--output <dir>]
   atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
   atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
-  atlas server [--data <dir>] [--port 8080] [--store <url>]...   one Atlas node: API, projects and client
+  atlas server [--port 8080]                                     one Atlas node: API, projects and client; needs ATLAS_S3_* (atlas serve --help)
   atlas client build [--no-data] [--out <dir>]                    build the project-agnostic Atlas client
   atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)

@@ -35,13 +35,13 @@ COPY --from=build /app/packages/visualizer/src/admin ./packages/visualizer/src/a
 COPY --from=build /app/packages/visualizer/src/ui/theme.tsx ./packages/visualizer/src/ui/theme.tsx
 COPY --from=build /app/site ./site
 # Leave ATLAS_PORT unset: Railway supplies PORT, and Atlas already defaults to 8080 otherwise.
-ENV ATLAS_HOST=0.0.0.0 ATLAS_DATA=/data ATLAS_SITE=/app/site
-RUN mkdir /data && chown bun:bun /data
-VOLUME /data
+ENV ATLAS_HOST=0.0.0.0 ATLAS_SITE=/app/site
+# The container keeps no state: all reports and user state (garbage collection policy, saved settings) live in
+# S3-compatible storage. The server refuses to start, and lists what is missing, unless these are set:
+#   ATLAS_S3_ENDPOINT ATLAS_S3_BUCKET ATLAS_S3_REGION ATLAS_S3_ACCESS_KEY_ID ATLAS_S3_SECRET_ACCESS_KEY
 EXPOSE 8080
 USER bun
-# Saved settings belong on the persistent volume alongside reports, rather than in the image.
-WORKDIR /data
+WORKDIR /app
 HEALTHCHECK --interval=15s --timeout=3s --start-period=30s CMD bun -e "fetch('http://127.0.0.1:'+(process.env.ATLAS_PORT||process.env.PORT||8080)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 ENTRYPOINT ["bun", "/app/packages/core/bin/atlas.mjs", "serve"]
 

@@ -109,6 +109,37 @@ Every field is optional, and every value except the booleans is an open string.
 - **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
   dropped, and the attachment, check and layer stay.
 
+## Finding runs and artifacts
+
+The viewer's **Runs** and **Artifacts** tabs and the API answer one query, so a link means the same thing everywhere.
+"Demo videos for checkout on iPhone, including failed attempts" is:
+
+```sh
+curl "$ATLAS_SERVER_URL/api/reports/artifacts?artifactTag=demo&type=video&domain=checkout&label=device%3DiPhone"
+```
+
+- **Dimensions.** `artifactTag`, `type` (the media type as a role: `video`, `image`, `audio`, `snapshot`, `text`,
+  `file`; `video` means a playable recording), `label` (`key=value`, or `key`), `domain` and `spec` (artifacts only),
+  `environment` (the device or client), `producer`, `branch`, `sha` (seven or more characters), `outcome` (`passed`,
+  `failed`, `running`, `not-run`), `since` and `until` (epoch milliseconds or an ISO date), and `q` (words).
+- **Semantics.** Filters combine with AND across dimensions and OR within one (`environment=ios,android`). With both
+  `artifactTag` and `type`, one attachment must be both where the report says which video carries which tag: a tagged
+  screenshot beside an untagged video is not a tagged video. `inherited=1` also counts the tags an attachment inherits
+  from its check and run. A comma or backslash inside a value is written `\,` or `\\`; the viewer encodes `#` and spaces.
+- **History.** Artifacts are recorded results, not only the report's current winners: a recording tagged `demo` is
+  found with its original run, commit and status even when a later attempt of the test is untagged. Tags a reviewer
+  added after upload are kept apart from the layer and are not searched here.
+- **Facets.** Each answer carries `facets`: for every dimension the values on offer. The count beside a value is what
+  the list would hold if that value alone were chosen in its dimension with every other filter applied, so the
+  chosen value's count is the list's and the others show what adding them would give.
+- **Older servers.** A response names the filters it applied in `filters`. A viewer that asked for one that is missing
+  filters what a run summary can answer itself and says plainly that the server cannot filter by the rest (tags, types,
+  labels); it never presents an unfiltered list as narrowed. A server without `/api/reports/artifacts` is reported as
+  such on the Artifacts tab.
+- **Views.** *Views* saves the current filters under a name in this browser, per project and tab. A saved view is a
+  **live query**: opening it asks again and shows what matches the newest report. It is not a snapshot; an immutable
+  review collection is a separate feature. *Copy link* gives the address, which holds the whole query.
+
 ## Labels describe, parameters split
 
 A result's **slot** is its producer, check id, part kind, spec, environment and **parameters**. The newest completed

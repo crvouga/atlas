@@ -41,6 +41,13 @@ they preserve evidence semantics, provenance, URL selection, or playback behavio
   `Bounded`/show-more controls. Do not fetch unopened results' recordings eagerly.
 - Loading: named `Loader`/`Skeleton` or explicit text with `role="status"`. Error: `Alert color="red"` and
   a retry when possible. Empty: descriptive `Text` and a relevant action. Use built-in loading/disabled states.
+- Waiting is bounded. A focused page (a spec, a recording) loads what its link names on its own and never waits for
+  the whole catalog. `loadingPolicy.stallMs` in `evidence/load-state.tsx` is how long a read may take before the page
+  names what is affected, keeps the rest usable and offers `Try again` and a way back that keeps the selected scope.
+  A missing spec or layer is an explicit unavailable state with its path, never an endless `Loading…`. Layers that
+  fail to read are counted (`EvidenceIncomplete`) and the rest stays usable. Search disclosed as incomplete (still
+  reading, or specs it could not read) never reports "no match" as final. `tests/resilient-navigation.test.tsx`
+  holds the request budgets for a large catalog.
 - Spec overview links use a centered `Group`: status, flexible title/folder, then outcome and time. Keep gaps
   explicit with theme spacing; stack metadata on narrow screens instead of crowding the title.
 
@@ -118,14 +125,14 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| Project home | Tests/runs tabs, metrics, search, status/environment/domain filters, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, Button, Accordion |
+| Project home | Tests/runs/artifacts tabs, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion |
 | Test detail | Current outcomes, statistics, duration graph, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index, Gherkin rules/scenarios/examples, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Table, CodeHighlightTabs, ResultRow |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |
 | Evidence | Steps, retries, annotations, facts, unknown extensions, safe downloads and previews | List, Badge, Accordion, Code, Image, native media |
 | Recordings | Pictures/video/timeline, actor selection, moments, failure jumps, timing, model-state differences | Tabs, Slider, Button, ScrollArea, Table, Progress |
 | Search/help | Ranked and semantic search, shortcut help, recording shortcuts | Spotlight, Modal, Kbd |
-| Administration | Token access, storage backends/write destination, live timeouts, report rules, limits, raw JSON, conflicts | Same provider/theme, Fieldset, Mantine inputs, Accordion, Alert |
+| Administration | Token access, S3 storage notice, garbage collection policy (saved in S3), live timeouts, report rules, limits, raw JSON, conflicts | Same provider/theme, Fieldset, Mantine inputs, Accordion, Alert |
 
 The hash routes (`/`, `/chart/$chartId`, `/specs/$kind`), query contracts, project scoping, streaming,
 report APIs and data adapters remain the migration boundary. `/admin` still serves an independent document:

@@ -177,6 +177,10 @@ export async function openAtlas(args: {
   live?: () => readonly LiveRun[] | Promise<readonly LiveRun[]>;
   projects?: () => Response;
   events?: boolean;
+  /** Answers a spec file itself (to stall it, fail it or count it) in place of the fixture. It gets the path and the fixture's text, if any. */
+  readSpec?: (path: string, text: string | undefined) => Promise<string>;
+  /** Answers a reports request itself (to stall or fail it); returning nothing leaves it to the reports app. */
+  intercept?: (path: string) => Response | Promise<Response> | undefined;
   /** An Atlas node to answer `/evidence/effective`, as a deployed one does. */ node?: { fetch: (request: Request) => Promise<Response> };
 }) {
   const specs = args.specs ?? SPECS;
@@ -199,12 +203,15 @@ export async function openAtlas(args: {
     ...args.deps
   });
   const requests: string[] = [];
+  const specReads: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://atlas.test/api/projects' && args.projects) return args.projects();
     if (url === 'http://atlas.test/api/live' && args.live) return Response.json({ runs: await args.live() });
     if (!url.startsWith(REPORTS_URL)) return new Response('not found', { status: 404 });
     requests.push(url.slice(REPORTS_URL.length));
+    const taken = args.intercept?.(url.slice(REPORTS_URL.length));
+    if (taken) return taken;
     if (args.down?.value) return new Response('{"error":"reports_unavailable"}', { status: 503 });
     // What a node answers beyond the report itself: one result's evidence, the files it points to, and the test catalog,
     // a test's history and the runs, which only a node keeps, and the layers behind the winners (an earlier run's own record).
@@ -217,6 +224,8 @@ export async function openAtlas(args: {
     label: 'Test specs',
     specIndex: async () => ({ schemaVersion: 1, generatedAt: '2026-10-10T00:00:00.000Z', files: Object.keys(specs) }),
     specFile: async (path) => {
+      specReads.push(path);
+      if (args.readSpec) return args.readSpec(path, specs[path]);
       const text = specs[path];
       if (text === undefined) throw new Error('missing spec');
       return text;
@@ -272,6 +281,7 @@ export async function openAtlas(args: {
     router,
     time,
     requests,
+    specReads,
     text,
     until,
     sees: (expected: string) => until(() => text().includes(expected), expected),
