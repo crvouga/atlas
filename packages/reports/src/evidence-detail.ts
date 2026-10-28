@@ -99,7 +99,8 @@ export function isVideoAttachment(attachment: Pick<Attachment, 'name' | 'role' |
 function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }): VideoRef | undefined {
   if (!isVideoAttachment(item)) return undefined;
   const recording = item.sha256 ? `sha256:${item.sha256}` : item.bundleKey ?? item.uri ?? (item.text === undefined ? undefined : `inline:${item.name}`);
-  return { name: item.name, owner, ...where, ...(recording === undefined ? {} : { recording }), available: recording !== undefined };
+  const tags = normalizeTags(item.tags);
+  return { name: item.name, owner, ...where, ...(tags.length ? { tags } : {}), ...(recording === undefined ? {} : { recording }), available: recording !== undefined };
 }
 
 /**

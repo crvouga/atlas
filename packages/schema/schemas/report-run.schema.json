@@ -170,6 +170,34 @@
             "unavailable"
           ],
           "additionalProperties": {}
+        },
+        "artifactTags": {
+          "description": "The normalized tags of the attachments of its results, sorted and distinct. Absent when none is tagged, and in reports of older servers",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "description": "The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches). Absent when none",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "types": {
+          "description": "The media types (roles) of its attachments, sorted and distinct; `video` only for a playable recording. Absent when it has no attachment",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "labels": {
+          "description": "The `key=value` labels of its results and layers, sorted and distinct. Absent when it has none",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -266,6 +294,13 @@
                 "step": {
                   "description": "The name of the step that holds it",
                   "type": "string"
+                },
+                "tags": {
+                  "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "recording": {
                   "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
