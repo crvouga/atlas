@@ -1,12 +1,12 @@
-# The same, with an S3 bucket as the place results are kept: an S3 server, a bucket, and the Atlas server.
+# Identical to compose.yaml, kept so older links keep working: Atlas always keeps its reports and user state in S3.
+# See compose.yaml (this file is the same stack with the server running without tokens, for a local demo).
 #
 #   docker compose -f compose.s3.yaml up --pull always
-#   # publish from your project (another terminal):
 #   export ATLAS_STORE=http://localhost:8080          # everything goes through the server, into the bucket
 #   bunx atlas report publish --producer unit --junit out.xml --specs ./specs
 #   # then open http://localhost:8080
 #   # (CI that has bucket access may also publish straight to it, and the server sees it within its refresh interval:
-#   #  AWS_ACCESS_KEY_ID=atlaskey AWS_SECRET_ACCESS_KEY=atlassecret ATLAS_STORE='s3://atlas/my-project?endpoint=http://localhost:8333&region=us-east-1')
+#   #  AWS_ACCESS_KEY_ID=atlaskey AWS_SECRET_ACCESS_KEY=atlassecret ATLAS_STORE='s3://atlas?endpoint=http://localhost:8333&region=us-east-1')
 #
 # The credentials above are for this demo only. Use a real bucket and a role in production.
 services:
@@ -26,14 +26,16 @@ services:
     restart: "no"
   atlas:
     image: ghcr.io/crvouga/atlas:latest
-    depends_on: [bucket]
+    depends_on:
+      bucket: { condition: service_completed_successfully }
     environment:
-      ATLAS_STORE: "project=s3://atlas/my-project?endpoint=http://s3:8333&region=us-east-1"
-      ATLAS_WRITE: project       # uploads go to the bucket, so the server holds nothing a replacement would lose
-      AWS_ACCESS_KEY_ID: atlaskey
-      AWS_SECRET_ACCESS_KEY: atlassecret
+      ATLAS_S3_ENDPOINT: http://s3:8333
+      ATLAS_S3_BUCKET: atlas
+      ATLAS_S3_REGION: us-east-1
+      ATLAS_S3_PREFIX: my-project
+      ATLAS_S3_ACCESS_KEY_ID: atlaskey
+      ATLAS_S3_SECRET_ACCESS_KEY: atlassecret
       ATLAS_INSECURE: "true"   # local demo; production needs tokens or an authenticated proxy
-      ATLAS_DATA: /tmp/atlas-data
     ports:
       - "8080:8080"
     restart: unless-stopped

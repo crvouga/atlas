@@ -69,7 +69,7 @@ adapter records each part independently.
 
 The existing selected-attempt pointer, reusable content hashes and frame bundles
 continue to own test-run publication. An empty closed run is `skipped`, never a
-successful result inferred from absent evidence. Retention keeps historical evidence and its referenced content, including previous attempts and deleted branches. `pruneReports` reports retained commits and deletes nothing; storage usage grows with unique evidence.
+successful result inferred from absent evidence. Retention keeps historical evidence and its referenced content, including previous attempts and deleted branches. `pruneReports` reports retained commits and deletes nothing; storage usage grows with unique evidence unless an operator saves a garbage collection policy for the server, which deletes only superseded layers (`garbage.ts`, [the server](../../docs/server.md#user-state-and-garbage-collection)).
 
 Large bundles overlap at most four 4 MiB chunk uploads per source. Entry parts
 retain input order even when uploads complete out of order. Backpressure bounds

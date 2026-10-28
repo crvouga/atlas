@@ -2833,6 +2833,76 @@ export function neighborStepFrame(
 
 First frame of the next / previous step (skipping same-step frames).
 
+### Layer garbage collection
+
+Source: `packages/reports/src/garbage.ts`. Import: `@crvouga/atlas/reports/garbage`
+
+Applies a garbage collection policy (`GcPolicy`, chosen by a person in the Atlas UI and kept in the user state) to the
+layers in a store. Atlas is otherwise deletion-free, so this is deliberately conservative: a layer is deleted only when
+(1) the caller says the report has read it and every result it carries has been replaced by a newer layer (`eligible`),
+(2) it was recorded longer ago than the policy allows, and (3) it is not among the newest `keepLatest` layers. Deleting
+it therefore cannot change the combined report. Its catalog entry goes first, so nothing visible ever points at a
+missing manifest; its manifest next; then the captured-file blobs that no remaining layer refers to. If any remaining
+layer cannot be read, no blob is deleted: what cannot be read is unknown, never unused. Specs, runs and commit
+inventories are not touched.
+
+See docs/server.md#user-state-and-garbage-collection
+
+#### `GcCandidate`
+
+```ts
+export type GcCandidate = { readonly id: string; readonly catalogKey: string; readonly recordedAtMs: number };
+```
+
+One layer the policy would delete.
+
+#### `GcPlan`
+
+```ts
+export type GcPlan = {
+  /** Layers to delete, oldest first. */
+  readonly candidates: readonly GcCandidate[];
+  /** Layers in the catalog that stay. */
+  readonly kept: number;
+};
+```
+
+What a policy would delete from a store right now.
+
+#### `GcOutcome`
+
+```ts
+export type GcOutcome = { readonly deletedLayers: number; readonly deletedBlobs: number };
+```
+
+The outcome of applying a plan.
+
+#### `planGarbage`
+
+```ts
+export async function planGarbage(store: ObjectStore, input: { readonly policy: GcPolicy; readonly nowMs: number; readonly eligible: ReadonlySet<string> }): Promise<GcPlan>
+```
+
+Decides which layers a policy deletes, without deleting anything. `eligible` is the set of layer ids the caller has
+read and knows no longer decide any result (`ReportIndex.superseded()`); a layer not in it is never a candidate.
+Lists the catalog only. With `policy.enabled === false` the plan is empty.
+
+**Example**
+
+```ts
+const plan = await planGarbage(store, { policy, nowMs: Date.now(), eligible: index.superseded() });
+```
+
+#### `collectGarbage`
+
+```ts
+export async function collectGarbage(store: ObjectStore, plan: GcPlan): Promise<GcOutcome>
+```
+
+Deletes the layers of a plan, then the blobs only they used. Store errors throw after whatever was already deleted;
+running the same plan again finishes the job, because every delete is idempotent and the catalog entry (what
+makes a layer visible) always goes before the content.
+
 ### URL hash routes of the reports viewer
 
 Source: `packages/reports/src/hash.ts`. Import: `@crvouga/atlas/reports/hash`
@@ -5725,6 +5795,7 @@ It reads only immutable layers (`layers/index/…`), which is what makes "read o
 - `json(): { readonly version: string; readonly text: string }` — The report as JSON text: exactly what `JSON.stringify({ ...snapshot(), active: [] })` writes, put together from the text of each layer, which is written once. `active` is what a store without live runs always sends: none.
 - `delta(since: string): { readonly text: string; readonly version: string } | null` — What differs between the report a viewer holds (named by its version) and the current one: the layers that changed in full, and the ids of those that no longer hold a winner. Null when that version is not remembered, and the viewer should ask for the whole report. See `applyEffectiveDelta`.
 - `get history(): TestHistory { return this.#history; }` — Every recorded result of every test and every run, as layers were folded in: what the test catalog, a test's history and the run list are built from. Read-only for callers; `history.rev` changes whenever a layer is taken in.
+- `superseded(): ReadonlySet<string>` — The ids of layers this index has read and that no longer decide any result. Removing one from its store cannot change the report (every slot it filled is held by a newer layer), which is what makes it safe for garbage collection to delete. A layer that failed to load, is hidden by `include`, or still holds a result is not here.
 - `stats()` — For `/readyz` and logs.
 
 ### Test loading state

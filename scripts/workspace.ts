@@ -28,7 +28,9 @@ const help = `Atlas IDE workspace commands (run from the repository root):
 
 Run/preview accept --port <0-65535>. ATLAS_PORT, then PORT, also select a port.
 Without an explicit port, try 5180 (server) or 5181 (preview), then a free port.
-Each checkout owns .atlas-workspace/ and .atlas-data/. No IDE CLI or credentials are required.
+Each checkout owns .atlas-workspace/. Setup and preview need no IDE CLI or credentials. "run" starts the Atlas server,
+which keeps all reports and user state in S3 only: set the ATLAS_S3_* variables (copy .env.example to .env, which Bun
+loads) or it exits at once and lists every missing one.
 `;
 
 /** Require the repository's pinned Bun; do not silently replace a user's runtime. */
@@ -149,9 +151,7 @@ async function app(root: string, mode: Mode, port: number, signal: AbortSignal) 
           '--host',
           '127.0.0.1',
           '--port',
-          String(port),
-          '--data',
-          path.join(root, '.atlas-data')
+          String(port)
         ]
       : [
           path.join(source, 'node_modules/vite/bin/vite.js'),
