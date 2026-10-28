@@ -1,12 +1,16 @@
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowLeft, IconVideo } from '@tabler/icons-react';
 import { Alert, Anchor, Box, Button, Code, Flex, Group, List, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
 /**
  * @module Runs view
  *
  * The CI runs that produced the report, newest first: when, on which branch and commit, which environments, how many
- * tests and how they went, how long it took, and a link to the run. Opening one lists every test it ran, filterable,
- * with a way to show exactly those tests in the explorer.
+ * tests and how they went, how long it took, whether it has recordings to watch, and a link to the run. Opening one lists
+ * every test it ran, filterable, with a way to show exactly those tests in the explorer. Videos are counted as
+ * references (every mention) and as distinct playable recordings (identical bytes are one), and a reference whose file
+ * was never stored is shown as unavailable, never as a recording.
  */
+import { videoCounts } from '@crvouga/atlas/reports/evidence-detail';
+import type { VideoCounts, VideoRef } from '@crvouga/atlas/reports/evidence-types';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { formatMs, type RunResult, type RunSummary } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
@@ -14,7 +18,7 @@ import { useMemo, useState } from 'react';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
 import { useRunDetail, useRunList } from './catalog';
-import { patched, useExplorerSearch } from './navigate';
+import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { runName } from './parts';
 const RUN_ROWS = 50;
 const RESULT_ROWS = 200;
@@ -22,6 +26,19 @@ const RESULT_ROWS = 200;
 export function RunsView() {
   const search = useExplorerSearch();
   return search.openRun ? <RunDetailView runKey={search.openRun} /> : <RunTable />;
+}
+/** What a run is called: the title its producer gave it, else its CI run number or `branch@sha`. */
+function runLabel(run: RunSummary): string {
+  return run.title ?? runName(run.key);
+}
+/** Beside a commit: said whenever the run was not recorded from a clean checkout, whatever the run is titled. */
+function Freshness({ run }: { run: RunSummary }) {
+  if (!run.freshness) return null;
+  return (
+    <Text span inherit c="dimmed">
+      {run.freshness === 'modified' ? 'with local changes' : 'origin not captured'}
+    </Text>
+  );
 }
 function Counts({ run }: { run: RunSummary }) {
   return (
@@ -47,8 +64,65 @@ function Counts({ run }: { run: RunSummary }) {
     </Text>
   );
 }
+/** Who holds a video, for a person: the test, one of its tries, or a step (in a try). */
+function ownerText(video: VideoRef): string {
+  const attempt = video.attempt === undefined ? '' : `try ${video.attempt + 1}`;
+  if (video.owner === 'layer') return 'the run';
+  if (video.owner === 'step') return `step “${video.step ?? ''}”${attempt ? `, ${attempt}` : ''}`;
+  if (video.owner === 'attempt') return attempt || 'a try';
+  return 'the test';
+}
+const UNAVAILABLE = 'Listed in the report, but its file was never stored, so it cannot be played.';
+/** The unavailable references of a video summary and why they cannot be watched. */
+function Unavailable({ videos }: { videos: VideoCounts }) {
+  if (!videos.unavailable) return null;
+  return (
+    <Text component="div" size="xs" c="dimmed" data-video-unavailable>
+      <IconAlertTriangle size={16} aria-hidden="true" /> {plural(videos.unavailable, 'video', 'videos')} unavailable. {UNAVAILABLE}
+    </Text>
+  );
+}
+/** A run's videos in its row: a link to the recordings, how many references they come from, and what cannot be played. */
+function RunVideos({ run }: { run: RunSummary }) {
+  const videos = run.videos;
+  if (!videos) return <Text span inherit c="dimmed" data-video="none">No video</Text>;
+  return (
+    <Stack gap={0} data-video={videos.recordings > 0 ? 'available' : 'unavailable'}>
+      {videos.recordings > 0 && (
+        <Anchor
+          aria-label={`Watch ${plural(videos.recordings, 'recording', 'recordings')} in run ${runName(run.key)}`}
+          renderRoot={(props) => (
+            <Link {...props} to="/" search={patched({ openRun: run.key, video: true })} resetScroll={false} activeOptions={{ exact: true }} />
+          )}
+        >
+          <IconVideo size={16} aria-hidden="true" /> {plural(videos.recordings, 'video', 'videos')}
+        </Anchor>
+      )}
+      {videos.references !== videos.recordings + videos.unavailable && (
+        <Text component="div" size="xs" c="dimmed">
+          {plural(videos.references, 'reference', 'references')}
+        </Text>
+      )}
+      <Unavailable videos={videos} />
+    </Stack>
+  );
+}
+/** The Has video filter: a toggle named by its meaning and the count of what it matches. */
+function HasVideo({ count, pressed, noun, onToggle }: { count: number; pressed: boolean; noun: [string, string]; onToggle: () => void }) {
+  return (
+    <Button type="button" aria-pressed={pressed} aria-label={`Has video: ${plural(count, noun[0], noun[1])}`} onClick={onToggle} variant="light" leftSection={<IconVideo size={16} aria-hidden="true" />}>
+      Has video{' '}
+      <Text span inherit>
+        {count}
+      </Text>
+    </Button>
+  );
+}
 function RunTable() {
-  const runs = useRunList();
+  const search = useExplorerSearch();
+  const go = useExplorerNavigate();
+  const video = search.video === true;
+  const runs = useRunList(true, video);
   const now = useNow();
   const [shown, setShown] = useState(RUN_ROWS);
   if (runs.isPending)
@@ -64,19 +138,30 @@ function RunTable() {
       </Alert>
     );
   const list = runs.data.runs;
-  if (!list.length)
+  const withVideo = runs.data.withVideo;
+  if (!list.length && !video)
     return (
       <Text component="div" c="dimmed">
         No runs recorded yet.
       </Text>
     );
+  const noun = video ? 'with a video' : '';
   return (
     <Box aria-label="Runs" component="section" mb="lg">
       <Flex gap="xs" align="center" wrap="wrap">
         {runs.data.total > list.length
-          ? `The newest ${list.length} of ${plural(runs.data.total, 'run', 'runs')}`
-          : plural(list.length, 'run', 'runs')}
+          ? `The newest ${list.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
+          : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
+        {(withVideo !== undefined || video) && (
+          <HasVideo count={withVideo ?? list.length} pressed={video} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} />
+        )}
       </Flex>
+      {!list.length && (
+        <Text component="div" c="dimmed">
+          No run has a playable video recording.{' '}
+          {runs.data.withVideo === undefined && 'This server does not report which runs have recordings.'}
+        </Text>
+      )}
       <Table.ScrollContainer minWidth={600}>
         <Table data-runs>
           <Table.Thead>
@@ -88,6 +173,7 @@ function RunTable() {
               <Table.Th scope="col">Tests</Table.Th>
               <Table.Th scope="col">Outcomes</Table.Th>
               <Table.Th scope="col">Span</Table.Th>
+              <Table.Th scope="col">Video</Table.Th>
               <Table.Th scope="col">
                 <VisuallyHidden>CI run</VisuallyHidden>
               </Table.Th>
@@ -98,19 +184,24 @@ function RunTable() {
               <Table.Tr key={run.key} data-status={run.counts.failed ? 'failed' : 'passed'}>
                 <Table.Td title={exactTime(run.endedAtMs)}>
                   <Anchor
-                    aria-label={`Open run ${runName(run.key)}`}
+                    aria-label={`Open run ${runLabel(run)}`}
                     renderRoot={(props) => (
-                      <Link {...props} to="/" search={patched({ openRun: run.key })} resetScroll={false} activeOptions={{ exact: true }} />
+                      <Link {...props} to="/" search={patched({ openRun: run.key, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
                     )}
                   >
                     {ago(run.endedAtMs, now)}
                   </Anchor>
+                  {run.title && (
+                    <Text c="dimmed" fz="xs">
+                      {run.title}
+                    </Text>
+                  )}
                 </Table.Td>
                 <Table.Td title={run.branch ?? ''} c="dimmed">
                   {run.branch ?? '—'}
                 </Table.Td>
                 <Table.Td>
-                  <Code>{shortSha(run.sha) ?? '—'}</Code>
+                  <Code>{shortSha(run.sha) ?? '—'}</Code> <Freshness run={run} />
                 </Table.Td>
                 <Table.Td>{run.environments.map((env) => environmentLabel(env)).join(', ') || '—'}</Table.Td>
                 <Table.Td>{run.tests}</Table.Td>
@@ -121,6 +212,9 @@ function RunTable() {
                   <Counts run={run} />
                 </Table.Td>
                 <Table.Td>{formatMs(run.spanMs)}</Table.Td>
+                <Table.Td>
+                  <RunVideos run={run} />
+                </Table.Td>
                 <Table.Td>
                   {run.runUrl ? (
                     <Anchor href={run.runUrl} target="_blank" rel="noreferrer">
@@ -141,6 +235,26 @@ function RunTable() {
     </Box>
   );
 }
+/** The videos of one result and who holds them, as text (the whole row is one link, so nothing here is interactive). */
+function ResultVideos({ videos }: { videos: readonly VideoRef[] | undefined }) {
+  const counts = videoCounts(videos);
+  if (!counts || !videos) return null;
+  const owners = [...new Set(videos.filter((item) => item.available).map(ownerText))];
+  return (
+    <>
+      {counts.recordings > 0 && (
+        <Text span inherit data-video="available">
+          <IconVideo size={16} aria-hidden="true" /> {plural(counts.recordings, 'video', 'videos')} ({owners.join('; ')})
+        </Text>
+      )}
+      {counts.unavailable > 0 && (
+        <Text span inherit data-video-unavailable>
+          <IconAlertTriangle size={16} aria-hidden="true" /> {plural(counts.unavailable, 'video', 'videos')} unavailable
+        </Text>
+      )}
+    </>
+  );
+}
 const RESULT_FILTERS = [
   { id: '', label: 'All' },
   { id: 'failed', label: 'Failed' },
@@ -148,6 +262,9 @@ const RESULT_FILTERS = [
   { id: 'not-run', label: 'Not run' }
 ] as const;
 function RunDetailView({ runKey }: { runKey: string }) {
+  const search = useExplorerSearch();
+  const go = useExplorerNavigate();
+  const video = search.video === true;
   const detail = useRunDetail(runKey);
   const now = useNow();
   const [status, setStatus] = useState('');
@@ -159,11 +276,12 @@ function RunDetailView({ runKey }: { runKey: string }) {
     return results.filter(
       (result) =>
         (!status || result.status === status) &&
+        (!video || (videoCounts(result.videos)?.recordings ?? 0) > 0) &&
         terms.every((term) =>
           `${result.title}\n${result.specPath ?? ''}\n${result.environment ?? ''}\n${result.producer}`.toLowerCase().includes(term)
         )
     );
-  }, [results, status, words]);
+  }, [results, status, words, video]);
   const bySpec = useMemo(() => {
     const groups = new Map<string, RunResult[]>();
     for (const result of filtered.slice(0, shown)) {
@@ -215,10 +333,10 @@ function RunDetailView({ runKey }: { runKey: string }) {
     );
   const { run } = detail.data;
   return (
-    <Box aria-label={`Run ${runName(run.key)}`} component="section" mb="lg">
+    <Box aria-label={`Run ${runLabel(run)}`} component="section" mb="lg">
       {back}
       <Title order={2} mb="sm">
-        Run {runName(run.key)}
+        Run {runLabel(run)}
       </Title>
       <Text component="div">
         {run.branch && (
@@ -227,6 +345,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
           </Text>
         )}
         {run.sha && <Code>{shortSha(run.sha)}</Code>}
+        <Freshness run={run} />
         <Text title={exactTime(run.endedAtMs)} span inherit>
           ended {ago(run.endedAtMs, now)}
         </Text>
@@ -256,13 +375,20 @@ function RunDetailView({ runKey }: { runKey: string }) {
         </Text>
         <Counts run={run} />
       </Stack>
+      {run.videos && (
+        <Text component="div" data-run-videos>
+          <IconVideo size={16} aria-hidden="true" /> {plural(run.videos.recordings, 'video', 'videos')}
+          {run.videos.references !== run.videos.recordings + run.videos.unavailable && ` from ${plural(run.videos.references, 'reference', 'references')}`}
+          <Unavailable videos={run.videos} />
+        </Text>
+      )}
       <Flex gap="xs" align="center" wrap="wrap">
         <Anchor
           renderRoot={(props) => (
             <Link
               {...props}
               to="/"
-              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined })}
+              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined, layer: undefined })}
               resetScroll={false}
               activeOptions={{ exact: true }}
             />
@@ -302,6 +428,16 @@ function RunDetailView({ runKey }: { runKey: string }) {
           </Button>
         ))}
       </Flex>
+      {(run.videos || video) && (
+        <Flex gap="xs" align="center" wrap="wrap">
+          <HasVideo
+            count={results.filter((result) => (videoCounts(result.videos)?.recordings ?? 0) > 0).length}
+            pressed={video}
+            noun={['result', 'results']}
+            onToggle={() => go({ video: video ? undefined : true })}
+          />
+        </Flex>
+      )}
       {!filtered.length && (
         <Text component="div" c="dimmed">
           No result matches.
@@ -328,7 +464,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
                     <Link
                       {...props}
                       to="/"
-                      search={patched({ tab: undefined, openRun: undefined, test: result.key })}
+                      search={patched({ tab: undefined, openRun: undefined, test: result.key, layer: result.layer })}
                       resetScroll={false}
                       activeOptions={{ exact: true }}
                     />
@@ -349,6 +485,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
                       <Text span inherit>
                         {statusWord(result.status)}
                       </Text>
+                      <ResultVideos videos={result.videos} />
                     </Flex>
                     {result.status === 'failed' && result.detail && (
                       <Text span inherit c="red.7" size="xs" lineClamp={2}>

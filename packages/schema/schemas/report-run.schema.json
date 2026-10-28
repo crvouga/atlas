@@ -15,7 +15,23 @@
       "properties": {
         "key": {
           "type": "string",
-          "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+          "description": "`run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+        },
+        "runId": {
+          "description": "The execution id the producer named, when it did. Layers that share it are one run however many uploads they took",
+          "type": "string"
+        },
+        "title": {
+          "description": "The human title of the execution (the newest layer's). Presentation only: the key, commit and `freshness` are unaffected",
+          "type": "string"
+        },
+        "freshness": {
+          "description": "`modified` when any layer of the run was recorded from a checkout with uncommitted changes; `unknown` when an origin was not captured; absent when all are clean. Shown beside the commit, never replaced by the title",
+          "type": "string",
+          "enum": [
+            "unknown",
+            "modified"
+          ]
         },
         "runUrl": {
           "type": [
@@ -124,6 +140,36 @@
             ],
             "additionalProperties": {}
           }
+        },
+        "videos": {
+          "description": "Its videos, from its layers and the last result of each test. Absent when it has none or the report carries no video information",
+          "type": "object",
+          "properties": {
+            "references": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Every reference to a video; identical bytes referenced twice count twice"
+            },
+            "recordings": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Distinct playable recordings"
+            },
+            "unavailable": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "References that name no bytes"
+            }
+          },
+          "required": [
+            "references",
+            "recordings",
+            "unavailable"
+          ],
+          "additionalProperties": {}
         }
       },
       "required": [
@@ -196,6 +242,47 @@
           },
           "detail": {
             "type": "string"
+          },
+          "videos": {
+            "description": "Every video its evidence references, with who holds it",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The attachment name"
+                },
+                "owner": {
+                  "type": "string",
+                  "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                },
+                "attempt": {
+                  "description": "The retry attempt that holds it, or that holds the step that does",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "step": {
+                  "description": "The name of the step that holds it",
+                  "type": "string"
+                },
+                "recording": {
+                  "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                  "type": "string"
+                },
+                "available": {
+                  "type": "boolean",
+                  "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                }
+              },
+              "required": [
+                "name",
+                "owner",
+                "available"
+              ],
+              "additionalProperties": {}
+            }
           }
         },
         "required": [
