@@ -7,6 +7,7 @@ import { folderOf, outlinePath, type SpecKind } from '../spec-kind';
 import { useUiStore } from '../state/ui-store';
 import { useEvidence } from './evidence-context';
 import { ago, plural, useNow } from './format';
+import { EvidenceIncomplete, EvidenceWaiting } from './load-state';
 import { backendLabel, Bounded, CountLine, Meter, StatusMark, Tally } from './marks';
 /** A kind's specs at a glance: how many have results, which are failing, and what just ran. */
 export function Overview({ kind }: { kind: SpecKind }) {
@@ -104,11 +105,8 @@ export function Overview({ kind }: { kind: SpecKind }) {
           </Button>
         </Alert>
       ))}
-      {!evidence.ready && !evidence.unavailable && (
-        <Text role="status" component="div" c="dimmed">
-          Loading recorded results…
-        </Text>
-      )}
+      {!evidence.ready && !evidence.unavailable && <EvidenceWaiting usable={`The list of ${kind.many} is readable.`} />}
+      {evidence.ready && <EvidenceIncomplete />}
       {evidence.ready && evidence.pending > 0 && (
         <Text role="status" component="div" c="dimmed">
           Reading {plural(evidence.pending, 'more layer', 'more layers')}…
@@ -168,7 +166,7 @@ export function Overview({ kind }: { kind: SpecKind }) {
         </Box>
       )}
 
-      {evidence.ready && evidence.pending === 0 && withResults.length === 0 && !evidence.unavailable && (
+      {evidence.ready && evidence.pending === 0 && evidence.failed.length === 0 && withResults.length === 0 && !evidence.unavailable && (
         <Text component="div" c="dimmed">
           {evidence.layers.length === 0
             ? `Nothing has been recorded yet. Results appear here as a spec run finishes each test.`

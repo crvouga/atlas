@@ -33,7 +33,8 @@ import { ReportIndex, type IndexChange } from '../../reports/src/report-index';
 import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
 import { catalogHealth, healthMarkdown, parseRootMappings } from '../../reports/src/catalog-health';
-import { catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
+import { parseArtifactFilter } from '../../reports/src/artifact-query';
+import { artifactList, artifactsMarkdown, catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
 import { llmsTxt } from './llms';
 import { openApiDocument } from './openapi';
 import { asProblem, problemResponse } from './problem';
@@ -312,7 +313,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true }
     });
   });
 
@@ -476,9 +477,18 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     if (!index.ready) return notReady(c);
     const found = await catalog();
     const limit = /^\d+$/.test(c.req.query('limit') ?? '') ? Number(c.req.query('limit')) : 100;
-    const video = ['1', 'true'].includes(c.req.query('video') ?? '');
-    const document = () => runList(index.history, found.version, limit, { video });
-    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${limit}|${video}|${wantsMarkdown(c)}`);
+    const search = new URL(c.req.url).searchParams;
+    const document = () => runList(index.history, found.version, limit, parseArtifactFilter(search));
+    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${search.toString()}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/artifacts', async c => {
+    if (!index.ready) return notReady(c);
+    const found = await catalog();
+    const search = new URL(c.req.url).searchParams;
+    const number = (name: string, fallback: number) => (/^\d+$/.test(search.get(name) ?? '') ? Number(search.get(name)) : fallback);
+    const domains = new Map(found.facets.specs.map(spec => [spec.path, spec.domain]));
+    const document = () => artifactList(index.history, found.version, parseArtifactFilter(search), { limit: number('limit', 100), offset: number('offset', 0), domainOf: path => domains.get(path) });
+    return answer(c, found.version, document, () => artifactsMarkdown(document()), `artifacts|${search.toString()}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/runs/detail', async c => {
     if (!index.ready) return notReady(c);

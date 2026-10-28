@@ -42,9 +42,35 @@ export function outlinePath(file: string) {
   return normal.startsWith('specs/') ? normal : `specs/${normal}`;
 }
 
-/** A file path relative to the specs folder, from either form. */
+/**
+ * A file path relative to the specs folder, from any form a link may name it by: with or without the `specs/` folder,
+ * with a leading `./` or `/`, with backslashes. Nothing here can leave the folder; `..` parts are kept for the reader to refuse.
+ */
 export function specFile(path: string) {
-  return path.replaceAll('\\', '/').replace(/^specs\//, '');
+  return path
+    .replaceAll('\\', '/')
+    .replace(/^(\.?\/)+/, '')
+    .replace(/^specs\//, '')
+    .replace(/\/{2,}/g, '/');
+}
+
+/**
+ * The listed spec a link means. An exact entry wins; otherwise the one listed spec that differs only in letter case, or that
+ * the link names by a trailing part of its path. More than one candidate, or none, leaves the link as written.
+ */
+export function resolveSpec(file: string, listed: readonly string[]): string {
+  if (listed.includes(file)) return file;
+  const lower = file.toLowerCase();
+  const sameCase = listed.filter((candidate) => candidate.toLowerCase() === lower);
+  if (sameCase.length === 1) return sameCase[0]!;
+  const tail = listed.filter((candidate) => candidate.toLowerCase().endsWith(`/${lower}`));
+  return tail.length === 1 ? tail[0]! : file;
+}
+
+/** The listed specs with the same file name as `file`, to offer when a link names one that is not there. */
+export function similarSpecs(file: string, listed: readonly string[], limit = 5): string[] {
+  const name = fileName(file).toLowerCase();
+  return listed.filter((candidate) => fileName(candidate).toLowerCase() === name).slice(0, limit);
 }
 
 export function fileName(path: string) {

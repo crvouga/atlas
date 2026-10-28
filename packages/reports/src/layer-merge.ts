@@ -12,7 +12,8 @@
  */
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
-import { summarizeEvidence, summarizeLayerEvidence } from './evidence-detail';
+import { summarizeEvidenceIn, summarizeLayerEvidence } from './evidence-detail';
+import { effectiveScope } from './evidence-scope';
 import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
 
@@ -94,7 +95,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
   for (const part of summary.parts) {
     for (const check of part.checks) {
       const test = tests.get(check.id);
-      const evidence = summarizeEvidence(check);
+      const evidence = summarizeEvidenceIn(effectiveScope(part.scope, summary.scope), check);
       const item = expectations?.get(check.id);
       rows.push({
         kind: part.kind,

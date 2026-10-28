@@ -497,6 +497,7 @@ Send `format=markdown` (or `Accept: text/markdown`) for the same as a Markdown r
 - `tag` (query): Only tests with this tag. Repeatable or comma-separated.
 - `artifactTag` (query): Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.
 - `inherited` (query): With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.
+- `scope` (query): Only tests with one playable recording that states every one of these producer-declared qualifications: `surface:<value>`, `device:<value>` (`device:physical` and `device:simulator` stay apart), `data:synthetic` or `data:real`, `dependencies:<value>`, `audio:recorded` or `audio:silent`, `pacing:<value>`. All must hold for the same recording. A recording that did not declare a value never matches it, and `unknown` matches only a recording that declared no scope. Repeatable or comma-separated.
 - `run` (query): Only tests recorded in this run (a `key` from `/api/reports/runs`).
 - `sort` (query): The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.
 - `offset` (query): Skip this many matching tests.
@@ -528,6 +529,7 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `tag` (query): Only tests with this tag. Repeatable or comma-separated.
 - `artifactTag` (query): Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.
 - `inherited` (query): With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.
+- `scope` (query): Only tests with one playable recording that states every one of these producer-declared qualifications: `surface:<value>`, `device:<value>` (`device:physical` and `device:simulator` stay apart), `data:synthetic` or `data:real`, `dependencies:<value>`, `audio:recorded` or `audio:silent`, `pacing:<value>`. All must hold for the same recording. A recording that did not declare a value never matches it, and `unknown` matches only a recording that declared no scope. Repeatable or comma-separated.
 - `run` (query): Only tests recorded in this run (a `key` from `/api/reports/runs`).
 - `sort` (query): The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.
 - `offset` (query): Skip this many matching tests.
@@ -644,10 +646,22 @@ Responses: `201` The recorded entry.; `401` No token, or an unknown one. Send `A
 
 `GET /api/reports/runs` · role: read
 
-Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.
+Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures, their video counts (references, distinct playable recordings, unavailable) and the artifact tags, media types and labels their results carry. Filters narrow the list before `limit`: AND across the parameters, OR within one; `filters` in the answer names those that were applied and `facets` offers each dimension's values with counts. A server that does not know a filter ignores it and does not name it in `filters`. Send `format=markdown` for Markdown.
 
 - `limit` (query): At most this many runs (default 100).
 - `video` (query): `true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.
+- `artifactTag` (query): Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\,` or `\\`. OR within the parameter, AND with the other filters.
+- `inherited` (query): `1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.
+- `type` (query): Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer's own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.
+- `label` (query): `key=value`, or `key` for any value.
+- `environment` (query): Environments or devices (`ios`, `desktop-web`).
+- `producer` (query): Producers.
+- `branch` (query): Branches.
+- `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
+- `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
+- `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
+- `until` (query): Only records at or before this time (same forms as `since`).
 - `format` (query): `markdown` for Markdown instead of JSON.
 - `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
@@ -657,16 +671,86 @@ Responses: `200` The runs.; `304` Unchanged since the `If-None-Match` ETag.; `40
 
 `GET /api/projects/{project}/reports/runs` · role: read
 
-Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.
+Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures, their video counts (references, distinct playable recordings, unavailable) and the artifact tags, media types and labels their results carry. Filters narrow the list before `limit`: AND across the parameters, OR within one; `filters` in the answer names those that were applied and `facets` offers each dimension's values with counts. A server that does not know a filter ignores it and does not name it in `filters`. Send `format=markdown` for Markdown.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
 - `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `limit` (query): At most this many runs (default 100).
 - `video` (query): `true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.
+- `artifactTag` (query): Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\,` or `\\`. OR within the parameter, AND with the other filters.
+- `inherited` (query): `1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.
+- `type` (query): Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer's own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.
+- `label` (query): `key=value`, or `key` for any value.
+- `environment` (query): Environments or devices (`ios`, `desktop-web`).
+- `producer` (query): Producers.
+- `branch` (query): Branches.
+- `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
+- `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
+- `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
+- `until` (query): Only records at or before this time (same forms as `since`).
 - `format` (query): `markdown` for Markdown instead of JSON.
 
 Responses: `200` The runs.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Recorded results that carry evidence, across the whole history
+
+`GET /api/reports/artifacts` · role: read
+
+Every recorded result that has attachments (recordings, screenshots, traces), newest first, found in the history and not only among the current winners: a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged. Narrow it by artifact tag, media type, label, feature (`domain`, `spec`), environment or device, producer, branch, revision, outcome and time: AND across the parameters, OR within one; with both `artifactTag` and `type`, one artifact must be both. `filters` names the filters that were applied and `facets` offers each dimension's values with counts: the count beside a value is what the list would hold if that value alone were chosen in its dimension, every other filter applied. Tags written by reviewers after upload are not searched; only those in the layer are. Send `format=markdown` for Markdown.
+
+- `limit` (query): At most this many results (default 100).
+- `offset` (query): Skip this many matches (default 0).
+- `video` (query): `true` for results with a playable video recording (the same as `type=video`).
+- `domain` (query): The feature domain of the result's spec.
+- `spec` (query): Spec paths.
+- `artifactTag` (query): Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\,` or `\\`. OR within the parameter, AND with the other filters.
+- `inherited` (query): `1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.
+- `type` (query): Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer's own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.
+- `label` (query): `key=value`, or `key` for any value.
+- `environment` (query): Environments or devices (`ios`, `desktop-web`).
+- `producer` (query): Producers.
+- `branch` (query): Branches.
+- `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
+- `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
+- `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
+- `until` (query): Only records at or before this time (same forms as `since`).
+- `format` (query): `markdown` for Markdown instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The matching results and the facets.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Recorded results that carry evidence, across the whole history
+
+`GET /api/projects/{project}/reports/artifacts` · role: read
+
+Every recorded result that has attachments (recordings, screenshots, traces), newest first, found in the history and not only among the current winners: a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged. Narrow it by artifact tag, media type, label, feature (`domain`, `spec`), environment or device, producer, branch, revision, outcome and time: AND across the parameters, OR within one; with both `artifactTag` and `type`, one artifact must be both. `filters` names the filters that were applied and `facets` offers each dimension's values with counts: the count beside a value is what the list would hold if that value alone were chosen in its dimension, every other filter applied. Tags written by reviewers after upload are not searched; only those in the layer are. Send `format=markdown` for Markdown.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `limit` (query): At most this many results (default 100).
+- `offset` (query): Skip this many matches (default 0).
+- `video` (query): `true` for results with a playable video recording (the same as `type=video`).
+- `domain` (query): The feature domain of the result's spec.
+- `spec` (query): Spec paths.
+- `artifactTag` (query): Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\,` or `\\`. OR within the parameter, AND with the other filters.
+- `inherited` (query): `1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.
+- `type` (query): Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer's own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.
+- `label` (query): `key=value`, or `key` for any value.
+- `environment` (query): Environments or devices (`ios`, `desktop-web`).
+- `producer` (query): Producers.
+- `branch` (query): Branches.
+- `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
+- `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
+- `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
+- `until` (query): Only records at or before this time (same forms as `since`).
+- `format` (query): `markdown` for Markdown instead of JSON.
+
+Responses: `200` The matching results and the facets.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
 ### Every test one run recorded
 

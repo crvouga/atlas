@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 
 import { publishChecks } from '../../reports/src/publish-checks';
 import { memoryStore } from '../../reports/tests/memory-store';
-import { CatalogHealthSchema, RunDetailSchema, RunListSchema, TestCatalogSchema, TestHistorySchema } from '../../schema/src/api';
+import { ArtifactListSchema, CatalogHealthSchema, RunDetailSchema, RunListSchema, TestCatalogSchema, TestHistorySchema } from '../../schema/src/api';
 import { ReportStatusSchema } from '../../schema/src/layer';
 import { createNode, type Node } from './node-compat';
 
@@ -219,5 +219,89 @@ describe('GET /api/reports/tests/health', () => {
     expect(await response.text()).toContain('# Catalog health');
     const json = await get(node, '/api/reports/tests/health');
     expect((await get(node, '/api/reports/tests/health', { 'if-none-match': json.headers.get('etag')! })).status).toBe(304);
+  });
+});
+
+describe('filtering runs and artifacts', () => {
+  /** Demo videos by two producers on two environments, a tagged screenshot, and a later untagged recording. */
+  async function demos() {
+    const store = memoryStore();
+    const movie = (name: string, text: string, extra: Record<string, unknown> = {}) => ({ name, contentType: 'video/webm', data: new TextEncoder().encode(text), ...extra });
+    const specs = [{ path: PAY, domain: 'checkout', kind: 'feature', title: 'Pay for an order' }];
+    const card = { id: 'pay', title: 'Pay with a card', specPath: PAY };
+    await publishChecks(store, { producer: 'Demo-Recorder', environment: 'ios', branch: 'main', sha: 'a'.repeat(40), runUrl: RUN_A, recordedAtMs: 1_000, specs, checks: [{ ...card, status: 'failed', labels: { device: 'iPhone' }, attachments: [movie('a.webm', 'one', { tags: ['#Demo'] })] }] });
+    await publishChecks(store, { producer: 'checkout-demos', environment: 'desktop-web', branch: 'main', sha: 'b'.repeat(40), runUrl: RUN_B, recordedAtMs: 2_000, specs, checks: [{ ...card, status: 'passed', attachments: [movie('b.webm', 'two', { tags: ['demo'] })] }] });
+    await publishChecks(store, { producer: 'Demo-Recorder', environment: 'ios', branch: 'main', sha: 'c'.repeat(40), runUrl: 'https://ci.example/runs/3', recordedAtMs: 3_000, specs, checks: [{ ...card, status: 'passed', labels: { device: 'iPhone' }, attachments: [movie('c.webm', 'three')] }] });
+    const node = createNode({ stores: [{ id: 'main', label: 'Main', store }], refreshMs: 60_000 });
+    nodes.push(node);
+    await node.ready;
+    return node;
+  }
+
+  test('GET /api/reports/artifacts finds tagged videos across producers, ANDs the dimensions and encodes tag values safely', async () => {
+    const node = await demos();
+    const all = ArtifactListSchema.parse(await (await get(node, '/api/reports/artifacts?artifactTag=%23Demo&type=video')).json());
+    expect(all.results.map(result => result.producer).sort()).toEqual(['Demo-Recorder', 'checkout-demos']);
+    expect(all.filters).toEqual(['artifactTag', 'type']);
+    const ios = ArtifactListSchema.parse(await (await get(node, '/api/reports/artifacts?artifactTag=demo&type=video&environment=ios&label=device%3DiPhone&domain=checkout')).json());
+    expect(ios.results).toHaveLength(1);
+    expect(ios.results[0]).toMatchObject({ status: 'failed', run: RUN_A, sha: 'a'.repeat(40), domain: 'checkout' });
+    // The label still applies to the environment facet, so only the iPhone's environment is offered.
+    expect(ios.facets.environments).toEqual([{ value: 'ios', count: 1 }]);
+    // A tag with a comma, a space and a hash is one value when its comma is escaped, and matches nothing here.
+    const odd = ArtifactListSchema.parse(await (await get(node, `/api/reports/artifacts?artifactTag=${encodeURIComponent('#release\\, candidate')}`)).json());
+    expect(odd.total).toBe(0);
+    expect(await (await get(node, '/api/reports/artifacts?artifactTag=demo&format=markdown')).text()).toContain('# Artifacts (2 of 2)');
+  });
+
+  test('GET /api/reports/runs applies the same filters before the limit and names the ones it applied', async () => {
+    const node = await demos();
+    const filtered = RunListSchema.parse(await (await get(node, '/api/reports/runs?artifactTag=demo&type=video&limit=1')).json());
+    expect(filtered.total).toBe(2);
+    expect(filtered.runs.map(run => run.key)).toEqual([RUN_B]);
+    expect(filtered.filters).toEqual(['artifactTag', 'type']);
+    const failed = RunListSchema.parse(await (await get(node, '/api/reports/runs?outcome=failed&environment=ios')).json());
+    expect(failed.runs.map(run => run.key)).toEqual([RUN_A]);
+    expect(failed.facets!.artifactTags).toEqual([{ value: 'demo', count: 1 }]);
+    expect(RunListSchema.parse(await (await get(node, '/api/reports/runs')).json()).filters).toEqual([]);
+  });
+});
+
+describe('GET /api/reports/tests?scope=', () => {
+  async function recorded() {
+    const store = memoryStore();
+    const clip = (name: string, scope?: Record<string, unknown>) => ({ name, contentType: 'video/webm', data: new TextEncoder().encode(name), ...(scope ? { scope } : {}) });
+    await publishChecks(store, {
+      producer: 'mobile', environment: 'ios', recordedAtMs: 1_000, checks: [
+        { id: 'sim', title: 'sim', status: 'passed', attachments: [clip('sim.webm', { deviceKind: 'simulator', audioCaptured: false })] },
+        { id: 'phone', title: 'phone', status: 'passed', attachments: [clip('phone.webm', { deviceKind: 'physical', audioCaptured: true, verified: ['deviceKind'] })] },
+        { id: 'bare', title: 'bare', status: 'passed', attachments: [clip('bare.webm')] },
+      ]
+    });
+    const node = createNode({ stores: [{ id: 'main', label: 'Main', store }], refreshMs: 60_000 });
+    nodes.push(node);
+    await node.ready;
+    return node;
+  }
+  const ids = async (node: Node, query: string) => TestCatalogSchema.parse(await (await get(node, `/api/reports/tests?${query}`)).json()).tests.map(test => test.id).sort();
+
+  test('narrows to physical or audible evidence and never includes the unknown or the simulated', async () => {
+    const node = await recorded();
+    expect(await ids(node, 'scope=device:physical')).toEqual(['phone']);
+    expect(await ids(node, 'scope=device:simulator')).toEqual(['sim']);
+    expect(await ids(node, 'scope=audio:recorded')).toEqual(['phone']);
+    expect(await ids(node, 'scope=unknown')).toEqual(['bare']);
+    expect(await ids(node, 'scope=device:physical,audio:silent')).toEqual([]);
+    expect(await ids(node, '')).toEqual(['bare', 'phone', 'sim']);
+  });
+
+  test('the document says what each recording declares', async () => {
+    const node = await recorded();
+    const catalog = TestCatalogSchema.parse(await (await get(node, '/api/reports/tests')).json());
+    expect(catalog.tests.find(test => test.id === 'phone')!.scopeProfiles).toEqual([['device:physical', 'audio:recorded']]);
+    expect(catalog.tests.find(test => test.id === 'bare')!.scopeProfiles).toEqual([['unknown']]);
+    expect(catalog.facets.scopes!.map(item => item.value)).toContain('device:simulator');
+    const detail = await (await get(node, '/api/reports/tests/history?key=' + encodeURIComponent(catalog.tests.find(test => test.id === 'phone')!.key))).json() as { test: { outcomes: { evidence: { videos: { scope: { verified: string[] } }[] } }[] } };
+    expect(detail.test.outcomes[0]!.evidence.videos[0]!.scope.verified).toEqual(['deviceKind']);
   });
 });

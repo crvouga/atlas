@@ -15,7 +15,7 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, RunListSchema, RunDetailSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
@@ -66,7 +66,7 @@ const COMPONENTS = {
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
-  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -325,6 +325,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'tag', in: 'query', description: 'Only tests with this tag. Repeatable or comma-separated.', schema: str },
       { name: 'artifactTag', in: 'query', description: 'Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.', schema: str, example: 'demo' },
       { name: 'inherited', in: 'query', description: 'With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.', schema: { type: 'string', enum: ['1', 'true'] } },
+      { name: 'scope', in: 'query', description: 'Only tests with one playable recording that states every one of these producer-declared qualifications: `surface:<value>`, `device:<value>` (`device:physical` and `device:simulator` stay apart), `data:synthetic` or `data:real`, `dependencies:<value>`, `audio:recorded` or `audio:silent`, `pacing:<value>`. All must hold for the same recording. A recording that did not declare a value never matches it, and `unknown` matches only a recording that declared no scope. Repeatable or comma-separated.', schema: str, example: 'device:physical,audio:recorded' },
       { name: 'run', in: 'query', description: 'Only tests recorded in this run (a `key` from `/api/reports/runs`).', schema: str },
       { name: 'sort', in: 'query', description: 'The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.', schema: { type: 'string', enum: ['spec', 'title', 'recent', 'slowest', 'failures', 'flaky', 'runs'] } },
       { name: 'offset', in: 'query', description: 'Skip this many matching tests.', schema: { type: 'integer', minimum: 0 } },
@@ -375,13 +376,51 @@ const BASE_OPERATIONS: readonly Operation[] = [
   {
     route: 'GET /api/reports/runs', path: '/api/reports/runs', operationId: 'getReportRuns', tag: 'Report', role: 'read',
     summary: 'The runs that recorded the report',
-    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.',
+    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures, their video counts (references, distinct playable recordings, unavailable) and the artifact tags, media types and labels their results carry. Filters narrow the list before `limit`: AND across the parameters, OR within one; `filters` in the answer names those that were applied and `facets` offers each dimension\'s values with counts. A server that does not know a filter ignores it and does not name it in `filters`. Send `format=markdown` for Markdown.',
     parameters: [
       { name: 'limit', in: 'query', description: 'At most this many runs (default 100).', schema: { type: 'integer', minimum: 0 } },
       { name: 'video', in: 'query', description: '`true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.', schema: { type: 'boolean' } },
+      { name: 'artifactTag', in: 'query', description: 'Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\\,` or `\\\\`. OR within the parameter, AND with the other filters.', schema: str },
+      { name: 'inherited', in: 'query', description: '`1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.', schema: { type: 'boolean' } },
+      { name: 'type', in: 'query', description: 'Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer\'s own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.', schema: str },
+      { name: 'label', in: 'query', description: '`key=value`, or `key` for any value.', schema: str },
+      { name: 'environment', in: 'query', description: 'Environments or devices (`ios`, `desktop-web`).', schema: str },
+      { name: 'producer', in: 'query', description: 'Producers.', schema: str },
+      { name: 'branch', in: 'query', description: 'Branches.', schema: str },
+      { name: 'sha', in: 'query', description: 'Revisions: a full commit id or a prefix of at least seven characters.', schema: str },
+      { name: 'outcome', in: 'query', description: 'Statuses: `passed`, `failed`, `running`, `not-run`. A run\'s outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.', schema: str },
+      { name: 'q', in: 'query', description: 'Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.', schema: str },
+      { name: 'since', in: 'query', description: 'Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result\'s recording time; a run\'s end.', schema: str },
+      { name: 'until', in: 'query', description: 'Only records at or before this time (same forms as `since`).', schema: str },
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The runs.', 'RunList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/artifacts', path: '/api/reports/artifacts', operationId: 'getReportArtifacts', tag: 'Report', role: 'read',
+    summary: 'Recorded results that carry evidence, across the whole history',
+    description: 'Every recorded result that has attachments (recordings, screenshots, traces), newest first, found in the history and not only among the current winners: a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged. Narrow it by artifact tag, media type, label, feature (`domain`, `spec`), environment or device, producer, branch, revision, outcome and time: AND across the parameters, OR within one; with both `artifactTag` and `type`, one artifact must be both. `filters` names the filters that were applied and `facets` offers each dimension\'s values with counts: the count beside a value is what the list would hold if that value alone were chosen in its dimension, every other filter applied. Tags written by reviewers after upload are not searched; only those in the layer are. Send `format=markdown` for Markdown.',
+    parameters: [
+      { name: 'limit', in: 'query', description: 'At most this many results (default 100).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'offset', in: 'query', description: 'Skip this many matches (default 0).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'video', in: 'query', description: '`true` for results with a playable video recording (the same as `type=video`).', schema: { type: 'boolean' } },
+      { name: 'domain', in: 'query', description: 'The feature domain of the result\'s spec.', schema: str },
+      { name: 'spec', in: 'query', description: 'Spec paths.', schema: str },
+      { name: 'artifactTag', in: 'query', description: 'Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\\,` or `\\\\`. OR within the parameter, AND with the other filters.', schema: str },
+      { name: 'inherited', in: 'query', description: '`1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.', schema: { type: 'boolean' } },
+      { name: 'type', in: 'query', description: 'Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer\'s own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.', schema: str },
+      { name: 'label', in: 'query', description: '`key=value`, or `key` for any value.', schema: str },
+      { name: 'environment', in: 'query', description: 'Environments or devices (`ios`, `desktop-web`).', schema: str },
+      { name: 'producer', in: 'query', description: 'Producers.', schema: str },
+      { name: 'branch', in: 'query', description: 'Branches.', schema: str },
+      { name: 'sha', in: 'query', description: 'Revisions: a full commit id or a prefix of at least seven characters.', schema: str },
+      { name: 'outcome', in: 'query', description: 'Statuses: `passed`, `failed`, `running`, `not-run`. A run\'s outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.', schema: str },
+      { name: 'q', in: 'query', description: 'Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.', schema: str },
+      { name: 'since', in: 'query', description: 'Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result\'s recording time; a run\'s end.', schema: str },
+      { name: 'until', in: 'query', description: 'Only records at or before this time (same forms as `since`).', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The matching results and the facets.', 'ArtifactList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',

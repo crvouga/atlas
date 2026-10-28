@@ -133,6 +133,7 @@ export async function publishChecks(store: ObjectStore, input: PublishChecksInpu
     ...(args.links?.length ? { links: args.links } : {}),
     ...((layerEvidence.attachments as Attachment[] | undefined)?.length ? { attachments: layerEvidence.attachments as Attachment[] } : {}),
     ...(args.annotations?.length ? { annotations: args.annotations } : {}),
+    ...(args.scope ? { scope: args.scope } : {}),
     ...(args.extensions && Object.keys(args.extensions).length ? { extensions: args.extensions } : {})
   };
   const bundle = entries.size ? await writeBundle(store, (async function* () { for (const entry of [...entries.values()].sort((a, b) => (a.key < b.key ? -1 : 1))) yield entry; })(), 'layers/blobs/') : {};

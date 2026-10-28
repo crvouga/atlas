@@ -31,6 +31,7 @@ carry any of these. Every one is optional.
 | `attempts[]` | Every try, when the check was retried. |
 | `tags[]` | Free labels to filter by: `smoke`, `payments`. |
 | `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. |
+| `scope{}` | What the evidence does and does not show: surface, device kind, synthetic data, scripted dependencies, audio, pacing, what was asserted and its limits. Unknown when absent. See [Evidence scope](rich-evidence.md#evidence-scope). |
 | `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
 | `measurements[]` | Numbers, with units and an allowance (already part of the contract). |

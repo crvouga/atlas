@@ -4,6 +4,257 @@ Layered evidence for any kind of spec: publishing layers, stores (folder, S3, an
 
 > Generated from the doc comments of `packages/reports/src` by `bun run docs`. Do not edit: change the comment next to the code.
 
+### Run and artifact queries
+
+Source: `packages/reports/src/artifact-query.ts`. Import: `@crvouga/atlas/reports/artifact-query`
+
+One shareable query for the runs of a project and for the recorded results that carry evidence (recordings,
+screenshots, traces): by artifact tag, label, media type, feature (domain, spec), environment or device, producer,
+branch, revision, outcome and time. The same rules answer `GET /api/reports/runs`, `GET /api/reports/artifacts`
+and the viewer's Runs and Artifacts views, so a link means the same thing everywhere.
+
+The semantics are fixed, not inferred:
+
+- Across dimensions the filters combine with AND: `artifactTag=demo&type=video&environment=ios` is a demo
+  recording on ios.
+- Within a dimension the values combine with OR: `environment=ios,android` is either.
+- When both `artifactTag` and `type` are asked for, one artifact must be both (a `demo`-tagged video, not a demo-tagged
+  screenshot beside an untagged video) wherever the report says which videos carry which tags; otherwise a result with
+  an artifact of that type and an artifact with that tag matches.
+- Facet counts are disjunctive: the count beside a value is how many records the list would hold if that value were
+  the only choice in its dimension, with every other dimension's filter applied. With a value already chosen, the
+  other values show what choosing them in addition would add, and the chosen one's count is the list's.
+- A filter never changes a status. Evidence that is not recorded is unknown, never a match.
+
+Lists in the address are comma-separated; a comma or backslash inside a value is written `\,` or `\\`
+({@link splitList}, {@link joinList}), so a label such as `note=a,b` survives.
+
+See docs/server.md#reading-the-report-as-an-agent
+
+#### `QueryFacetValue`
+
+```ts
+export type QueryFacetValue = { readonly value: string; readonly count: number };
+```
+
+A value of a dimension and how many records have it.
+
+#### `QUERY_DIMENSIONS`
+
+```ts
+export const QUERY_DIMENSIONS = …
+```
+
+The dimensions a query narrows by, with their address parameters.
+
+#### `QueryDimension`
+
+```ts
+export type QueryDimension = (typeof QUERY_DIMENSIONS)[number];
+```
+
+One of {@link QUERY_DIMENSIONS}.
+
+#### `ArtifactFilter`
+
+```ts
+export type ArtifactFilter = {
+  /** Words (all of them) found in the title, test id, spec, domain, branch, labels, tags, environment or producer; or, for a run, its title. */
+  readonly q?: string;
+  /** Artifact tags (`demo` and `#demo` are the same). */
+  readonly artifactTag?: readonly string[];
+  /** Also match the tags an artifact inherits from its check and run. Default false: the exact artifact query. */
+  readonly inherited?: boolean;
+  /** Media types as roles: `video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer's own role. `video` means a playable recording. */
+  readonly type?: readonly string[];
+  /** `key=value`, or `key` for any value. */
+  readonly label?: readonly string[];
+  /** Environments or devices (`ios`, `desktop-web`). */
+  readonly environment?: readonly string[];
+  readonly producer?: readonly string[];
+  readonly branch?: readonly string[];
+  /** Revisions: a full commit id, or a prefix of at least seven characters. */
+  readonly sha?: readonly string[];
+  /** Statuses (`passed`, `failed`, `running`, `not-run`). A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`. */
+  readonly outcome?: readonly string[];
+  /** The feature domain of a result's spec. Not applicable to runs. */
+  readonly domain?: readonly string[];
+  /** Spec paths. Not applicable to runs. */
+  readonly spec?: readonly string[];
+  /** Only records at or after this time (epoch ms): a result's recording time, a run's end. */
+  readonly since?: number;
+  /** Only records at or before this time (epoch ms). */
+  readonly until?: number;
+  /** Only records with a playable video recording (the same as `type: ['video']`). */
+  readonly video?: boolean;
+};
+```
+
+What a query asks for. Every field is optional; nothing asked is everything. See the module comment for the semantics.
+
+#### `FilterName`
+
+```ts
+export type FilterName = QueryDimension | 'q' | 'inherited' | 'since' | 'until' | 'video';
+```
+
+The filters a query used, as they are named in the address and in `filters` of a response.
+
+#### `FilterFields`
+
+```ts
+export type FilterFields = {
+  /** Lower-cased text a search matches. */
+  readonly text: string;
+  /** The normalized tags of its artifacts. */
+  readonly artifactTags: readonly string[];
+  /** The tags its artifacts inherit from checks and runs, and its own. */
+  readonly tags: readonly string[];
+  /** Distinct media types; `video` only when a recording can be played. */
+  readonly types: readonly string[];
+  /** Artifacts by type and their own tags. Where the report does not say which artifact carries which tag, every artifact of the record is given the record's artifact tags. */
+  readonly media: readonly { readonly type: string; readonly tags: readonly string[] }[];
+  /** `key=value`, sorted and distinct. */
+  readonly labels: readonly string[];
+  readonly environments: readonly string[];
+  readonly producers: readonly string[];
+  readonly branches: readonly string[];
+  readonly shas: readonly string[];
+  readonly outcomes: readonly string[];
+  /** Absent when the dimension does not apply (runs have no domain). */
+  readonly domains?: readonly string[];
+  readonly specs?: readonly string[];
+  readonly at: number;
+};
+```
+
+The values of a record a query looks at: made by {@link fieldsOfRun} or by the artifact search.
+
+#### `QueryFacets`
+
+```ts
+export type QueryFacets = {
+  readonly artifactTags: readonly QueryFacetValue[];
+  readonly types: readonly QueryFacetValue[];
+  /** Values are `key=value`. */
+  readonly labels: readonly QueryFacetValue[];
+  readonly environments: readonly QueryFacetValue[];
+  readonly producers: readonly QueryFacetValue[];
+  readonly branches: readonly QueryFacetValue[];
+  readonly outcomes: readonly QueryFacetValue[];
+  readonly domains?: readonly QueryFacetValue[];
+};
+```
+
+The facets of a query: for each dimension, its values with disjunctive counts (see the module comment).
+
+#### `splitList`
+
+```ts
+export function splitList(raw: string): string[]
+```
+
+Splits a comma-separated list from an address: `a,b` is two values; `\,` is a comma and `\\` a backslash inside a
+value. Values are trimmed and empty ones dropped.
+
+**Example**
+
+```ts
+splitList('demo,release\\,2'); // ['demo', 'release,2']
+```
+
+#### `joinList`
+
+```ts
+export function joinList(list: readonly string[]): string | undefined
+```
+
+Joins values into one address parameter that {@link splitList} reads back; `undefined` when there are none.
+
+#### `parseTime`
+
+```ts
+export function parseTime(raw: string | null | undefined): number | undefined
+```
+
+A time from an address: epoch milliseconds, or a date or date-time Date can read (a date alone is UTC). `undefined` when unreadable.
+
+#### `parseArtifactFilter`
+
+```ts
+export function parseArtifactFilter(params: URLSearchParams): ArtifactFilter
+```
+
+Reads a query from URL search parameters: `q`, `video`, `inherited`, `since`, `until` and the repeatable or
+comma-separated {@link QUERY_DIMENSIONS}. Unreadable values are left out, never an error.
+
+#### `filterParams`
+
+```ts
+export function filterParams(filter: ArtifactFilter): URLSearchParams
+```
+
+A query as URL search parameters, the form {@link parseArtifactFilter} reads back.
+
+#### `usedFilters`
+
+```ts
+export function usedFilters(filter: ArtifactFilter): FilterName[]
+```
+
+Which filters a query uses, by the names an address gives them.
+
+#### `isFiltered`
+
+```ts
+export function isFiltered(filter: ArtifactFilter): boolean
+```
+
+Whether a query narrows anything.
+
+#### `forRuns`
+
+```ts
+export function forRuns(filter: ArtifactFilter): ArtifactFilter
+```
+
+Every filter in `filter` that may be applied to a record with these fields, as the runs query applies them (no domain or spec).
+
+#### `matchesFilter`
+
+```ts
+export function matchesFilter(fields: FilterFields, filter: ArtifactFilter, skip?: QueryDimension): boolean
+```
+
+Whether a record satisfies a query. `skip` leaves one dimension out: what {@link facetsOf} uses to count the values of
+that dimension, and nothing else should need.
+
+#### `facetsOf`
+
+```ts
+export function facetsOf(records: readonly FilterFields[], filter: ArtifactFilter): QueryFacets
+```
+
+The facets of a query over every record: for each dimension, the values the records have and how many records
+would match if that value were chosen in its dimension (see the module comment). A value chosen in the query is
+listed even when nothing has it, with a count of 0, so it can be removed.
+
+#### `outcomeOfCounts`
+
+```ts
+export function outcomeOfCounts(counts: Readonly<Record<string, number>>): string
+```
+
+The outcome of a run from its results by status: `failed`, else `running`, else `passed`, else `not-run`.
+
+#### `labelList`
+
+```ts
+export function labelList(labels: Readonly<Record<string, string>> | undefined): string[]
+```
+
+The `key=value` labels of a record, sorted and distinct.
+
 ### Reviewer tags in a store
 
 Source: `packages/reports/src/artifact-tag-store.ts`. Import: `@crvouga/atlas/reports/artifact-tag-store`
@@ -1410,6 +1661,8 @@ export type EvidenceHolder = {
   readonly steps?: readonly Step[];
   readonly attempts?: readonly Attempt[];
   readonly extensions?: Readonly<Record<string, unknown>>;
+  /** What its evidence shows, as its producer declared it (see `EvidenceScope`). */
+  readonly scope?: EvidenceScope;
 };
 ```
 
@@ -1429,7 +1682,17 @@ Several holders (for example a check and its layer) are summed: `attachments` al
 attempts, `steps` counts only each holder's own top-level steps, tags are de-duplicated, and for a repeated
 label the later holder wins. `artifactTags` are the attachments' own normalized tags and are never inherited. `roles` are the attachments' roles (or, without one, what their media type or file
 name implies), sorted and distinct. `videos` lists every attachment whose effective media type is video, with the
-check, retry attempt or step that holds it (see {@link isVideoAttachment}).
+check, retry attempt or step that holds it (see {@link isVideoAttachment}), each with the scope that applies to it.
+
+#### `summarizeEvidenceIn`
+
+```ts
+export function summarizeEvidenceIn(inherited: EvidenceScope | undefined, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined
+```
+
+Like {@link summarizeEvidence} for the checks of a part: a video that declares no scope, and sits in a holder that
+declares none, takes the scope `inherited` from its part or layer (the nearest declaration of the two, see
+`effectiveScope`). Without `inherited` it is the same as `summarizeEvidence`.
 
 #### `summarizeLayerEvidence`
 
@@ -1489,6 +1752,8 @@ export type CheckDetail = {
   readonly check: Check;
   /** What the run as a whole carries: its logs, its links, its labels. */
   readonly run: EvidenceHolder;
+  /** The scope the check inherits: its part's declaration, else its layer's. Absent when neither declared one, which is unknown, not live or physical. */
+  readonly inheritedScope?: EvidenceScope;
 };
 ```
 
@@ -1497,7 +1762,7 @@ All of one result's evidence, read when someone opens it.
 #### `checkDetailOf`
 
 ```ts
-export function checkDetailOf(layer: { readonly id: string; readonly parts: readonly { readonly kind: string; readonly checks: readonly Check[] }[] } & EvidenceHolder, checkId: string, kind?: string): CheckDetail | null
+export function checkDetailOf(layer: { readonly id: string; readonly parts: readonly { readonly kind: string; readonly checks: readonly Check[]; readonly scope?: EvidenceScope }[] } & EvidenceHolder, checkId: string, kind?: string): CheckDetail | null
 ```
 
 One result's evidence, from a layer: the first check with id `checkId` (in a part of kind `kind`, when given) plus the layer's own evidence. Null when the layer holds no such check.
@@ -1508,7 +1773,7 @@ One result's evidence, from a layer: the first check with id `checkId` (in a par
 export function runEvidence(layer: EvidenceHolder): EvidenceHolder
 ```
 
-What a layer carries as a whole (its tags, labels, links, attachments, annotations and extensions; not its parts' checks). Absent fields stay absent.
+What a layer carries as a whole (its scope, tags, labels, links, attachments, annotations and extensions; not its parts' checks). Absent fields stay absent.
 
 #### `PartEvidence`
 
@@ -1624,6 +1889,156 @@ the next pass; `refresh` does not throw for those.
 
 - `args.backend`: The backend id stamped on live layers.
 
+### Evidence scope
+
+Source: `packages/reports/src/evidence-scope.ts`. Import: `@crvouga/atlas/reports/evidence-scope`
+
+Reads what a producer declared a piece of evidence shows (`EvidenceScope`): which declaration applies to an
+attachment, the short badges a reviewer sees before playing a recording, the facts split into declared and
+independently verified, and the filter tokens (`device:physical`, `audio:recorded`) a query narrows by. Pure
+functions, safe in a browser.
+
+The one rule: what is not declared is unknown. A missing scope, or a missing field, never reads as live, physical,
+audible or end to end, and a filter for a value never matches evidence that did not say it. A scope describes
+evidence; it never decides a status, a slot or a winner.
+
+See docs/rich-evidence.md#evidence-scope
+
+#### `SCOPE_DIMENSIONS`
+
+```ts
+export const SCOPE_DIMENSIONS = …
+```
+
+The fields of a scope that say something about the evidence and that `verified` may name, in the order they are shown.
+
+#### `ScopeDimension`
+
+```ts
+export type ScopeDimension = (typeof SCOPE_DIMENSIONS)[number];
+```
+
+One of {@link SCOPE_DIMENSIONS}.
+
+#### `UNKNOWN_SCOPE`
+
+```ts
+export const UNKNOWN_SCOPE = …
+```
+
+The filter token of a recording that declares no scope at all.
+
+#### `effectiveScope`
+
+```ts
+export function effectiveScope(...candidates: readonly (EvidenceScope | undefined)[]): EvidenceScope | undefined
+```
+
+The declaration that applies to something: the nearest one wins as a whole, never field by field, so a recording
+never shows a limitation or a device that was declared for another source. Pass the candidates nearest first
+(attachment, attempt, check, part, layer); absent ones are skipped. Undefined when none declares a scope.
+
+**Example**
+
+```ts
+effectiveScope(attachment.scope, attempt.scope, check.scope, layer.scope);
+```
+
+#### `scopeKey`
+
+```ts
+export function scopeKey(scope: EvidenceScope | undefined): string
+```
+
+A stable string that is equal for equal declarations (key order never matters), to tell one scope from another.
+
+#### `scopeTokens`
+
+```ts
+export function scopeTokens(scope: EvidenceScope | undefined): string[]
+```
+
+The filter tokens one declaration states, normalized (letter case and spaces never matter): `surface:<value>`,
+`device:<value>`, `data:synthetic` or `data:real`, `dependencies:<value>`, `audio:recorded` or `audio:silent`,
+`pacing:<value>`. A field that is not declared adds no token. No scope at all is the single token
+{@link UNKNOWN_SCOPE}, so a filter can ask for the unknown on purpose; a scope that declares nothing readable is
+also unknown.
+
+#### `matchesScope`
+
+```ts
+export function matchesScope(tokens: readonly string[], wanted: readonly string[]): boolean
+```
+
+Whether one recording's tokens satisfy a filter: every wanted token must be among them. Tokens compare normalized.
+An empty filter matches everything. The token {@link UNKNOWN_SCOPE} matches only a recording with no declared
+fields, so asking for `device:physical` never includes a recording that did not say what it ran on.
+
+#### `ScopeBasis`
+
+```ts
+export type ScopeBasis = 'verified' | 'declared' | 'undeclared';
+```
+
+How a fact is known: `verified` (independently checked), `declared` (the producer's word) or `undeclared` (unknown).
+
+#### `ScopeFact`
+
+```ts
+export type ScopeFact = {
+  readonly dimension: ScopeDimension;
+  /** A name for the dimension: `Device`, `Audio`. */
+  readonly label: string;
+  /** The value as words: `Physical device`, `Silent`, `Not declared`. */
+  readonly value: string;
+  readonly basis: ScopeBasis;
+};
+```
+
+One line of what a scope says: the dimension, a sentence for a person, and how well it is known.
+
+#### `ScopeBadge`
+
+```ts
+export type ScopeBadge = {
+  readonly dimension: ScopeDimension | 'unknown';
+  readonly text: string;
+  readonly basis: ScopeBasis;
+};
+```
+
+A short qualification to show beside a recording: `Device: Simulator`, `Scripted dependencies`, `Silent`.
+
+#### `scopeFacts`
+
+```ts
+export function scopeFacts(scope: EvidenceScope | undefined): ScopeFact[]
+```
+
+Every dimension of a scope with its value and how it is known, in a fixed order, including the ones nobody declared
+(`Not declared`, basis `undeclared`). A dimension is `verified` only when the scope's `verified` names it and it has
+a value; everything else a producer wrote is `declared`. With no scope every dimension is undeclared.
+
+#### `scopeBadges`
+
+```ts
+export function scopeBadges(scope: EvidenceScope | undefined): ScopeBadge[]
+```
+
+The concise badges for a scope: one per declared dimension, in a fixed order (`Surface: Browser`, `Device: Simulator`, `Synthetic
+data`, `Scripted dependencies`, `Silent`, `Paced`). With no declared dimension the one badge `Scope unknown`, so
+a reviewer is told nothing was claimed rather than shown nothing.
+
+#### `scopeCaveats`
+
+```ts
+export function scopeCaveats(scope: EvidenceScope | undefined): string[]
+```
+
+What a reviewer must not read into evidence: a sentence per thing that is not shown. It names the assertions the
+result stands on when there are some (so activity visible beyond them is not verified), and every kind of reality
+that was not declared. Empty only for a scope that declares and verifies everything and lists no limitation.
+
 ### Report evidence types
 
 Source: `packages/reports/src/evidence-types.ts`. Import: `@crvouga/atlas/reports/evidence-types`
@@ -1690,10 +2105,14 @@ export type VideoRef = {
   readonly attempt?: number;
   /** The name of the step that holds it, when `owner` is `step`. */
   readonly step?: string;
+  /** The normalized tags of this attachment itself (`demo`), so a query can ask for a tagged video rather than a result that has a video and some tagged file. Absent when it has none (and in documents of older servers). */
+  readonly tags?: readonly string[];
   /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
   readonly recording?: string;
   /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
   readonly available: boolean;
+  /** What this recording shows, as declared for it: its own `scope`, else its attempt's, check's, part's or layer's. Absent when none declared one: its scope is unknown, not live, physical or audible. */
+  readonly scope?: EvidenceScope;
 };
 ```
 
@@ -2197,7 +2616,7 @@ A number a check recorded. Exceeding `limit` is shown and never fails the check 
 #### `EvidenceExtras`
 
 ```ts
-export type EvidenceExtras = Partial<Pick<import('../../schema/src/layer').Check, 'tags' | 'labels' | 'links' | 'steps' | 'attachments' | 'annotations' | 'attempts' | 'extensions'>>;
+export type EvidenceExtras = Partial<Pick<import('../../schema/src/layer').Check, 'tags' | 'labels' | 'links' | 'steps' | 'attachments' | 'annotations' | 'attempts' | 'extensions' | 'scope'>>;
 ```
 
 What a check may carry beyond its outcome. All optional and open: see docs/extending.md.
@@ -4111,7 +4530,7 @@ String choices (such as `{ device: 'iphone-15' }`) that make a result its own sl
 #### `LayerExtras`
 
 ```ts
-export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions' | 'recordings'>>;
+export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions' | 'recordings' | 'scope'>>;
 ```
 
 What a layer may carry as a whole. All optional and open: see docs/extending.md.
@@ -6415,7 +6834,7 @@ See docs/server.md#streaming-a-run-as-it-happens
 #### `ReporterIdentity`
 
 ```ts
-export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'run' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>;
+export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'run' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'scope' | 'extensions'>;
 ```
 
 What every layer of one stream shares: who is reporting, from where. Whatever `publishChecks` takes, except the checks and the time.
@@ -7843,7 +8262,9 @@ runs that produced them and which tests each one ran.
   always the report's winner (`combineEvidence`), and history only describes how it got there.
 - `testCatalog` turns the report's winners (plus a history, when there is one) into a `TestCatalog`: a summary with
   insights (slowest, flaky, failing), facets to filter by, and the tests that match a `TestQuery`.
-- `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run.
+- `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run. `runList` and `artifactList`
+  narrow by tag, label, media type, environment, branch, outcome and time (see `artifact-query.ts`); `artifactList` finds
+  the recorded results that carry evidence across the whole history, not only the latest winners.
 - `catalogMarkdown`, `historyMarkdown`, `runsMarkdown` and `runMarkdown` say the same in Markdown, for an agent or a
   terminal.
 
@@ -7994,6 +8415,8 @@ export type TestSummary = {
   readonly artifactTags?: readonly string[];
   /** The normalized tags its attachments inherit from their check and run (those of the results that have attachments), apart from `artifactTags`. What an inherited artifact query also matches. */
   readonly inheritedArtifactTags?: readonly string[];
+  /** What each distinct playable recording of its current results declares it shows, as filter tokens (`device:physical`, `audio:silent`; see `scopeTokens`). A recording that declared nothing is `['unknown']`. Absent when it has no playable recording. A query's `scope` must hold for one recording, so evidence from two different devices never combines. */
+  readonly scopeProfiles?: readonly (readonly string[])[];
   readonly labels: Readonly<Record<string, string>>;
   /** What its current results carry: attachments, steps, retries, and the kinds of attachment. */
   readonly evidence: { readonly attachments: number; readonly steps: number; readonly attempts: number; readonly roles: readonly string[] };
@@ -8086,6 +8509,8 @@ export type CatalogFacets = {
   readonly tags: readonly FacetValue[];
   /** The tags of attachments, normalized. Absent in documents of older servers. */
   readonly artifactTags?: readonly FacetValue[];
+  /** The scope tokens of its recordings (`device:simulator`, `audio:recorded`, `unknown`), with how many tests have a recording that states each. Absent in documents of older servers. */
+  readonly scopes?: readonly FacetValue[];
   readonly branches: readonly FacetValue[];
   readonly labels: Readonly<Record<string, readonly FacetValue[]>>;
 };
@@ -8127,6 +8552,8 @@ export type TestQuery = {
   readonly artifactTag?: readonly string[];
   /** With `artifactTag`: also match the tags an attachment inherits from its check and run (a recording without a tag of its own under a run tagged `demo`). Default false: the exact query. */
   readonly inherited?: boolean;
+  /** Only tests with one playable recording that states every one of these (`device:physical`, `audio:recorded`, `data:synthetic`, `dependencies:live`, `surface:browser`, `pacing:paced`; see `scopeTokens`). Evidence that did not declare a value never matches it; `unknown` matches only a recording that declared no scope. */
+  readonly scope?: readonly string[];
   /** Only tests recorded in this run (a key from `runList`). */
   readonly run?: string;
   readonly sort?: TestSort;
@@ -8211,7 +8638,10 @@ export type RunSummary = {
    * summaries. All kinds, videos included. Absent when none, and in a report that carries no such information.
    */
   readonly attachments?: number;
-};
+  /** The normalized tags of the attachments of its results and layers, sorted and distinct. Absent when none is tagged. */
+  readonly artifactTags?: readonly string[];
+  /** The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches), sorted and distinct. Absent when none. */
+  …
 ```
 
 A run: the layers that name the same execution (`run.id`), else share a CI run URL, else a branch and commit. When,
@@ -8220,13 +8650,11 @@ where, and how its tests went.
 #### `RunQuery`
 
 ```ts
-export type RunQuery = {
-  /** Only runs that have at least one playable video recording. `total` then counts only those. */
-  readonly video?: boolean;
-};
+export type RunQuery = ArtifactFilter;
 ```
 
-What `runList` can be asked.
+What `runList` can be asked: an {@link ArtifactFilter}, of which a run answers every dimension but `domain` and
+`spec`. `video` keeps only runs that have at least one playable video recording; `total` then counts only those.
 
 #### `RunList`
 
@@ -8239,6 +8667,10 @@ export type RunList = {
   readonly runs: readonly RunSummary[];
   /** How many of all runs (whatever was asked, before `limit`) have a playable video recording. */
   readonly withVideo?: number;
+  /** The filters of the query that were applied. A viewer that asked for another knows the server ignored it. */
+  readonly filters?: readonly FilterName[];
+  /** The values each filter dimension offers with counts over every run (see `facetsOf`). */
+  readonly facets?: QueryFacets;
 };
 ```
 
@@ -8304,6 +8736,70 @@ export type RunDetail = {
 
 `GET /api/reports/runs/detail`: one run and every result it recorded.
 
+#### `ArtifactResult`
+
+```ts
+export type ArtifactResult = {
+  /** The test's key, as in `TestSummary.key`. */
+  readonly key: string;
+  readonly id: string;
+  readonly title: string;
+  readonly specPath: string | null;
+  /** The domain of its spec, or null when it has none. */
+  readonly domain: string | null;
+  /** When it was recorded, epoch ms. */
+  readonly at: number;
+  readonly status: EvidenceStatus;
+  readonly environment: string | null;
+  readonly producer: string;
+  /** The kind of the part that held it. */
+  readonly kind: string;
+  readonly parameters: Readonly<Record<string, string>>;
+  readonly branch: string | null;
+  readonly sha: string | null;
+  /** The key of its run (see `runKey`). */
+  readonly run: string;
+  readonly runUrl: string | null;
+  /** The id of the layer that recorded it: with `key`, the exact result to open. */
+  readonly layer: string;
+  readonly backend: string;
+  /** Attachments on the result, including those on its steps and attempts. */
+  readonly attachments: number;
+  /** The normalized tags of its attachments. */
+  readonly artifactTags: readonly string[];
+  /** The tags of its check and run, which its attachments inherit. */
+  readonly tags: readonly string[];
+  /** The media types (roles) of its attachments; `video` only for a playable recording. */
+  readonly types: readonly string[];
+  readonly labels: Readonly<Record<string, string>>;
+  readonly videos?: readonly VideoRef[];
+};
+```
+
+One recorded result that carries evidence (an attachment: a recording, a screenshot, a trace), with where and when it
+was recorded: the unit `artifactList` finds. It is a result in the history, not only the report's current winner, so
+a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged.
+
+#### `ArtifactList`
+
+```ts
+export type ArtifactList = {
+  readonly schemaVersion: typeof TEST_CATALOG_VERSION;
+  readonly version: string;
+  /** Results that matched, before `offset` and `limit`. */
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly results: readonly ArtifactResult[];
+  /** The filters of the query that were applied. */
+  readonly filters: readonly FilterName[];
+  /** The values each dimension offers with disjunctive counts over every result that carries evidence. */
+  readonly facets: QueryFacets;
+};
+```
+
+`GET /api/reports/artifacts`: the recorded results that carry evidence and match a query, newest first.
+
 #### `runKey`
 
 ```ts
@@ -8341,6 +8837,7 @@ const catalog = testCatalog(catalogModel(layers, { history }));
 - `get runCount(): number { return this.#runs.size; }` — How many runs it knows of.
 - `runs(): RunSummary[]` — Every run, newest first.
 - `run(key: string): { readonly run: RunSummary; readonly results: RunResult[]; readonly layers: RunLayer[] } | null` — One run and its results (failed first, then by spec and title), or null.
+- `evidenceResults(): readonly { readonly result: ArtifactResult; readonly fields: FilterFields }[]` — Every recorded result that carries an attachment, newest first, with the values a query looks at. Built once per layer added. The domain is left to the caller (`artifactList`), which may know more specs than the layers recorded.
 - `testsIn(key: string): ReadonlySet<string>` — The keys of the tests one run recorded.
 
 #### `durationStats`
@@ -8454,6 +8951,32 @@ Every run the history knows of, newest first, `limit` at most (default 100). Wit
 have a playable video recording: the filter and `total` apply to every run before `limit`, and nothing is read from
 any recording's bytes. `withVideo` always counts every run that has one.
 
+#### `fieldsOfRun`
+
+```ts
+export function fieldsOfRun(run: RunSummary): FilterFields
+```
+
+What a query looks at in a run: see {@link ArtifactFilter}. A run's outcome is `failed` when any result failed.
+
+#### `artifactList`
+
+```ts
+export function artifactList(history: TestHistory, version: string, query: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList
+```
+
+The recorded results that carry evidence and match a query, newest first, across the whole history (`limit` default
+100). `total` and the facet counts apply to every match before `offset` and `limit`. `domainOf` tells the domain of a
+spec path when the caller knows more than the layers recorded (a server with a spec set); otherwise it is the
+recorded spec's domain, else the folder the path implies.
+
+**Example**
+
+```ts
+const list = artifactList(history, 'v1', { artifactTag: ['demo'], type: ['video'], environment: ['ios'] });
+list.results.map(r => [r.title, r.run, r.sha, r.status]);
+```
+
 #### `runDetail`
 
 ```ts
@@ -8468,7 +8991,7 @@ One run with every result it recorded, or null when no run has that key.
 export function parseTestQuery(params: URLSearchParams): TestQuery
 ```
 
-Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, and `inherited=1`.
+Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, `scope` (every token must hold for one recording), and `inherited=1`.
 
 #### `formatMs`
 
@@ -8501,6 +9024,14 @@ export function runsMarkdown(list: RunList): string
 ```
 
 The run list as Markdown.
+
+#### `artifactsMarkdown`
+
+```ts
+export function artifactsMarkdown(list: ArtifactList): string
+```
+
+The artifact results as Markdown, for an agent or a terminal.
 
 #### `runMarkdown`
 

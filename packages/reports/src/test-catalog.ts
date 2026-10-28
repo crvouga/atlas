@@ -10,7 +10,9 @@
  *   always the report's winner (`combineEvidence`), and history only describes how it got there.
  * - `testCatalog` turns the report's winners (plus a history, when there is one) into a `TestCatalog`: a summary with
  *   insights (slowest, flaky, failing), facets to filter by, and the tests that match a `TestQuery`.
- * - `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run.
+ * - `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run. `runList` and `artifactList`
+ *   narrow by tag, label, media type, environment, branch, outcome and time (see `artifact-query.ts`); `artifactList` finds
+ *   the recorded results that carry evidence across the whole history, not only the latest winners.
  * - `catalogMarkdown`, `historyMarkdown`, `runsMarkdown` and `runMarkdown` say the same in Markdown, for an agent or a
  *   terminal.
  *
@@ -21,9 +23,11 @@
  * @see docs/server.md#reading-the-report-as-an-agent
  */
 import { displayTag, normalizeTag, normalizeTags } from './artifact-tags';
+import { facetsOf, forRuns, labelList, matchesFilter, outcomeOfCounts, splitList, usedFilters, type ArtifactFilter, type FilterFields, type FilterName, type QueryFacets } from './artifact-query';
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
 import { videoCounts } from './evidence-detail';
+import { matchesScope, scopeTokens, UNKNOWN_SCOPE } from './evidence-scope';
 import { checkSlots, type CheckSlot } from './evidence-view';
 import { combineEvidence, emptyCounts, slotKey, specPath as normalSpecPath, type EvidenceResult } from './layer-merge';
 import { RecordedSpecs } from './recorded-specs';
@@ -134,6 +138,8 @@ export type TestSummary = {
   readonly artifactTags?: readonly string[];
   /** The normalized tags its attachments inherit from their check and run (those of the results that have attachments), apart from `artifactTags`. What an inherited artifact query also matches. */
   readonly inheritedArtifactTags?: readonly string[];
+  /** What each distinct playable recording of its current results declares it shows, as filter tokens (`device:physical`, `audio:silent`; see `scopeTokens`). A recording that declared nothing is `['unknown']`. Absent when it has no playable recording. A query's `scope` must hold for one recording, so evidence from two different devices never combines. */
+  readonly scopeProfiles?: readonly (readonly string[])[];
   readonly labels: Readonly<Record<string, string>>;
   /** What its current results carry: attachments, steps, retries, and the kinds of attachment. */
   readonly evidence: { readonly attachments: number; readonly steps: number; readonly attempts: number; readonly roles: readonly string[] };
@@ -201,6 +207,8 @@ export type CatalogFacets = {
   readonly tags: readonly FacetValue[];
   /** The tags of attachments, normalized. Absent in documents of older servers. */
   readonly artifactTags?: readonly FacetValue[];
+  /** The scope tokens of its recordings (`device:simulator`, `audio:recorded`, `unknown`), with how many tests have a recording that states each. Absent in documents of older servers. */
+  readonly scopes?: readonly FacetValue[];
   readonly branches: readonly FacetValue[];
   readonly labels: Readonly<Record<string, readonly FacetValue[]>>;
 };
@@ -226,6 +234,8 @@ export type TestQuery = {
   readonly artifactTag?: readonly string[];
   /** With `artifactTag`: also match the tags an attachment inherits from its check and run (a recording without a tag of its own under a run tagged `demo`). Default false: the exact query. */
   readonly inherited?: boolean;
+  /** Only tests with one playable recording that states every one of these (`device:physical`, `audio:recorded`, `data:synthetic`, `dependencies:live`, `surface:browser`, `pacing:paced`; see `scopeTokens`). Evidence that did not declare a value never matches it; `unknown` matches only a recording that declared no scope. */
+  readonly scope?: readonly string[];
   /** Only tests recorded in this run (a key from `runList`). */
   readonly run?: string;
   readonly sort?: TestSort;
@@ -298,13 +308,21 @@ export type RunSummary = {
    * summaries. All kinds, videos included. Absent when none, and in a report that carries no such information.
    */
   readonly attachments?: number;
+  /** The normalized tags of the attachments of its results and layers, sorted and distinct. Absent when none is tagged. */
+  readonly artifactTags?: readonly string[];
+  /** The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches), sorted and distinct. Absent when none. */
+  readonly tags?: readonly string[];
+  /** The media types (roles) of its attachments, sorted and distinct; `video` only for a playable recording. Absent when it has no attachment. */
+  readonly types?: readonly string[];
+  /** The `key=value` labels of its results and layers, sorted and distinct. Absent when none. */
+  readonly labels?: readonly string[];
 };
 
-/** What `runList` can be asked. */
-export type RunQuery = {
-  /** Only runs that have at least one playable video recording. `total` then counts only those. */
-  readonly video?: boolean;
-};
+/**
+ * What `runList` can be asked: an {@link ArtifactFilter}, of which a run answers every dimension but `domain` and
+ * `spec`. `video` keeps only runs that have at least one playable video recording; `total` then counts only those.
+ */
+export type RunQuery = ArtifactFilter;
 
 /** `GET /api/reports/runs`: runs, newest first. */
 export type RunList = {
@@ -315,6 +333,10 @@ export type RunList = {
   readonly runs: readonly RunSummary[];
   /** How many of all runs (whatever was asked, before `limit`) have a playable video recording. */
   readonly withVideo?: number;
+  /** The filters of the query that were applied. A viewer that asked for another knows the server ignored it. */
+  readonly filters?: readonly FilterName[];
+  /** The values each filter dimension offers with counts over every run (see `facetsOf`). */
+  readonly facets?: QueryFacets;
 };
 
 /** One test's last result within one run. */
@@ -362,6 +384,62 @@ export type RunDetail = {
   readonly results: readonly RunResult[];
   /** Every layer of the run, oldest first, so its run-level files can be found even in a layer with no checks. Absent from an older server. */
   readonly layers?: readonly RunLayer[];
+};
+
+/**
+ * One recorded result that carries evidence (an attachment: a recording, a screenshot, a trace), with where and when it
+ * was recorded: the unit `artifactList` finds. It is a result in the history, not only the report's current winner, so
+ * a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged.
+ */
+export type ArtifactResult = {
+  /** The test's key, as in `TestSummary.key`. */
+  readonly key: string;
+  readonly id: string;
+  readonly title: string;
+  readonly specPath: string | null;
+  /** The domain of its spec, or null when it has none. */
+  readonly domain: string | null;
+  /** When it was recorded, epoch ms. */
+  readonly at: number;
+  readonly status: EvidenceStatus;
+  readonly environment: string | null;
+  readonly producer: string;
+  /** The kind of the part that held it. */
+  readonly kind: string;
+  readonly parameters: Readonly<Record<string, string>>;
+  readonly branch: string | null;
+  readonly sha: string | null;
+  /** The key of its run (see `runKey`). */
+  readonly run: string;
+  readonly runUrl: string | null;
+  /** The id of the layer that recorded it: with `key`, the exact result to open. */
+  readonly layer: string;
+  readonly backend: string;
+  /** Attachments on the result, including those on its steps and attempts. */
+  readonly attachments: number;
+  /** The normalized tags of its attachments. */
+  readonly artifactTags: readonly string[];
+  /** The tags of its check and run, which its attachments inherit. */
+  readonly tags: readonly string[];
+  /** The media types (roles) of its attachments; `video` only for a playable recording. */
+  readonly types: readonly string[];
+  readonly labels: Readonly<Record<string, string>>;
+  readonly videos?: readonly VideoRef[];
+};
+
+/** `GET /api/reports/artifacts`: the recorded results that carry evidence and match a query, newest first. */
+export type ArtifactList = {
+  readonly schemaVersion: typeof TEST_CATALOG_VERSION;
+  readonly version: string;
+  /** Results that matched, before `offset` and `limit`. */
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly results: readonly ArtifactResult[];
+  /** The filters of the query that were applied. */
+  readonly filters: readonly FilterName[];
+  /** The values each dimension offers with disjunctive counts over every result that carries evidence. */
+  readonly facets: QueryFacets;
 };
 
 /**
@@ -436,6 +514,8 @@ type RunAcc = {
   attachments: number;
   /** Its layers, in the order they arrived. */
   members: RunLayer[];
+  /** What its layers' own evidence (their logs, links and labels) carries. */
+  evidence: { tags: Set<string>; artifactTags: Set<string>; roles: Set<string>; labels: Set<string> };
 };
 /** A test as history names it: its key and the newest title seen. */
 type Ident = { readonly slot: string; readonly id: string; title: string; titledAt: number; readonly specPath: string | null };
@@ -468,6 +548,7 @@ export class TestHistory {
   readonly #seen = new Set<string>();
   #rev = 0;
   #cells: { rev: number; byRun: Map<string, RunCell[]> } | null = null;
+  #evidence: { rev: number; items: { result: ArtifactResult; fields: FilterFields }[] } | null = null;
 
   /** Changes each time a layer is added. */
   get rev(): number {
@@ -498,7 +579,7 @@ export class TestHistory {
     const key = runKey(layer);
     let run = this.#runs.get(key);
     if (!run) {
-      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [], attachments: 0, members: [] };
+      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [], attachments: 0, members: [], evidence: { tags: new Set(), artifactTags: new Set(), roles: new Set(), labels: new Set() } };
       this.#runs.set(key, run);
     }
     // A run is told by its first layer (by time, then id), whatever order its layers arrive in.
@@ -528,6 +609,7 @@ export class TestHistory {
     run.attachments += held;
     const layerVideos = videoCounts(layer.evidence?.videos);
     run.members.push({ id: layer.id, backend, producer: layer.producer, environment: layer.environment, recordedAtMs: layer.recordedAtMs, checks: rows.length, attachments: held, ...(layerVideos ? { videos: layerVideos } : {}) });
+    if (layer.evidence) takeEvidence(run.evidence, layer.evidence);
     const origin = originOf(layer, backend);
     for (const row of rows) {
       // "Still running" is progress, not history: a test running now shows it as its current outcome.
@@ -606,20 +688,79 @@ export class TestHistory {
     return { run: runSummary(run, cells), results, layers };
   }
 
+  /**
+   * Every recorded result that carries an attachment, newest first, with the values a query looks at. Built once per
+   * layer added. The domain is left to the caller (`artifactList`), which may know more specs than the layers recorded.
+   */
+  evidenceResults(): readonly { readonly result: ArtifactResult; readonly fields: FilterFields }[] {
+    if (this.#evidence?.rev === this.#rev) return this.#evidence.items;
+    const items: { result: ArtifactResult; fields: FilterFields }[] = [];
+    for (const [slot, list] of this.#bySlot) {
+      const i = this.#idents.get(slot)!;
+      for (const held of list) {
+        const e = held.e;
+        if (!e || e.attachments < 1) continue;
+        const playable = (videoCounts(e.videos)?.recordings ?? 0) > 0;
+        const types = typesOf(e.roles, playable);
+        const artifactTags = [...(e.artifactTags ?? [])];
+        const o = held.o;
+        const result: ArtifactResult = {
+          key: i.slot, id: i.id, title: i.title, specPath: i.specPath, domain: null, at: o.at, status: held.s, environment: o.environment, producer: o.producer, kind: held.k,
+          parameters: o.parameters, branch: o.branch, sha: o.sha, run: o.run, runUrl: o.runUrl, layer: o.layer, backend: o.backend, attachments: e.attachments,
+          artifactTags, tags: [...e.tags], types, labels: e.labels, ...(e.videos ? { videos: e.videos } : {}),
+        };
+        const media = [
+          ...types.filter(type => type !== 'video').map(type => ({ type, tags: artifactTags })),
+          ...(e.videos ?? []).filter(video => video.available).map(video => ({ type: 'video', tags: video.tags ?? [] })),
+        ];
+        const labels = labelList(e.labels);
+        items.push({
+          result,
+          fields: {
+            text: [i.title, i.id, i.specPath ?? '', o.branch ?? '', o.producer, o.environment ?? '', ...artifactTags, ...e.tags, ...labels].join('\n').toLowerCase(),
+            artifactTags, tags: [...new Set([...e.tags, ...artifactTags])], types, media, labels,
+            environments: o.environment ? [o.environment] : [], producers: [o.producer], branches: o.branch ? [o.branch] : [], shas: o.sha ? [o.sha.toLowerCase()] : [],
+            outcomes: [held.s], at: o.at,
+          },
+        });
+      }
+    }
+    items.sort((a, b) => b.result.at - a.result.at || compareText(a.result.layer, b.result.layer) || compareText(a.result.key, b.result.key) || compareText(a.result.kind, b.result.kind) || compareText(a.result.producer, b.result.producer));
+    this.#evidence = { rev: this.#rev, items };
+    return items;
+  }
+
   /** The keys of the tests one run recorded. */
   testsIn(key: string): ReadonlySet<string> {
     return new Set((this.#runCells().get(key) ?? []).map(cell => cell.i.slot));
   }
 }
 
+function takeEvidence(into: RunAcc['evidence'], evidence: EvidenceSummary): void {
+  for (const tag of evidence.tags) into.tags.add(tag);
+  for (const tag of evidence.artifactTags ?? []) into.artifactTags.add(tag);
+  for (const role of evidence.roles) into.roles.add(role);
+  for (const label of labelList(evidence.labels)) into.labels.add(label);
+}
+
+/** The media types of an evidence summary: its roles, with `video` only when a recording can be played. */
+function typesOf(roles: Iterable<string>, playable: boolean): string[] {
+  const types = new Set(roles);
+  types.delete('video');
+  if (playable) types.add('video');
+  return [...types].sort();
+}
+
 function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
   const counts = emptyCounts();
+  const carried = { tags: new Set(run.evidence.tags), artifactTags: new Set(run.evidence.artifactTags), roles: new Set(run.evidence.roles), labels: new Set(run.evidence.labels) };
   const tests = new Set<string>();
   let total = 0, measured = false;
   const failed: RunCell[] = [];
   const videos = [...run.videos];
   for (const cell of cells) {
     if (cell.r.e?.videos) videos.push(...cell.r.e.videos);
+    if (cell.r.e) takeEvidence(carried, cell.r.e);
     counts[cell.r.s] += 1;
     tests.add(cell.i.slot);
     if (cell.r.d !== null) { total += cell.r.d; measured = true; }
@@ -636,6 +777,10 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
     layers: run.layers, tests: tests.size, counts, totalDurationMs: measured ? total : null, failing,
     ...(video ? { videos: video } : {}),
     ...(run.attachments ? { attachments: run.attachments } : {}),
+    ...(carried.artifactTags.size ? { artifactTags: [...carried.artifactTags].sort() } : {}),
+    ...(carried.roles.size ? { types: typesOf(carried.roles, (video?.recordings ?? 0) > 0) } : {}),
+    ...(carried.labels.size ? { labels: [...carried.labels].sort() } : {}),
+    ...(carried.tags.size ? { tags: [...carried.tags].sort() } : {}),
   };
 }
 
@@ -747,9 +892,11 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
   const labels: Record<string, string> = {};
   let attachments = 0, steps = 0, attempts = 0;
   const roles = new Set<string>();
+  const profiles = new Map<string, readonly string[]>();
   for (const [at, outcome] of outcomes.entries()) {
     const evidence = outcome.evidence;
     if (!evidence) continue;
+    for (const video of evidence.videos ?? []) if (video.available) { const tokens = scopeTokens(video.scope); profiles.set(tokens.join('\n'), tokens); }
     if (evidence.attachments > 0) for (const tag of normalizeTags([...evidence.tags, ...(slot.outcomes[at]?.layer.evidence?.tags ?? [])])) inheritedTags.add(tag);
     for (const tag of evidence.tags) tags.add(tag);
     for (const tag of evidence.artifactTags ?? []) artifactTags.add(tag);
@@ -774,6 +921,7 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
     tags: tagList,
     ...(artifactTags.size ? { artifactTags: [...artifactTags].sort() } : {}),
     ...([...inheritedTags].some(tag => !artifactTags.has(tag)) ? { inheritedArtifactTags: [...inheritedTags].filter(tag => !artifactTags.has(tag)).sort() } : {}),
+    ...(profiles.size ? { scopeProfiles: [...profiles.values()] } : {}),
     labels,
     evidence: { attachments, steps, attempts, roles: [...roles].sort() },
     lastRecordedAtMs: slot.latestAtMs,
@@ -784,7 +932,7 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
 /** The lowercase text a search matches a test against: title, id, spec, domain, tags, labels, environments and producers. */
 export function haystackOf(test: TestSummary): string {
   return [
-    test.title, test.id, test.specPath ?? '', test.spec?.title ?? '', test.spec?.domain ?? '', ...test.tags, ...(test.artifactTags ?? []).map(displayTag),
+    test.title, test.id, test.specPath ?? '', test.spec?.title ?? '', test.spec?.domain ?? '', ...test.tags, ...(test.artifactTags ?? []).map(displayTag), ...(test.scopeProfiles ?? []).flat().filter(token => token !== UNKNOWN_SCOPE),
     ...Object.entries(test.labels).flatMap(([key, value]) => [key, value]), ...test.environments, ...test.producers,
   ].join('\n').toLowerCase();
 }
@@ -875,6 +1023,7 @@ export function catalogModel(layers: readonly LayerEvidence[], sources: CatalogS
     specs: [...specGroups].map(([, list]) => { const g = group(list[0]!.spec!.path, list); return { ...list[0]!.spec!, tests: g.tests, counts: g.counts }; }).sort((a, b) => compareText(a.domain, b.domain) || compareText(a.title, b.title)),
     tags: facet(tests, test => test.tags),
     artifactTags: facet(tests, test => test.artifactTags ?? []),
+    scopes: facet(tests, test => (test.scopeProfiles ?? []).flat()),
     branches: facet(tests, test => test.stats.branches),
     labels: Object.fromEntries([...labelKeys].sort().map(key => [key, facet(tests, test => (test.labels[key] === undefined ? [] : [test.labels[key]!]))])),
   };
@@ -902,6 +1051,7 @@ export function matchesQuery(model: CatalogModel, test: TestSummary, query: Test
   if (query.spec?.length && !query.spec.some(path => test.specPath !== null && normalSpecPath(path) === test.specPath)) return false;
   if (query.tag?.length && !query.tag.some(tag => test.tags.includes(tag))) return false;
   if (query.artifactTag?.length && !query.artifactTag.some(tag => { const wanted = normalizeTag(tag); return wanted !== null && ((test.artifactTags?.includes(wanted) ?? false) || (query.inherited === true && (test.inheritedArtifactTags?.includes(wanted) ?? false))); })) return false;
+  if (query.scope?.length && !(test.scopeProfiles ?? []).some(tokens => matchesScope(tokens, query.scope!))) return false;
   if (inRun && !inRun.has(test.key)) return false;
   return true;
 }
@@ -937,8 +1087,59 @@ export function hasVideo(run: Pick<RunSummary, 'videos'>): boolean {
 export function runList(history: TestHistory, version: string, limit = 100, query: RunQuery = {}): RunList {
   const all = history.runs();
   const withVideo = all.filter(hasVideo).length;
-  const runs = query.video ? all.filter(hasVideo) : all;
-  return { schemaVersion: TEST_CATALOG_VERSION, version, total: runs.length, runs: runs.slice(0, Math.max(0, limit)), withVideo };
+  const filter = forRuns(query);
+  const fields = all.map(fieldsOfRun);
+  const runs = all.filter((_, at) => matchesFilter(fields[at]!, filter));
+  return {
+    schemaVersion: TEST_CATALOG_VERSION, version, total: runs.length, runs: runs.slice(0, Math.max(0, limit)), withVideo,
+    filters: usedFilters(filter), facets: facetsOf(fields, filter),
+  };
+}
+
+/** What a query looks at in a run: see {@link ArtifactFilter}. A run's outcome is `failed` when any result failed. */
+export function fieldsOfRun(run: RunSummary): FilterFields {
+  const artifactTags = run.artifactTags ?? [];
+  // A run summary of an older server has no `types`, but it says whether it has a playable video.
+  const types = run.types ?? (hasVideo(run) ? ['video'] : []);
+  const labels = run.labels ?? [];
+  return {
+    text: [run.title ?? '', run.key, run.branch ?? '', run.sha ?? '', ...run.producers, ...run.environments, ...artifactTags, ...(run.tags ?? []), ...labels].join('\n').toLowerCase(),
+    artifactTags, tags: [...new Set([...(run.tags ?? []), ...artifactTags])], types, media: types.map(type => ({ type, tags: artifactTags })), labels,
+    environments: run.environments, producers: run.producers, branches: run.branch ? [run.branch] : [], shas: run.sha ? [run.sha.toLowerCase()] : [],
+    outcomes: [outcomeOfCounts(run.counts)], at: run.endedAtMs,
+  };
+}
+
+/**
+ * The recorded results that carry evidence and match a query, newest first, across the whole history (`limit` default
+ * 100). `total` and the facet counts apply to every match before `offset` and `limit`. `domainOf` tells the domain of a
+ * spec path when the caller knows more than the layers recorded (a server with a spec set); otherwise it is the
+ * recorded spec's domain, else the folder the path implies.
+ *
+ * @example
+ * ```ts
+ * const list = artifactList(history, 'v1', { artifactTag: ['demo'], type: ['video'], environment: ['ios'] });
+ * list.results.map(r => [r.title, r.run, r.sha, r.status]);
+ * ```
+ */
+export function artifactList(history: TestHistory, version: string, query: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList {
+  const domains = new Map<string, string | null>();
+  const domainOf = (path: string | null): string | null => {
+    if (path === null) return null;
+    if (!domains.has(path)) domains.set(path, (page.domainOf?.(path) ?? catalogSpec(path, known => history.specs.get(known))?.domain) || null);
+    return domains.get(path)!;
+  };
+  const items = history.evidenceResults().map(({ result, fields }) => {
+    const domain = domainOf(result.specPath);
+    return { result: { ...result, domain }, fields: { ...fields, domains: domain ? [domain] : [], specs: result.specPath ? [normalSpecPath(result.specPath)] : [] } as FilterFields };
+  });
+  const matched = items.filter(item => matchesFilter(item.fields, query));
+  const limit = Math.max(0, page.limit ?? 100);
+  const offset = Math.max(0, page.offset ?? 0);
+  return {
+    schemaVersion: TEST_CATALOG_VERSION, version, total: matched.length, offset, limit,
+    results: matched.slice(offset, offset + limit).map(item => item.result), filters: usedFilters(query), facets: facetsOf(items.map(item => item.fields), query),
+  };
 }
 
 /** One run with every result it recorded, or null when no run has that key. */
@@ -947,15 +1148,15 @@ export function runDetail(history: TestHistory, version: string, key: string): R
   return found ? { schemaVersion: TEST_CATALOG_VERSION, version, ...found } : null;
 }
 
-/** Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, and `inherited=1`. */
+/** Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, `scope` (every token must hold for one recording), and `inherited=1`. */
 export function parseTestQuery(params: URLSearchParams): TestQuery {
-  const many = (name: string) => params.getAll(name).flatMap(value => value.split(',')).map(value => value.trim()).filter(Boolean);
+  const many = (name: string) => params.getAll(name).flatMap(splitList);
   const number = (name: string) => { const value = params.get(name); return value !== null && /^\d+$/.test(value) ? Number(value) : undefined; };
   const sort = params.get('sort');
   const query: Record<string, unknown> = {};
   const q = params.get('q');
   if (q) query.q = q;
-  for (const name of ['status', 'environment', 'producer', 'domain', 'spec', 'tag', 'artifactTag']) { const values = many(name); if (values.length) query[name] = values; }
+  for (const name of ['status', 'environment', 'producer', 'domain', 'spec', 'tag', 'artifactTag', 'scope']) { const values = many(name); if (values.length) query[name] = values; }
   if (['1', 'true'].includes(params.get('inherited') ?? '')) query.inherited = true;
   const run = params.get('run');
   if (run) query.run = run;
@@ -1031,6 +1232,7 @@ export function historyMarkdown(document: TestHistoryDocument): string {
     `- Duration: ${d ? `avg ${formatMs(d.avgMs)}, p50 ${formatMs(d.p50Ms)}, p95 ${formatMs(d.p95Ms)}, min ${formatMs(d.minMs)}, max ${formatMs(d.maxMs)}, last ${formatMs(d.lastMs)}` : 'not measured'}`,
     ...(test.tags.length ? [`- Tags: ${test.tags.join(', ')}`] : []),
     ...(test.artifactTags?.length ? [`- Artifact tags: ${test.artifactTags.map(displayTag).join(', ')}`] : []),
+    ...(test.scopeProfiles?.length ? [`- Recording scope: ${test.scopeProfiles.map(tokens => tokens.join(' ')).join('; ')}`] : []),
     ...(Object.keys(test.labels).length ? [`- Labels: ${Object.entries(test.labels).map(([k, v]) => `${k}=${v}`).join(', ')}`] : []),
     `- Evidence: ${test.evidence.attachments} attachments${test.evidence.roles.length ? ` (${test.evidence.roles.join(', ')})` : ''}, ${test.evidence.steps} steps`,
     '',
@@ -1067,6 +1269,17 @@ export function runsMarkdown(list: RunList): string {
     '| Ended | Branch | Commit | Environments | Tests | Passed | Failed | Not run | Span | Videos | Run |',
     '|---|---|---|---|---:|---:|---:|---:|---:|---|---|',
     ...list.runs.map(r => `| ${iso(r.endedAtMs)} | ${cell(r.branch ?? '—')} | ${r.sha?.slice(0, 10) ?? '—'}${freshnessNote(r.freshness)} | ${r.environments.join(', ') || '—'} | ${r.tests} | ${r.counts.passed} | ${r.counts.failed} | ${r.counts['not-run']} | ${formatMs(r.spanMs)} | ${videosText(r.videos)} | ${cell(r.title ? `${r.title} (${r.key})` : r.key)} |`),
+  ].join('\n')}\n`;
+}
+
+/** The artifact results as Markdown, for an agent or a terminal. */
+export function artifactsMarkdown(list: ArtifactList): string {
+  return `${[
+    `# Artifacts (${list.results.length} of ${list.total})`,
+    '',
+    '| Recorded | Test | Status | Environment | Branch | Commit | Types | Tags | Videos | Run |',
+    '|---|---|---|---|---|---|---|---|---|---|',
+    ...list.results.map(r => `| ${iso(r.at)} | ${cell(r.title)} | ${r.status} | ${r.environment ?? '—'} | ${cell(r.branch ?? '—')} | ${r.sha?.slice(0, 10) ?? '—'} | ${r.types.join(', ') || '—'} | ${r.artifactTags.map(displayTag).join(' ') || '—'} | ${videosText(videoCounts(r.videos))} | ${cell(r.runUrl ?? r.run)} |`),
   ].join('\n')}\n`;
 }
 

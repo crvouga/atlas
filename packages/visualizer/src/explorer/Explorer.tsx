@@ -12,6 +12,7 @@ import {
   Flex,
   Group,
   List,
+  MultiSelect,
   NativeSelect,
   Paper,
   SimpleGrid,
@@ -53,8 +54,9 @@ import { useRunDetail, useTestCatalog } from './catalog';
 import { groupTests, tally, type TestGroupView } from './groups';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, EnvironmentChips, projectTitle, runName } from './parts';
+import { ArtifactsView } from './ArtifactsView';
 import { RunsView } from './RunsView';
-import { narrowed, queryOf, TEST_GROUPS, toggled, values, type ExplorerSearch, type TestGroup } from './search';
+import { joined, narrowed, queryOf, TEST_GROUPS, toggled, values, type ExplorerSearch, type TestGroup } from './search';
 import { TestDetail } from './TestDetail';
 /** Groups start closed when there are more of them than this, unless the list is short. */
 const OPEN_GROUPS = 40;
@@ -132,7 +134,7 @@ export function Explorer() {
   const model = catalog.model;
   const selected = search.test ? (model?.byKey.get(search.test) ?? null) : null;
   const empty = model !== null && model.tests.length === 0;
-  const split = !!search.test && search.tab !== 'runs';
+  const split = !!search.test && search.tab !== 'runs' && search.tab !== 'artifacts';
   return (
     <Container size="xl" py="xl">
       <Box aria-label="Test explorer" component="article" miw={0}>
@@ -143,7 +145,7 @@ export function Explorer() {
           {model && (model.tests.length > 0 || model.summary.runs > 0) && (
             <Tabs
               value={search.tab ?? 'tests'}
-              onChange={(value) => go({ tab: value === 'runs' ? 'runs' : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined })}
+              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' ? value : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined })}
             >
               <Tabs.List aria-label="Explorer view">
                 <Tabs.Tab
@@ -166,6 +168,7 @@ export function Explorer() {
                 >
                   Runs
                 </Tabs.Tab>
+                <Tabs.Tab value="artifacts">Artifacts</Tabs.Tab>
               </Tabs.List>
             </Tabs>
           )}
@@ -228,6 +231,8 @@ export function Explorer() {
           listing &&
           (search.tab === 'runs' ? (
             <RunsView />
+          ) : search.tab === 'artifacts' ? (
+            <ArtifactsView />
           ) : empty ? null : (
             <>
               <InsightStrip model={model} scope={listing.scope} search={search} />
@@ -510,6 +515,8 @@ function Toolbar({
   const chips = [
     ...values(search.spec).map((path) => ({ label: `Spec: ${specTitle(path)}`, clear: { spec: toggled(search.spec, path) } })),
     ...values(search.tag).map((tag) => ({ label: `Tag: ${tag}`, clear: { tag: toggled(search.tag, tag) } })),
+    ...values(search.scope).map((token) => ({ label: `Scope: ${token}`, clear: { scope: toggled(search.scope, token) } })),
+    ...values(search.artifactTag).map((tag) => ({ label: `Artifact tag: #${tag}`, clear: { artifactTag: toggled(search.artifactTag, tag) } })),
     ...(search.inRun ? [{ label: `Run: ${runName(search.inRun)}`, clear: { inRun: undefined } }] : [])
   ];
   return (
@@ -618,6 +625,23 @@ function Toolbar({
             </NativeSelect>
           </Box>
         )}
+        {((model.facets.artifactTags?.length ?? 0) > 0 || values(search.artifactTag).length > 0) && (
+          <MultiSelect
+            aria-label="Artifact tag"
+            placeholder={values(search.artifactTag).length ? undefined : 'Any artifact tag'}
+            data={[
+              ...(model.facets.artifactTags ?? []).map(({ value, count }) => ({ value, label: `#${value} (${count})` })),
+              ...values(search.artifactTag)
+                .filter((tag) => !model.facets.artifactTags?.some((facet) => facet.value === tag))
+                .map((tag) => ({ value: tag, label: `#${tag} (0)` }))
+            ]}
+            value={values(search.artifactTag)}
+            searchable
+            clearable
+            nothingFoundMessage="Nothing found"
+            onChange={(next) => go({ artifactTag: joined(next) })}
+          />
+        )}
         {model.facets.domains.length > 1 && (
           <Box component="label">
             <VisuallyHidden>Domain</VisuallyHidden>
@@ -630,6 +654,23 @@ function Toolbar({
               {model.facets.domains.map(({ value, count }) => (
                 <option key={value} value={value}>
                   {value === '(no spec)' ? 'No spec' : value} ({count})
+                </option>
+              ))}
+            </NativeSelect>
+          </Box>
+        )}
+        {(model.facets.scopes?.length ?? 0) > 0 && (
+          <Box component="label">
+            <VisuallyHidden>Recording scope</VisuallyHidden>
+            <NativeSelect
+              aria-label="Recording scope"
+              value=""
+              onChange={(event) => event.target.value && go({ scope: toggled(search.scope, event.target.value) })}
+            >
+              <option value="">Any recording scope</option>
+              {model.facets.scopes!.filter(({ value }) => !values(search.scope).includes(value)).map(({ value, count }) => (
+                <option key={value} value={value}>
+                  {value === 'unknown' ? 'Scope unknown' : value} ({count})
                 </option>
               ))}
             </NativeSelect>
@@ -663,6 +704,9 @@ function Toolbar({
                 domain: undefined,
                 spec: undefined,
                 tag: undefined,
+                scope: undefined,
+                artifactTag: undefined,
+                inherited: undefined,
                 inRun: undefined
               });
             }}

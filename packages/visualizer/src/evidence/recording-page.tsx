@@ -10,6 +10,7 @@ import { useRecordedReport } from './check-detail';
 import { useEvidence } from './evidence-context';
 import { duration, statusWord, useNow } from './format';
 import { Origin, StatusMark } from './marks';
+import { EvidenceIncomplete, EvidenceWaiting } from './load-state';
 import { Timeline } from './recording';
 type Props = {
   /** The check whose recording is open, once the combined report holds it. */
@@ -40,7 +41,7 @@ function needsStylesheet(report: RunReport | undefined): boolean {
 /** One recorded test, opened in place of its spec. */
 export function RecordingPage({ slot, layerId, entry, label, back, moment, onMoment, onClose }: Props) {
   const progress = useTestProgress(slot ?? null);
-  const { evidence, backends, pending, ready, unavailable } = useEvidence();
+  const { evidence, backends, pending, ready, unavailable, failed, retry } = useEvidence();
   const now = useNow();
   const history = useMemo(() => (slot ? checkHistory(evidence, slot.specPath, slot.id) : []), [evidence, slot]);
   const winner = slot?.outcomes[0];
@@ -86,17 +87,26 @@ export function RecordingPage({ slot, layerId, entry, label, back, moment, onMom
         )}
       </Box>
       <TestProgress {...progress} />
-      {waiting && (
-        <Text role="status" component="div" c="dimmed">
-          Loading the recording…
-        </Text>
-      )}
+      {waiting && <EvidenceWaiting label="Loading the recording…" usable="The way back to the spec is available." />}
       {!chosen && !waiting && !progress.tests.length && (
         <Alert color={'blue'} my="sm">
           {unavailable ??
-            'This result is not in the combined report any more. A newer run may have replaced it, or its source is switched off.'}
+            (failed.length > 0
+              ? 'This result was not found in the layers that could be read, and some layers could not be read.'
+              : 'This result is not in the combined report any more. A newer run may have replaced it, or its source is switched off.')}{' '}
+          {(unavailable || failed.length > 0) && (
+            <Button type="button" onClick={retry} variant="subtle">
+              Try again
+            </Button>
+          )}
         </Alert>
       )}
+      {chosen && layerId && !entry && chosen.layer.id !== layerId && ready && pending === 0 && (
+        <Alert role="status" color={'blue'} my="sm">
+          The layer this link names is not among the results held for this test. Showing the current result instead.
+        </Alert>
+      )}
+      {ready && !chosen && <EvidenceIncomplete />}
       {chosen && !paths && (
         <Alert color={'blue'} my="sm">
           This result has an outcome and no recorded timeline.
