@@ -12,7 +12,7 @@
  */
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
-import { summarizeEvidence } from './evidence-detail';
+import { summarizeEvidence, summarizeLayerEvidence } from './evidence-detail';
 import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
 
@@ -109,7 +109,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     }
   }
   const recording = summary.recording;
-  const layerSummaryEvidence = summarizeEvidence(summary, ...summary.parts);
+  const layerSummaryEvidence = summarizeLayerEvidence(summary, ...summary.parts);
   const layer: LayerHeader = {
     ...(summary.freshness ? { freshness: summary.freshness } : {}),
     ...(summary.run ? { run: summary.run } : {}),

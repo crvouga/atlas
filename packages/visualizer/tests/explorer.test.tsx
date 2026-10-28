@@ -231,6 +231,77 @@ test('the runs view lists CI runs, opens one, and shows its tests in the explore
   await atlas.until(() => rows().length === 4, 'every test again');
 });
 
+/** Four runs: videos at every level, screenshots only, a video only on a failed retry's step, and a video that was never stored. */
+async function publishVideos(store: ObjectStore) {
+  const bytes = (text: string) => new TextEncoder().encode(text);
+  const movie = (name: string, text: string, extra: Record<string, unknown> = {}) => ({ name, contentType: 'video/webm', data: bytes(text), ...extra });
+  const run = (n: number) => ({ producer: 'web', environment: 'desktop-web', branch: 'main', sha: String(n).repeat(40), runUrl: RUN(n), recordedAtMs: n * 1_000 });
+  await publishChecks(store, {
+    ...run(1),
+    attachments: [movie('review.webm', 'review', { role: 'demo' })],
+    checks: [
+      { ...FIND, status: 'passed', attachments: [movie('a.webm', 'same')] },
+      { ...ESCALATE, status: 'passed', attachments: [movie('b.webm', 'same'), movie('c.webm', 'other')] }
+    ]
+  });
+  await publishChecks(store, { ...run(2), checks: [{ ...FIND, status: 'passed', attachments: [{ name: 'shot.png', contentType: 'image/png', data: bytes('png') }] }] });
+  await publishChecks(store, {
+    ...run(3),
+    checks: [
+      {
+        ...FIND,
+        status: 'passed',
+        attempts: [
+          { index: 0, status: 'failed', steps: [{ name: 'Open the inbox', attachments: [movie('retry.webm', 'retry')] }] },
+          { index: 1, status: 'passed' }
+        ]
+      }
+    ]
+  });
+  await publishChecks(store, { ...run(4), checks: [{ ...FIND, status: 'passed', attachments: [{ name: 'gone.webm', contentType: 'video/webm' }] }] });
+}
+
+test('runs show how many recordings they have, filter to those with video, and keep unavailable ones apart', async () => {
+  const localStore = memoryStore();
+  await publishVideos(localStore);
+  atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
+  await atlas.until(() => shows('Escalate a ticket'), 'the tests');
+  await atlas.click('[role="tablist"] button', 'Runs');
+  await atlas.until(() => document.querySelectorAll('section[aria-label="Runs"] tbody tr').length === 4, 'four runs');
+  const runRows = () => [...document.querySelectorAll<HTMLElement>('section[aria-label="Runs"] tbody tr')];
+  const rowOf = (n: number) => runRows().find((row) => row.querySelector(`a[aria-label="Open run #${n}"]`))!;
+  // Three distinct recordings from four references: the same bytes referenced twice are one recording.
+  expect(rowOf(1).textContent).toContain('3 videos');
+  expect(rowOf(1).textContent).toContain('4 references');
+  expect(rowOf(1).querySelector('a[aria-label="Watch 3 recordings in run #1"]')).not.toBeNull();
+  expect(rowOf(2).textContent).toContain('No video');
+  expect(rowOf(3).textContent).toContain('1 video');
+  // A reference with no stored file is explained, and is not a recording to watch.
+  expect(rowOf(4).textContent).toContain('1 video unavailable');
+  expect(rowOf(4).textContent).toContain('never stored');
+  expect(rowOf(4).querySelector('a[aria-label^="Watch"]')).toBeNull();
+
+  // The filter is a pressable button whose name says what it means and how many runs it matches.
+  const filter = () => document.querySelector<HTMLButtonElement>('section[aria-label="Runs"] button[aria-label^="Has video"]')!;
+  expect(filter().getAttribute('aria-label')).toBe('Has video: 2 runs');
+  expect(filter().getAttribute('aria-pressed')).toBe('false');
+  await act(async () => filter().click());
+  await atlas.until(() => runRows().length === 2, 'only the runs with a video');
+  expect(filter().getAttribute('aria-pressed')).toBe('true');
+  expect(runRows().map((row) => row.querySelector('a')?.getAttribute('aria-label'))).toEqual(['Open run #3', 'Open run #1']);
+  expect(atlas.router.state.location.search).toMatchObject({ video: true });
+
+  // The row opens the recordings: the run's results that have one, each with who holds it.
+  await atlas.click('section[aria-label="Runs"] a', 'Watch 1 recording in run #3');
+  await atlas.sees('Run #3');
+  await atlas.until(() => document.querySelectorAll('section[aria-label="Run #3"] li').length === 1, 'the result with the video');
+  const result = document.querySelector('section[aria-label="Run #3"] li')!.textContent!;
+  expect(result).toContain('1 video (step “Open the inbox”, try 1)');
+  const detailFilter = document.querySelector<HTMLButtonElement>('section[aria-label="Run #3"] button[aria-label^="Has video"]')!;
+  expect(detailFilter.getAttribute('aria-label')).toBe('Has video: 1 result');
+  expect(detailFilter.getAttribute('aria-pressed')).toBe('true');
+});
+
 test('the runs view names an execution by its title, keeps two demos at one commit apart, and states local changes beside the commit', async () => {
   const localStore = memoryStore();
   const demo = { sha: 'c'.repeat(40), branch: 'main', producer: 'demo', environment: 'desktop-web' };

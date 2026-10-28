@@ -163,6 +163,31 @@ describe('GET /api/reports/runs', () => {
   });
 });
 
+describe('GET /api/reports/runs?video=true', () => {
+  test('lists only runs with a playable recording, counted over every run before the limit', async () => {
+    const store = memoryStore();
+    const movie = (name: string, text: string) => ({ name, contentType: 'video/webm', data: new TextEncoder().encode(text) });
+    const check = { id: 'a', title: 'A', status: 'passed' as const };
+    await publishChecks(store, { producer: 'web', runUrl: RUN_A, recordedAtMs: 1_000, checks: [{ ...check, attachments: [movie('a.webm', 'one')] }] });
+    await publishChecks(store, { producer: 'web', runUrl: RUN_B, recordedAtMs: 2_000, checks: [check] });
+    await publishChecks(store, { producer: 'web', runUrl: 'https://ci.example/runs/3', recordedAtMs: 3_000, checks: [{ ...check, attachments: [{ name: 'shot.png', contentType: 'image/png', data: new Uint8Array([1]) }] }] });
+    const node = createNode({ stores: [{ id: 'main', label: 'Main', store }], refreshMs: 60_000 });
+    nodes.push(node);
+    await node.ready;
+    const all = RunListSchema.parse(await (await get(node, '/api/reports/runs')).json());
+    expect(all.total).toBe(3);
+    expect(all.withVideo).toBe(1);
+    expect(all.runs.find(run => run.key === RUN_A)!.videos).toEqual({ references: 1, recordings: 1, unavailable: 0 });
+    expect(all.runs.find(run => run.key === RUN_B)!.videos).toBeUndefined();
+    // Filtered before `limit`: the one match is found though two newer runs come first.
+    const filtered = RunListSchema.parse(await (await get(node, '/api/reports/runs?video=true&limit=1')).json());
+    expect(filtered.runs.map(run => run.key)).toEqual([RUN_A]);
+    expect(filtered.total).toBe(1);
+    expect(filtered.withVideo).toBe(1);
+    expect(await (await get(node, '/api/reports/runs?video=true&format=markdown')).text()).toContain('# Runs (1 of 1)');
+  });
+});
+
 describe('GET /api/reports/tests/health', () => {
   /** Results published under `checkout/cart.feature` while the specs are recorded under `specs/`. */
   async function drifted() {

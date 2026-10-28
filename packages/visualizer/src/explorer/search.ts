@@ -38,7 +38,9 @@ export const ExplorerSearchFields = {
   /** The run opened in the Runs tab. */
   openRun: text,
   /** Pins the open test's detail to one exact layer (a run's record of it), instead of the latest combined evidence. */
-  layer: text
+  layer: text,
+  /** Only the runs, and the results of an opened run, that have a playable video recording. */
+  video: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined)
 };
 
 /** The explorer's search parameters as the route holds them. */
@@ -57,6 +59,7 @@ export type ExplorerSearch = {
   readonly tab?: 'runs';
   readonly openRun?: string;
   readonly layer?: string;
+  readonly video?: true;
 };
 
 /** The values of a comma-separated filter, empty when it is not set. */

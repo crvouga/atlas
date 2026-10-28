@@ -1426,7 +1426,36 @@ read when someone asks for it. Undefined when there is none.
 Several holders (for example a check and its layer) are summed: `attachments` also counts those on steps and
 attempts, `steps` counts only each holder's own top-level steps, tags are de-duplicated, and for a repeated
 label the later holder wins. `artifactTags` are the attachments' own normalized tags and are never inherited. `roles` are the attachments' roles (or, without one, what their media type or file
-name implies), sorted and distinct.
+name implies), sorted and distinct. `videos` lists every attachment whose effective media type is video, with the
+check, retry attempt or step that holds it (see {@link isVideoAttachment}).
+
+#### `summarizeLayerEvidence`
+
+```ts
+export function summarizeLayerEvidence(...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined
+```
+
+Like {@link summarizeEvidence} for a layer and its parts: the same summary, but a video attached to the layer or a
+part is owned by the `layer`, not by a check.
+
+#### `isVideoAttachment`
+
+```ts
+export function isVideoAttachment(attachment: Pick<Attachment, 'name' | 'role' | 'contentType'>): boolean
+```
+
+Whether an attachment is a video, by its effective media type: the producer's `contentType`, else the one its file
+name implies. A role never decides this on its own (`demo` on a PNG is not a video), except that a `video` role
+settles a file whose type nothing says (`application/octet-stream`).
+
+#### `videoCounts`
+
+```ts
+export function videoCounts(videos: readonly VideoRef[] | undefined): VideoCounts | undefined
+```
+
+Counts references, distinct playable recordings and unplayable references. Undefined when there is no reference, so
+"no video" and "nothing known about video" look the same on the wire.
 
 #### `roleOfType`
 
@@ -1609,6 +1638,51 @@ export type StatusCounts = Readonly<Record<EvidenceStatus, number>>;
 
 How many results have each status (`passed`, `failed`, `running`, `not-run`).
 
+#### `VideoOwner`
+
+```ts
+export type VideoOwner = 'layer' | 'check' | 'attempt' | 'step';
+```
+
+Who holds a recording: the whole layer (or one of its parts), one check, one retry attempt of a check, or one step.
+
+#### `VideoRef`
+
+```ts
+export type VideoRef = {
+  /** The attachment's name, for a person. */
+  readonly name: string;
+  readonly owner: VideoOwner;
+  /** The try that holds it, when `owner` is `attempt` or the step is inside one. */
+  readonly attempt?: number;
+  /** The name of the step that holds it, when `owner` is `step`. */
+  readonly step?: string;
+  /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
+  readonly recording?: string;
+  /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
+  readonly available: boolean;
+};
+```
+
+One reference to a video, found by its effective media type (the producer's `contentType`, else the one the file
+name implies; a `video` role alone counts only when nothing else says what the file is). A reference is not a
+recording: the same bytes referenced from three checks are three references and one recording.
+
+#### `VideoCounts`
+
+```ts
+export type VideoCounts = {
+  /** Every reference to a video, playable or not. */
+  readonly references: number;
+  /** Distinct playable recordings: identical bytes referenced twice are one. */
+  readonly recordings: number;
+  /** References that name no bytes. A report that predates availability metadata has none of these and none of the others. */
+  readonly unavailable: number;
+};
+```
+
+Video availability as counts: references, distinct playable recordings (deduplicated), and references that cannot be played.
+
 #### `EvidenceSummary`
 
 ```ts
@@ -1626,6 +1700,8 @@ export type EvidenceSummary = {
   readonly labels: Readonly<Record<string, string>>;
   /** The distinct roles of its attachments (or what their media types say), to show what kind of evidence there is. */
   readonly roles: readonly string[];
+  /** Its references to videos, wherever they are held (layer, check, attempt, step). Only there when it has any. */
+  readonly videos?: readonly VideoRef[];
 };
 ```
 
@@ -7930,11 +8006,27 @@ export type RunSummary = {
   readonly totalDurationMs: number | null;
   /** Up to twenty tests that failed in it. */
   readonly failing: readonly { readonly key: string; readonly title: string; readonly environment: string | null; readonly detail: string }[];
+  /**
+   * Its videos, from the run's layers and from the last result of each test: references, distinct playable recordings
+   * and references that cannot be played. Absent when it has none, and in a report that carries no video information.
+   */
+  readonly videos?: VideoCounts;
 };
 ```
 
 A run: the layers that name the same execution (`run.id`), else share a CI run URL, else a branch and commit. When,
 where, and how its tests went.
+
+#### `RunQuery`
+
+```ts
+export type RunQuery = {
+  /** Only runs that have at least one playable video recording. `total` then counts only those. */
+  readonly video?: boolean;
+};
+```
+
+What `runList` can be asked.
 
 #### `RunList`
 
@@ -7942,8 +8034,11 @@ where, and how its tests went.
 export type RunList = {
   readonly schemaVersion: typeof TEST_CATALOG_VERSION;
   readonly version: string;
+  /** Runs that matched, before `limit`. */
   readonly total: number;
   readonly runs: readonly RunSummary[];
+  /** How many of all runs (whatever was asked, before `limit`) have a playable video recording. */
+  readonly withVideo?: number;
 };
 ```
 
@@ -7964,6 +8059,8 @@ export type RunResult = {
   readonly at: number;
   readonly layer: string;
   readonly detail: string;
+  /** Every video its evidence references, with who holds it (check, retry attempt or step). Absent when there is none. */
+  readonly videos?: readonly VideoRef[];
 };
 ```
 
@@ -8114,13 +8211,23 @@ export function testHistory(model: CatalogModel, key: string): TestHistoryDocume
 
 One test and its recorded results, or null when the report has no test with that key.
 
+#### `hasVideo`
+
+```ts
+export function hasVideo(run: Pick<RunSummary, 'videos'>): boolean
+```
+
+Whether a run has at least one playable video recording.
+
 #### `runList`
 
 ```ts
-export function runList(history: TestHistory, version: string, limit = 100): RunList
+export function runList(history: TestHistory, version: string, limit = 100, query: RunQuery = {}): RunList
 ```
 
-Every run the history knows of, newest first, `limit` at most (default 100).
+Every run the history knows of, newest first, `limit` at most (default 100). With `query.video` only the runs that
+have a playable video recording: the filter and `total` apply to every run before `limit`, and nothing is read from
+any recording's bytes. `withVideo` always counts every run that has one.
 
 #### `runDetail`
 

@@ -356,9 +356,10 @@ const BASE_OPERATIONS: readonly Operation[] = [
   {
     route: 'GET /api/reports/runs', path: '/api/reports/runs', operationId: 'getReportRuns', tag: 'Report', role: 'read',
     summary: 'The runs that recorded the report',
-    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.',
+    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.',
     parameters: [
       { name: 'limit', in: 'query', description: 'At most this many runs (default 100).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'video', in: 'query', description: '`true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.', schema: { type: 'boolean' } },
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The runs.', 'RunList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }

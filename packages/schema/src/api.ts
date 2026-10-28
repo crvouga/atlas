@@ -70,6 +70,23 @@ export const BackendInfoSchema = z.looseObject({
   available: z.boolean().describe('False when the backend could not be read; its results are then unknown, never passed')
 });
 
+/** One reference to a video held by a layer, check, retry attempt or step, found by the attachment's effective media type. */
+export const VideoRefSchema = z.looseObject({
+  name: z.string().describe('The attachment name'),
+  owner: z.string().describe('Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check'),
+  attempt: z.number().int().nonnegative().optional().describe('The retry attempt that holds it, or that holds the step that does'),
+  step: z.string().optional().describe('The name of the step that holds it'),
+  recording: z.string().optional().describe('What identifies the bytes; references with the same value are one recording. Absent when it cannot be played'),
+  available: z.boolean().describe('False when the reference names no bytes (no bundle key, address or inline text)')
+});
+
+/** Video references as counts: how many are referenced, how many distinct recordings can be played, how many cannot. */
+export const VideoCountsSchema = z.looseObject({
+  references: z.number().int().nonnegative().describe('Every reference to a video; identical bytes referenced twice count twice'),
+  recordings: z.number().int().nonnegative().describe('Distinct playable recordings'),
+  unavailable: z.number().int().nonnegative().describe('References that name no bytes')
+});
+
 /** What a result carries beyond its outcome, as counts and short facts. Present only when there is something. */
 export const EvidenceSummarySchema = z.looseObject({
   attachments: z.number().int().nonnegative(),
@@ -80,7 +97,8 @@ export const EvidenceSummarySchema = z.looseObject({
   tags: z.array(z.string()),
   artifactTags: z.array(z.string()).optional().describe('Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run'),
   labels: z.record(z.string(), z.string()),
-  roles: z.array(z.string())
+  roles: z.array(z.string()),
+  videos: z.array(VideoRefSchema).optional().describe('Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded')
 });
 
 /** A layer as the report shows it: its origin and its checks by status. */
@@ -413,11 +431,18 @@ export const ReportRunSchema = z.looseObject({
   producers: z.array(z.string()), environments: z.array(z.string()),
   layers: z.number().int().nonnegative(), tests: z.number().int().nonnegative(), counts: StatusCountsSchema,
   totalDurationMs: z.number().nullable(),
-  failing: z.array(z.looseObject({ key: z.string(), title: z.string(), environment: z.string().nullable(), detail: z.string() }))
+  failing: z.array(z.looseObject({ key: z.string(), title: z.string(), environment: z.string().nullable(), detail: z.string() })),
+  videos: VideoCountsSchema.optional().describe('Its videos, from its layers and the last result of each test. Absent when it has none or the report carries no video information')
 });
 
 /** `GET /api/reports/runs`: runs, newest first. */
-export const RunListSchema = z.looseObject({ schemaVersion: z.literal(1), version: z.string(), total: z.number().int().nonnegative(), runs: z.array(ReportRunSchema) });
+export const RunListSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string(),
+  total: z.number().int().nonnegative().describe('Runs that matched, before `limit`'),
+  runs: z.array(ReportRunSchema),
+  withVideo: z.number().int().nonnegative().optional().describe('How many of all runs (before `video` and `limit`) have a playable video recording')
+});
 
 /** `GET /api/reports/runs/detail`: one run and its last result for every test, environment and producer it recorded. */
 export const RunDetailSchema = z.looseObject({
@@ -426,6 +451,7 @@ export const RunDetailSchema = z.looseObject({
   run: ReportRunSchema,
   results: z.array(z.looseObject({
     key: z.string(), id: z.string(), title: z.string(), specPath: z.string().nullable(), environment: z.string().nullable(), producer: z.string(),
-    status: EvidenceStatusSchema, durationMs: z.number().nullable(), at: z.number(), layer: z.string(), detail: z.string()
+    status: EvidenceStatusSchema, durationMs: z.number().nullable(), at: z.number(), layer: z.string(), detail: z.string(),
+    videos: z.array(VideoRefSchema).optional().describe('Every video its evidence references, with who holds it')
   }))
 });
