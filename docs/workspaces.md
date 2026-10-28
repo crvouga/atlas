@@ -59,8 +59,11 @@ bun run workspace:status
 ```
 
 Everything binds to `127.0.0.1`. For remote workspaces, use the IDE's port forwarding. Reports and server
-settings stay in this checkout's `.atlas-data/`; live runtime leases stay in `.atlas-workspace/`.
-Keep both directories private to each worktree. Do not share `node_modules`, `.atlas-data/`,
+settings are kept in S3 only, never in the checkout: `workspace:run` needs the required `ATLAS_S3_*` variables
+(copy `.env.example` to `.env`, which Bun loads, or export them) and exits at once, listing every missing one,
+without them. Give each checkout its own bucket or `ATLAS_S3_PREFIX` if their reports must not mix
+(`workspace:setup` and `workspace:preview` need no credentials). Live runtime leases stay in `.atlas-workspace/`.
+Keep that directory private to each worktree. Do not share `node_modules`,
 `.atlas-workspace/` or caches across checkouts with different dependencies. Frozen installs use Bun's
 download cache without linking one worktree's dependency tree to another.
 

@@ -21,6 +21,8 @@ import {
   PasswordInput,
   SimpleGrid,
   Stack,
+  Switch,
+  Table,
   Text,
   TextInput,
   Title
@@ -28,7 +30,10 @@ import {
 import { useState } from 'react';
 
 type Settings = Record<string, unknown>;
-type Backend = { id: string; label?: string; url: string; write?: boolean };
+type GcPolicy = { enabled: boolean; maxAgeDays: number; keepLatest: number; intervalHours: number };
+type GcRun = { project: string; dryRun: boolean; at: string; candidates: number; deletedLayers: number; deletedBlobs: number; keptLayers: number; error?: string };
+/** What to suggest when no policy has been saved yet. Nothing is deleted until the person saves it with "Enabled" on. */
+const SUGGESTED_POLICY: GcPolicy = { enabled: false, maxAgeDays: 90, keepLatest: 20, intervalHours: 24 };
 type Field = {
   id: string;
   label: string;
@@ -39,9 +44,6 @@ type Field = {
   type?: 'number' | 'boolean' | 'branches';
 };
 const fields: Record<string, Field[]> = {
-  storage: [
-    { id: 'data', label: 'Local data folder', path: ['data'], description: 'Relative paths start from the server configuration directory.' }
-  ],
   live: [
     {
       id: 'runTimeoutSeconds',
@@ -138,15 +140,76 @@ export function SettingsPage() {
     setJson(JSON.stringify(next, null, 2));
     setJsonError('');
   };
-  const backends = (draft.backends as Backend[] | undefined) ?? [];
-  const changeBackend = (index: number, patch: Partial<Backend>) =>
-    change({ ...draft, backends: backends.map((b, i) => (i === index ? { ...b, ...patch } : b)) });
+  const [policy, setPolicy] = useState<GcPolicy>(SUGGESTED_POLICY);
+  const [policySaved, setPolicySaved] = useState(false);
+  const [runs, setRuns] = useState<GcRun[]>([]);
+  const [preview, setPreview] = useState<GcRun[]>();
+  const authorization = (): Record<string, string> => (token ? { authorization: `Bearer ${token}` } : {});
+  const failure = (error: unknown) =>
+    setMessage({
+      text:
+        error instanceof SyntaxError
+          ? 'The JSON configuration is invalid. Fix it before saving.'
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      error: true
+    });
+  const readJson = async (response: Response) => {
+    const data = await response.json();
+    if (!response.ok) {
+      if (response.status === 409 || response.status === 428) setStale(true);
+      throw new Error(data.detail || data.error || `Request failed (${response.status})`);
+    }
+    return data;
+  };
+  const applyGc = (data: { revision: string; policy: GcPolicy | null; saved: boolean; lastRuns: GcRun[] }) => {
+    setPolicy(data.policy ?? SUGGESTED_POLICY);
+    setPolicySaved(data.saved);
+    setRuns(data.lastRuns);
+  };
+  /** The garbage collection policy lives in the user state in S3: this reads and writes it through the server, never the browser. */
+  const gcRequest = async (action: 'save' | 'preview') => {
+    if (busy || !revision || (action === 'save' && stale)) return;
+    setBusy(true);
+    try {
+      if (action === 'save') {
+        const data = await readJson(
+          await fetch('/api/settings/gc', {
+            method: 'PUT',
+            headers: { ...authorization(), 'content-type': 'application/json', 'if-match': `"${revision}"` },
+            body: JSON.stringify(policy),
+            cache: 'no-store'
+          })
+        );
+        setRevision(data.revision);
+        setStale(false);
+        applyGc(data);
+        setMessage({
+          text: data.policy.enabled
+            ? 'Garbage collection policy saved to S3. It applies on the next scheduled pass.'
+            : 'Garbage collection policy saved to S3 but disabled: nothing will be deleted.',
+          success: true
+        });
+      } else {
+        const data = await readJson(
+          await fetch('/api/settings/gc/run?dryRun=1', { method: 'POST', headers: authorization(), cache: 'no-store' })
+        );
+        setPreview(data.runs);
+        setMessage({ text: 'Preview finished. Nothing was deleted.' });
+      }
+    } catch (error) {
+      failure(error);
+    } finally {
+      setBusy(false);
+    }
+  };
   const request = async (method: 'GET' | 'PUT') => {
     if (busy || (method === 'PUT' && (!revision || stale))) return;
     setBusy(true);
     if (method === 'GET') setRevision(undefined);
     try {
-      const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
+      const headers: Record<string, string> = authorization();
       let body: string | undefined;
       if (method === 'PUT') {
         const parsed = JSON.parse(json);
@@ -155,16 +218,14 @@ export function SettingsPage() {
         headers['if-match'] = `"${revision}"`;
         body = JSON.stringify(parsed);
       }
-      const response = await fetch('/api/settings', { method, headers, body, cache: 'no-store' });
-      const data = await response.json();
-      if (!response.ok) {
-        if (response.status === 409 || response.status === 428) setStale(true);
-        throw new Error(data.detail || data.error || `Request failed (${response.status})`);
-      }
-      setRevision(data.revision);
+      const data = await readJson(await fetch('/api/settings', { method, headers, body, cache: 'no-store' }));
+      // After a load, read the policy too. After a save, the revision (of the whole user state) changed under it.
+      const gc = method === 'GET' ? await readJson(await fetch('/api/settings/gc', { headers: authorization(), cache: 'no-store' })) : null;
+      setRevision(gc ? gc.revision : data.revision);
       setStale(false);
       setActive(data.active);
       change(data.settings);
+      if (gc) { applyGc(gc); setPreview(undefined); }
       setMessage({
         text:
           method === 'PUT' || data.restartRequired
@@ -173,15 +234,7 @@ export function SettingsPage() {
         success: method === 'PUT' || data.restartRequired
       });
     } catch (error) {
-      setMessage({
-        text:
-          error instanceof SyntaxError
-            ? 'The JSON configuration is invalid. Fix it before saving.'
-            : error instanceof Error
-              ? error.message
-              : String(error),
-        error: true
-      });
+      failure(error);
     } finally {
       setBusy(false);
     }
@@ -285,7 +338,7 @@ export function SettingsPage() {
             <Box>
               <Title order={1}>Atlas server settings</Title>
               <Text c="dimmed" mt="xs">
-                Configure how this Atlas node stores reports and tracks test runs. These settings apply to every project on this node.
+                Define the garbage collection policy and configure how this Atlas node tracks test runs. Everything here is saved to S3 and applies to every project on this node.
               </Text>
             </Box>
             <Fieldset legend={<Group gap="xs">Administrator access {revision && <Badge color="green">Connected</Badge>}</Group>}>
@@ -319,8 +372,101 @@ export function SettingsPage() {
               <Box id="configuration">
                 <Stack gap="lg">
                   <Alert title="Changes apply after a server restart.">
-                    Environment variables and command-line flags can override saved settings. Current values are shown under each field.
+                    The configuration file, environment variables and command-line flags can override saved settings. Current values are shown under each field.
                   </Alert>
+                  <Box
+                    id="garbage-collection"
+                    component="form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void gcRequest('save');
+                    }}
+                  >
+                    <Fieldset legend="Garbage collection" disabled={busy}>
+                      <Stack>
+                        {policySaved ? (
+                          <Text size="sm" c="dimmed">
+                            This policy is saved in S3 (<Code>server/state.json</Code>) and the server reads it from there each time it collects.
+                          </Text>
+                        ) : (
+                          <Alert id="gc-empty" color="yellow" title="No policy has been saved yet">
+                            Garbage collection is off and nothing is deleted. The values below are suggestions; they take effect only after you
+                            turn collection on and save.
+                          </Alert>
+                        )}
+                        <Text size="sm" c="dimmed">
+                          Only report layers that no longer decide any result (newer layers replaced all their checks) are ever deleted, and never
+                          the newest layers you choose to keep. Everything else, including specs and runs, is kept.
+                        </Text>
+                        <Switch
+                          id="gc-enabled"
+                          label="Delete eligible layers on a schedule"
+                          checked={policy.enabled}
+                          onChange={(event) => setPolicy({ ...policy, enabled: event.currentTarget.checked })}
+                        />
+                        <SimpleGrid cols={{ base: 1, sm: 3 }}>
+                          <NumberInput
+                            id="gc-maxAgeDays"
+                            label="Delete layers older than (days)"
+                            min={1}
+                            max={3650}
+                            allowDecimal={false}
+                            value={policy.maxAgeDays}
+                            onChange={(value) => setPolicy({ ...policy, maxAgeDays: Number(value) })}
+                          />
+                          <NumberInput
+                            id="gc-keepLatest"
+                            label="Always keep the newest layers"
+                            min={0}
+                            allowDecimal={false}
+                            value={policy.keepLatest}
+                            onChange={(value) => setPolicy({ ...policy, keepLatest: Number(value) })}
+                          />
+                          <NumberInput
+                            id="gc-intervalHours"
+                            label="Run every (hours)"
+                            min={1}
+                            max={720}
+                            value={policy.intervalHours}
+                            onChange={(value) => setPolicy({ ...policy, intervalHours: Number(value) })}
+                          />
+                        </SimpleGrid>
+                        <Group>
+                          <Button id="gc-save" type="submit" variant="filled" loading={busy} disabled={stale}>
+                            Save garbage collection policy
+                          </Button>
+                          <Button id="gc-preview" disabled={!policySaved} loading={busy} onClick={() => void gcRequest('preview')}>
+                            Preview deletions
+                          </Button>
+                        </Group>
+                        {(preview ?? runs).length > 0 && (
+                          <Table.ScrollContainer minWidth={480}>
+                            <Table id="gc-runs">
+                              <Table.Caption>{preview ? 'Preview (nothing deleted)' : 'Last collection pass per project'}</Table.Caption>
+                              <Table.Thead>
+                                <Table.Tr>
+                                  <Table.Th>Project</Table.Th>
+                                  <Table.Th>{preview ? 'Would delete' : 'Deleted layers'}</Table.Th>
+                                  <Table.Th>Kept layers</Table.Th>
+                                  <Table.Th>Result</Table.Th>
+                                </Table.Tr>
+                              </Table.Thead>
+                              <Table.Tbody>
+                                {(preview ?? runs).map((run) => (
+                                  <Table.Tr key={`${run.project}-${run.at}`}>
+                                    <Table.Td>{run.project}</Table.Td>
+                                    <Table.Td>{preview ? run.candidates : run.deletedLayers}</Table.Td>
+                                    <Table.Td>{run.keptLayers}</Table.Td>
+                                    <Table.Td>{run.error ? `Failed: ${run.error}` : `OK at ${run.at}`}</Table.Td>
+                                  </Table.Tr>
+                                ))}
+                              </Table.Tbody>
+                            </Table>
+                          </Table.ScrollContainer>
+                        )}
+                      </Stack>
+                    </Fieldset>
+                  </Box>
                   <Box
                     component="form"
                     onSubmit={(event) => {
@@ -329,67 +475,16 @@ export function SettingsPage() {
                     }}
                   >
                     <Stack gap="lg">
-                      <Fieldset legend="Storage" disabled={busy}>
-                        <Stack>
-                          {fields.storage!.map(input)}
-                          <NativeSelect
-                            id="write"
-                            label="Upload destination"
-                            description={`Current: ${active.write ?? 'data'}. Reports are read from all configured storage locations.`}
-                            value={String(draft.write ?? '')}
-                            onChange={(event) => {
-                              const next = updated(draft, ['write'], event.currentTarget.value || undefined);
-                              change({
-                                ...next,
-                                ...(draft.backends !== undefined ? { backends: backends.map(({ write, ...backend }) => backend) } : {})
-                              });
-                            }}
-                          >
-                            <option value="">Use default destination</option>
-                            <option value="data">Local data folder</option>
-                            {backends.map((backend, i) => (
-                              <option key={i} value={backend.id}>
-                                {backend.label || backend.id}
-                              </option>
-                            ))}
-                            {typeof draft.write === 'string' && draft.write !== 'data' && !backends.some((b) => b.id === draft.write) && (
-                              <option value={draft.write}>{draft.write}</option>
-                            )}
-                          </NativeSelect>
-                          <Title order={3}>Additional storage</Title>
-                          <Text c="dimmed">
-                            Add a folder, S3-compatible bucket, or another Atlas server. Keep credentials in the server environment.
+                      <Fieldset legend="Storage">
+                        <Stack gap="xs">
+                          <Text>
+                            All reports and all user state, including the garbage collection policy below, are stored in S3-compatible
+                            object storage and nowhere else. The bucket and credentials are set by the server&apos;s required{' '}
+                            <Code>ATLAS_S3_*</Code> environment variables and cannot be changed here.
                           </Text>
-                          {!backends.length && <Text c="dimmed">No additional storage configured. Atlas uses its local data folder.</Text>}
-                          {backends.map((backend, i) => (
-                            <Fieldset key={i} legend="Storage location">
-                              <Stack gap="sm">
-                                <TextInput
-                                  label="Storage ID"
-                                  required
-                                  pattern="[a-z0-9-]+"
-                                  value={backend.id}
-                                  onChange={(event) => changeBackend(i, { id: event.currentTarget.value })}
-                                />
-                                <TextInput
-                                  label="Display name (optional)"
-                                  value={backend.label ?? ''}
-                                  onChange={(event) => changeBackend(i, { label: event.currentTarget.value || undefined })}
-                                />
-                                <TextInput
-                                  label="Location"
-                                  required
-                                  value={backend.url}
-                                  placeholder="s3://reports/atlas"
-                                  onChange={(event) => changeBackend(i, { url: event.currentTarget.value })}
-                                />
-                                <Button color="red" onClick={() => change({ ...draft, backends: backends.filter((_, at) => at !== i) })}>
-                                  Remove
-                                </Button>
-                              </Stack>
-                            </Fieldset>
-                          ))}
-                          <Button onClick={() => change({ ...draft, backends: [...backends, { id: '', url: '' }] })}>Add storage</Button>
+                          <Text size="sm" c="dimmed">
+                            The settings on this page are saved as JSON in the same bucket, in <Code>server/state.json</Code>.
+                          </Text>
                         </Stack>
                       </Fieldset>
                       <Fieldset legend="Live updates" disabled={busy}>
@@ -407,7 +502,7 @@ export function SettingsPage() {
                               <Accordion.Panel>
                                 <JsonInput
                                   id="settings"
-                                  label="Storage and report settings (JSON)"
+                                  label="Report and live-run settings (JSON)"
                                   autosize
                                   minRows={10}
                                   formatOnBlur
@@ -440,7 +535,7 @@ export function SettingsPage() {
                           Save changes
                         </Button>
                         <Text size="xs" c="dimmed">
-                          Saved to <Code>atlas.server.json</Code>. Restart Atlas to apply.
+                          Saved to S3 (<Code>server/state.json</Code>). Restart Atlas to apply.
                         </Text>
                       </Group>
                     </Stack>
