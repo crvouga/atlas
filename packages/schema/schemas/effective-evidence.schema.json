@@ -132,6 +132,13 @@
                         "type": "string"
                       }
                     },
+                    "artifactTags": {
+                      "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "labels": {
                       "type": "object",
                       "propertyNames": {
@@ -145,6 +152,47 @@
                       "type": "array",
                       "items": {
                         "type": "string"
+                      }
+                    },
+                    "videos": {
+                      "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The attachment name"
+                          },
+                          "owner": {
+                            "type": "string",
+                            "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                          },
+                          "attempt": {
+                            "description": "The retry attempt that holds it, or that holds the step that does",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "step": {
+                            "description": "The name of the step that holds it",
+                            "type": "string"
+                          },
+                          "recording": {
+                            "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "owner",
+                          "available"
+                        ],
+                        "additionalProperties": {}
                       }
                     }
                   },
@@ -256,6 +304,36 @@
                   "modified"
                 ]
               },
+              "run": {
+                "description": "The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+                  },
+                  "title": {
+                    "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                    "type": "string"
+                  },
+                  "startedAtMs": {
+                    "description": "When the execution started, epoch milliseconds",
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "endedAtMs": {
+                    "description": "When the execution ended, epoch milliseconds",
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": {}
+              },
               "recording": {
                 "anyOf": [
                   {},
@@ -328,6 +406,13 @@
                       "type": "string"
                     }
                   },
+                  "artifactTags": {
+                    "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "labels": {
                     "type": "object",
                     "propertyNames": {
@@ -341,6 +426,47 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "videos": {
+                    "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "The attachment name"
+                        },
+                        "owner": {
+                          "type": "string",
+                          "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                        },
+                        "attempt": {
+                          "description": "The retry attempt that holds it, or that holds the step that does",
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "step": {
+                          "description": "The name of the step that holds it",
+                          "type": "string"
+                        },
+                        "recording": {
+                          "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "boolean",
+                          "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "owner",
+                        "available"
+                      ],
+                      "additionalProperties": {}
                     }
                   }
                 },

@@ -69,6 +69,22 @@ export const BackendInfoSchema = …
 
 A backend as the report shows it: where results came from, and whether it could be read.
 
+#### `VideoRefSchema`
+
+```ts
+export const VideoRefSchema = …
+```
+
+One reference to a video held by a layer, check, retry attempt or step, found by the attachment's effective media type.
+
+#### `VideoCountsSchema`
+
+```ts
+export const VideoCountsSchema = …
+```
+
+Video references as counts: how many are referenced, how many distinct recordings can be played, how many cannot.
+
 #### `EvidenceSummarySchema`
 
 ```ts
@@ -185,6 +201,38 @@ export const ChecksResultSchema = …
 
 `POST /api/checks` answered: the layer that was written.
 
+#### `ArtifactTargetSchema`
+
+```ts
+export const ArtifactTargetSchema = …
+```
+
+Which attachment a reviewer's tags belong to: one attachment of one check of one archived layer.
+
+#### `ArtifactTagEditSchema`
+
+```ts
+export const ArtifactTagEditSchema = …
+```
+
+The body of `POST /api/reports/artifact-tags`: tags to add to and to remove from one attachment. At least one tag overall.
+
+#### `ArtifactTagEntrySchema`
+
+```ts
+export const ArtifactTagEntrySchema = …
+```
+
+One recorded edit of an attachment's reviewer tags. Entries are never changed or removed: they are the audit trail.
+
+#### `ArtifactTagsSchema`
+
+```ts
+export const ArtifactTagsSchema = …
+```
+
+`GET /api/reports/artifact-tags`: every recorded edit, oldest first. Fold them with `foldArtifactTags`.
+
 #### `HelloEventSchema`
 
 ```ts
@@ -258,7 +306,7 @@ export const TestHistorySchema = …
 export const ReportRunSchema = …
 ```
 
-A run: the layers that share a run URL (else a branch and commit), with what they recorded.
+A run: the layers that name the same execution (else share a run URL, else a branch and commit), with what they recorded.
 
 #### `RunListSchema`
 
@@ -642,6 +690,25 @@ export const FRESHNESS = …
 Why a layer's origin is advisory: `modified` (recorded from a checkout with uncommitted changes) or `unknown`
 (origin not captured). Absent on a layer from a clean commit. It never changes a status. A closed vocabulary: it
 changes only with a new `schemaVersion`.
+
+#### `LayerRunSchema`
+
+```ts
+export const LayerRunSchema = …
+```
+
+The execution a layer belongs to, named by the producer: one invocation of a local or manual run, which several
+layers (shards, batches, producers) may share. Presentation and history grouping only: it never takes part in the
+slot a result fills, in which result wins, or in a status. Absent, a run is told by its CI run URL, else `branch@sha`.
+Within one project, layers that carry the same `id` are one run; a later invocation gets another `id`.
+
+#### `LayerRun`
+
+```ts
+export type LayerRun = z.output<typeof LayerRunSchema>;
+```
+
+The execution of a layer, parsed from `LayerRunSchema`.
 
 #### `MeasurementSchema`
 

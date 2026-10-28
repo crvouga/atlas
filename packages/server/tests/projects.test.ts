@@ -5,6 +5,7 @@ import { httpStore } from '../../reports/src/http-store';
 import { publishChecks } from '../../reports/src/publish-checks';
 import { publishSpecSet } from '../../reports/src/spec-set';
 import { listen, type RunningServer } from '../src/host';
+import { RunDetailSchema, RunListSchema } from '../../schema/src/api';
 
 const servers: AtlasServer[] = [];
 const listeners: RunningServer[] = [];
@@ -83,4 +84,20 @@ test('project discovery reaches existing default and project event streams witho
       expect(frame).not.toContain('beta');
     }
   } finally { await Promise.all(readers.map(reader => reader.cancel())); }
+});
+
+test('an execution id names a run over the API, and the same id in two projects stays isolated', async () => {
+  const server = createAtlasServer({ backends: [{ id: 'data', store: memoryStore() }], write: 'data' }); servers.push(server); await server.ready;
+  const body = (status: string, recordedAtMs: number, run: object) => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ producer: 'demo', sha: 'a'.repeat(40), branch: 'main', recordedAtMs, run, checks: [{ id: 'pay', title: 'Pay', status }] }) });
+  expect((await req(server, '/api/projects/alpha/checks', body('failed', 1_000, { id: 'demo-1', title: 'Alpha demo' }))).status).toBe(201);
+  expect((await req(server, '/api/projects/alpha/checks', body('passed', 5_000, { id: 'demo-2' }))).status).toBe(201);
+  expect((await req(server, '/api/projects/beta/checks', body('passed', 2_000, { id: 'demo-1', title: 'Beta demo' }))).status).toBe(201);
+  const runs = async (slug: string) => RunListSchema.parse(await (await req(server, `/api/projects/${slug}/reports/runs`)).json()).runs;
+  const alpha = await runs('alpha'), beta = await runs('beta');
+  expect(alpha.map(run => [run.key, run.title ?? null, run.counts.failed, run.counts.passed])).toEqual([['run:demo-2', null, 0, 1], ['run:demo-1', 'Alpha demo', 1, 0]]);
+  expect(beta.map(run => [run.key, run.title ?? null, run.counts.failed, run.counts.passed])).toEqual([['run:demo-1', 'Beta demo', 0, 1]]);
+  const detail = RunDetailSchema.parse(await (await req(server, `/api/projects/alpha/reports/runs/detail?key=${encodeURIComponent('run:demo-1')}`)).json());
+  expect(detail.run).toMatchObject({ runId: 'demo-1', title: 'Alpha demo' });
+  expect(detail.results.map(result => result.status)).toEqual(['failed']);
+  expect((await req(server, '/api/projects/alpha/checks', body('passed', 1, { id: '' }))).status).toBe(422);
 });
