@@ -266,3 +266,42 @@ describe('filtering runs and artifacts', () => {
     expect(RunListSchema.parse(await (await get(node, '/api/reports/runs')).json()).filters).toEqual([]);
   });
 });
+
+describe('GET /api/reports/tests?scope=', () => {
+  async function recorded() {
+    const store = memoryStore();
+    const clip = (name: string, scope?: Record<string, unknown>) => ({ name, contentType: 'video/webm', data: new TextEncoder().encode(name), ...(scope ? { scope } : {}) });
+    await publishChecks(store, {
+      producer: 'mobile', environment: 'ios', recordedAtMs: 1_000, checks: [
+        { id: 'sim', title: 'sim', status: 'passed', attachments: [clip('sim.webm', { deviceKind: 'simulator', audioCaptured: false })] },
+        { id: 'phone', title: 'phone', status: 'passed', attachments: [clip('phone.webm', { deviceKind: 'physical', audioCaptured: true, verified: ['deviceKind'] })] },
+        { id: 'bare', title: 'bare', status: 'passed', attachments: [clip('bare.webm')] },
+      ]
+    });
+    const node = createNode({ stores: [{ id: 'main', label: 'Main', store }], refreshMs: 60_000 });
+    nodes.push(node);
+    await node.ready;
+    return node;
+  }
+  const ids = async (node: Node, query: string) => TestCatalogSchema.parse(await (await get(node, `/api/reports/tests?${query}`)).json()).tests.map(test => test.id).sort();
+
+  test('narrows to physical or audible evidence and never includes the unknown or the simulated', async () => {
+    const node = await recorded();
+    expect(await ids(node, 'scope=device:physical')).toEqual(['phone']);
+    expect(await ids(node, 'scope=device:simulator')).toEqual(['sim']);
+    expect(await ids(node, 'scope=audio:recorded')).toEqual(['phone']);
+    expect(await ids(node, 'scope=unknown')).toEqual(['bare']);
+    expect(await ids(node, 'scope=device:physical,audio:silent')).toEqual([]);
+    expect(await ids(node, '')).toEqual(['bare', 'phone', 'sim']);
+  });
+
+  test('the document says what each recording declares', async () => {
+    const node = await recorded();
+    const catalog = TestCatalogSchema.parse(await (await get(node, '/api/reports/tests')).json());
+    expect(catalog.tests.find(test => test.id === 'phone')!.scopeProfiles).toEqual([['device:physical', 'audio:recorded']]);
+    expect(catalog.tests.find(test => test.id === 'bare')!.scopeProfiles).toEqual([['unknown']]);
+    expect(catalog.facets.scopes!.map(item => item.value)).toContain('device:simulator');
+    const detail = await (await get(node, '/api/reports/tests/history?key=' + encodeURIComponent(catalog.tests.find(test => test.id === 'phone')!.key))).json() as { test: { outcomes: { evidence: { videos: { scope: { verified: string[] } }[] } }[] } };
+    expect(detail.test.outcomes[0]!.evidence.videos[0]!.scope.verified).toEqual(['deviceKind']);
+  });
+});

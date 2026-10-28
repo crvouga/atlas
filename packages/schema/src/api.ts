@@ -15,7 +15,7 @@
  */
 import { z } from 'zod/v4';
 
-import { CheckSchema, LayerRunSchema } from './layer';
+import { CheckSchema, EvidenceScopeSchema, LayerRunSchema } from './layer';
 
 /** One of the statuses a check has in a report: `passed`, `failed`, `running` (not finished) or `not-run`. Closed. */
 export const EvidenceStatusSchema = z.enum(['passed', 'failed', 'running', 'not-run']);
@@ -78,7 +78,8 @@ export const VideoRefSchema = z.looseObject({
   step: z.string().optional().describe('The name of the step that holds it'),
   tags: z.array(z.string()).optional().describe('The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)'),
   recording: z.string().optional().describe('What identifies the bytes; references with the same value are one recording. Absent when it cannot be played'),
-  available: z.boolean().describe('False when the reference names no bytes (no bundle key, address or inline text)')
+  available: z.boolean().describe('False when the reference names no bytes (no bundle key, address or inline text)'),
+  scope: EvidenceScopeSchema.optional().describe('What this recording shows as its producer declared it: its own `scope`, else its attempt\'s, check\'s, part\'s or layer\'s. Absent: the scope is unknown, never live, physical or audible')
 });
 
 /** Video references as counts: how many are referenced, how many distinct recordings can be played, how many cannot. */
@@ -209,7 +210,8 @@ export const CheckDetailSchema = z.looseObject({
   layer: z.string(),
   kind: z.string(),
   check: CheckSchema,
-  run: z.looseObject({}).describe('What the run as a whole carries: its logs, links, labels, annotations and extensions')
+  run: z.looseObject({}).describe('What the run as a whole carries: its logs, links, labels, annotations, scope and extensions'),
+  inheritedScope: EvidenceScopeSchema.optional().describe('The scope the check inherits: its part\'s declaration, else its layer\'s. Absent when neither declared one: unknown, not live or physical')
 });
 
 /** `GET /api/store?prefix=…`: one page of keys under `layers/`, in code-unit order. */
@@ -330,6 +332,7 @@ export const TestSummarySchema = z.looseObject({
   tags: z.array(z.string()),
   artifactTags: z.array(z.string()).optional().describe('Normalized tags of the attachments of its current results, such as `demo` (shown `#demo`). Not inherited from a check or run, unlike `tags`'),
   inheritedArtifactTags: z.array(z.string()).optional().describe('Normalized tags its attachments inherit from their check and run, apart from `artifactTags`: what `?artifactTag=…&inherited=1` also matches'),
+  scopeProfiles: z.array(z.array(z.string())).optional().describe('The scope tokens each distinct playable recording of its current results declares (`device:physical`, `audio:silent`); `["unknown"]` for a recording that declared none. What `?scope=` matches, one recording at a time. Absent when it has no playable recording'),
   labels: z.record(z.string(), z.string()),
   evidence: z.looseObject({ attachments: z.number().int().nonnegative(), steps: z.number().int().nonnegative(), attempts: z.number().int().nonnegative(), roles: z.array(z.string()) }),
   lastRecordedAtMs: z.number(),
@@ -358,7 +361,7 @@ export const TestCatalogSchema = z.looseObject({
   facets: z.looseObject({
     statuses: z.array(FacetValueSchema), environments: z.array(FacetValueSchema), producers: z.array(FacetValueSchema), domains: z.array(FacetValueSchema),
     specs: z.array(CatalogSpecSchema.extend({ tests: z.number().int().nonnegative(), counts: StatusCountsSchema })),
-    tags: z.array(FacetValueSchema), artifactTags: z.array(FacetValueSchema).optional(), branches: z.array(FacetValueSchema), labels: z.record(z.string(), z.array(FacetValueSchema))
+    tags: z.array(FacetValueSchema), artifactTags: z.array(FacetValueSchema).optional(), scopes: z.array(FacetValueSchema).optional().describe('Scope tokens of recordings (`device:simulator`, `unknown`) with the number of tests that have a recording stating each'), branches: z.array(FacetValueSchema), labels: z.record(z.string(), z.array(FacetValueSchema))
   }),
   total: z.number().int().nonnegative().describe('Tests the query matched, before offset and limit'),
   offset: z.number().int().nonnegative(),

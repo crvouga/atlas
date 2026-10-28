@@ -40,6 +40,8 @@ export const ExplorerSearchFields = {
   domain: text,
   spec: text,
   tag: text,
+  /** Only tests with one recording that declares every one of these scope tokens (`device:physical,audio:recorded`). */
+  scope: text,
   /** Artifact tags (`demo`, shown `#demo`): tests with an attachment carrying one; runs and artifacts likewise. */
   artifactTag: text,
   /** With `artifactTag`: also the tags attachments inherit from their check and run. */
@@ -79,6 +81,7 @@ export type ExplorerSearch = {
   readonly domain?: string;
   readonly spec?: string;
   readonly tag?: string;
+  readonly scope?: string;
   readonly artifactTag?: string;
   readonly inherited?: true;
   readonly type?: string;
@@ -127,6 +130,7 @@ export function queryOf(search: ExplorerSearch): TestQuery {
     domain: values(search.domain),
     spec: values(search.spec),
     tag: values(search.tag),
+    ...(values(search.scope).length ? { scope: values(search.scope) } : {}),
     artifactTag: values(search.artifactTag),
     ...(search.inherited ? { inherited: true } : {}),
     sort: search.sort === 'relevance' || !search.sort ? 'spec' : search.sort
@@ -140,7 +144,7 @@ export function explorerSearch(search: Record<string, unknown>): ExplorerSearch 
 
 /** True when any filter or search narrows the list. */
 export function narrowed(search: ExplorerSearch): boolean {
-  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.artifactTag || search.inRun || search.video);
+  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.scope || search.artifactTag || search.inRun || search.video);
 }
 
 /** The filters of the Runs and Artifacts tabs, in the address. */
