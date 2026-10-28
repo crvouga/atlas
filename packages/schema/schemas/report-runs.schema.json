@@ -178,6 +178,34 @@
               "unavailable"
             ],
             "additionalProperties": {}
+          },
+          "artifactTags": {
+            "description": "The normalized tags of the attachments of its results, sorted and distinct. Absent when none is tagged, and in reports of older servers",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "description": "The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches). Absent when none",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "types": {
+            "description": "The media types (roles) of its attachments, sorted and distinct; `video` only for a playable recording. Absent when it has no attachment",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "labels": {
+            "description": "The `key=value` labels of its results and layers, sorted and distinct. Absent when it has none",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -204,6 +232,199 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 9007199254740991
+    },
+    "filters": {
+      "description": "The filter parameters this server applied (`artifactTag`, `type`, `outcome`…). A viewer that asked for one that is missing here knows the server ignored it. Absent on servers that predate filtering",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "facets": {
+      "description": "The values each filter dimension offers, counted over every run. Absent on servers that predate filtering",
+      "type": "object",
+      "properties": {
+        "artifactTags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          },
+          "description": "Values are `key=value`"
+        },
+        "environments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "domains": {
+          "description": "Only for artifacts: runs have no domain",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "artifactTags",
+        "types",
+        "labels",
+        "environments",
+        "producers",
+        "branches",
+        "outcomes"
+      ],
+      "additionalProperties": {}
     }
   },
   "required": [

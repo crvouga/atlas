@@ -12,6 +12,7 @@ import { Alert, Anchor, Badge, Box, Button, Code, Flex, Group, List, NativeSelec
 import { videoCounts } from '@crvouga/atlas/reports/evidence-detail';
 import type { VideoCounts, VideoRef } from '@crvouga/atlas/reports/evidence-types';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
+import type { FilterName } from '@crvouga/atlas/reports/artifact-query';
 import { formatMs, type RunResult, type RunSummary } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -22,9 +23,11 @@ import type { FindDoc, Ranked } from '../find/rank';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
 import { useRunDetail, useRunList, useTestCatalog } from './catalog';
+import { FilterBar } from './filters';
 import { SearchNotes, TypedFilters } from './search-notes';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { runName } from './parts';
+import { filtered, filterOf, NO_FILTERS } from './search';
 const RUN_ROWS = 50;
 const NO_RESULTS: readonly RunResult[] = [];
 const RESULT_ROWS = 200;
@@ -174,12 +177,31 @@ const RUN_SORTS = [
   { id: 'failures', label: 'Most failures' },
   { id: 'relevance', label: 'Best match' }
 ] as const;
+/** What a filter is called when a page says a server could not apply it. */
+const FILTER_WORDS: Partial<Record<FilterName, string>> = { artifactTag: 'tag', type: 'media type', label: 'label', domain: 'domain', spec: 'spec' };
+/** Says which filters the list is not narrowed by, because the server that answered ignored them. */
+export function NotApplied({ names, noun }: { names: readonly FilterName[]; noun: string }) {
+  if (!names.length) return null;
+  return (
+    <Alert role="status" color="blue" my="sm" data-not-applied>
+      This server cannot filter {noun} by {names.map((name) => FILTER_WORDS[name] ?? name).join(', ')}, so the list below is not narrowed by {names.length > 1 ? 'them' : 'it'}. Update the server to use{' '}
+      {names.length > 1 ? 'these filters' : 'this filter'}.
+    </Alert>
+  );
+}
 function RunTable() {
   const search = useExplorerSearch();
   const go = useExplorerNavigate();
   const video = search.video === true;
   const searching = !!search.q;
-  const runs = useRunList(true, video, searching);
+  // The structured filters of the address narrow the runs on the server; the words are matched here by the shared search,
+  // over every run, so the Runs tab judges "savde answer" as the finder and the test list do.
+  const filter = useMemo(() => {
+    const { q: _words, ...rest } = filterOf(search);
+    return rest;
+  }, [search]);
+  const narrow = filtered(search);
+  const runs = useRunList(true, filter, searching);
   const now = useNow();
   const [shown, setShown] = useState(RUN_ROWS);
   const docs = useMemo(() => (runs.data?.runs ?? []).map((run) => runDoc(run, runLabel(run))), [runs.data]);
@@ -211,53 +233,69 @@ function RunTable() {
     );
   const everything = runs.data.runs;
   const list = visible;
-  const withVideoCount = runs.data.withVideo;
-  if (!everything.length && !video)
-    return (
-      <Text component="div" c="dimmed">
-        No runs recorded yet.
-      </Text>
-    );
-  const noun = video ? 'with a video' : '';
-  const matching = searching ? 'matching' : '';
+  const withVideo = runs.data.withVideo;
+  const noun = narrow ? 'matching' : '';
   const hasVideoNow = video || parsed.filters.video;
   return (
     <Box aria-label="Runs" component="section" mb="lg">
-      <SearchBox
-        label="Search runs"
-        placeholder='Search runs, branches, failures… or filter: status:failed has:video "exact phrase"'
-        parsed={parsed}
-        onSearch={(value) => go({ q: value || undefined }, { replace: true })}
-      />
-      <Flex gap="xs" align="center" wrap="wrap" role="status">
-        {runs.data.total > everything.length
-          ? `The newest ${list.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
-          : searching || list.length !== everything.length
-            ? `${list.length.toLocaleString()} of ${plural(everything.length, 'run', 'runs')} ${[matching, noun].filter(Boolean).join(' ')}`.trim()
-            : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
-        {(withVideoCount !== undefined || video) && (
-          <HasVideo count={withVideoCount ?? list.length} pressed={hasVideoNow} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} />
-        )}
-        <NativeSelect
-          aria-label="Sort runs"
-          value={sortValue}
-          onChange={(event) => go({ sort: event.target.value === (found.hits ? 'relevance' : 'recent') ? undefined : (event.target.value as 'recent' | 'failures' | 'relevance') })}
-        >
-          {RUN_SORTS.filter((option) => option.id !== 'relevance' || found.hits !== null).map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </NativeSelect>
-      </Flex>
-      <SearchNotes issues={parsed.issues} semantic={found.status} />
-      {!list.length && (
+      {(narrow || everything.length > 0) && (
+        <FilterBar
+          facets={runs.data.facets}
+          search={search}
+          tab="runs"
+          extra={
+            withVideo !== undefined || video ? (
+              <HasVideo count={withVideo ?? list.length} pressed={hasVideoNow} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} />
+            ) : undefined
+          }
+        />
+      )}
+      <NotApplied names={runs.data.notApplied} noun="runs" />
+      {(parsed.tokens.length > 0 || parsed.issues.length > 0 || found.status !== 'idle') && (
+        <>
+          <Flex gap="xs" align="center" wrap="wrap">
+            <TypedFilters parsed={parsed} query={search.q ?? ''} onChange={(next) => go({ q: next || undefined }, { replace: true })} />
+          </Flex>
+          <SearchNotes issues={parsed.issues} semantic={found.status} />
+        </>
+      )}
+      {!everything.length && !narrow && (
         <Text component="div" c="dimmed">
-          {searching || hasFilters(parsed.filters)
-            ? 'No run matches this search.'
-            : 'No run has a playable video recording.'}{' '}
-          {runs.data.withVideo === undefined && video && 'This server does not report which runs have recordings.'}
+          No runs recorded yet.
         </Text>
+      )}
+      {everything.length > 0 && (
+        <Flex gap="xs" align="center" wrap="wrap" role="status">
+          <Text span inherit>
+            {runs.data.total > everything.length
+              ? `The newest ${everything.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
+              : searching || list.length !== everything.length
+                ? `${list.length.toLocaleString()} of ${plural(everything.length, 'run', 'runs')} ${noun}`.trim()
+                : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
+          </Text>
+          <NativeSelect
+            aria-label="Sort runs"
+            value={sortValue}
+            onChange={(event) => go({ sort: event.target.value === (found.hits ? 'relevance' : 'recent') ? undefined : (event.target.value as 'recent' | 'failures' | 'relevance') })}
+          >
+            {RUN_SORTS.filter((option) => option.id !== 'relevance' || found.hits !== null).map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </Flex>
+      )}
+      {!list.length && narrow && (
+        <Stack gap="xs" align="flex-start" role="status" data-no-match>
+          <Text component="div" c="dimmed">
+            No run matches these filters.
+            {video && withVideo === undefined && ' This server does not report which runs have recordings.'}
+          </Text>
+          <Button type="button" variant="light" onClick={() => go(NO_FILTERS)}>
+            Clear filters
+          </Button>
+        </Stack>
       )}
       <Table.ScrollContainer minWidth={600}>
         <Table data-runs>
@@ -271,6 +309,7 @@ function RunTable() {
               <Table.Th scope="col">Outcomes</Table.Th>
               <Table.Th scope="col">Span</Table.Th>
               <Table.Th scope="col">Video</Table.Th>
+              <Table.Th scope="col">Tags</Table.Th>
               <Table.Th scope="col">
                 <VisuallyHidden>CI run</VisuallyHidden>
               </Table.Th>
@@ -313,6 +352,7 @@ function RunTable() {
                 <Table.Td>
                   <RunVideos run={run} />
                 </Table.Td>
+                <Table.Td data-tags>{run.artifactTags?.map((tag) => `#${tag}`).join(' ') || '—'}</Table.Td>
                 <Table.Td>
                   {run.runUrl ? (
                     <Anchor href={run.runUrl} target="_blank" rel="noreferrer">

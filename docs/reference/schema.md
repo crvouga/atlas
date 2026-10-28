@@ -308,6 +308,22 @@ export const ReportRunSchema = …
 
 A run: the layers that name the same execution (else share a run URL, else a branch and commit), with what they recorded.
 
+#### `QueryFacetValueSchema`
+
+```ts
+export const QueryFacetValueSchema = …
+```
+
+A value of a filter dimension and how many records have it.
+
+#### `QueryFacetsSchema`
+
+```ts
+export const QueryFacetsSchema = …
+```
+
+The facets of a runs or artifacts query: per dimension, its values with disjunctive counts (the list's count if that value were the only one chosen, every other dimension's filter applied).
+
 #### `RunListSchema`
 
 ```ts
@@ -315,6 +331,22 @@ export const RunListSchema = …
 ```
 
 `GET /api/reports/runs`: runs, newest first.
+
+#### `ArtifactResultSchema`
+
+```ts
+export const ArtifactResultSchema = …
+```
+
+One recorded result that carries evidence: where and when it was recorded and what it carries.
+
+#### `ArtifactListSchema`
+
+```ts
+export const ArtifactListSchema = …
+```
+
+`GET /api/reports/artifacts`: recorded results that carry evidence, newest first, with the facets of the query.
 
 #### `RunDetailSchema`
 
