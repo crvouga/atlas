@@ -12,14 +12,17 @@ import { Alert, Anchor, Box, Button, Code, Flex, Group, List, Stack, Table, Text
 import { videoCounts } from '@crvouga/atlas/reports/evidence-detail';
 import type { VideoCounts, VideoRef } from '@crvouga/atlas/reports/evidence-types';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
+import type { FilterName } from '@crvouga/atlas/reports/artifact-query';
 import { formatMs, type RunResult, type RunSummary } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
 import { useRunDetail, useRunList } from './catalog';
+import { FilterBar } from './filters';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { runName } from './parts';
+import { filtered, filterOf, NO_FILTERS } from './search';
 const RUN_ROWS = 50;
 const RESULT_ROWS = 200;
 /** The Runs tab: the run list, or the run opened in it. */
@@ -118,11 +121,25 @@ function HasVideo({ count, pressed, noun, onToggle }: { count: number; pressed: 
     </Button>
   );
 }
+/** What a filter is called when a page says a server could not apply it. */
+const FILTER_WORDS: Partial<Record<FilterName, string>> = { artifactTag: 'tag', type: 'media type', label: 'label', domain: 'domain', spec: 'spec' };
+/** Says which filters the list is not narrowed by, because the server that answered ignored them. */
+export function NotApplied({ names, noun }: { names: readonly FilterName[]; noun: string }) {
+  if (!names.length) return null;
+  return (
+    <Alert role="status" color="blue" my="sm" data-not-applied>
+      This server cannot filter {noun} by {names.map((name) => FILTER_WORDS[name] ?? name).join(', ')}, so the list below is not narrowed by {names.length > 1 ? 'them' : 'it'}. Update the server to use{' '}
+      {names.length > 1 ? 'these filters' : 'this filter'}.
+    </Alert>
+  );
+}
 function RunTable() {
   const search = useExplorerSearch();
   const go = useExplorerNavigate();
   const video = search.video === true;
-  const runs = useRunList(true, video);
+  const filter = useMemo(() => filterOf(search), [search]);
+  const narrow = filtered(search);
+  const runs = useRunList(true, filter);
   const now = useNow();
   const [shown, setShown] = useState(RUN_ROWS);
   if (runs.isPending)
@@ -139,28 +156,33 @@ function RunTable() {
     );
   const list = runs.data.runs;
   const withVideo = runs.data.withVideo;
-  if (!list.length && !video)
-    return (
-      <Text component="div" c="dimmed">
-        No runs recorded yet.
-      </Text>
-    );
-  const noun = video ? 'with a video' : '';
+  const noun = narrow ? 'matching' : '';
   return (
     <Box aria-label="Runs" component="section" mb="lg">
-      <Flex gap="xs" align="center" wrap="wrap">
-        {runs.data.total > list.length
-          ? `The newest ${list.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
-          : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
-        {(withVideo !== undefined || video) && (
-          <HasVideo count={withVideo ?? list.length} pressed={video} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} />
-        )}
-      </Flex>
-      {!list.length && (
+      {(narrow || list.length > 0) && <FilterBar facets={runs.data.facets} search={search} tab="runs" extra={withVideo !== undefined || video ? <HasVideo count={withVideo ?? list.length} pressed={video} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} /> : undefined} />}
+      <NotApplied names={runs.data.notApplied} noun="runs" />
+      {!list.length && !narrow && (
         <Text component="div" c="dimmed">
-          No run has a playable video recording.{' '}
-          {runs.data.withVideo === undefined && 'This server does not report which runs have recordings.'}
+          No runs recorded yet.
         </Text>
+      )}
+      {list.length > 0 && (
+        <Text role="status" component="div">
+          {runs.data.total > list.length
+            ? `The newest ${list.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
+            : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
+        </Text>
+      )}
+      {!list.length && narrow && (
+        <Stack gap="xs" align="flex-start" role="status" data-no-match>
+          <Text component="div" c="dimmed">
+            No run matches these filters.
+            {video && withVideo === undefined && ' This server does not report which runs have recordings.'}
+          </Text>
+          <Button type="button" variant="light" onClick={() => go(NO_FILTERS)}>
+            Clear filters
+          </Button>
+        </Stack>
       )}
       <Table.ScrollContainer minWidth={600}>
         <Table data-runs>
@@ -174,6 +196,7 @@ function RunTable() {
               <Table.Th scope="col">Outcomes</Table.Th>
               <Table.Th scope="col">Span</Table.Th>
               <Table.Th scope="col">Video</Table.Th>
+              <Table.Th scope="col">Tags</Table.Th>
               <Table.Th scope="col">
                 <VisuallyHidden>CI run</VisuallyHidden>
               </Table.Th>
@@ -215,6 +238,7 @@ function RunTable() {
                 <Table.Td>
                   <RunVideos run={run} />
                 </Table.Td>
+                <Table.Td data-tags>{run.artifactTags?.map((tag) => `#${tag}`).join(' ') || '—'}</Table.Td>
                 <Table.Td>
                   {run.runUrl ? (
                     <Anchor href={run.runUrl} target="_blank" rel="noreferrer">

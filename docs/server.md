@@ -375,7 +375,8 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | Only some: `q` (all words), `status` (or `flaky`), `environment`, `producer`, `domain`, `spec`, `tag`, `run`; `sort`, `offset`, `limit` | `GET /api/reports/tests?status=failed&environment=ios` |
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
 | Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
-| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video | `GET /api/reports/runs` |
+| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
+| Recorded results that carry evidence, across the whole history, found by tag, media type, label, feature, environment, branch, revision, outcome and time | `GET /api/reports/artifacts?artifactTag=demo&type=video` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 
 ```sh
@@ -458,6 +459,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `GET /api/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
+| `GET /api/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
+| `GET /api/projects/{project}/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/projects/{project}/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/reports/outline` | read | The specs a report is laid over. |

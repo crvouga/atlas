@@ -131,7 +131,7 @@ describe('execution identity of a run', () => {
     const store = memoryStore();
     await publishChecks(store, { ...where, producer: 'demo', recordedAtMs: 1_000, run: { id: 'demo-1', title: 'Draft' }, checks: [pay('failed', { detail: 'boom' })] });
     const before = await runsOf(store);
-    const stripped = (run: RunSummary) => { const { title: _title, layers: _layers, ...rest } = run; return rest; };
+    const stripped = (run: RunSummary) => { const { title: _title, layers: _layers, tags: _tags, ...rest } = run; return rest; };
     // The rename is a later layer of the same execution: it names a title and a tag, and records no result.
     await publishChecks(store, { ...where, producer: 'demo', recordedAtMs: 1_500, run: { id: 'demo-1', title: 'Customer demo' }, tags: ['demo'], checks: [] });
     const after = await runsOf(store);

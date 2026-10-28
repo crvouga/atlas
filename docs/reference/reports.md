@@ -4,6 +4,257 @@ Layered evidence for any kind of spec: publishing layers, stores (folder, S3, an
 
 > Generated from the doc comments of `packages/reports/src` by `bun run docs`. Do not edit: change the comment next to the code.
 
+### Run and artifact queries
+
+Source: `packages/reports/src/artifact-query.ts`. Import: `@crvouga/atlas/reports/artifact-query`
+
+One shareable query for the runs of a project and for the recorded results that carry evidence (recordings,
+screenshots, traces): by artifact tag, label, media type, feature (domain, spec), environment or device, producer,
+branch, revision, outcome and time. The same rules answer `GET /api/reports/runs`, `GET /api/reports/artifacts`
+and the viewer's Runs and Artifacts views, so a link means the same thing everywhere.
+
+The semantics are fixed, not inferred:
+
+- Across dimensions the filters combine with AND: `artifactTag=demo&type=video&environment=ios` is a demo
+  recording on ios.
+- Within a dimension the values combine with OR: `environment=ios,android` is either.
+- When both `artifactTag` and `type` are asked for, one artifact must be both (a `demo`-tagged video, not a demo-tagged
+  screenshot beside an untagged video) wherever the report says which videos carry which tags; otherwise a result with
+  an artifact of that type and an artifact with that tag matches.
+- Facet counts are disjunctive: the count beside a value is how many records the list would hold if that value were
+  the only choice in its dimension, with every other dimension's filter applied. With a value already chosen, the
+  other values show what choosing them in addition would add, and the chosen one's count is the list's.
+- A filter never changes a status. Evidence that is not recorded is unknown, never a match.
+
+Lists in the address are comma-separated; a comma or backslash inside a value is written `\,` or `\\`
+({@link splitList}, {@link joinList}), so a label such as `note=a,b` survives.
+
+See docs/server.md#reading-the-report-as-an-agent
+
+#### `QueryFacetValue`
+
+```ts
+export type QueryFacetValue = { readonly value: string; readonly count: number };
+```
+
+A value of a dimension and how many records have it.
+
+#### `QUERY_DIMENSIONS`
+
+```ts
+export const QUERY_DIMENSIONS = …
+```
+
+The dimensions a query narrows by, with their address parameters.
+
+#### `QueryDimension`
+
+```ts
+export type QueryDimension = (typeof QUERY_DIMENSIONS)[number];
+```
+
+One of {@link QUERY_DIMENSIONS}.
+
+#### `ArtifactFilter`
+
+```ts
+export type ArtifactFilter = {
+  /** Words (all of them) found in the title, test id, spec, domain, branch, labels, tags, environment or producer; or, for a run, its title. */
+  readonly q?: string;
+  /** Artifact tags (`demo` and `#demo` are the same). */
+  readonly artifactTag?: readonly string[];
+  /** Also match the tags an artifact inherits from its check and run. Default false: the exact artifact query. */
+  readonly inherited?: boolean;
+  /** Media types as roles: `video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer's own role. `video` means a playable recording. */
+  readonly type?: readonly string[];
+  /** `key=value`, or `key` for any value. */
+  readonly label?: readonly string[];
+  /** Environments or devices (`ios`, `desktop-web`). */
+  readonly environment?: readonly string[];
+  readonly producer?: readonly string[];
+  readonly branch?: readonly string[];
+  /** Revisions: a full commit id, or a prefix of at least seven characters. */
+  readonly sha?: readonly string[];
+  /** Statuses (`passed`, `failed`, `running`, `not-run`). A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`. */
+  readonly outcome?: readonly string[];
+  /** The feature domain of a result's spec. Not applicable to runs. */
+  readonly domain?: readonly string[];
+  /** Spec paths. Not applicable to runs. */
+  readonly spec?: readonly string[];
+  /** Only records at or after this time (epoch ms): a result's recording time, a run's end. */
+  readonly since?: number;
+  /** Only records at or before this time (epoch ms). */
+  readonly until?: number;
+  /** Only records with a playable video recording (the same as `type: ['video']`). */
+  readonly video?: boolean;
+};
+```
+
+What a query asks for. Every field is optional; nothing asked is everything. See the module comment for the semantics.
+
+#### `FilterName`
+
+```ts
+export type FilterName = QueryDimension | 'q' | 'inherited' | 'since' | 'until' | 'video';
+```
+
+The filters a query used, as they are named in the address and in `filters` of a response.
+
+#### `FilterFields`
+
+```ts
+export type FilterFields = {
+  /** Lower-cased text a search matches. */
+  readonly text: string;
+  /** The normalized tags of its artifacts. */
+  readonly artifactTags: readonly string[];
+  /** The tags its artifacts inherit from checks and runs, and its own. */
+  readonly tags: readonly string[];
+  /** Distinct media types; `video` only when a recording can be played. */
+  readonly types: readonly string[];
+  /** Artifacts by type and their own tags. Where the report does not say which artifact carries which tag, every artifact of the record is given the record's artifact tags. */
+  readonly media: readonly { readonly type: string; readonly tags: readonly string[] }[];
+  /** `key=value`, sorted and distinct. */
+  readonly labels: readonly string[];
+  readonly environments: readonly string[];
+  readonly producers: readonly string[];
+  readonly branches: readonly string[];
+  readonly shas: readonly string[];
+  readonly outcomes: readonly string[];
+  /** Absent when the dimension does not apply (runs have no domain). */
+  readonly domains?: readonly string[];
+  readonly specs?: readonly string[];
+  readonly at: number;
+};
+```
+
+The values of a record a query looks at: made by {@link fieldsOfRun} or by the artifact search.
+
+#### `QueryFacets`
+
+```ts
+export type QueryFacets = {
+  readonly artifactTags: readonly QueryFacetValue[];
+  readonly types: readonly QueryFacetValue[];
+  /** Values are `key=value`. */
+  readonly labels: readonly QueryFacetValue[];
+  readonly environments: readonly QueryFacetValue[];
+  readonly producers: readonly QueryFacetValue[];
+  readonly branches: readonly QueryFacetValue[];
+  readonly outcomes: readonly QueryFacetValue[];
+  readonly domains?: readonly QueryFacetValue[];
+};
+```
+
+The facets of a query: for each dimension, its values with disjunctive counts (see the module comment).
+
+#### `splitList`
+
+```ts
+export function splitList(raw: string): string[]
+```
+
+Splits a comma-separated list from an address: `a,b` is two values; `\,` is a comma and `\\` a backslash inside a
+value. Values are trimmed and empty ones dropped.
+
+**Example**
+
+```ts
+splitList('demo,release\\,2'); // ['demo', 'release,2']
+```
+
+#### `joinList`
+
+```ts
+export function joinList(list: readonly string[]): string | undefined
+```
+
+Joins values into one address parameter that {@link splitList} reads back; `undefined` when there are none.
+
+#### `parseTime`
+
+```ts
+export function parseTime(raw: string | null | undefined): number | undefined
+```
+
+A time from an address: epoch milliseconds, or a date or date-time Date can read (a date alone is UTC). `undefined` when unreadable.
+
+#### `parseArtifactFilter`
+
+```ts
+export function parseArtifactFilter(params: URLSearchParams): ArtifactFilter
+```
+
+Reads a query from URL search parameters: `q`, `video`, `inherited`, `since`, `until` and the repeatable or
+comma-separated {@link QUERY_DIMENSIONS}. Unreadable values are left out, never an error.
+
+#### `filterParams`
+
+```ts
+export function filterParams(filter: ArtifactFilter): URLSearchParams
+```
+
+A query as URL search parameters, the form {@link parseArtifactFilter} reads back.
+
+#### `usedFilters`
+
+```ts
+export function usedFilters(filter: ArtifactFilter): FilterName[]
+```
+
+Which filters a query uses, by the names an address gives them.
+
+#### `isFiltered`
+
+```ts
+export function isFiltered(filter: ArtifactFilter): boolean
+```
+
+Whether a query narrows anything.
+
+#### `forRuns`
+
+```ts
+export function forRuns(filter: ArtifactFilter): ArtifactFilter
+```
+
+Every filter in `filter` that may be applied to a record with these fields, as the runs query applies them (no domain or spec).
+
+#### `matchesFilter`
+
+```ts
+export function matchesFilter(fields: FilterFields, filter: ArtifactFilter, skip?: QueryDimension): boolean
+```
+
+Whether a record satisfies a query. `skip` leaves one dimension out: what {@link facetsOf} uses to count the values of
+that dimension, and nothing else should need.
+
+#### `facetsOf`
+
+```ts
+export function facetsOf(records: readonly FilterFields[], filter: ArtifactFilter): QueryFacets
+```
+
+The facets of a query over every record: for each dimension, the values the records have and how many records
+would match if that value were chosen in its dimension (see the module comment). A value chosen in the query is
+listed even when nothing has it, with a count of 0, so it can be removed.
+
+#### `outcomeOfCounts`
+
+```ts
+export function outcomeOfCounts(counts: Readonly<Record<string, number>>): string
+```
+
+The outcome of a run from its results by status: `failed`, else `running`, else `passed`, else `not-run`.
+
+#### `labelList`
+
+```ts
+export function labelList(labels: Readonly<Record<string, string>> | undefined): string[]
+```
+
+The `key=value` labels of a record, sorted and distinct.
+
 ### Reviewer tags in a store
 
 Source: `packages/reports/src/artifact-tag-store.ts`. Import: `@crvouga/atlas/reports/artifact-tag-store`
@@ -1659,6 +1910,8 @@ export type VideoRef = {
   readonly attempt?: number;
   /** The name of the step that holds it, when `owner` is `step`. */
   readonly step?: string;
+  /** The normalized tags of this attachment itself (`demo`), so a query can ask for a tagged video rather than a result that has a video and some tagged file. Absent when it has none (and in documents of older servers). */
+  readonly tags?: readonly string[];
   /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
   readonly recording?: string;
   /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
@@ -7811,7 +8064,9 @@ runs that produced them and which tests each one ran.
   always the report's winner (`combineEvidence`), and history only describes how it got there.
 - `testCatalog` turns the report's winners (plus a history, when there is one) into a `TestCatalog`: a summary with
   insights (slowest, flaky, failing), facets to filter by, and the tests that match a `TestQuery`.
-- `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run.
+- `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run. `runList` and `artifactList`
+  narrow by tag, label, media type, environment, branch, outcome and time (see `artifact-query.ts`); `artifactList` finds
+  the recorded results that carry evidence across the whole history, not only the latest winners.
 - `catalogMarkdown`, `historyMarkdown`, `runsMarkdown` and `runMarkdown` say the same in Markdown, for an agent or a
   terminal.
 
@@ -8174,7 +8429,15 @@ export type RunSummary = {
    * and references that cannot be played. Absent when it has none, and in a report that carries no video information.
    */
   readonly videos?: VideoCounts;
-};
+  /** The normalized tags of the attachments of its results and layers, sorted and distinct. Absent when none is tagged. */
+  readonly artifactTags?: readonly string[];
+  /** The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches), sorted and distinct. Absent when none. */
+  readonly tags?: readonly string[];
+  /** The media types (roles) of its attachments, sorted and distinct; `video` only for a playable recording. Absent when it has no attachment. */
+  readonly types?: readonly string[];
+  /** The `key=value` labels of its results and layers, sorted and distinct. Absent when none. */
+  readonly labels?: readonly string[];
+  …
 ```
 
 A run: the layers that name the same execution (`run.id`), else share a CI run URL, else a branch and commit. When,
@@ -8183,13 +8446,11 @@ where, and how its tests went.
 #### `RunQuery`
 
 ```ts
-export type RunQuery = {
-  /** Only runs that have at least one playable video recording. `total` then counts only those. */
-  readonly video?: boolean;
-};
+export type RunQuery = ArtifactFilter;
 ```
 
-What `runList` can be asked.
+What `runList` can be asked: an {@link ArtifactFilter}, of which a run answers every dimension but `domain` and
+`spec`. `video` keeps only runs that have at least one playable video recording; `total` then counts only those.
 
 #### `RunList`
 
@@ -8202,6 +8463,10 @@ export type RunList = {
   readonly runs: readonly RunSummary[];
   /** How many of all runs (whatever was asked, before `limit`) have a playable video recording. */
   readonly withVideo?: number;
+  /** The filters of the query that were applied. A viewer that asked for another knows the server ignored it. */
+  readonly filters?: readonly FilterName[];
+  /** The values each filter dimension offers with counts over every run (see `facetsOf`). */
+  readonly facets?: QueryFacets;
 };
 ```
 
@@ -8242,6 +8507,70 @@ export type RunDetail = {
 
 `GET /api/reports/runs/detail`: one run and every result it recorded.
 
+#### `ArtifactResult`
+
+```ts
+export type ArtifactResult = {
+  /** The test's key, as in `TestSummary.key`. */
+  readonly key: string;
+  readonly id: string;
+  readonly title: string;
+  readonly specPath: string | null;
+  /** The domain of its spec, or null when it has none. */
+  readonly domain: string | null;
+  /** When it was recorded, epoch ms. */
+  readonly at: number;
+  readonly status: EvidenceStatus;
+  readonly environment: string | null;
+  readonly producer: string;
+  /** The kind of the part that held it. */
+  readonly kind: string;
+  readonly parameters: Readonly<Record<string, string>>;
+  readonly branch: string | null;
+  readonly sha: string | null;
+  /** The key of its run (see `runKey`). */
+  readonly run: string;
+  readonly runUrl: string | null;
+  /** The id of the layer that recorded it: with `key`, the exact result to open. */
+  readonly layer: string;
+  readonly backend: string;
+  /** Attachments on the result, including those on its steps and attempts. */
+  readonly attachments: number;
+  /** The normalized tags of its attachments. */
+  readonly artifactTags: readonly string[];
+  /** The tags of its check and run, which its attachments inherit. */
+  readonly tags: readonly string[];
+  /** The media types (roles) of its attachments; `video` only for a playable recording. */
+  readonly types: readonly string[];
+  readonly labels: Readonly<Record<string, string>>;
+  readonly videos?: readonly VideoRef[];
+};
+```
+
+One recorded result that carries evidence (an attachment: a recording, a screenshot, a trace), with where and when it
+was recorded: the unit `artifactList` finds. It is a result in the history, not only the report's current winner, so
+a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged.
+
+#### `ArtifactList`
+
+```ts
+export type ArtifactList = {
+  readonly schemaVersion: typeof TEST_CATALOG_VERSION;
+  readonly version: string;
+  /** Results that matched, before `offset` and `limit`. */
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly results: readonly ArtifactResult[];
+  /** The filters of the query that were applied. */
+  readonly filters: readonly FilterName[];
+  /** The values each dimension offers with disjunctive counts over every result that carries evidence. */
+  readonly facets: QueryFacets;
+};
+```
+
+`GET /api/reports/artifacts`: the recorded results that carry evidence and match a query, newest first.
+
 #### `runKey`
 
 ```ts
@@ -8279,6 +8608,7 @@ const catalog = testCatalog(catalogModel(layers, { history }));
 - `get runCount(): number { return this.#runs.size; }` — How many runs it knows of.
 - `runs(): RunSummary[]` — Every run, newest first.
 - `run(key: string): { readonly run: RunSummary; readonly results: RunResult[] } | null` — One run and its results (failed first, then by spec and title), or null.
+- `evidenceResults(): readonly { readonly result: ArtifactResult; readonly fields: FilterFields }[]` — Every recorded result that carries an attachment, newest first, with the values a query looks at. Built once per layer added. The domain is left to the caller (`artifactList`), which may know more specs than the layers recorded.
 - `testsIn(key: string): ReadonlySet<string>` — The keys of the tests one run recorded.
 
 #### `durationStats`
@@ -8392,6 +8722,32 @@ Every run the history knows of, newest first, `limit` at most (default 100). Wit
 have a playable video recording: the filter and `total` apply to every run before `limit`, and nothing is read from
 any recording's bytes. `withVideo` always counts every run that has one.
 
+#### `fieldsOfRun`
+
+```ts
+export function fieldsOfRun(run: RunSummary): FilterFields
+```
+
+What a query looks at in a run: see {@link ArtifactFilter}. A run's outcome is `failed` when any result failed.
+
+#### `artifactList`
+
+```ts
+export function artifactList(history: TestHistory, version: string, query: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList
+```
+
+The recorded results that carry evidence and match a query, newest first, across the whole history (`limit` default
+100). `total` and the facet counts apply to every match before `offset` and `limit`. `domainOf` tells the domain of a
+spec path when the caller knows more than the layers recorded (a server with a spec set); otherwise it is the
+recorded spec's domain, else the folder the path implies.
+
+**Example**
+
+```ts
+const list = artifactList(history, 'v1', { artifactTag: ['demo'], type: ['video'], environment: ['ios'] });
+list.results.map(r => [r.title, r.run, r.sha, r.status]);
+```
+
 #### `runDetail`
 
 ```ts
@@ -8439,6 +8795,14 @@ export function runsMarkdown(list: RunList): string
 ```
 
 The run list as Markdown.
+
+#### `artifactsMarkdown`
+
+```ts
+export function artifactsMarkdown(list: ArtifactList): string
+```
+
+The artifact results as Markdown, for an agent or a terminal.
 
 #### `runMarkdown`
 
