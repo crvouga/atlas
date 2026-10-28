@@ -80,7 +80,7 @@ In another terminal run `bun run example:run`: statecharts, Gherkin scenarios an
 to project `todo-app` on that server while testing. Producers renew a heartbeat every 5 seconds; 30 seconds of silence
 marks an invocation interrupted. Final specs and recordings upload when their privacy scan completes.
 Tests show inline running indicators and logs without waiting for the whole suite to finish. Report history
-is retained in `atlas-data/projects/todo-app`; local run artifacts remain in `atlas-runs` and
+is retained in the server's bucket under `projects/todo-app/`; local run artifacts remain in `atlas-runs` and
 `atlas-reports`. To upload a completed run again without rerunning tests,
 use `bun run example:publish`. Set `ATLAS_SERVER_URL` for a different upload destination (and
 `ATLAS_PUBLISH_TOKEN` when it requires one). Restart `bun atlas` when switching from the older

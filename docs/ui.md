@@ -132,7 +132,7 @@ The narrowly scoped exceptions are:
 | Evidence | Steps, retries, annotations, facts, unknown extensions, safe downloads and previews | List, Badge, Accordion, Code, Image, native media |
 | Recordings | Pictures/video/timeline, actor selection, moments, failure jumps, timing, model-state differences | Tabs, Slider, Button, ScrollArea, Table, Progress |
 | Search/help | Ranked and semantic search, shortcut help, recording shortcuts | Spotlight, Modal, Kbd |
-| Administration | Token access, storage backends/write destination, live timeouts, report rules, limits, raw JSON, conflicts | Same provider/theme, Fieldset, Mantine inputs, Accordion, Alert |
+| Administration | Token access, S3 storage notice, garbage collection policy (saved in S3), live timeouts, report rules, limits, raw JSON, conflicts | Same provider/theme, Fieldset, Mantine inputs, Accordion, Alert |
 
 The hash routes (`/`, `/chart/$chartId`, `/specs/$kind`), query contracts, project scoping, streaming,
 report APIs and data adapters remain the migration boundary. `/admin` still serves an independent document:
