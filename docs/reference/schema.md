@@ -764,6 +764,47 @@ export type Attachment = z.output<typeof AttachmentSchema>;
 
 An attachment as stored in a layer, parsed from `AttachmentSchema`.
 
+#### `RECORDING_EXPECTATIONS`
+
+```ts
+export const RECORDING_EXPECTATIONS = …
+```
+
+Whether a check is expected to have a screen recording (a video). `required`: the producer expects one, and the layer's
+recording receipt says whether it arrived. `not-applicable`: the check is intentionally unrecorded (an API-only check),
+so it counts as neither a recorded pass nor a missing video. An open string: a reader treats any other value, and its
+absence, as no expectation.
+
+#### `RecordingItemSchema`
+
+```ts
+export const RecordingItemSchema = …
+```
+
+The state of one check's recording in a receipt, in an open vocabulary. Conventions: `uploaded` (the video's bytes are in
+the layer, with a checksum), `referenced` (only a `uri` was given: Atlas cannot vouch for it), `skipped` (the video was
+captured but its bytes were left out, with a reason), `unresolved` (no video was attached at all), `not-applicable`
+(intentionally unrecorded). A reader shows a state it does not know as it is and never counts it as uploaded.
+
+#### `RecordingReceiptSchema`
+
+```ts
+export const RecordingReceiptSchema = …
+```
+
+What a layer's producer published about the recordings it expected: counts and one item per check that expected a
+recording (or declared itself not applicable). Written by `publishChecks` when any check declares a
+`recordingExpectation`; a layer without it says nothing, which a reader reports as Unknown, never Complete. It only
+describes publication: it never changes a check's status, its slot or which result wins.
+
+#### `RecordingReceipt`
+
+```ts
+export type RecordingReceipt = z.output<typeof RecordingReceiptSchema>;
+```
+
+A recording receipt as stored in a layer, parsed from `RecordingReceiptSchema`.
+
 #### `AnnotationSchema`
 
 ```ts
@@ -961,6 +1002,24 @@ export type PublishChecksInput = z.input<typeof PublishChecksSchema>;
 ```
 
 What a caller passes to `publishChecks`: the input type of `PublishChecksSchema`, before defaults.
+
+#### `RecordingCompletenessSchema`
+
+```ts
+export const RecordingCompletenessSchema = …
+```
+
+Recording completeness across the winning results of a report: `complete` (every expected recording was published),
+`incomplete` (at least one is skipped or unresolved), `none-expected` (every layer declared its expectations, and none
+required a recording) or `unknown` (a layer has no receipt, so nothing is claimed). Independent of the checks' outcomes.
+
+#### `RecordingCompleteness`
+
+```ts
+export type RecordingCompleteness = z.output<typeof RecordingCompletenessSchema>;
+```
+
+A parsed `RecordingCompletenessSchema` value.
 
 #### `REPORT_STATUS_SCHEMA_VERSION`
 

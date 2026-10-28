@@ -16,7 +16,7 @@ import type { SourceRecord } from './protocol';
 /** String choices (such as `{ device: 'iphone-15' }`) that make a result its own slot. Compared as sorted key/value pairs. */
 export type LayerParameters = Readonly<Record<string, string>>;
 /** What a layer may carry as a whole. All optional and open: see docs/extending.md. */
-export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>>;
+export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions' | 'recordings'>>;
 
 /** A layer without its captured files: what composition and the viewer's lists read. */
 export type LayerSummary = LayerExtras & {

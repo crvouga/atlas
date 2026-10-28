@@ -252,6 +252,51 @@
               "roles"
             ],
             "additionalProperties": {}
+          },
+          "recordings": {
+            "description": "How many of the recordings the layer expected were published. Absent: the layer declared no expectations, so its completeness is unknown, not complete",
+            "type": "object",
+            "properties": {
+              "expected": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "uploaded": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "referenced": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "unresolved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "notApplicable": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "expected",
+              "uploaded",
+              "referenced",
+              "skipped",
+              "unresolved",
+              "notApplicable"
+            ],
+            "additionalProperties": {}
           }
         },
         "required": [

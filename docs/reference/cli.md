@@ -91,6 +91,7 @@ atlas report — layered evidence for any kind of spec
                        [--param key=value]... [--kind <k>] [--title <t>] [--recorded-at <iso|ms>]
                        [--attach [role=]<file>]... [--label key=value]... [--link [name=]<url>]...
                        [--attach-root <dir>]... [--max-attachment-mb <n>] [--max-total-attachment-mb <n>]
+                       [--require-recordings]
   atlas report stream  [--store <dir|s3://…|https://atlas.example.com>] --producer <name> [--environment <name>]
                        [--branch <b>] [--sha <s>] [--run-url <u>] [--kind <k>] [--param key=value]...
                        [--run-id <id>] [--run-title <t>]
@@ -127,6 +128,10 @@ atlas report — layered evidence for any kind of spec
             Files a report names (CTRF attachments, JUnit [[ATTACHMENT|path]] lines) come from the report's own
             folder and each --attach-root, and never from a hidden file or a link out: a report is data from a
             test run, not instructions. One that is missing or not allowed is skipped with a warning.
+            --require-recordings   exit 1 when a check that declared recordingExpectation "required" has no
+                              uploaded video (absent, left out as too large or not allowed, or refused). The layer is
+                              still written and the checks keep their results; only this command fails. The receipt of
+                              what was uploaded (counts, sizes, checksums) is in the JSON result under layer.recordings.
             From a checkout with uncommitted changes the layer is marked "modified".
   stream    Send checks as they finish: one JSON object per line on standard input (the fields of one
             check: id, title, status, and any evidence). Each second's worth becomes one layer, so a server

@@ -124,6 +124,24 @@ export type LayerHeader = {
   readonly execution: string;
   /** What the run as a whole carries: its logs, links and labels. */
   readonly evidence?: EvidenceSummary;
+  /** Counts from the layer's recording receipt: how many expected recordings were published. Absent when the layer declared no expectations: its completeness is unknown, not complete. Never changes a status. */
+  readonly recordings?: RecordingCounts;
+};
+
+/** How many recordings a layer expected and what became of them (see `RecordingReceipt`). */
+export type RecordingCounts = {
+  /** Checks that required a recording: `uploaded + referenced + skipped + unresolved`. */
+  readonly expected: number;
+  /** Stored in the layer, with a checksum. */
+  readonly uploaded: number;
+  /** Given only by `uri`: Atlas cannot vouch for it. */
+  readonly referenced: number;
+  /** Captured but left out, with a reason (too large, not allowed…). */
+  readonly skipped: number;
+  /** No video was attached at all. */
+  readonly unresolved: number;
+  /** Intentionally unrecorded checks: neither expected nor missing. */
+  readonly notApplicable: number;
 };
 
 /** One check of one report part. */
@@ -147,6 +165,8 @@ export type LayerRow = {
   readonly durationMs: number | null;
   /** What this result carries beyond its outcome. Absent when nothing. */
   readonly evidence?: EvidenceSummary;
+  /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
+  readonly recording?: { readonly state: string; readonly reason?: string };
 };
 
 /** The checks of one layer, read separately from its header. */

@@ -119,7 +119,11 @@ export const LayerHeaderSchema = z.looseObject({
   live: z.boolean(),
   counts: z.record(EvidenceStatusSchema, z.number().int().nonnegative()),
   execution: z.string(),
-  evidence: EvidenceSummarySchema.optional()
+  evidence: EvidenceSummarySchema.optional(),
+  recordings: z.looseObject({
+    expected: z.number().int().nonnegative(), uploaded: z.number().int().nonnegative(), referenced: z.number().int().nonnegative(),
+    skipped: z.number().int().nonnegative(), unresolved: z.number().int().nonnegative(), notApplicable: z.number().int().nonnegative()
+  }).optional().describe('How many of the recordings the layer expected were published. Absent: the layer declared no expectations, so its completeness is unknown, not complete')
 });
 
 /** One check of a layer as the report shows it. */
@@ -134,7 +138,8 @@ export const LayerRowSchema = z.looseObject({
   testId: z.string().nullable(),
   variant: z.record(z.string(), z.string()),
   durationMs: z.number().nullable(),
-  evidence: EvidenceSummarySchema.optional()
+  evidence: EvidenceSummarySchema.optional(),
+  recording: z.looseObject({ state: z.string(), reason: z.string().optional() }).optional().describe('What became of the check\'s expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`')
 });
 
 /** A layer with its checks: the rows of one layer, read apart from its header. */

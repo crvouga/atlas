@@ -73,6 +73,10 @@
           "type": "number",
           "minimum": 0
         },
+        "recordingExpectation": {
+          "description": "`required`: expect a video of this check, and report whether it was published. `not-applicable`: intentionally unrecorded. Absent: no expectation. Never changes the check's status",
+          "type": "string"
+        },
         "tags": {
           "description": "Free labels to filter and group by: smoke, slow, flaky…",
           "type": "array",
@@ -167,6 +171,10 @@
                 "minimum": 0
               },
               "description": {
+                "type": "string"
+              },
+              "omitted": {
+                "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                 "type": "string"
               },
               "tags": {
@@ -402,6 +410,10 @@
                       "minimum": 0
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "omitted": {
+                      "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                       "type": "string"
                     },
                     "tags": {
@@ -676,6 +688,10 @@
                           "description": {
                             "type": "string"
                           },
+                          "omitted": {
+                            "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                            "type": "string"
+                          },
                           "tags": {
                             "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
                             "type": "array",
@@ -881,6 +897,10 @@
                       "minimum": 0
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "omitted": {
+                      "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                       "type": "string"
                     },
                     "tags": {

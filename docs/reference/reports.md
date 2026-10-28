@@ -276,7 +276,9 @@ recursively), and hands their bytes over as `data` with a `contentType` guessed 
 attachment gave none.
 
 A file that is missing, not allowed or too large is left out with a warning: evidence that could not be
-found never stops the results from being published. Attachments without a `path` are kept untouched.
+found never stops the results from being published. The exception in kind is a video of a check that declared
+`recordingExpectation: "required"`: it stays as an attachment without bytes whose `omitted` says why (`not-found`,
+`not-allowed`, `too-large`, `over-budget`), so the recording receipt can name the gap. Attachments without a `path` are kept untouched.
 
 - `holder`: A check, step, attempt or any object that may have `attachments`, `steps` and `attempts`.
 
@@ -1747,10 +1749,33 @@ export type LayerHeader = {
   readonly execution: string;
   /** What the run as a whole carries: its logs, links and labels. */
   readonly evidence?: EvidenceSummary;
+  /** Counts from the layer's recording receipt: how many expected recordings were published. Absent when the layer declared no expectations: its completeness is unknown, not complete. Never changes a status. */
+  readonly recordings?: RecordingCounts;
 };
 ```
 
 A report layer's origin and totals. Its checks are read separately, once.
+
+#### `RecordingCounts`
+
+```ts
+export type RecordingCounts = {
+  /** Checks that required a recording: `uploaded + referenced + skipped + unresolved`. */
+  readonly expected: number;
+  /** Stored in the layer, with a checksum. */
+  readonly uploaded: number;
+  /** Given only by `uri`: Atlas cannot vouch for it. */
+  readonly referenced: number;
+  /** Captured but left out, with a reason (too large, not allowed…). */
+  readonly skipped: number;
+  /** No video was attached at all. */
+  readonly unresolved: number;
+  /** Intentionally unrecorded checks: neither expected nor missing. */
+  readonly notApplicable: number;
+};
+```
+
+How many recordings a layer expected and what became of them (see `RecordingReceipt`).
 
 #### `LayerRow`
 
@@ -1775,6 +1800,8 @@ export type LayerRow = {
   readonly durationMs: number | null;
   /** What this result carries beyond its outcome. Absent when nothing. */
   readonly evidence?: EvidenceSummary;
+  /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
+  readonly recording?: { readonly state: string; readonly reason?: string };
 };
 ```
 
@@ -3983,7 +4010,7 @@ String choices (such as `{ device: 'iphone-15' }`) that make a result its own sl
 #### `LayerExtras`
 
 ```ts
-export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>>;
+export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions' | 'recordings'>>;
 ```
 
 What a layer may carry as a whole. All optional and open: see docs/extending.md.
@@ -5381,6 +5408,69 @@ export function contentTypeForMedia(media: string): string
 
 The media type for a snapshot media kind (`html`, `png`, `json`, `text`, `bytes`, `video`); an unknown kind is `application/octet-stream`.
 
+### Recording receipts
+
+Source: `packages/reports/src/recording-receipt.ts`. Import: `@crvouga/atlas/reports/recording-receipt`
+
+Answers "did the recordings we expected get published?" apart from "did the tests pass?". `recordingReceipt` reads the
+checks a producer is about to publish (after their files were stored) and describes, per check that declared a
+`recordingExpectation`, whether its video was uploaded, only referenced, left out (with a reason) or never attached.
+`recordingCompleteness` reduces the winning results of a report to the figures `atlas report status` prints. Neither
+reads a clock or the environment, and neither changes a status, a slot or a winner: a receipt describes publication, it
+does not decide a result. A layer with no receipt is Unknown, never Complete.
+
+See docs/rich-evidence.md#recording-completeness
+
+#### `isVideoAttachment`
+
+```ts
+export function isVideoAttachment(attachment: Loose): boolean
+```
+
+Is this attachment a screen recording: a role of `video`, or a `video/*` media type?
+
+#### `recordingReceipt`
+
+```ts
+export function recordingReceipt(checks: readonly Loose[]): RecordingReceipt | undefined
+```
+
+The receipt for the checks of one layer, or `undefined` when no check declares a `recordingExpectation` (the layer then
+claims nothing). Call it with checks whose attachment bytes are already stored (`bundleKey`, `bytes` and `sha256` set).
+
+A `required` check is `uploaded` when any video of it has stored bytes, `referenced` when one has only a `uri`,
+`skipped` when its videos were left out (the attachment's `omitted` is the reason) and `unresolved` when it has no
+video at all. A `not-applicable` check is listed but is neither expected nor missing. Items are sorted by check id so the
+same input is always the same receipt.
+
+#### `RecordingResult`
+
+```ts
+export type RecordingResult = {
+  readonly spec: string | null;
+  readonly check: string;
+  readonly environment: string | null;
+  readonly layer: string;
+  /** Whether the layer the result came from carried a receipt. */
+  readonly hasReceipt: boolean;
+  /** The result's item in that receipt, when its check declared an expectation. */
+  readonly recording?: { readonly state: string; readonly reason?: string };
+};
+```
+
+One result as {@link recordingCompleteness} reads it.
+
+#### `recordingCompleteness`
+
+```ts
+export function recordingCompleteness(results: readonly RecordingResult[]): RecordingCompleteness
+```
+
+Reduces the winning results of a report to its recording completeness. `incomplete` when any expected recording is
+skipped or unresolved; otherwise `unknown` when a contributing layer has no receipt (nothing is claimed for it, and a
+report with no results at all is unknown too); otherwise `complete` when something was expected and `none-expected` when
+nothing was. Gaps are sorted so the output never depends on read order.
+
 ### Remote commit report
 
 Source: `packages/reports/src/remote-report.ts`. Import: `@crvouga/atlas/reports/remote-report`
@@ -5756,6 +5846,8 @@ checks (or none completed), failed checks, running checks, specs without results
 each required environment with no checks (the name is normalised, so `iOS` means `ios`), then every notice of the
 report (an unreadable layer or backend). `failing` lists each failed or running winner, in a fixed order that does
 not depend on read order; diagnostic `performance` checks are left out unless nothing else was recorded.
+`recordings` reports recording completeness of the same results apart from `ok`: an incomplete or unknown
+completeness never changes the gate (use `atlas report publish --require-recordings` to fail on a missing video).
 
 **Example**
 

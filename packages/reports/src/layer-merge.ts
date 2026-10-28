@@ -89,10 +89,13 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     return found;
   };
   const rows: LayerRow[] = [];
+  const receipt = summary.recordings;
+  const expectations = receipt ? new Map(receipt.items.map(item => [item.check, item])) : null;
   for (const part of summary.parts) {
     for (const check of part.checks) {
       const test = tests.get(check.id);
       const evidence = summarizeEvidence(check);
+      const item = expectations?.get(check.id);
       rows.push({
         kind: part.kind,
         id: check.id,
@@ -105,6 +108,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
         variant: test ? { system: test.system, runtime: test.runtime, seed: test.seed } : {},
         durationMs: test?.durationMs ?? check.durationMs ?? null,
         ...(evidence ? { evidence } : {}),
+        ...(item ? { recording: { state: item.state, ...(item.reason ? { reason: item.reason } : {}) } } : {}),
       });
     }
   }
@@ -128,6 +132,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     counts: outcomeCounts(rows),
     execution: textFingerprint(layerExecutionKey(summary)),
     ...(layerSummaryEvidence ? { evidence: layerSummaryEvidence } : {}),
+    ...(receipt ? { recordings: { expected: receipt.expected, uploaded: receipt.uploaded, referenced: receipt.referenced, skipped: receipt.skipped, unresolved: receipt.unresolved, notApplicable: receipt.notApplicable } } : {}),
   };
   const fingerprints: Record<string, string> = {};
   for (const spec of summary.specs) if (spec.fingerprint) fingerprints[specPath(spec.path)] = spec.fingerprint;
