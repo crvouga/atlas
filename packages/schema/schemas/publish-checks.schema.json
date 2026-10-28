@@ -1110,6 +1110,36 @@
         "modified"
       ]
     },
+    "run": {
+      "description": "Name the execution these checks belong to, so repeated local runs at one commit stay separate runs and shards of one execution stay together",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+        },
+        "title": {
+          "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+          "type": "string"
+        },
+        "startedAtMs": {
+          "description": "When the execution started, epoch milliseconds",
+          "type": "number",
+          "minimum": 0
+        },
+        "endedAtMs": {
+          "description": "When the execution ended, epoch milliseconds",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": {}
+    },
     "specs": {
       "default": [],
       "type": "array",

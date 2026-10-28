@@ -505,6 +505,14 @@ first commit, they are `null`: that is provenance missing, not an error, and nev
 result wins. `--param key=value` (repeatable) adds a parameter that makes a result its own slot, such
 as `--param device=iphone-15`.
 
+Without a CI run URL, layers recorded at one branch and commit group into one run, so repeating a local demo
+looks like one execution. To keep invocations apart, name each one: `--run-id <id>` (or `ATLAS_RUN_ID`), with
+`--run-title <title>` (or `ATLAS_RUN_TITLE`) for a human name and `--run-started-at` / `--run-ended-at` for when
+it ran. Every shard or batch of one invocation passes the same id and is one run; the next invocation passes a new
+one. A run recorded from a checkout with uncommitted changes keeps saying so beside its commit. The id only
+groups: it is not part of which result a check fills or which wins, and a producer that never passes it keeps
+the CI-run-URL, then `branch@sha`, grouping.
+
 The time the checks ran comes from the report (CTRF `summary.stop`, a JUnit `timestamp`, a manifest's
 `finishedAt`), or failing that from the report file's modification time, in milliseconds. Publish in
 the same job that wrote the report and that is the time it ran. If you copy the report first, pass
@@ -2174,6 +2182,7 @@ Zod schema as `LayerDocumentSchema` from `@crvouga/atlas/schema`.
 | `environment` | The client checked, or absent. Normalised to a lowercase slug: `iOS` → `ios`, `Desktop Web` → `desktop-web`, `iphone` → `ios`, `mobile browser` → `mobile-web`. Any other name is kept. Part of the slot. |
 | `parameters` | Other string choices that make a result its own slot, such as `{ "device": "iphone-15" }`. A parameter named `environment` is read as the environment. Part of the slot. |
 | `freshness` | `modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Advisory only; see [Statuses](#statuses-and-the-gate). |
+| `run` | Optional `{ id, title?, startedAtMs?, endedAtMs? }`: the execution a local or manual producer names. Layers with the same `id` in one project are one run in the run list, however many shards or batches uploaded them; a later invocation at the same branch and commit gets another `id`. Without it a run is its `runUrl`, else `branch@sha`, as before. `title` is for people. Grouping and display only: it is **never part of the slot**, never decides a winner or a status, and never hides `sha`, `branch` or `freshness`. A `run` a reader cannot read is treated as absent. |
 | `specs` | The specs the layer was recorded against, with a `fingerprint` of their text, so a reader can warn when a spec changed since. Optional. |
 | `parts[].kind` | An open category (`behavior`, `performance`, `accessibility`, …). A new kind needs no change to any reader. Part of the slot. |
 | `parts[].checks[]` | `id` (required, stable), `title`, `status`, `detail`, `specPath`, `measurements`, `durationMs`. |
@@ -4246,12 +4255,14 @@ atlas report — layered evidence for any kind of spec
   atlas report publish [--store <dir|s3://bucket/prefix>] [--producer <name>]
                        ( --ctrf <file> | --junit <file> | --manifest <file> | --checks <file.json> )
                        [--environment <name>] [--branch <b>] [--sha <s>] [--run-url <u>]
+                       [--run-id <id>] [--run-title <t>] [--run-started-at <iso|ms>] [--run-ended-at <iso|ms>]
                        [--spec <path> | --specs <dir>] [--upload-run]
                        [--param key=value]... [--kind <k>] [--title <t>] [--recorded-at <iso|ms>]
                        [--attach [role=]<file>]... [--label key=value]... [--link [name=]<url>]...
                        [--attach-root <dir>]... [--max-attachment-mb <n>] [--max-total-attachment-mb <n>]
   atlas report stream  [--store <dir|s3://…|https://atlas.example.com>] --producer <name> [--environment <name>]
                        [--branch <b>] [--sha <s>] [--run-url <u>] [--kind <k>] [--param key=value]...
+                       [--run-id <id>] [--run-title <t>]
                        [--flush-ms 1000] [--batch 100]       (checks as JSON lines on standard input)
   atlas report status  [--store <dir|s3://…|id=url>]... [--backends <module>]
                        [--specs <dir>] [--format text|json|markdown]
@@ -4272,6 +4283,11 @@ atlas report — layered evidence for any kind of spec
             --specs <dir>   link checks to the spec files in <dir> by path, or by the suite, class or
                             file name the report gives; also publishes the specs themselves, so the
                             node can show them without a checkout
+            --run-id <id>   name this execution (a local or manual run with no CI run URL; also ATLAS_RUN_ID).
+                            Layers that share an id are one run, however many shards or batches uploaded them;
+                            another invocation at the same commit gets another id. Never part of what a check is
+            --run-title <t> a human name for the run (also ATLAS_RUN_TITLE); --run-started-at and --run-ended-at
+                            record when it ran. Without --run-id a run is its CI run URL, else branch@sha
             --upload-run    with --manifest: also upload the run's screenshots and clips for the viewer
             --attach <file>   attach a file to the whole layer: a CI log, a coverage report, a trace archive
                               (screenshots, videos and traces of a single test go in its CTRF or checks file)

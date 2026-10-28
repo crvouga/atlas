@@ -112,6 +112,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
   const layerSummaryEvidence = summarizeEvidence(summary, ...summary.parts);
   const layer: LayerHeader = {
     ...(summary.freshness ? { freshness: summary.freshness } : {}),
+    ...(summary.run ? { run: summary.run } : {}),
     id: summary.id,
     backend,
     producer: summary.producer,
@@ -305,12 +306,12 @@ export function distinctLayers(layers: readonly LayerSummary[]): LayerSummary[] 
 }
 
 /**
- * A string equal for the mutable and the archived address of one execution: its producer, sha, time and parts.
+ * A string equal for the mutable and the archived address of one execution: its producer, sha, time, parts and, when the producer named one, its execution id.
  * Object key order is ignored at every depth, including check evidence and extensions; array order is preserved.
  * This is an advisory execution identity, not the content digest that addresses an immutable layer in storage.
  */
 export function layerExecutionKey(layer: LayerSummary): string {
-  return JSON.stringify([layer.producer, layer.sha, layer.recordedAtMs, orderedValue(layer.parts)]);
+  return JSON.stringify([layer.producer, layer.sha, layer.recordedAtMs, orderedValue(layer.parts), ...(layer.run ? [layer.run.id] : [])]);
 }
 
 /** Sort JSON objects recursively without changing array order or interpreting extension keys as prototypes. */

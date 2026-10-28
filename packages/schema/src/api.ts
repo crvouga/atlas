@@ -15,7 +15,7 @@
  */
 import { z } from 'zod/v4';
 
-import { CheckSchema } from './layer';
+import { CheckSchema, LayerRunSchema } from './layer';
 
 /** One of the statuses a check has in a report: `passed`, `failed`, `running` (not finished) or `not-run`. Closed. */
 export const EvidenceStatusSchema = z.enum(['passed', 'failed', 'running', 'not-run']);
@@ -95,6 +95,7 @@ export const LayerHeaderSchema = z.looseObject({
   runUrl: z.string().nullable(),
   parameters: z.record(z.string(), z.string()).describe('Other choices that make a result its own slot'),
   freshness: z.enum(['unknown', 'modified']).optional().describe('`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent: clean'),
+  run: LayerRunSchema.optional().describe('The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot'),
   recording: z.unknown().nullable().describe('Where recorded timelines are read from, or null'),
   live: z.boolean(),
   counts: z.record(EvidenceStatusSchema, z.number().int().nonnegative()),
@@ -367,9 +368,12 @@ export const TestHistorySchema = z.looseObject({
   history: z.array(TestResultEntrySchema)
 });
 
-/** A run: the layers that share a run URL (else a branch and commit), with what they recorded. */
+/** A run: the layers that name the same execution (else share a run URL, else a branch and commit), with what they recorded. */
 export const ReportRunSchema = z.looseObject({
-  key: z.string().describe('The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`'),
+  key: z.string().describe('`run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`'),
+  runId: z.string().optional().describe('The execution id the producer named, when it did. Layers that share it are one run however many uploads they took'),
+  title: z.string().optional().describe('The human title of the execution (the newest layer\'s). Presentation only: the key, commit and `freshness` are unaffected'),
+  freshness: z.enum(['unknown', 'modified']).optional().describe('`modified` when any layer of the run was recorded from a checkout with uncommitted changes; `unknown` when an origin was not captured; absent when all are clean. Shown beside the commit, never replaced by the title'),
   runUrl: z.string().nullable(), branch: z.string().nullable(), sha: z.string().nullable(),
   startedAtMs: z.number(), endedAtMs: z.number(), spanMs: z.number(),
   producers: z.array(z.string()), environments: z.array(z.string()),

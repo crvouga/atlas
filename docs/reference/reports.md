@@ -1454,6 +1454,8 @@ export type LayerHeader = {
   readonly parameters: LayerParameters;
   /** `modified`: recorded from a checkout with uncommitted changes; `unknown`: origin not captured; absent: clean. Advisory; never changes a status. */
   readonly freshness?: 'unknown' | 'modified';
+  /** The execution the producer named for it (one local or manual invocation), or absent. Grouping and display only; never part of the slot. */
+  readonly run?: LayerRun;
   /** Where this layer's recorded timelines and captured files are read from, or null when it has none. */
   readonly recording: RecordingAddress | null;
   /** From a spec run that has not been collected into a layer yet. */
@@ -3560,7 +3562,7 @@ Drops each mutable layer whose execution is already archived as an immutable one
 export function layerExecutionKey(layer: LayerSummary): string
 ```
 
-A string equal for the mutable and the archived address of one execution: its producer, sha, time and parts.
+A string equal for the mutable and the archived address of one execution: its producer, sha, time, parts and, when the producer named one, its execution id.
 Object key order is ignored at every depth, including check evidence and extensions; array order is preserved.
 This is an advisory execution identity, not the content digest that addresses an immutable layer in storage.
 
@@ -3725,6 +3727,8 @@ export type LayerSummary = LayerExtras & {
   readonly environment?: string | null;
   /** Provenance: the CI run that produced the layer, or `null`. Never part of the slot. */
   readonly runUrl: string | null;
+  /** The execution (one invocation of a local or manual run) the layer belongs to, when the producer named one. Grouping and display only; never part of the slot. Absent: the run is told by `runUrl`, else `branch@sha`. */
+  readonly run?: LayerRun;
   /** Free choices that make a result its own slot. The `environment` parameter is read as the environment (see `layerPlace`). */
   readonly parameters: LayerParameters;
   /** The specs the layer was recorded against, with fingerprints of their text. */
@@ -5935,7 +5939,7 @@ See docs/server.md#streaming-a-run-as-it-happens
 #### `ReporterIdentity`
 
 ```ts
-export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>;
+export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'run' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>;
 ```
 
 What every layer of one stream shares: who is reporting, from where. Whatever `publishChecks` takes, except the checks and the time.
@@ -7685,8 +7689,14 @@ export type TestHistoryDocument = {
 
 ```ts
 export type RunSummary = {
-  /** Stable key: the run URL, or `branch@sha`. */
+  /** Stable key: `run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. */
   readonly key: string;
+  /** The execution id a producer named for it, when it did. Layers that share it are one run, however many uploads they took; another invocation at the same commit has another. */
+  readonly runId?: string;
+  /** The human title the producer gave the execution (the newest layer's). Presentation only: the key, the commit and `freshness` are unaffected. */
+  readonly title?: string;
+  /** `modified` when any of its layers was recorded from a checkout with uncommitted changes, else `unknown` when any origin was not captured; absent when every layer is from a clean commit. Advisory; never changes a status. */
+  readonly freshness?: 'unknown' | 'modified';
   readonly runUrl: string | null;
   readonly branch: string | null;
   readonly sha: string | null;
@@ -7708,7 +7718,8 @@ export type RunSummary = {
 };
 ```
 
-A CI run (or any group of layers sharing a run URL, else a branch and commit): when, where, and how its tests went.
+A run: the layers that name the same execution (`run.id`), else share a CI run URL, else a branch and commit. When,
+where, and how its tests went.
 
 #### `RunList`
 
@@ -7759,10 +7770,11 @@ export type RunDetail = {
 #### `runKey`
 
 ```ts
-export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'>): string
+export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'> & { readonly run?: { readonly id: string } }): string
 ```
 
-The run a layer belongs to: its run URL, else `branch@sha`, else `local`. Layers with the same key are one run.
+The run a layer belongs to: the execution its producer named (`run:<id>`), else its run URL, else `branch@sha`, else
+`local`. Layers with the same key are one run. Only grouping: it is never part of the slot a result fills.
 
 #### `TestHistory`
 

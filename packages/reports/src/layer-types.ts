@@ -8,6 +8,7 @@
  *
  * @see docs/report-contract.md#the-layer-document
  */
+import type { LayerRun } from '../../schema/src/layer';
 import type { BundleIndex } from './bundle';
 import type { ReportPart, SpecEntry } from './explorer-types';
 import type { SourceRecord } from './protocol';
@@ -35,6 +36,8 @@ export type LayerSummary = LayerExtras & {
   readonly environment?: string | null;
   /** Provenance: the CI run that produced the layer, or `null`. Never part of the slot. */
   readonly runUrl: string | null;
+  /** The execution (one invocation of a local or manual run) the layer belongs to, when the producer named one. Grouping and display only; never part of the slot. Absent: the run is told by `runUrl`, else `branch@sha`. */
+  readonly run?: LayerRun;
   /** Free choices that make a result its own slot. The `environment` parameter is read as the environment (see `layerPlace`). */
   readonly parameters: LayerParameters;
   /** The specs the layer was recorded against, with fingerprints of their text. */
