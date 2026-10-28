@@ -11,6 +11,7 @@
  */
 import type { Annotation, Attachment, Attempt, Check, Step } from '../../schema/src/layer';
 import type { EvidenceSummary, VideoCounts, VideoOwner, VideoRef } from './evidence-types';
+import { normalizeTags } from './artifact-tags';
 import { contentTypeOf } from './media-types';
 
 /** Anything that may carry evidence: a layer, a part or a check. */
@@ -36,7 +37,7 @@ function count(holder: EvidenceHolder): number {
  *
  * Several holders (for example a check and its layer) are summed: `attachments` also counts those on steps and
  * attempts, `steps` counts only each holder's own top-level steps, tags are de-duplicated, and for a repeated
- * label the later holder wins. `roles` are the attachments' roles (or, without one, what their media type or file
+ * label the later holder wins. `artifactTags` are the attachments' own normalized tags and are never inherited. `roles` are the attachments' roles (or, without one, what their media type or file
  * name implies), sorted and distinct. `videos` lists every attachment whose effective media type is video, with the
  * check, retry attempt or step that holds it (see {@link isVideoAttachment}).
  */
@@ -56,12 +57,14 @@ function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner): Evide
   if (!holders.some(holder => count(holder) > 0)) return undefined;
   const roles = new Set<string>();
   const tags = new Set<string>();
+  const artifactTags = new Set<string>();
   const labels: Record<string, string> = {};
   const videos: VideoRef[] = [];
   let attachments = 0, steps = 0, annotations = 0, attempts = 0, links = 0;
   const attachmentsOf = (list: readonly Attachment[] | undefined, by: VideoOwner, where: { attempt?: number; step?: string } = {}) => {
     for (const item of list ?? []) {
       attachments += 1;
+      for (const tag of normalizeTags(item.tags)) artifactTags.add(tag);
       roles.add(item.role ?? roleOfType(item.contentType ?? contentTypeOf(item.name)));
       const video = videoOf(item, by, where);
       if (video) videos.push(video);
@@ -80,7 +83,7 @@ function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner): Evide
     for (const tag of holder.tags ?? []) tags.add(tag);
     Object.assign(labels, holder.labels);
   }
-  return { attachments, steps, annotations, attempts, links, tags: [...tags], labels, roles: [...roles].sort(), ...(videos.length ? { videos } : {}) };
+  return { attachments, steps, annotations, attempts, links, tags: [...tags], ...(artifactTags.size ? { artifactTags: [...artifactTags].sort() } : {}), labels, roles: [...roles].sort(), ...(videos.length ? { videos } : {}) };
 }
 
 /**

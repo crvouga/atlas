@@ -35,6 +35,9 @@ carry any of these. Every one is optional.
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
 | `measurements[]` | Numbers, with units and an allowance (already part of the contract). |
 
+An attachment may carry its own `tags[]` (`demo`): shown as `#demo` and searchable; see
+[Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos).
+
 On a **layer** the same fields describe the whole run: its CI log, a coverage report, an archive of traces, the
 build number, a link to the pipeline.
 

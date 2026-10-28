@@ -20,6 +20,7 @@
  *
  * @see docs/server.md#reading-the-report-as-an-agent
  */
+import { displayTag, normalizeTag, normalizeTags } from './artifact-tags';
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
 import { videoCounts } from './evidence-detail';
@@ -129,6 +130,10 @@ export type TestSummary = {
   readonly outcomes: readonly TestOutcome[];
   readonly stats: TestStats;
   readonly tags: readonly string[];
+  /** The normalized tags of the attachments of its current results (`demo`, shown as `#demo`). Never inherited from a check or run; the `tags` above are. Absent in documents of older servers. */
+  readonly artifactTags?: readonly string[];
+  /** The normalized tags its attachments inherit from their check and run (those of the results that have attachments), apart from `artifactTags`. What an inherited artifact query also matches. */
+  readonly inheritedArtifactTags?: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   /** What its current results carry: attachments, steps, retries, and the kinds of attachment. */
   readonly evidence: { readonly attachments: number; readonly steps: number; readonly attempts: number; readonly roles: readonly string[] };
@@ -194,6 +199,8 @@ export type CatalogFacets = {
   readonly domains: readonly FacetValue[];
   readonly specs: readonly (CatalogSpec & { readonly tests: number; readonly counts: StatusCounts })[];
   readonly tags: readonly FacetValue[];
+  /** The tags of attachments, normalized. Absent in documents of older servers. */
+  readonly artifactTags?: readonly FacetValue[];
   readonly branches: readonly FacetValue[];
   readonly labels: Readonly<Record<string, readonly FacetValue[]>>;
 };
@@ -215,6 +222,10 @@ export type TestQuery = {
   /** Spec paths (`specs/...`). */
   readonly spec?: readonly string[];
   readonly tag?: readonly string[];
+  /** Only tests with an attachment carrying this tag (`demo` and `#demo` are the same), not counting tags inherited from a check or run: the exact artifact query. `tag` is the inherited one. */
+  readonly artifactTag?: readonly string[];
+  /** With `artifactTag`: also match the tags an attachment inherits from its check and run (a recording without a tag of its own under a run tagged `demo`). Default false: the exact query. */
+  readonly inherited?: boolean;
   /** Only tests recorded in this run (a key from `runList`). */
   readonly run?: string;
   readonly sort?: TestSort;
@@ -246,10 +257,19 @@ export type TestHistoryDocument = {
   readonly history: readonly TestResultEntry[];
 };
 
-/** A CI run (or any group of layers sharing a run URL, else a branch and commit): when, where, and how its tests went. */
+/**
+ * A run: the layers that name the same execution (`run.id`), else share a CI run URL, else a branch and commit. When,
+ * where, and how its tests went.
+ */
 export type RunSummary = {
-  /** Stable key: the run URL, or `branch@sha`. */
+  /** Stable key: `run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. */
   readonly key: string;
+  /** The execution id a producer named for it, when it did. Layers that share it are one run, however many uploads they took; another invocation at the same commit has another. */
+  readonly runId?: string;
+  /** The human title the producer gave the execution (the newest layer's). Presentation only: the key, the commit and `freshness` are unaffected. */
+  readonly title?: string;
+  /** `modified` when any of its layers was recorded from a checkout with uncommitted changes, else `unknown` when any origin was not captured; absent when every layer is from a clean commit. Advisory; never changes a status. */
+  readonly freshness?: 'unknown' | 'modified';
   readonly runUrl: string | null;
   readonly branch: string | null;
   readonly sha: string | null;
@@ -317,8 +337,12 @@ export type RunDetail = {
   readonly results: readonly RunResult[];
 };
 
-/** The run a layer belongs to: its run URL, else `branch@sha`, else `local`. Layers with the same key are one run. */
-export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'>): string {
+/**
+ * The run a layer belongs to: the execution its producer named (`run:<id>`), else its run URL, else `branch@sha`, else
+ * `local`. Layers with the same key are one run. Only grouping: it is never part of the slot a result fills.
+ */
+export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'> & { readonly run?: { readonly id: string } }): string {
+  if (layer.run?.id) return `run:${layer.run.id}`;
   if (layer.runUrl) return layer.runUrl;
   if (layer.branch || layer.sha) return `${layer.branch ?? ''}@${layer.sha ?? ''}`;
   return 'local';
@@ -374,7 +398,11 @@ function newer(a: Held, b: Held): number {
 /** What a run is told by, kept per run: small, whatever how many results it recorded. */
 type RunAcc = {
   key: string; runUrl: string | null; branch: string | null; sha: string | null;
-  start: number; end: number; first: string; producers: Set<string>; environments: Set<string>; layers: number;
+  /** The earliest and latest times the run is told by: a layer's `recordedAtMs`, or the start and end its execution declared. */
+  start: number; end: number;
+  /** When its first layer was recorded: which layer tells the branch and commit. */
+  firstAt: number; first: string; producers: Set<string>; environments: Set<string>; layers: number;
+  runId: string | undefined; title: string | undefined; titledAt: number; titledBy: string; freshness: 'unknown' | 'modified' | undefined;
   /** Videos attached to its layers (not to a check). */
   videos: VideoRef[];
 };
@@ -420,6 +448,11 @@ export class TestHistory {
     return this.#specs;
   }
 
+  /** Every test the history holds a result for (keyed as `TestSummary.key`), including tests the report no longer has a current result for. */
+  tests(): readonly { readonly key: string; readonly id: string; readonly specPath: string | null }[] {
+    return [...this.#idents.values()].map(({ slot, id, specPath }) => ({ key: slot, id, specPath }));
+  }
+
   /** How many layers were added. */
   get layers(): number {
     return this.#seen.size;
@@ -434,17 +467,28 @@ export class TestHistory {
     const key = runKey(layer);
     let run = this.#runs.get(key);
     if (!run) {
-      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, videos: [] };
+      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [] };
       this.#runs.set(key, run);
     }
     // A run is told by its first layer (by time, then id), whatever order its layers arrive in.
-    if (layer.recordedAtMs < run.start || (layer.recordedAtMs === run.start && layer.id < run.first)) {
-      run.start = layer.recordedAtMs;
+    if (layer.recordedAtMs < run.firstAt || (layer.recordedAtMs === run.firstAt && layer.id < run.first)) {
+      run.firstAt = layer.recordedAtMs;
       run.first = layer.id;
       run.branch = layer.branch;
       run.sha = layer.sha;
+      run.runUrl = layer.runUrl;
     }
-    run.end = Math.max(run.end, layer.recordedAtMs);
+    run.start = Math.min(run.start, layer.recordedAtMs, layer.run?.startedAtMs ?? Infinity);
+    run.end = Math.max(run.end, layer.recordedAtMs, layer.run?.endedAtMs ?? -Infinity);
+    // The newest title wins, so a person can rename a run by sending its id again with another title.
+    const title = layer.run?.title;
+    if (title && (layer.recordedAtMs > run.titledAt || (layer.recordedAtMs === run.titledAt && layer.id > run.titledBy))) {
+      run.title = title;
+      run.titledAt = layer.recordedAtMs;
+      run.titledBy = layer.id;
+    }
+    // Local changes are never lost to a clean sibling: the run is as modified as its most modified layer.
+    if (layer.freshness === 'modified' || (layer.freshness === 'unknown' && run.freshness !== 'modified')) run.freshness = layer.freshness;
     run.producers.add(layer.producer);
     if (layer.environment) run.environments.add(layer.environment);
     run.layers += 1;
@@ -549,7 +593,8 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
   const video = videoCounts(videos);
   const failing = failed.slice(0, 20).map(cell => ({ key: cell.i.slot, title: cell.i.title, environment: cell.r.o.environment, detail: (cell.r.t.split('\n')[0] ?? '').slice(0, 500) }));
   return {
-    key: run.key, runUrl: run.runUrl, branch: run.branch, sha: run.sha,
+    key: run.key, ...(run.runId ? { runId: run.runId } : {}), ...(run.title ? { title: run.title } : {}), ...(run.freshness ? { freshness: run.freshness } : {}),
+    runUrl: run.runUrl, branch: run.branch, sha: run.sha,
     startedAtMs: run.start, endedAtMs: run.end, spanMs: run.end - run.start,
     producers: [...run.producers].sort(), environments: [...run.environments].sort(),
     layers: run.layers, tests: tests.size, counts, totalDurationMs: measured ? total : null, failing,
@@ -653,18 +698,24 @@ export type CatalogModel = {
   readonly facets: CatalogFacets;
   readonly haystacks: ReadonlyMap<string, string>;
   readonly history: TestHistory | null;
+  /** The specs the report is laid over, sorted by path: the given ones, else those the layers recorded. What `catalogHealth` calls defined. Absent on a model built from a server's catalog document. */
+  readonly specs?: readonly SpecEntry[];
 };
 
 function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: string) => SpecEntry | undefined): TestSummary {
   const outcomes = slot.outcomes.map(outcomeOf);
   const tags = new Set<string>();
+  const artifactTags = new Set<string>();
+  const inheritedTags = new Set<string>();
   const labels: Record<string, string> = {};
   let attachments = 0, steps = 0, attempts = 0;
   const roles = new Set<string>();
-  for (const outcome of outcomes) {
+  for (const [at, outcome] of outcomes.entries()) {
     const evidence = outcome.evidence;
     if (!evidence) continue;
+    if (evidence.attachments > 0) for (const tag of normalizeTags([...evidence.tags, ...(slot.outcomes[at]?.layer.evidence?.tags ?? [])])) inheritedTags.add(tag);
     for (const tag of evidence.tags) tags.add(tag);
+    for (const tag of evidence.artifactTags ?? []) artifactTags.add(tag);
     Object.assign(labels, evidence.labels);
     attachments += evidence.attachments;
     steps += evidence.steps;
@@ -684,6 +735,8 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
     outcomes,
     stats: statsOf(history?.of(slot.key) ?? [], outcomes, tagList, labels),
     tags: tagList,
+    ...(artifactTags.size ? { artifactTags: [...artifactTags].sort() } : {}),
+    ...([...inheritedTags].some(tag => !artifactTags.has(tag)) ? { inheritedArtifactTags: [...inheritedTags].filter(tag => !artifactTags.has(tag)).sort() } : {}),
     labels,
     evidence: { attachments, steps, attempts, roles: [...roles].sort() },
     lastRecordedAtMs: slot.latestAtMs,
@@ -694,7 +747,7 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
 /** The lowercase text a search matches a test against: title, id, spec, domain, tags, labels, environments and producers. */
 export function haystackOf(test: TestSummary): string {
   return [
-    test.title, test.id, test.specPath ?? '', test.spec?.title ?? '', test.spec?.domain ?? '', ...test.tags,
+    test.title, test.id, test.specPath ?? '', test.spec?.title ?? '', test.spec?.domain ?? '', ...test.tags, ...(test.artifactTags ?? []).map(displayTag),
     ...Object.entries(test.labels).flatMap(([key, value]) => [key, value]), ...test.environments, ...test.producers,
   ].join('\n').toLowerCase();
 }
@@ -784,10 +837,11 @@ export function catalogModel(layers: readonly LayerEvidence[], sources: CatalogS
     domains: facet(tests, test => [test.spec?.domain || '(no spec)']),
     specs: [...specGroups].map(([, list]) => { const g = group(list[0]!.spec!.path, list); return { ...list[0]!.spec!, tests: g.tests, counts: g.counts }; }).sort((a, b) => compareText(a.domain, b.domain) || compareText(a.title, b.title)),
     tags: facet(tests, test => test.tags),
+    artifactTags: facet(tests, test => test.artifactTags ?? []),
     branches: facet(tests, test => test.stats.branches),
     labels: Object.fromEntries([...labelKeys].sort().map(key => [key, facet(tests, test => (test.labels[key] === undefined ? [] : [test.labels[key]!]))])),
   };
-  return { version: sources.version ?? '', generatedAtMs: sources.now ?? Date.now(), tests, byKey, summary, facets, haystacks, history };
+  return { version: sources.version ?? '', generatedAtMs: sources.now ?? Date.now(), tests, byKey, summary, facets, haystacks, history, specs: recorded.entries() };
 }
 
 const SORTERS: Record<TestSort, (a: TestSummary, b: TestSummary) => number> = {
@@ -810,6 +864,7 @@ export function matchesQuery(model: CatalogModel, test: TestSummary, query: Test
   if (query.domain?.length && !query.domain.includes(test.spec?.domain || '(no spec)')) return false;
   if (query.spec?.length && !query.spec.some(path => test.specPath !== null && normalSpecPath(path) === test.specPath)) return false;
   if (query.tag?.length && !query.tag.some(tag => test.tags.includes(tag))) return false;
+  if (query.artifactTag?.length && !query.artifactTag.some(tag => { const wanted = normalizeTag(tag); return wanted !== null && ((test.artifactTags?.includes(wanted) ?? false) || (query.inherited === true && (test.inheritedArtifactTags?.includes(wanted) ?? false))); })) return false;
   if (inRun && !inRun.has(test.key)) return false;
   return true;
 }
@@ -855,7 +910,7 @@ export function runDetail(history: TestHistory, version: string, key: string): R
   return found ? { schemaVersion: TEST_CATALOG_VERSION, version, ...found } : null;
 }
 
-/** Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`. */
+/** Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, and `inherited=1`. */
 export function parseTestQuery(params: URLSearchParams): TestQuery {
   const many = (name: string) => params.getAll(name).flatMap(value => value.split(',')).map(value => value.trim()).filter(Boolean);
   const number = (name: string) => { const value = params.get(name); return value !== null && /^\d+$/.test(value) ? Number(value) : undefined; };
@@ -863,7 +918,8 @@ export function parseTestQuery(params: URLSearchParams): TestQuery {
   const query: Record<string, unknown> = {};
   const q = params.get('q');
   if (q) query.q = q;
-  for (const name of ['status', 'environment', 'producer', 'domain', 'spec', 'tag']) { const values = many(name); if (values.length) query[name] = values; }
+  for (const name of ['status', 'environment', 'producer', 'domain', 'spec', 'tag', 'artifactTag']) { const values = many(name); if (values.length) query[name] = values; }
+  if (['1', 'true'].includes(params.get('inherited') ?? '')) query.inherited = true;
   const run = params.get('run');
   if (run) query.run = run;
   if (sort && (TEST_SORTS as readonly string[]).includes(sort)) query.sort = sort;
@@ -937,6 +993,7 @@ export function historyMarkdown(document: TestHistoryDocument): string {
     `- Results: ${test.stats.results} recorded, ${test.stats.passed} passed, ${test.stats.failed} failed${test.stats.passRate === null ? '' : `, pass rate ${Math.round(test.stats.passRate * 100)}%`}, in ${test.stats.runs} runs`,
     `- Duration: ${d ? `avg ${formatMs(d.avgMs)}, p50 ${formatMs(d.p50Ms)}, p95 ${formatMs(d.p95Ms)}, min ${formatMs(d.minMs)}, max ${formatMs(d.maxMs)}, last ${formatMs(d.lastMs)}` : 'not measured'}`,
     ...(test.tags.length ? [`- Tags: ${test.tags.join(', ')}`] : []),
+    ...(test.artifactTags?.length ? [`- Artifact tags: ${test.artifactTags.map(displayTag).join(', ')}`] : []),
     ...(Object.keys(test.labels).length ? [`- Labels: ${Object.entries(test.labels).map(([k, v]) => `${k}=${v}`).join(', ')}`] : []),
     `- Evidence: ${test.evidence.attachments} attachments${test.evidence.roles.length ? ` (${test.evidence.roles.join(', ')})` : ''}, ${test.evidence.steps} steps`,
     '',
@@ -960,6 +1017,11 @@ function videosText(videos: VideoCounts | undefined): string {
   return `${videos.recordings}${videos.references !== videos.recordings ? ` (${videos.references} references)` : ''}${videos.unavailable ? `, ${videos.unavailable} unavailable` : ''}`;
 }
 
+/** What to say beside a commit that was not recorded from a clean checkout: nothing, ` (modified)` or ` (origin unknown)`. */
+function freshnessNote(freshness: 'unknown' | 'modified' | undefined): string {
+  return freshness === 'modified' ? ' (modified: local changes)' : freshness === 'unknown' ? ' (origin unknown)' : '';
+}
+
 /** The run list as Markdown. */
 export function runsMarkdown(list: RunList): string {
   return `${[
@@ -967,7 +1029,7 @@ export function runsMarkdown(list: RunList): string {
     '',
     '| Ended | Branch | Commit | Environments | Tests | Passed | Failed | Not run | Span | Videos | Run |',
     '|---|---|---|---|---:|---:|---:|---:|---:|---|---|',
-    ...list.runs.map(r => `| ${iso(r.endedAtMs)} | ${cell(r.branch ?? '—')} | ${r.sha?.slice(0, 10) ?? '—'} | ${r.environments.join(', ') || '—'} | ${r.tests} | ${r.counts.passed} | ${r.counts.failed} | ${r.counts['not-run']} | ${formatMs(r.spanMs)} | ${videosText(r.videos)} | ${cell(r.key)} |`),
+    ...list.runs.map(r => `| ${iso(r.endedAtMs)} | ${cell(r.branch ?? '—')} | ${r.sha?.slice(0, 10) ?? '—'}${freshnessNote(r.freshness)} | ${r.environments.join(', ') || '—'} | ${r.tests} | ${r.counts.passed} | ${r.counts.failed} | ${r.counts['not-run']} | ${formatMs(r.spanMs)} | ${videosText(r.videos)} | ${cell(r.title ? `${r.title} (${r.key})` : r.key)} |`),
   ].join('\n')}\n`;
 }
 
@@ -977,7 +1039,8 @@ export function runMarkdown(detail: RunDetail): string {
   return `${[
     `# Run ${run.key}`,
     '',
-    `- Branch ${run.branch ?? '—'}, commit ${run.sha ?? '—'}`,
+    ...(run.title ? [`- Title: ${run.title}`] : []),
+    `- Branch ${run.branch ?? '—'}, commit ${run.sha ?? '—'}${freshnessNote(run.freshness)}`,
     `- ${iso(run.startedAtMs)} to ${iso(run.endedAtMs)} (${formatMs(run.spanMs)}); ${run.layers} layers from ${run.producers.join(', ')}`,
     `- Environments: ${run.environments.join(', ') || '—'}`,
     `- ${run.tests} tests: ${counted(run.counts)}${run.totalDurationMs === null ? '' : `; ${formatMs(run.totalDurationMs)} of test time`}`,

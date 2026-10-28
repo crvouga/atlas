@@ -80,6 +80,7 @@ Every endpoint below answers JSON, or Markdown with \`format=markdown\`. Prefix 
 curl "${url}/api/projects/$ATLAS_PROJECT/reports/tests?format=markdown&limit=50"                 # summary, environments, domains, failing, flaky, slowest, then the tests
 curl "${url}/api/projects/$ATLAS_PROJECT/reports/tests?status=failed,flaky&environment=desktop-web" # filter: q, status, environment, producer, domain, spec, tag, run; sort, offset, limit
 curl "${url}/api/projects/$ATLAS_PROJECT/reports/tests/history?key=<url-encoded test key>"         # one test: every recorded result, durations, branches, CI runs
+curl "${url}/api/projects/$ATLAS_PROJECT/reports/tests/health?format=markdown"                      # why Specs, domains and counts disagree; add root=<from>><to> to declare a path-root mapping
 curl "${url}/api/projects/$ATLAS_PROJECT/reports/runs?format=markdown"                             # CI runs, newest first, with their results by status and video counts
 curl "${url}/api/projects/$ATLAS_PROJECT/reports/runs?video=true&format=markdown"                 # only runs with a playable video recording
 curl "${url}/api/projects/$ATLAS_PROJECT/reports/runs/detail?key=<url-encoded run key>"            # every test one run recorded

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Atlas server API",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "summary": "Take in test results from every environment, keep them, and show everyone the combined report, live.",
     "description": "One Atlas node serves multiple projects. Clients select a project using ?project=<slug>, X-Atlas-Project, or /api/projects/<slug>/… . Each project has independent specs, layers, recordings, status, and event streams. Within each project, the newest completed result of every check wins its slot. Unqualified requests address the legacy default project.\n\n**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `publish` < `admin`. Uploading needs a Bearer token; a browser's HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.\n\n**Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`) with a `detail` that says what to do. `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not valid, `503` still starting (retry after `Retry-After`).\n\n**Compatibility.** Within `/api` the API only grows: optional parameters, optional response fields, new events. Ignore what you do not know.\n\nGuides: `/llms.txt`. Source: https://github.com/crvouga/atlas.",
     "license": {
@@ -3060,6 +3060,29 @@
           },
           {
             "required": false,
+            "name": "artifactTag",
+            "in": "query",
+            "description": "Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.",
+            "example": "demo",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "inherited",
+            "in": "query",
+            "description": "With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "true"
+              ]
+            }
+          },
+          {
+            "required": false,
             "name": "run",
             "in": "query",
             "description": "Only tests recorded in this run (a `key` from `/api/reports/runs`).",
@@ -3276,6 +3299,29 @@
           },
           {
             "required": false,
+            "name": "artifactTag",
+            "in": "query",
+            "description": "Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.",
+            "example": "demo",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "inherited",
+            "in": "query",
+            "description": "With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "true"
+              ]
+            }
+          },
+          {
+            "required": false,
             "name": "run",
             "in": "query",
             "description": "Only tests recorded in this run (a `key` from `/api/reports/runs`).",
@@ -3351,6 +3397,204 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TestCatalog"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/tests/health": {
+      "get": {
+        "operationId": "getCatalogHealth",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Why specs, domains and counts disagree",
+        "description": "Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.\n\n`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.\n\nTwo paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "root",
+            "in": "query",
+            "description": "A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.",
+            "example": ">specs/",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for a Markdown report instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The diagnostics.",
+            "headers": {
+              "ETag": {
+                "description": "Changes with the report, its history and the mappings.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogHealth"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/tests/health": {
+      "get": {
+        "operationId": "getCatalogHealthForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Why specs, domains and counts disagree",
+        "description": "Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.\n\n`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.\n\nTwo paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "root",
+            "in": "query",
+            "description": "A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.",
+            "example": ">specs/",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for a Markdown report instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The diagnostics.",
+            "headers": {
+              "ETag": {
+                "description": "Changes with the report, its history and the mappings.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogHealth"
                 }
               }
             }
@@ -3592,6 +3836,298 @@
           },
           "503": {
             "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/artifact-tags": {
+      "get": {
+        "operationId": "getArtifactTags",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Reviewer tags of attachments: every recorded edit",
+        "description": "The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer's own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The edits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTags"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "editArtifactTags",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Tag or untag one attachment after upload",
+        "description": "Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer's tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The attachment and the tags to add and remove. At most 20 of each, 64 KiB.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactTagEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The recorded entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTagEntry"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/artifact-tags": {
+      "get": {
+        "operationId": "getArtifactTagsForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Reviewer tags of attachments: every recorded edit",
+        "description": "The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer's own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The edits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTags"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "editArtifactTagsForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Tag or untag one attachment after upload",
+        "description": "Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer's tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The attachment and the tags to add and remove. At most 20 of each, 64 KiB.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactTagEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The recorded entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTagEntry"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7271,6 +7807,13 @@
                               "type": "string"
                             }
                           },
+                          "artifactTags": {
+                            "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labels": {
                             "type": "object",
                             "propertyNames": {
@@ -7436,6 +7979,36 @@
                         "modified"
                       ]
                     },
+                    "run": {
+                      "description": "The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot",
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256,
+                          "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+                        },
+                        "title": {
+                          "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                          "type": "string"
+                        },
+                        "startedAtMs": {
+                          "description": "When the execution started, epoch milliseconds",
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "endedAtMs": {
+                          "description": "When the execution ended, epoch milliseconds",
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "recording": {
                       "anyOf": [
                         {},
@@ -7503,6 +8076,13 @@
                           "maximum": 9007199254740991
                         },
                         "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "artifactTags": {
+                          "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -7796,6 +8376,13 @@
                               "type": "string"
                             }
                           },
+                          "artifactTags": {
+                            "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labels": {
                             "type": "object",
                             "propertyNames": {
@@ -7961,6 +8548,36 @@
                         "modified"
                       ]
                     },
+                    "run": {
+                      "description": "The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot",
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256,
+                          "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+                        },
+                        "title": {
+                          "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                          "type": "string"
+                        },
+                        "startedAtMs": {
+                          "description": "When the execution started, epoch milliseconds",
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "endedAtMs": {
+                          "description": "When the execution ended, epoch milliseconds",
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "recording": {
                       "anyOf": [
                         {},
@@ -8028,6 +8645,13 @@
                           "maximum": 9007199254740991
                         },
                         "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "artifactTags": {
+                          "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -8726,6 +9350,13 @@
                       "description": {
                         "type": "string"
                       },
+                      "tags": {
+                        "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "at": {
                         "type": "object",
                         "properties": {
@@ -8962,6 +9593,13 @@
                             },
                             "description": {
                               "type": "string"
+                            },
+                            "tags": {
+                              "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "at": {
                               "type": "object",
@@ -9237,6 +9875,13 @@
                                   "description": {
                                     "type": "string"
                                   },
+                                  "tags": {
+                                    "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
                                   "at": {
                                     "type": "object",
                                     "properties": {
@@ -9446,6 +10091,13 @@
                             },
                             "description": {
                               "type": "string"
+                            },
+                            "tags": {
+                              "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "at": {
                               "type": "object",
@@ -9667,6 +10319,36 @@
               "modified"
             ]
           },
+          "run": {
+            "description": "Name the execution these checks belong to, so repeated local runs at one commit stay separate runs and shards of one execution stay together",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+              },
+              "title": {
+                "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                "type": "string"
+              },
+              "startedAtMs": {
+                "description": "When the execution started, epoch milliseconds",
+                "type": "number",
+                "minimum": 0
+              },
+              "endedAtMs": {
+                "description": "When the execution ended, epoch milliseconds",
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": {}
+          },
           "specs": {
             "default": [],
             "type": "array",
@@ -9796,6 +10478,13 @@
                 },
                 "description": {
                   "type": "string"
+                },
+                "tags": {
+                  "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "at": {
                   "type": "object",
@@ -10155,6 +10844,36 @@
                     "modified"
                   ]
                 },
+                "run": {
+                  "description": "The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+                    },
+                    "title": {
+                      "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                      "type": "string"
+                    },
+                    "startedAtMs": {
+                      "description": "When the execution started, epoch milliseconds",
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "endedAtMs": {
+                      "description": "When the execution ended, epoch milliseconds",
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
+                },
                 "recording": {
                   "anyOf": [
                     {},
@@ -10222,6 +10941,13 @@
                       "maximum": 9007199254740991
                     },
                     "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "artifactTags": {
+                      "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -10490,6 +11216,13 @@
                       "maximum": 9007199254740991
                     },
                     "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "artifactTags": {
+                      "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -10767,6 +11500,13 @@
                     "description": {
                       "type": "string"
                     },
+                    "tags": {
+                      "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "at": {
                       "type": "object",
                       "properties": {
@@ -10994,6 +11734,13 @@
                           },
                           "description": {
                             "type": "string"
+                          },
+                          "tags": {
+                            "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "at": {
                             "type": "object",
@@ -11260,6 +12007,13 @@
                                 "description": {
                                   "type": "string"
                                 },
+                                "tags": {
+                                  "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
                                 "at": {
                                   "type": "object",
                                   "properties": {
@@ -11460,6 +12214,13 @@
                           "description": {
                             "type": "string"
                           },
+                          "tags": {
+                            "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "at": {
                             "type": "object",
                             "properties": {
@@ -11627,6 +12388,224 @@
           "kind",
           "check",
           "run"
+        ],
+        "additionalProperties": {}
+      },
+      "ArtifactTagEdit": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "layer": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "The id of the archived layer that holds the check"
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The check's id"
+              },
+              "kind": {
+                "description": "The kind of the part holding the check, when the same id exists in several parts",
+                "type": "string",
+                "minLength": 1
+              },
+              "artifact": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "description": "The attachment: `id:<id>` when it has an id, else `key:<bundleKey>`, else `name:<name>` (see `artifactRef`)"
+              }
+            },
+            "required": [
+              "layer",
+              "check",
+              "artifact"
+            ],
+            "additionalProperties": {}
+          },
+          "add": {
+            "description": "Tags to add. `demo` and `#demo` are the same tag",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "remove": {
+            "description": "Reviewer tags to remove. Tags the producer wrote are part of the immutable layer and stay",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": {}
+      },
+      "ArtifactTagEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique and time-ordered"
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "layer": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "The id of the archived layer that holds the check"
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The check's id"
+              },
+              "kind": {
+                "description": "The kind of the part holding the check, when the same id exists in several parts",
+                "type": "string",
+                "minLength": 1
+              },
+              "artifact": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "description": "The attachment: `id:<id>` when it has an id, else `key:<bundleKey>`, else `name:<name>` (see `artifactRef`)"
+              }
+            },
+            "required": [
+              "layer",
+              "check",
+              "artifact"
+            ],
+            "additionalProperties": {}
+          },
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Normalized tags added"
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Normalized tags removed"
+          },
+          "by": {
+            "type": "string",
+            "description": "The name of the token that made the edit (never the token)"
+          },
+          "atMs": {
+            "type": "number",
+            "description": "When the server recorded it, epoch milliseconds"
+          }
+        },
+        "required": [
+          "id",
+          "target",
+          "add",
+          "remove",
+          "by",
+          "atMs"
+        ],
+        "additionalProperties": {}
+      },
+      "ArtifactTags": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Unique and time-ordered"
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "layer": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "The id of the archived layer that holds the check"
+                    },
+                    "check": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "The check's id"
+                    },
+                    "kind": {
+                      "description": "The kind of the part holding the check, when the same id exists in several parts",
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "artifact": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024,
+                      "description": "The attachment: `id:<id>` when it has an id, else `key:<bundleKey>`, else `name:<name>` (see `artifactRef`)"
+                    }
+                  },
+                  "required": [
+                    "layer",
+                    "check",
+                    "artifact"
+                  ],
+                  "additionalProperties": {}
+                },
+                "add": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Normalized tags added"
+                },
+                "remove": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Normalized tags removed"
+                },
+                "by": {
+                  "type": "string",
+                  "description": "The name of the token that made the edit (never the token)"
+                },
+                "atMs": {
+                  "type": "number",
+                  "description": "When the server recorded it, epoch milliseconds"
+                }
+              },
+              "required": [
+                "id",
+                "target",
+                "add",
+                "remove",
+                "by",
+                "atMs"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "entries"
         ],
         "additionalProperties": {}
       },
@@ -12220,6 +13199,27 @@
                   "additionalProperties": {}
                 }
               },
+              "artifactTags": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
               "branches": {
                 "type": "array",
                 "items": {
@@ -12486,6 +13486,13 @@
                               "type": "string"
                             }
                           },
+                          "artifactTags": {
+                            "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labels": {
                             "type": "object",
                             "propertyNames": {
@@ -12721,6 +13728,20 @@
                     "type": "string"
                   }
                 },
+                "artifactTags": {
+                  "description": "Normalized tags of the attachments of its current results, such as `demo` (shown `#demo`). Not inherited from a check or run, unlike `tags`",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "inheritedArtifactTags": {
+                  "description": "Normalized tags its attachments inherit from their check and run, apart from `artifactTags`: what `?artifactTag=…&inherited=1` also matches",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
                 "labels": {
                   "type": "object",
                   "propertyNames": {
@@ -12801,6 +13822,404 @@
           "offset",
           "limit",
           "tests"
+        ],
+        "additionalProperties": {}
+      },
+      "CatalogHealth": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "type": "string",
+            "description": "Changes whenever the report or its history does"
+          },
+          "generatedAtMs": {
+            "type": "number"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True when there is no warning-severity finding"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "specs": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Spec files the report is laid over, before any root mapping"
+                  },
+                  "defined": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Logical specs: files joined by a declared root mapping count once"
+                  },
+                  "withTests": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Logical specs, defined or not, that have at least one test"
+                  },
+                  "executed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Defined logical specs with a test that passed or failed"
+                  },
+                  "withoutExecution": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Defined logical specs with no passed or failed test: the defined coverage gaps"
+                  }
+                },
+                "required": [
+                  "files",
+                  "defined",
+                  "withTests",
+                  "executed",
+                  "withoutExecution"
+                ],
+                "additionalProperties": {}
+              },
+              "tests": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "withSpec": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "withoutSpec": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "passed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Tests whose current status is passed"
+                  },
+                  "historicalOnly": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Tests only the history holds a result for"
+                  }
+                },
+                "required": [
+                  "total",
+                  "withSpec",
+                  "withoutSpec",
+                  "passed",
+                  "historicalOnly"
+                ],
+                "additionalProperties": {}
+              },
+              "scenarios": {
+                "type": "object",
+                "properties": {
+                  "outlines": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Tests sharing the label `outline` count once; a test without it is its own outline"
+                  },
+                  "examples": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Tests (check identities), however many environments ran them"
+                  },
+                  "observations": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Current results per producer, environment and parameter set"
+                  },
+                  "executedObservations": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "passedObservations": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "outlines",
+                  "examples",
+                  "observations",
+                  "executedObservations",
+                  "passedObservations"
+                ],
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "specs",
+              "tests",
+              "scenarios"
+            ],
+            "additionalProperties": {}
+          },
+          "reconciliation": {
+            "type": "object",
+            "properties": {
+              "specs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "What the Specs view counts: spec files"
+              },
+              "testSpecs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "What the Tests view groups by: logical specs with at least one test"
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "delta": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "label",
+                    "delta"
+                  ],
+                  "additionalProperties": {}
+                },
+                "description": "From `specs` to `testSpecs`: each step adds its `delta`"
+              },
+              "testsWithoutSpec": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "explanation": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "specs",
+              "testSpecs",
+              "steps",
+              "testsWithoutSpec",
+              "explanation"
+            ],
+            "additionalProperties": {}
+          },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "checks": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "fallbackIdentity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Checks whose id equals their title"
+              },
+              "basis": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "checks",
+              "fallbackIdentity",
+              "basis"
+            ],
+            "additionalProperties": {}
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "specs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "name",
+                "specs"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Specs per domain, most first"
+          },
+          "roots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "matched": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Distinct paths the mapping changed"
+                }
+              },
+              "required": [
+                "from",
+                "to",
+                "matched"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "sources"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Logical specs seen under more than one original path, joined by a root mapping"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "An open set: treat a code you do not know as informational"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "warning",
+                    "info"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "candidates": {
+                        "description": "Other paths it could be the same promise as. Atlas has not merged them",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "reason"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  "description": "At most 25; `count` is the whole"
+                }
+              },
+              "required": [
+                "code",
+                "severity",
+                "message",
+                "count",
+                "items"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "version",
+          "generatedAtMs",
+          "ok",
+          "counts",
+          "reconciliation",
+          "identity",
+          "domains",
+          "roots",
+          "aliases",
+          "findings"
         ],
         "additionalProperties": {}
       },
@@ -12996,6 +14415,13 @@
                           "maximum": 9007199254740991
                         },
                         "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "artifactTags": {
+                          "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -13236,6 +14662,20 @@
                   "type": "string"
                 }
               },
+              "artifactTags": {
+                "description": "Normalized tags of the attachments of its current results, such as `demo` (shown `#demo`). Not inherited from a check or run, unlike `tags`",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "inheritedArtifactTags": {
+                "description": "Normalized tags its attachments inherit from their check and run, apart from `artifactTags`: what `?artifactTag=…&inherited=1` also matches",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "labels": {
                 "type": "object",
                 "propertyNames": {
@@ -13418,6 +14858,13 @@
                         "type": "string"
                       }
                     },
+                    "artifactTags": {
+                      "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "labels": {
                       "type": "object",
                       "propertyNames": {
@@ -13539,7 +14986,23 @@
               "properties": {
                 "key": {
                   "type": "string",
-                  "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+                  "description": "`run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+                },
+                "runId": {
+                  "description": "The execution id the producer named, when it did. Layers that share it are one run however many uploads they took",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The human title of the execution (the newest layer's). Presentation only: the key, commit and `freshness` are unaffected",
+                  "type": "string"
+                },
+                "freshness": {
+                  "description": "`modified` when any layer of the run was recorded from a checkout with uncommitted changes; `unknown` when an origin was not captured; absent when all are clean. Shown beside the commit, never replaced by the title",
+                  "type": "string",
+                  "enum": [
+                    "unknown",
+                    "modified"
+                  ]
                 },
                 "runUrl": {
                   "type": [
@@ -13729,7 +15192,23 @@
             "properties": {
               "key": {
                 "type": "string",
-                "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+                "description": "`run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+              },
+              "runId": {
+                "description": "The execution id the producer named, when it did. Layers that share it are one run however many uploads they took",
+                "type": "string"
+              },
+              "title": {
+                "description": "The human title of the execution (the newest layer's). Presentation only: the key, commit and `freshness` are unaffected",
+                "type": "string"
+              },
+              "freshness": {
+                "description": "`modified` when any layer of the run was recorded from a checkout with uncommitted changes; `unknown` when an origin was not captured; absent when all are clean. Shown beside the commit, never replaced by the title",
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "modified"
+                ]
               },
               "runUrl": {
                 "type": [

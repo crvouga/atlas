@@ -9,6 +9,7 @@
  * @see docs/report-contract.md
  */
 import type { EvidenceMeasurement, EvidenceStatus } from './explorer-types';
+import type { LayerRun } from '../../schema/src/layer';
 import type { LayerParameters } from './layer-types';
 
 /** Where a recorded test's timeline and captured files are read from. */
@@ -78,6 +79,8 @@ export type EvidenceSummary = {
   readonly attempts: number;
   readonly links: number;
   readonly tags: readonly string[];
+  /** The normalized tags of the attachments themselves (`#demo` is `demo`), sorted and distinct. Absent when no attachment is tagged. Unlike `tags` they are never inherited from a check or run. */
+  readonly artifactTags?: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   /** The distinct roles of its attachments (or what their media types say), to show what kind of evidence there is. */
   readonly roles: readonly string[];
@@ -109,6 +112,8 @@ export type LayerHeader = {
   readonly parameters: LayerParameters;
   /** `modified`: recorded from a checkout with uncommitted changes; `unknown`: origin not captured; absent: clean. Advisory; never changes a status. */
   readonly freshness?: 'unknown' | 'modified';
+  /** The execution the producer named for it (one local or manual invocation), or absent. Grouping and display only; never part of the slot. */
+  readonly run?: LayerRun;
   /** Where this layer's recorded timelines and captured files are read from, or null when it has none. */
   readonly recording: RecordingAddress | null;
   /** From a spec run that has not been collected into a layer yet. */

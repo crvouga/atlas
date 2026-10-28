@@ -15,6 +15,8 @@ type Props = {
   /** The check whose recording is open, once the combined report holds it. */
   slot: CheckSlot | undefined;
   layerId: string | undefined;
+  /** The exact result to play, when the caller already found it (it wins over `layerId` and the combined winner). */
+  entry?: HistoryEntry | undefined;
   label: string;
   back: string;
   moment: number | null;
@@ -36,14 +38,15 @@ function needsStylesheet(report: RunReport | undefined): boolean {
   return visit(report.steps) || (report.artifacts ?? []).some((artifact) => artifact.media === 'html');
 }
 /** One recorded test, opened in place of its spec. */
-export function RecordingPage({ slot, layerId, label, back, moment, onMoment, onClose }: Props) {
+export function RecordingPage({ slot, layerId, entry, label, back, moment, onMoment, onClose }: Props) {
   const progress = useTestProgress(slot ?? null);
   const { evidence, backends, pending, ready, unavailable } = useEvidence();
   const now = useNow();
   const history = useMemo(() => (slot ? checkHistory(evidence, slot.specPath, slot.id) : []), [evidence, slot]);
   const winner = slot?.outcomes[0];
   const chosen: HistoryEntry | null =
-    (layerId ? history.find((entry) => entry.layer.id === layerId) : undefined) ??
+    entry ??
+    (layerId ? history.find((earlier) => earlier.layer.id === layerId) : undefined) ??
     (winner ? { layer: winner.layer, row: winner.row } : null);
   const { paths, report } = useRecordedReport(chosen);
   const wantsCss = needsStylesheet(report.data);
