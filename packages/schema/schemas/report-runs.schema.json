@@ -178,6 +178,12 @@
               "unavailable"
             ],
             "additionalProperties": {}
+          },
+          "attachments": {
+            "description": "Files attached to the run itself, in its layers, not to a check. Absent when there are none",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [

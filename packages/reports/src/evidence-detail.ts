@@ -96,9 +96,18 @@ export function isVideoAttachment(attachment: Pick<Attachment, 'name' | 'role' |
   return type.startsWith('video/') || (attachment.role === 'video' && type.startsWith('application/octet-stream'));
 }
 
+/**
+ * What identifies an attachment's bytes: its digest, else its bundle key, address or inline text. Attachments with the
+ * same identity are the same file however many results reference them. Undefined when it names no bytes at all (it can
+ * never be opened). This is the `recording` of a {@link VideoRef}.
+ */
+export function attachmentIdentity(item: Pick<Attachment, 'name' | 'sha256' | 'bundleKey' | 'uri' | 'text'>): string | undefined {
+  return item.sha256 ? `sha256:${item.sha256}` : item.bundleKey ?? item.uri ?? (item.text === undefined ? undefined : `inline:${item.name}`);
+}
+
 function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }): VideoRef | undefined {
   if (!isVideoAttachment(item)) return undefined;
-  const recording = item.sha256 ? `sha256:${item.sha256}` : item.bundleKey ?? item.uri ?? (item.text === undefined ? undefined : `inline:${item.name}`);
+  const recording = attachmentIdentity(item);
   return { name: item.name, owner, ...where, ...(recording === undefined ? {} : { recording }), available: recording !== undefined };
 }
 
@@ -154,6 +163,24 @@ export function checkDetailOf(layer: { readonly id: string; readonly parts: read
 export function runEvidence(layer: EvidenceHolder): EvidenceHolder {
   const { tags, labels, links, attachments, annotations, extensions } = layer;
   return { ...(tags ? { tags } : {}), ...(labels ? { labels } : {}), ...(links ? { links } : {}), ...(attachments ? { attachments } : {}), ...(annotations ? { annotations } : {}), ...(extensions ? { extensions } : {}) };
+}
+
+/** What one part of a layer (one kind of report) carries as a whole, named by the part. */
+export type PartEvidence = EvidenceHolder & {
+  readonly kind: string;
+  readonly id: string;
+  readonly title: string;
+};
+
+/**
+ * The parts of a layer that carry evidence of their own (attachments, links, labels…), each with its name. Parts
+ * that carry none are left out. A part's files belong to the run, not to any one check.
+ */
+export function partsEvidence(layer: { readonly parts: readonly (EvidenceHolder & { readonly kind: string; readonly id: string; readonly title: string })[] }): PartEvidence[] {
+  return layer.parts.flatMap(part => {
+    const evidence = runEvidence(part);
+    return Object.keys(evidence).length ? [{ kind: part.kind, id: part.id, title: part.title, ...evidence }] : [];
+  });
 }
 
 /** Every distinct bundle key (`bundleKey`) that the attachments of a holder, its steps and its attempts point to, so a layer's files can be copied. Attachments held by `uri` or inline `text` have none. */

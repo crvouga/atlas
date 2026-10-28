@@ -118,7 +118,7 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| Project home | Tests/runs tabs, metrics, search, status/environment/domain filters, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, Button, Accordion |
+| Project home | Tests/runs tabs, a run's Artifacts (files of its layers, shared recordings, direct links), metrics, search, status/environment/domain filters, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, Button, Accordion |
 | Test detail | Current outcomes, statistics, duration graph, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index, Gherkin rules/scenarios/examples, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Table, CodeHighlightTabs, ResultRow |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |

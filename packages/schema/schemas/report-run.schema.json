@@ -170,6 +170,12 @@
             "unavailable"
           ],
           "additionalProperties": {}
+        },
+        "attachments": {
+          "description": "Files attached to the run itself, in its layers, not to a check. Absent when there are none",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -297,6 +303,85 @@
           "at",
           "layer",
           "detail"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "layers": {
+      "description": "Every layer of the run, oldest first. Absent from an older server",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The layer id; read its files with `/api/reports/evidence/detail/{backend}/{id}`"
+          },
+          "backend": {
+            "type": "string"
+          },
+          "producer": {
+            "type": "string"
+          },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recordedAtMs": {
+            "type": "number"
+          },
+          "checks": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "How many checks the layer recorded. Zero means evidence only, not a pass"
+          },
+          "attachments": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Files the layer carries as a whole, not those of its checks"
+          },
+          "videos": {
+            "type": "object",
+            "properties": {
+              "references": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Every reference to a video; identical bytes referenced twice count twice"
+              },
+              "recordings": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Distinct playable recordings"
+              },
+              "unavailable": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "References that name no bytes"
+              }
+            },
+            "required": [
+              "references",
+              "recordings",
+              "unavailable"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "backend",
+          "producer",
+          "environment",
+          "recordedAtMs",
+          "checks",
+          "attachments"
         ],
         "additionalProperties": {}
       }

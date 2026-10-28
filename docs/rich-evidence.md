@@ -225,6 +225,29 @@ or the command line, an attachment may name a `path` instead; `atlas report publ
 `atlas report publish --ctrf` keeps it ([native runner reporters](runners.md) cover CodeceptJS, Mocha, Jest and Node's
 test runner).
 
+## Run artifacts and direct links
+
+Files attached to a run as a whole (top-level `attachments`: a review movie, a ZIP, an HTML gallery, a summary) are
+shown under **Artifacts** when you open a run in the viewer's Runs tab, without opening any test. The movie plays
+inline, an archive is a download, and each file keeps its name, role, type, size, duration and tags. They are grouped
+by the layer that carries them, with who recorded it and when. A layer may hold no checks at all, only files: it is
+listed with `No checks in this layer`, and a run of only such layers shows `No checks recorded`, never `0 passed`.
+
+- **Direct link.** *Link to this file* gives an address that names the project, the run, one immutable layer and one
+  attachment: `#/?tab=runs&openRun=<run key>&layer=<layer id>&artifact=<id:… | key:… | name:…>`. Opened in a fresh tab
+  it selects that same file of that same layer, whatever runs arrived since. A link whose file is not in the layer says
+  so instead of showing another file.
+- **Shared recordings.** Tests that reference the same bytes (same SHA-256 or bundle key) are one recording. The run's
+  *Recordings in tests* lists each once, with every test that references it, and a run-level file that a test also
+  references says so.
+- **Unplayable files.** A file with no stored bytes, with an address that is not a web address, in a type the viewer
+  has no preview for, or that the browser cannot play, shows what is wrong and, when it can, a download.
+- **Safety is unchanged.** Files are served only through the attachment route (never sniffed, sandboxed), and an HTML
+  archive renders in an iframe with an empty `sandbox`: it cannot run script.
+- **API.** `GET /api/reports/runs/detail` lists the run's `layers` (backend, check count, file count) and
+  `GET /api/reports/evidence/detail/{backend}/{id}` returns what a layer carries as a whole (and, as `parts`, what its
+  parts carry). Both only gained optional fields.
+
 ## Recording completeness
 
 A green run does not say whether the videos you expected were kept and published. Atlas answers that separately from

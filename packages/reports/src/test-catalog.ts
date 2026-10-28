@@ -293,6 +293,11 @@ export type RunSummary = {
    * and references that cannot be played. Absent when it has none, and in a report that carries no video information.
    */
   readonly videos?: VideoCounts;
+  /**
+   * Files attached to the run itself, in its layers (and their parts), not to any one check: review movies, archives,
+   * summaries. All kinds, videos included. Absent when none, and in a report that carries no such information.
+   */
+  readonly attachments?: number;
 };
 
 /** What `runList` can be asked. */
@@ -329,12 +334,34 @@ export type RunResult = {
   readonly videos?: readonly VideoRef[];
 };
 
+/**
+ * One layer of a run, as the run's artifact hub names it: who recorded it, how many checks it holds (zero is possible
+ * and is not a pass) and the files it carries as a whole. Read the files with `GET /evidence/detail/{backend}/{id}`.
+ */
+export type RunLayer = {
+  /** The layer's id: 64 hex digits for an archived layer. */
+  readonly id: string;
+  /** The backend it was read from, for `GET /evidence/detail/{backend}/{id}`. */
+  readonly backend: string;
+  readonly producer: string;
+  readonly environment: string | null;
+  readonly recordedAtMs: number;
+  /** How many checks the layer recorded. A layer of zero checks is evidence only: it is not a passing test. */
+  readonly checks: number;
+  /** Files the layer carries as a whole (not those of its checks). */
+  readonly attachments: number;
+  /** Its videos, when it has any. */
+  readonly videos?: VideoCounts;
+};
+
 /** `GET /api/reports/runs/detail`: one run and every result it recorded. */
 export type RunDetail = {
   readonly schemaVersion: typeof TEST_CATALOG_VERSION;
   readonly version: string;
   readonly run: RunSummary;
   readonly results: readonly RunResult[];
+  /** Every layer of the run, oldest first, so its run-level files can be found even in a layer with no checks. Absent from an older server. */
+  readonly layers?: readonly RunLayer[];
 };
 
 /**
@@ -405,6 +432,10 @@ type RunAcc = {
   runId: string | undefined; title: string | undefined; titledAt: number; titledBy: string; freshness: 'unknown' | 'modified' | undefined;
   /** Videos attached to its layers (not to a check). */
   videos: VideoRef[];
+  /** Files attached to its layers (not to a check). */
+  attachments: number;
+  /** Its layers, in the order they arrived. */
+  members: RunLayer[];
 };
 /** A test as history names it: its key and the newest title seen. */
 type Ident = { readonly slot: string; readonly id: string; title: string; titledAt: number; readonly specPath: string | null };
@@ -467,7 +498,7 @@ export class TestHistory {
     const key = runKey(layer);
     let run = this.#runs.get(key);
     if (!run) {
-      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [] };
+      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [], attachments: 0, members: [] };
       this.#runs.set(key, run);
     }
     // A run is told by its first layer (by time, then id), whatever order its layers arrive in.
@@ -493,6 +524,10 @@ export class TestHistory {
     if (layer.environment) run.environments.add(layer.environment);
     run.layers += 1;
     if (layer.evidence?.videos) run.videos.push(...layer.evidence.videos);
+    const held = layer.evidence?.attachments ?? 0;
+    run.attachments += held;
+    const layerVideos = videoCounts(layer.evidence?.videos);
+    run.members.push({ id: layer.id, backend, producer: layer.producer, environment: layer.environment, recordedAtMs: layer.recordedAtMs, checks: rows.length, attachments: held, ...(layerVideos ? { videos: layerVideos } : {}) });
     const origin = originOf(layer, backend);
     for (const row of rows) {
       // "Still running" is progress, not history: a test running now shows it as its current outcome.
@@ -557,7 +592,7 @@ export class TestHistory {
   }
 
   /** One run and its results (failed first, then by spec and title), or null. */
-  run(key: string): { readonly run: RunSummary; readonly results: RunResult[] } | null {
+  run(key: string): { readonly run: RunSummary; readonly results: RunResult[]; readonly layers: RunLayer[] } | null {
     const run = this.#runs.get(key);
     if (!run) return null;
     const cells = this.#runCells().get(key) ?? [];
@@ -567,7 +602,8 @@ export class TestHistory {
       ...(r.e?.videos ? { videos: r.e.videos } : {}),
     }));
     results.sort((a, b) => FAILURE_RANK[b.status] - FAILURE_RANK[a.status] || compareText(a.specPath ?? '', b.specPath ?? '') || compareText(a.title, b.title) || compareText(a.environment ?? '', b.environment ?? '') || compareText(a.producer, b.producer) || compareText(a.key, b.key));
-    return { run: runSummary(run, cells), results };
+    const layers = [...run.members].sort((a, b) => a.recordedAtMs - b.recordedAtMs || compareText(a.id, b.id));
+    return { run: runSummary(run, cells), results, layers };
   }
 
   /** The keys of the tests one run recorded. */
@@ -599,6 +635,7 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
     producers: [...run.producers].sort(), environments: [...run.environments].sort(),
     layers: run.layers, tests: tests.size, counts, totalDurationMs: measured ? total : null, failing,
     ...(video ? { videos: video } : {}),
+    ...(run.attachments ? { attachments: run.attachments } : {}),
   };
 }
 

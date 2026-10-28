@@ -2,7 +2,7 @@
  * @module Explorer address
  *
  * Everything the test explorer shows is in the address of the `/` route, so a link reproduces the view: the open test,
- * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, and the exact layer a test's detail is pinned to. Filters that
+ * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the exact layer a test's detail is pinned to, and the one file of a run's layer its Artifacts select. Filters that
  * take several values are comma-separated (`status=failed,flaky`). Anything unreadable is dropped, never an error.
  */
 import { TEST_SORTS, type TestQuery, type TestSort } from '@crvouga/atlas/reports/test-catalog';
@@ -37,8 +37,10 @@ export const ExplorerSearchFields = {
   tab: z.enum(['runs']).optional().catch(undefined),
   /** The run opened in the Runs tab. */
   openRun: text,
-  /** Pins the open test's detail to one exact layer (a run's record of it), instead of the latest combined evidence. */
+  /** Pins the open test's detail to one exact layer (a run's record of it), instead of the latest combined evidence. With `openRun` and `artifact` it names the layer the file is in. */
   layer: text,
+  /** With `openRun` and `layer`: the one file of that layer (an `artifactRef`: `id:…`, `key:…` or `name:…`) the run's Artifacts select. */
+  artifact: text,
   /** Only the runs, and the results of an opened run, that have a playable video recording. */
   video: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined)
 };
@@ -59,6 +61,7 @@ export type ExplorerSearch = {
   readonly tab?: 'runs';
   readonly openRun?: string;
   readonly layer?: string;
+  readonly artifact?: string;
   readonly video?: true;
 };
 

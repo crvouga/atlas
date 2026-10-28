@@ -3,9 +3,9 @@ import { roleOfType } from '@crvouga/atlas/reports/evidence-detail';
 import type { LayerHeader, LayerRow } from '@crvouga/atlas/reports/evidence-types';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
 import type { Annotation, Attachment, Attempt, Step } from '@crvouga/atlas/schema';
-import { Accordion, Alert, Anchor, Box, Code, Flex, Image, List, Stack, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Anchor, Badge, Box, Code, Flex, Image, List, Stack, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArtifactTagList, ArtifactTagsProvider, TagFilterBar, useFilteredAttachments } from './artifact-tags';
 import { reportAssetUrl, reportJson, reportText } from './api';
 import { duration, plural } from './format';
@@ -42,6 +42,23 @@ function safeUri(uri: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+/** A video that plays inline; when the file cannot be loaded or this browser cannot play it, it says so and offers the file, instead of an empty player. */
+function VideoPlayer({ attachment, url }: { attachment: Attachment; url: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed)
+    return (
+      <Alert role="alert" color="orange" title="This video cannot be played">
+        <Text component="div">
+          {label(attachment)} could not be loaded, or this browser cannot play its format. Nothing is wrong with the report: the file may be missing from the
+          store or in an unsupported codec.{' '}
+          <Anchor href={url} download={attachment.name} target="_blank" rel="noreferrer">
+            Download {attachment.name}
+          </Anchor>
+        </Text>
+      </Alert>
+    );
+  return <Box src={url} controls preload="metadata" aria-label={label(attachment)} component="video" maw="100%" w="100%" onError={() => setFailed(true)} />;
 }
 function TextValue({ attachment, path }: { attachment: Attachment; path: string | null }) {
   const stored = useQuery({
@@ -100,8 +117,7 @@ export const artifactRenderers: ArtifactRenderer[] = [
     id: 'video',
     wide: true,
     matches: (_, type) => type.startsWith('video/'),
-    render: (a, { url }) =>
-      url ? <Box src={url} controls preload="metadata" aria-label={label(a)} component="video" maw="100%" w="100%" /> : null
+    render: (a, { url }) => (url ? <VideoPlayer attachment={a} url={url} /> : null)
   },
   {
     id: 'audio',
@@ -138,7 +154,13 @@ function sizeOf(bytes: number | undefined) {
   if (bytes < 1024) return `${bytes} B`;
   return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
 }
-function Artifact({ attachment, layer }: { attachment: Attachment; layer: string }) {
+/**
+ * One attachment as a card: it plays or shows itself when it can, and always says what it is (name, role, type, size,
+ * duration, tags) and how to get it. A file that has no address, has an address that is not a web address, or that
+ * nothing can preview says so in words. Pass `link` for a control that opens this one artifact, `note` for how it
+ * relates to the rest of the report, and `selected` to mark the one a link pointed at (it scrolls into view).
+ */
+export function ArtifactCard({ attachment, layer, link, note, selected }: { attachment: Attachment; layer: string; link?: ReactNode; note?: ReactNode; selected?: boolean }) {
   const type = mediaType(attachment);
   const path = attachment.bundleKey
     ? `/layers/${encodeURIComponent(layer)}/blobs/${attachment.bundleKey.split('/').map(encodeURIComponent).join('/')}`
@@ -146,13 +168,24 @@ function Artifact({ attachment, layer }: { attachment: Attachment; layer: string
   const url = path ? reportAssetUrl(path) : safeUri(attachment.uri);
   const renderer = artifactRenderers.find((candidate) => candidate.matches(attachment, type));
   const body = renderer?.render(attachment, { url, path, type });
+  const item = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (selected) item.current?.scrollIntoView?.({ block: 'center' });
+  }, [selected]);
   return (
-    <List.Item data-wide={renderer?.wide || undefined} data-role={attachment.role ?? roleOfType(type)}>
+    <List.Item
+      ref={item}
+      data-wide={renderer?.wide || undefined}
+      data-role={attachment.role ?? roleOfType(type)}
+      data-selected={selected || undefined}
+      {...(selected ? { bg: 'blue.0', p: 'sm', bd: '2px solid var(--mantine-color-blue-6)' } : {})}
+    >
       {body}
       <Box component="figcaption">
         <Text span inherit fw={600}>
           {attachment.name}
         </Text>
+        {selected && <Badge variant="light">Selected</Badge>}
         {attachment.role && (
           <Text span inherit>
             {attachment.role}
@@ -166,12 +199,21 @@ function Artifact({ attachment, layer }: { attachment: Attachment; layer: string
             {body ? 'Download' : 'Open'}
           </Anchor>
         )}
-        {!url && attachment.text === undefined && (
-          <Text span inherit>
-            No file to show
-          </Text>
-        )}
+        {link}
       </Box>
+      {!url && attachment.text === undefined && (
+        <Alert role={selected ? 'alert' : undefined} color="orange" data-unavailable my="xs">
+          {attachment.uri
+            ? 'No file to show. This file is only given by an address that is not a web address, so Atlas will not follow it. Ask the producer for a web address or to upload the file.'
+            : 'No file to show. The report lists this file, but it was never stored, so it cannot be shown or downloaded. Publish it again with the file attached.'}
+        </Alert>
+      )}
+      {url && !renderer && (
+        <Text component="div" c="dimmed" data-no-preview>
+          Atlas has no preview for this kind of file. Open or download it to inspect it.
+        </Text>
+      )}
+      {note}
       <ArtifactTagList attachment={attachment} />
     </List.Item>
   );
@@ -186,7 +228,7 @@ export function Attachments({ attachments: all, layer }: { attachments: readonly
       </Title>
       <List spacing="xs" listStyleType="none">
         {attachments.map((attachment, index) => (
-          <Artifact key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} />
+          <ArtifactCard key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} />
         ))}
       </List>
     </Box>
