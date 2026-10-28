@@ -7280,6 +7280,22 @@
                           "roles"
                         ],
                         "additionalProperties": {}
+                      },
+                      "recording": {
+                        "description": "What became of the check's expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`",
+                        "type": "object",
+                        "properties": {
+                          "state": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state"
+                        ],
+                        "additionalProperties": {}
                       }
                     },
                     "required": [
@@ -7474,6 +7490,51 @@
                         "tags",
                         "labels",
                         "roles"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "recordings": {
+                      "description": "How many of the recordings the layer expected were published. Absent: the layer declared no expectations, so its completeness is unknown, not complete",
+                      "type": "object",
+                      "properties": {
+                        "expected": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "uploaded": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "referenced": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unresolved": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "notApplicable": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "expected",
+                        "uploaded",
+                        "referenced",
+                        "skipped",
+                        "unresolved",
+                        "notApplicable"
                       ],
                       "additionalProperties": {}
                     }
@@ -7723,6 +7784,22 @@
                           "roles"
                         ],
                         "additionalProperties": {}
+                      },
+                      "recording": {
+                        "description": "What became of the check's expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`",
+                        "type": "object",
+                        "properties": {
+                          "state": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state"
+                        ],
+                        "additionalProperties": {}
                       }
                     },
                     "required": [
@@ -7917,6 +7994,51 @@
                         "tags",
                         "labels",
                         "roles"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "recordings": {
+                      "description": "How many of the recordings the layer expected were published. Absent: the layer declared no expectations, so its completeness is unknown, not complete",
+                      "type": "object",
+                      "properties": {
+                        "expected": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "uploaded": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "referenced": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unresolved": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "notApplicable": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "expected",
+                        "uploaded",
+                        "referenced",
+                        "skipped",
+                        "unresolved",
+                        "notApplicable"
                       ],
                       "additionalProperties": {}
                     }
@@ -8358,6 +8480,110 @@
               "additionalProperties": {}
             },
             "description": "Each slot whose newest completed result failed, or that is still running"
+          },
+          "recordings": {
+            "description": "Whether the recordings the producers expected were published, separately from `ok`. It never changes `ok`",
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "incomplete",
+                  "none-expected",
+                  "unknown"
+                ]
+              },
+              "expected": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "uploaded": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "referenced": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "unresolved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "notApplicable": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "layersWithoutReceipt": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Layers that contribute results but declared no recording expectations: their completeness is unknown"
+              },
+              "gaps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "spec": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "check": {
+                      "type": "string"
+                    },
+                    "layer": {
+                      "type": "string"
+                    },
+                    "environment": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "spec",
+                    "check",
+                    "layer",
+                    "environment",
+                    "state"
+                  ],
+                  "additionalProperties": {}
+                },
+                "description": "Each expected recording that is skipped or unresolved"
+              }
+            },
+            "required": [
+              "state",
+              "expected",
+              "uploaded",
+              "referenced",
+              "skipped",
+              "unresolved",
+              "notApplicable",
+              "layersWithoutReceipt",
+              "gaps"
+            ],
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -8447,6 +8673,10 @@
                   "description": "How long the check took, when the producer measured it",
                   "type": "number",
                   "minimum": 0
+                },
+                "recordingExpectation": {
+                  "description": "`required`: expect a video of this check, and report whether it was published. `not-applicable`: intentionally unrecorded. Absent: no expectation. Never changes the check's status",
+                  "type": "string"
                 },
                 "tags": {
                   "description": "Free labels to filter and group by: smoke, slow, flaky…",
@@ -8542,6 +8772,10 @@
                         "minimum": 0
                       },
                       "description": {
+                        "type": "string"
+                      },
+                      "omitted": {
+                        "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                         "type": "string"
                       },
                       "at": {
@@ -8779,6 +9013,10 @@
                               "minimum": 0
                             },
                             "description": {
+                              "type": "string"
+                            },
+                            "omitted": {
+                              "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                               "type": "string"
                             },
                             "at": {
@@ -9055,6 +9293,10 @@
                                   "description": {
                                     "type": "string"
                                   },
+                                  "omitted": {
+                                    "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                                    "type": "string"
+                                  },
                                   "at": {
                                     "type": "object",
                                     "properties": {
@@ -9263,6 +9505,10 @@
                               "minimum": 0
                             },
                             "description": {
+                              "type": "string"
+                            },
+                            "omitted": {
+                              "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                               "type": "string"
                             },
                             "at": {
@@ -9613,6 +9859,10 @@
                   "minimum": 0
                 },
                 "description": {
+                  "type": "string"
+                },
+                "omitted": {
+                  "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                   "type": "string"
                 },
                 "at": {
@@ -10072,6 +10322,51 @@
                     "roles"
                   ],
                   "additionalProperties": {}
+                },
+                "recordings": {
+                  "description": "How many of the recordings the layer expected were published. Absent: the layer declared no expectations, so its completeness is unknown, not complete",
+                  "type": "object",
+                  "properties": {
+                    "expected": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "uploaded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "referenced": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "skipped": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "unresolved": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "notApplicable": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "expected",
+                    "uploaded",
+                    "referenced",
+                    "skipped",
+                    "unresolved",
+                    "notApplicable"
+                  ],
+                  "additionalProperties": {}
                 }
               },
               "required": [
@@ -10299,6 +10594,22 @@
                     "roles"
                   ],
                   "additionalProperties": {}
+                },
+                "recording": {
+                  "description": "What became of the check's expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`",
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "additionalProperties": {}
                 }
               },
               "required": [
@@ -10407,6 +10718,10 @@
                 "type": "number",
                 "minimum": 0
               },
+              "recordingExpectation": {
+                "description": "`required`: expect a video of this check, and report whether it was published. `not-applicable`: intentionally unrecorded. Absent: no expectation. Never changes the check's status",
+                "type": "string"
+              },
               "tags": {
                 "description": "Free labels to filter and group by: smoke, slow, flaky…",
                 "type": "array",
@@ -10501,6 +10816,10 @@
                       "minimum": 0
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "omitted": {
+                      "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                       "type": "string"
                     },
                     "at": {
@@ -10729,6 +11048,10 @@
                             "minimum": 0
                           },
                           "description": {
+                            "type": "string"
+                          },
+                          "omitted": {
+                            "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                             "type": "string"
                           },
                           "at": {
@@ -10996,6 +11319,10 @@
                                 "description": {
                                   "type": "string"
                                 },
+                                "omitted": {
+                                  "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                                  "type": "string"
+                                },
                                 "at": {
                                   "type": "object",
                                   "properties": {
@@ -11194,6 +11521,10 @@
                             "minimum": 0
                           },
                           "description": {
+                            "type": "string"
+                          },
+                          "omitted": {
+                            "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
                             "type": "string"
                           },
                           "at": {

@@ -196,3 +196,32 @@ or the command line, an attachment may name a `path` instead; `atlas report publ
 ([attach evidence](extending.md#attach-evidence)). A CTRF report already carries most of this, and
 `atlas report publish --ctrf` keeps it ([native runner reporters](runners.md) cover CodeceptJS, Mocha, Jest and Node's
 test runner).
+
+## Recording completeness
+
+A green run does not say whether the videos you expected were kept and published. Atlas answers that separately from
+the checks' outcomes. Mark a check with `recordingExpectation`: `"required"` (expect a video of it) or
+`"not-applicable"` (an API-only or intentionally unrecorded check). A check with neither is not part of the answer.
+
+```json
+{ "id": "checkout#pays", "title": "Pays", "status": "passed", "recordingExpectation": "required",
+  "attachments": [{ "name": "pays.webm", "role": "video", "path": "test-results/pays.webm" }] }
+```
+
+When any check carries an expectation, `publishChecks` and `atlas report publish` write a receipt into the layer
+(`recordings`): counts of expected, uploaded, referenced (only a `uri`, which Atlas cannot vouch for), skipped and
+unresolved recordings, and for each expected check its state, a reason when it is not uploaded, and the size and SHA-256
+of every stored video. A video over the size limit, or a file that is missing or not allowed, is kept as an attachment
+without bytes whose `omitted` says why (`too-large`, `not-found`, `not-allowed`, `over-budget`) instead of failing the
+publish; it never contains a path or a token.
+
+- `atlas report publish --format json` prints the receipt under `layer.recordings` and a summary under `recordings`.
+  Add `--require-recordings` to exit 1 when an expected recording is skipped or unresolved. The layer and its test
+  results are still written and are not changed; only the command fails, so a CI step can report the evidence gap and
+  retry (publishing again reuses the stored files).
+- `atlas report status --format json` has `recordings`: `state` is `complete`, `incomplete`, `none-expected` or
+  `unknown`, with counts and each gap. It never changes `ok`. A layer without a receipt is `unknown`, never `complete`.
+- The viewer shows `Recordings 2 of 3: incomplete` beside the run's origin, apart from its green or red outcomes.
+
+This is a statement about publication. Atlas does not check that a stored video plays in a browser, and does not yet
+re-check later that a stored file is still readable.

@@ -150,6 +150,22 @@
               "roles"
             ],
             "additionalProperties": {}
+          },
+          "recording": {
+            "description": "What became of the check's expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`",
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "additionalProperties": {}
           }
         },
         "required": [

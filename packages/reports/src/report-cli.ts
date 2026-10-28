@@ -46,6 +46,7 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
                        [--param key=value]... [--kind <k>] [--title <t>] [--recorded-at <iso|ms>]
                        [--attach [role=]<file>]... [--label key=value]... [--link [name=]<url>]...
                        [--attach-root <dir>]... [--max-attachment-mb <n>] [--max-total-attachment-mb <n>]
+                       [--require-recordings]
   atlas report stream  [--store <dir|s3://…|https://atlas.example.com>] --producer <name> [--environment <name>]
                        [--branch <b>] [--sha <s>] [--run-url <u>] [--kind <k>] [--param key=value]...
                        [--flush-ms 1000] [--batch 100]       (checks as JSON lines on standard input)
@@ -76,6 +77,10 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
             Files a report names (CTRF attachments, JUnit [[ATTACHMENT|path]] lines) come from the report's own
             folder and each --attach-root, and never from a hidden file or a link out: a report is data from a
             test run, not instructions. One that is missing or not allowed is skipped with a warning.
+            --require-recordings   exit 1 when a check that declared recordingExpectation "required" has no
+                              uploaded video (absent, left out as too large or not allowed, or refused). The layer is
+                              still written and the checks keep their results; only this command fails. The receipt of
+                              what was uploaded (counts, sizes, checksums) is in the JSON result under layer.recordings.
             From a checkout with uncommitted changes the layer is marked "modified".
   stream    Send checks as they finish: one JSON object per line on standard input (the fields of one
             check: id, title, status, and any evidence). Each second's worth becomes one layer, so a server
@@ -278,13 +283,24 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
     const linkedCount = linked.checks.filter(check => check.specPath).length;
     const hint = linkedCount < linked.checks.length && !value(rest, 'spec') && !specsDirectory ? ' (pass --specs <dir> or --spec <path> to link checks to their specs)' : '';
     const json = wantsJson(rest);
-    const result: { ok: true; store: string; layer: object; specSet?: object; run?: object; warnings: string[] } = {
+    const result: { ok: boolean; store: string; layer: object; specSet?: object; run?: object; recordings?: object; warnings: string[] } = {
       ok: true, store: target.label,
-      layer: { id: layer.id, producer, environment: layer.environment ?? null, checks: ingested.checks.length, passed: counts.passed, failed: counts.failed, notRun: counts.other, linkedToSpec: linkedCount, ...(freshness ? { freshness } : {}), attachmentFiles: attachedFiles, attachmentBytes: attachedBytes },
+      layer: { id: layer.id, producer, environment: layer.environment ?? null, checks: ingested.checks.length, passed: counts.passed, failed: counts.failed, notRun: counts.other, linkedToSpec: linkedCount, ...(freshness ? { freshness } : {}), attachmentFiles: attachedFiles, attachmentBytes: attachedBytes, ...(layer.recordings ? { recordings: layer.recordings } : {}) },
       warnings: warnings.map(warning => `attachment skipped: ${warning}`)
     };
     if (!json) io.out(`Published layer ${layer.id.slice(0, 12)}: ${ingested.checks.length} checks (${counts.passed} passed, ${counts.failed} failed, ${counts.other} not run) as "${producer}"${layer.environment ? ` on ${layer.environment}` : ''}${freshness === 'modified' ? ' [from a modified checkout]' : ''}; ${linkedCount} of ${linked.checks.length} linked to a spec${hint}${attachedFiles ? `; ${attachedFiles} attachment file${attachedFiles === 1 ? '' : 's'} (${(attachedBytes / 1024 / 1024).toFixed(1)} MiB)` : ''}\n`);
     if (!json) for (const warning of warnings) io.out(`! attachment skipped: ${warning}\n`);
+    // Recording completeness is reported apart from the checks' results. Only --require-recordings turns a gap into a failing exit.
+    const gaps = (layer.recordings?.items ?? []).filter(item => item.state !== 'uploaded' && item.state !== 'referenced' && item.state !== 'not-applicable');
+    const strict = rest.includes('--require-recordings');
+    if (layer.recordings) {
+      result.recordings = { strict, complete: gaps.length === 0, expected: layer.recordings.expected, uploaded: layer.recordings.uploaded, gaps: gaps.map(({ check, state, reason }) => ({ check, state, ...(reason ? { reason } : {}) })) };
+      if (!json) {
+        io.out(`Recordings: ${layer.recordings.uploaded + layer.recordings.referenced} of ${layer.recordings.expected} expected published${layer.recordings.notApplicable ? `, ${layer.recordings.notApplicable} not applicable` : ''}\n`);
+        for (const gap of gaps) io.out(`! recording ${gap.state}: ${gap.check}${gap.reason ? ` (${gap.reason})` : ''}\n`);
+      }
+      if (strict && gaps.length) result.ok = false;
+    }
 
     if (specsDirectory) {
       const files = await collectSpecFiles(path.resolve(base, specsDirectory));
@@ -306,7 +322,7 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
       if (!json) io.out(run.alreadyPublished ? `Run ${run.id} was already in the store\n` : `Uploaded run ${run.id}: ${run.files} files, ${(run.bytes / 1024 / 1024).toFixed(1)} MiB\n`);
     }
     if (json) io.out(`${JSON.stringify(result, null, 2)}\n`);
-    return 0;
+    return result.ok ? 0 : 1;
   }
 
   if (command === 'stream') {
