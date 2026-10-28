@@ -237,6 +237,102 @@
                     "available": {
                       "type": "boolean",
                       "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                    },
+                    "scope": {
+                      "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
+                      "type": "object",
+                      "properties": {
+                        "surface": {
+                          "description": "Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "deviceKind": {
+                          "description": "What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "syntheticData": {
+                          "description": "True: the data was made up for the run. False: real data. Absent: unknown",
+                          "type": "boolean"
+                        },
+                        "dependencies": {
+                          "description": "Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "audioCaptured": {
+                          "description": "True: the recording has real audio. False: it is silent. Absent: unknown",
+                          "type": "boolean"
+                        },
+                        "pacing": {
+                          "description": "How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "asserted": {
+                          "description": "The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "limitations": {
+                          "description": "Known limits of what this evidence shows, in the producer's words",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "declaredBy": {
+                          "description": "Who or what made this declaration: a tool, a team, a person",
+                          "type": "string"
+                        },
+                        "verified": {
+                          "description": "The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "verifiedBy": {
+                          "description": "What checked the `verified` fields",
+                          "type": "string"
+                        },
+                        "provenance": {
+                          "description": "Where the declaration comes from and how to check it: a document, a CI step, a device log",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "rel": {
+                                "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "url"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        },
+                        "extensions": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "additionalProperties": {}
                     }
                   },
                   "required": [

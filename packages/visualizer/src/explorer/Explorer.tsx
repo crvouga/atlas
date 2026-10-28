@@ -511,6 +511,7 @@ function Toolbar({
   const chips = [
     ...values(search.spec).map((path) => ({ label: `Spec: ${specTitle(path)}`, clear: { spec: toggled(search.spec, path) } })),
     ...values(search.tag).map((tag) => ({ label: `Tag: ${tag}`, clear: { tag: toggled(search.tag, tag) } })),
+    ...values(search.scope).map((token) => ({ label: `Scope: ${token}`, clear: { scope: toggled(search.scope, token) } })),
     ...values(search.artifactTag).map((tag) => ({ label: `Artifact tag: #${tag}`, clear: { artifactTag: toggled(search.artifactTag, tag) } })),
     ...(search.inRun ? [{ label: `Run: ${runName(search.inRun)}`, clear: { inRun: undefined } }] : [])
   ];
@@ -654,6 +655,23 @@ function Toolbar({
             </NativeSelect>
           </Box>
         )}
+        {(model.facets.scopes?.length ?? 0) > 0 && (
+          <Box component="label">
+            <VisuallyHidden>Recording scope</VisuallyHidden>
+            <NativeSelect
+              aria-label="Recording scope"
+              value=""
+              onChange={(event) => event.target.value && go({ scope: toggled(search.scope, event.target.value) })}
+            >
+              <option value="">Any recording scope</option>
+              {model.facets.scopes!.filter(({ value }) => !values(search.scope).includes(value)).map(({ value, count }) => (
+                <option key={value} value={value}>
+                  {value === 'unknown' ? 'Scope unknown' : value} ({count})
+                </option>
+              ))}
+            </NativeSelect>
+          </Box>
+        )}
       </Flex>
       <Flex role="status" gap="xs" align="center" wrap="wrap">
         <Text span inherit>
@@ -682,6 +700,7 @@ function Toolbar({
                 domain: undefined,
                 spec: undefined,
                 tag: undefined,
+                scope: undefined,
                 artifactTag: undefined,
                 inherited: undefined,
                 inRun: undefined

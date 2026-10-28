@@ -9,7 +9,7 @@
  * @see docs/report-contract.md
  */
 import type { EvidenceMeasurement, EvidenceStatus } from './explorer-types';
-import type { LayerRun } from '../../schema/src/layer';
+import type { EvidenceScope, LayerRun } from '../../schema/src/layer';
 import type { LayerParameters } from './layer-types';
 
 /** Where a recorded test's timeline and captured files are read from. */
@@ -55,6 +55,8 @@ export type VideoRef = {
   readonly recording?: string;
   /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
   readonly available: boolean;
+  /** What this recording shows, as declared for it: its own `scope`, else its attempt's, check's, part's or layer's. Absent when none declared one: its scope is unknown, not live, physical or audible. */
+  readonly scope?: EvidenceScope;
 };
 
 /** Video availability as counts: references, distinct playable recordings (deduplicated), and references that cannot be played. */

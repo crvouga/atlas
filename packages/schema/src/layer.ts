@@ -105,6 +105,34 @@ export const MomentSchema = z.looseObject({
 });
 
 /**
+ * What a piece of evidence does and does not show, declared by the producer that made it: where it ran, whether its
+ * data and dependencies were real, whether audio was captured, how it was paced and which assertions the result
+ * stands on. Every field is optional and a field that is absent is unknown, never assumed live, physical or end to end.
+ *
+ * It is a declaration, not a finding: Atlas shows it as the producer's word, apart from the dimensions the producer
+ * names in `verified` (facts something independent checked). It describes evidence and never decides a status, a slot
+ * or a winner. The nearest declaration wins as a whole, never field by field: an attachment's `scope`, else its
+ * attempt's, else its check's, else its part's, else its layer's.
+ */
+export const EvidenceScopeSchema = z.looseObject({
+  surface: z.string().min(1).optional().describe('Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…'),
+  deviceKind: z.string().min(1).optional().describe('What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately'),
+  syntheticData: z.boolean().optional().describe('True: the data was made up for the run. False: real data. Absent: unknown'),
+  dependencies: z.string().min(1).optional().describe('Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown'),
+  audioCaptured: z.boolean().optional().describe('True: the recording has real audio. False: it is silent. Absent: unknown'),
+  pacing: z.string().min(1).optional().describe('How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown'),
+  asserted: z.array(z.string()).optional().describe('The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior'),
+  limitations: z.array(z.string()).optional().describe('Known limits of what this evidence shows, in the producer\'s words'),
+  declaredBy: z.string().optional().describe('Who or what made this declaration: a tool, a team, a person'),
+  verified: z.array(z.string()).optional().describe('The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared'),
+  verifiedBy: z.string().optional().describe('What checked the `verified` fields'),
+  provenance: z.array(LinkSchema).optional().describe('Where the declaration comes from and how to check it: a document, a CI step, a device log'),
+  extensions: ExtensionsSchema.optional()
+});
+/** A producer-declared evidence scope as stored in a layer, parsed from `EvidenceScopeSchema`. */
+export type EvidenceScope = z.output<typeof EvidenceScopeSchema>;
+
+/**
  * A file or a value that goes with a result: a screenshot, a video, a trace, a log, a DOM or accessibility
  * snapshot, a HAR, a coverage report, a diff, anything. `contentType` says how to read it; `role` says what
  * it is for, in an open vocabulary (`screenshot`, `video`, `trace`, `log`, `snapshot`, `har`, `coverage`,
@@ -126,6 +154,7 @@ export const AttachmentSchema = z.looseObject({
   durationMs: z.number().nonnegative().optional().describe('For video and audio'),
   description: z.string().optional(),
   omitted: z.string().optional().describe('Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell "left out" from "never recorded"'),
+  scope: EvidenceScopeSchema.optional().describe('What this one attachment (usually a recording) does and does not show. Overrides the scope of its attempt, check, part and layer as a whole'),
   tags: z.array(z.string()).optional().describe('Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result'),
   at: MomentSchema.optional(),
   poster: z.string().optional().describe('The `id` of an attachment that stands for this one before it is opened'),
@@ -220,6 +249,7 @@ export const AttemptSchema = z.looseObject({
   durationMs: z.number().nonnegative().optional(),
   startedAtMs: z.number().nonnegative().optional(),
   detail: z.string().optional(),
+  scope: EvidenceScopeSchema.optional().describe('What this try\'s evidence shows, when it differs from the other tries (a retry on another device). Overrides the check\'s scope for this try\'s attachments'),
   steps: z.array(StepSchema).optional(),
   attachments: z.array(AttachmentSchema).optional(),
   annotations: z.array(AnnotationSchema).optional(),
@@ -235,6 +265,7 @@ const evidenceShape = {
   links: z.array(LinkSchema).optional(),
   attachments: z.array(AttachmentSchema).optional(),
   annotations: z.array(AnnotationSchema).optional(),
+  scope: EvidenceScopeSchema.optional().describe('What the evidence below this level does and does not show: where it ran, how real its data and dependencies were, whether audio was captured, and what is asserted. Absent: unknown, never assumed live, physical or end to end'),
   extensions: ExtensionsSchema.optional()
 };
 
@@ -380,17 +411,26 @@ function lenientList<T>(value: unknown, schema: z.ZodType<T>, prepare: (item: un
 
 const object = (value: unknown): Record<string, unknown> | null => (typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
 
-/** An attachment whose `tags` cannot be read keeps its file: only the tags that are strings are kept. */
+/** A scope that cannot be read is no scope: the evidence is kept and its scope is unknown. */
+function lenientScope(holder: Record<string, unknown>): Record<string, unknown> {
+  if (!('scope' in holder)) return holder;
+  const { scope, ...rest } = holder;
+  const parsed = EvidenceScopeSchema.safeParse(scope);
+  return parsed.success ? { ...rest, scope: parsed.data } : rest;
+}
+
+/** An attachment whose `tags` or `scope` cannot be read keeps its file: only the tags that are strings are kept, and an unreadable scope is dropped. */
 function lenientAttachment(item: unknown): unknown {
   const attachment = object(item);
-  if (!attachment || !('tags' in attachment)) return item;
-  const { tags, ...rest } = attachment;
+  if (!attachment) return item;
+  const { tags, ...rest } = lenientScope(attachment);
+  if (!('tags' in attachment)) return rest;
   const kept = lenientList(tags, z.string());
   return kept ? { ...rest, tags: kept } : rest;
 }
 
 function lenientEvidence(holder: Record<string, unknown>, nested: readonly string[] = []): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...holder };
+  const out: Record<string, unknown> = lenientScope(holder);
   const set = (key: string, value: unknown) => { if (value === undefined) delete out[key]; else out[key] = value; };
   if ('tags' in out) set('tags', lenientList(out.tags, z.string()));
   if ('links' in out) set('links', lenientList(out.links, LinkSchema));
@@ -504,6 +544,7 @@ export const PublishChecksSchema = z.looseObject({
   links: evidenceShape.links,
   attachments: z.array(AttachmentInputSchema).optional().describe('Attached to the whole layer: a CI log, a coverage report, a trace archive'),
   annotations: evidenceShape.annotations,
+  scope: evidenceShape.scope,
   extensions: evidenceShape.extensions
 });
 /** What a caller passes to `publishChecks`: the input type of `PublishChecksSchema`, before defaults. */

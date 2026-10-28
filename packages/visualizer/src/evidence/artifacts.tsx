@@ -1,5 +1,6 @@
 import type { CheckDetail, EvidenceHolder } from '@crvouga/atlas/reports/evidence-detail';
-import { roleOfType } from '@crvouga/atlas/reports/evidence-detail';
+import { isVideoAttachment, roleOfType } from '@crvouga/atlas/reports/evidence-detail';
+import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { LayerHeader, LayerRow } from '@crvouga/atlas/reports/evidence-types';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
 import type { Annotation, Attachment, Attempt, Step } from '@crvouga/atlas/schema';
@@ -8,7 +9,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, type ReactNode } from 'react';
 import { ArtifactTagList, ArtifactTagsProvider, TagFilterBar, useFilteredAttachments } from './artifact-tags';
 import { reportAssetUrl, reportJson, reportText } from './api';
-import { duration, plural } from './format';
+import { ScopeNotice, ScopeProvider, useScope } from './evidence-scope';
+import { duration, plural, safeUri } from './format';
 import { StatusMark } from './marks';
 /**
  * How one kind of attachment is shown. The first renderer that matches wins, so a new kind of artifact (a
@@ -33,16 +35,6 @@ export type ArtifactRenderer = {
 const mediaType = (attachment: Attachment) =>
   (attachment.contentType ?? contentTypeOf(attachment.name)).split(';')[0]!.trim().toLowerCase();
 const label = (attachment: Attachment) => attachment.description ?? attachment.name;
-/** Only addresses a browser may follow: never `javascript:` or `data:` from a producer. */
-function safeUri(uri: string | undefined): string | null {
-  if (!uri) return null;
-  try {
-    const url = new URL(uri, 'https://atlas.invalid/');
-    return url.protocol === 'http:' || url.protocol === 'https:' ? uri : null;
-  } catch {
-    return null;
-  }
-}
 function TextValue({ attachment, path }: { attachment: Attachment; path: string | null }) {
   const stored = useQuery({
     queryKey: ['artifact-text', path ?? ''],
@@ -146,8 +138,12 @@ function Artifact({ attachment, layer }: { attachment: Attachment; layer: string
   const url = path ? reportAssetUrl(path) : safeUri(attachment.uri);
   const renderer = artifactRenderers.find((candidate) => candidate.matches(attachment, type));
   const body = renderer?.render(attachment, { url, path, type });
+  const scope = effectiveScope(attachment.scope, useScope());
+  // A recording says what it shows before it is played; evidence that declared a scope of its own says so too.
+  const scoped = isVideoAttachment(attachment) || attachment.scope !== undefined;
   return (
     <List.Item data-wide={renderer?.wide || undefined} data-role={attachment.role ?? roleOfType(type)}>
+      {scoped && <ScopeNotice scope={scope} name={attachment.name} />}
       {body}
       <Box component="figcaption">
         <Text span inherit fw={600}>
@@ -300,7 +296,7 @@ function Tries({ attempts, layer }: { attempts: readonly Attempt[]; layer: strin
       </Title>
       <List spacing="xs" listStyleType="none" type="ordered">
         {attempts.map((attempt) => (
-          <List.Item key={attempt.index}>
+          <List.Item key={attempt.index} data-attempt={attempt.index}>
             <Flex gap="xs" align="center" wrap="wrap">
               <StatusMark status={attempt.status} size={14} />
               <Text span inherit>
@@ -312,7 +308,9 @@ function Tries({ attempts, layer }: { attempts: readonly Attempt[]; layer: strin
               </Text>
             </Flex>
             {attempt.detail && <Text component="div">{attempt.detail}</Text>}
-            {attempt.attachments && <Attachments attachments={attempt.attachments} layer={layer} />}
+            <ScopeProvider scope={attempt.scope}>
+              {attempt.attachments && <Attachments attachments={attempt.attachments} layer={layer} />}
+            </ScopeProvider>
           </List.Item>
         ))}
       </List>
@@ -371,14 +369,14 @@ function Facts({ holder }: { holder: EvidenceHolder }) {
 }
 function Evidence({ holder, layer, steps }: { holder: EvidenceHolder; layer: string; steps?: boolean }) {
   return (
-    <>
+    <ScopeProvider scope={holder.scope}>
       <Facts holder={holder} />
       {holder.annotations && <Notes notes={holder.annotations} />}
       {steps && holder.steps && holder.steps.length > 0 && <Timeline steps={holder.steps} layer={layer} />}
       {holder.attempts && holder.attempts.length > 1 && <Tries attempts={holder.attempts} layer={layer} />}
       {holder.attachments && <Attachments attachments={holder.attachments} layer={layer} />}
       {holder.extensions && <Raw extensions={holder.extensions} />}
-    </>
+    </ScopeProvider>
   );
 }
 /** Everything one result carries beyond its outcome, read when it is opened, and what the run around it carried. */
@@ -408,7 +406,8 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
         What this result carries could not be read.
       </Text>
     );
-  const { check, run } = detail.data;
+  const { check, run, inheritedScope } = detail.data;
+  const declared = effectiveScope(check.scope, inheritedScope);
   const hasRun = Object.values(run).some((value) =>
     Array.isArray(value) ? value.length > 0 : value && typeof value === 'object' ? Object.keys(value).length > 0 : false
   );
@@ -416,7 +415,14 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
     <ArtifactTagsProvider layer={layer.id} kind={row.kind} check={row.id} holders={[check, run]}>
       <Stack aria-label="Evidence" gap="sm" miw={0}>
         <TagFilterBar holders={[check, run]} />
-        <Evidence holder={check} layer={layer.id} steps />
+        {declared && (
+          <Box aria-label="Scope of this result" component="section">
+            <ScopeNotice scope={declared} name={row.title} />
+          </Box>
+        )}
+        <ScopeProvider scope={inheritedScope}>
+          <Evidence holder={check} layer={layer.id} steps />
+        </ScopeProvider>
         {hasRun && (
           <Box aria-label="From the run" component="section" mb="lg">
             <Title order={4} mb="sm">

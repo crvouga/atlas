@@ -27,6 +27,7 @@ import { facetsOf, forRuns, labelList, matchesFilter, outcomeOfCounts, splitList
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
 import { videoCounts } from './evidence-detail';
+import { matchesScope, scopeTokens, UNKNOWN_SCOPE } from './evidence-scope';
 import { checkSlots, type CheckSlot } from './evidence-view';
 import { combineEvidence, emptyCounts, slotKey, specPath as normalSpecPath, type EvidenceResult } from './layer-merge';
 import { RecordedSpecs } from './recorded-specs';
@@ -137,6 +138,8 @@ export type TestSummary = {
   readonly artifactTags?: readonly string[];
   /** The normalized tags its attachments inherit from their check and run (those of the results that have attachments), apart from `artifactTags`. What an inherited artifact query also matches. */
   readonly inheritedArtifactTags?: readonly string[];
+  /** What each distinct playable recording of its current results declares it shows, as filter tokens (`device:physical`, `audio:silent`; see `scopeTokens`). A recording that declared nothing is `['unknown']`. Absent when it has no playable recording. A query's `scope` must hold for one recording, so evidence from two different devices never combines. */
+  readonly scopeProfiles?: readonly (readonly string[])[];
   readonly labels: Readonly<Record<string, string>>;
   /** What its current results carry: attachments, steps, retries, and the kinds of attachment. */
   readonly evidence: { readonly attachments: number; readonly steps: number; readonly attempts: number; readonly roles: readonly string[] };
@@ -204,6 +207,8 @@ export type CatalogFacets = {
   readonly tags: readonly FacetValue[];
   /** The tags of attachments, normalized. Absent in documents of older servers. */
   readonly artifactTags?: readonly FacetValue[];
+  /** The scope tokens of its recordings (`device:simulator`, `audio:recorded`, `unknown`), with how many tests have a recording that states each. Absent in documents of older servers. */
+  readonly scopes?: readonly FacetValue[];
   readonly branches: readonly FacetValue[];
   readonly labels: Readonly<Record<string, readonly FacetValue[]>>;
 };
@@ -229,6 +234,8 @@ export type TestQuery = {
   readonly artifactTag?: readonly string[];
   /** With `artifactTag`: also match the tags an attachment inherits from its check and run (a recording without a tag of its own under a run tagged `demo`). Default false: the exact query. */
   readonly inherited?: boolean;
+  /** Only tests with one playable recording that states every one of these (`device:physical`, `audio:recorded`, `data:synthetic`, `dependencies:live`, `surface:browser`, `pacing:paced`; see `scopeTokens`). Evidence that did not declare a value never matches it; `unknown` matches only a recording that declared no scope. */
+  readonly scope?: readonly string[];
   /** Only tests recorded in this run (a key from `runList`). */
   readonly run?: string;
   readonly sort?: TestSort;
@@ -848,9 +855,11 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
   const labels: Record<string, string> = {};
   let attachments = 0, steps = 0, attempts = 0;
   const roles = new Set<string>();
+  const profiles = new Map<string, readonly string[]>();
   for (const [at, outcome] of outcomes.entries()) {
     const evidence = outcome.evidence;
     if (!evidence) continue;
+    for (const video of evidence.videos ?? []) if (video.available) { const tokens = scopeTokens(video.scope); profiles.set(tokens.join('\n'), tokens); }
     if (evidence.attachments > 0) for (const tag of normalizeTags([...evidence.tags, ...(slot.outcomes[at]?.layer.evidence?.tags ?? [])])) inheritedTags.add(tag);
     for (const tag of evidence.tags) tags.add(tag);
     for (const tag of evidence.artifactTags ?? []) artifactTags.add(tag);
@@ -875,6 +884,7 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
     tags: tagList,
     ...(artifactTags.size ? { artifactTags: [...artifactTags].sort() } : {}),
     ...([...inheritedTags].some(tag => !artifactTags.has(tag)) ? { inheritedArtifactTags: [...inheritedTags].filter(tag => !artifactTags.has(tag)).sort() } : {}),
+    ...(profiles.size ? { scopeProfiles: [...profiles.values()] } : {}),
     labels,
     evidence: { attachments, steps, attempts, roles: [...roles].sort() },
     lastRecordedAtMs: slot.latestAtMs,
@@ -885,7 +895,7 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
 /** The lowercase text a search matches a test against: title, id, spec, domain, tags, labels, environments and producers. */
 export function haystackOf(test: TestSummary): string {
   return [
-    test.title, test.id, test.specPath ?? '', test.spec?.title ?? '', test.spec?.domain ?? '', ...test.tags, ...(test.artifactTags ?? []).map(displayTag),
+    test.title, test.id, test.specPath ?? '', test.spec?.title ?? '', test.spec?.domain ?? '', ...test.tags, ...(test.artifactTags ?? []).map(displayTag), ...(test.scopeProfiles ?? []).flat().filter(token => token !== UNKNOWN_SCOPE),
     ...Object.entries(test.labels).flatMap(([key, value]) => [key, value]), ...test.environments, ...test.producers,
   ].join('\n').toLowerCase();
 }
@@ -976,6 +986,7 @@ export function catalogModel(layers: readonly LayerEvidence[], sources: CatalogS
     specs: [...specGroups].map(([, list]) => { const g = group(list[0]!.spec!.path, list); return { ...list[0]!.spec!, tests: g.tests, counts: g.counts }; }).sort((a, b) => compareText(a.domain, b.domain) || compareText(a.title, b.title)),
     tags: facet(tests, test => test.tags),
     artifactTags: facet(tests, test => test.artifactTags ?? []),
+    scopes: facet(tests, test => (test.scopeProfiles ?? []).flat()),
     branches: facet(tests, test => test.stats.branches),
     labels: Object.fromEntries([...labelKeys].sort().map(key => [key, facet(tests, test => (test.labels[key] === undefined ? [] : [test.labels[key]!]))])),
   };
@@ -1003,6 +1014,7 @@ export function matchesQuery(model: CatalogModel, test: TestSummary, query: Test
   if (query.spec?.length && !query.spec.some(path => test.specPath !== null && normalSpecPath(path) === test.specPath)) return false;
   if (query.tag?.length && !query.tag.some(tag => test.tags.includes(tag))) return false;
   if (query.artifactTag?.length && !query.artifactTag.some(tag => { const wanted = normalizeTag(tag); return wanted !== null && ((test.artifactTags?.includes(wanted) ?? false) || (query.inherited === true && (test.inheritedArtifactTags?.includes(wanted) ?? false))); })) return false;
+  if (query.scope?.length && !(test.scopeProfiles ?? []).some(tokens => matchesScope(tokens, query.scope!))) return false;
   if (inRun && !inRun.has(test.key)) return false;
   return true;
 }
@@ -1099,7 +1111,7 @@ export function runDetail(history: TestHistory, version: string, key: string): R
   return found ? { schemaVersion: TEST_CATALOG_VERSION, version, ...found } : null;
 }
 
-/** Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, and `inherited=1`. */
+/** Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, `scope` (every token must hold for one recording), and `inherited=1`. */
 export function parseTestQuery(params: URLSearchParams): TestQuery {
   const many = (name: string) => params.getAll(name).flatMap(splitList);
   const number = (name: string) => { const value = params.get(name); return value !== null && /^\d+$/.test(value) ? Number(value) : undefined; };
@@ -1107,7 +1119,7 @@ export function parseTestQuery(params: URLSearchParams): TestQuery {
   const query: Record<string, unknown> = {};
   const q = params.get('q');
   if (q) query.q = q;
-  for (const name of ['status', 'environment', 'producer', 'domain', 'spec', 'tag', 'artifactTag']) { const values = many(name); if (values.length) query[name] = values; }
+  for (const name of ['status', 'environment', 'producer', 'domain', 'spec', 'tag', 'artifactTag', 'scope']) { const values = many(name); if (values.length) query[name] = values; }
   if (['1', 'true'].includes(params.get('inherited') ?? '')) query.inherited = true;
   const run = params.get('run');
   if (run) query.run = run;
@@ -1183,6 +1195,7 @@ export function historyMarkdown(document: TestHistoryDocument): string {
     `- Duration: ${d ? `avg ${formatMs(d.avgMs)}, p50 ${formatMs(d.p50Ms)}, p95 ${formatMs(d.p95Ms)}, min ${formatMs(d.minMs)}, max ${formatMs(d.maxMs)}, last ${formatMs(d.lastMs)}` : 'not measured'}`,
     ...(test.tags.length ? [`- Tags: ${test.tags.join(', ')}`] : []),
     ...(test.artifactTags?.length ? [`- Artifact tags: ${test.artifactTags.map(displayTag).join(', ')}`] : []),
+    ...(test.scopeProfiles?.length ? [`- Recording scope: ${test.scopeProfiles.map(tokens => tokens.join(' ')).join('; ')}`] : []),
     ...(Object.keys(test.labels).length ? [`- Labels: ${Object.entries(test.labels).map(([k, v]) => `${k}=${v}`).join(', ')}`] : []),
     `- Evidence: ${test.evidence.attachments} attachments${test.evidence.roles.length ? ` (${test.evidence.roles.join(', ')})` : ''}, ${test.evidence.steps} steps`,
     '',
