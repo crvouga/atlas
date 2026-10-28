@@ -16,7 +16,7 @@ import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
 import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, RunListSchema, RunDetailSchema } from '../../schema/src/api';
-import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
+import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
 export const API_VERSION = '1.4.0';
@@ -59,6 +59,7 @@ function schemaOf(schema: z.ZodType, io: 'input' | 'output' = 'output'): JsonSch
 const COMPONENTS = {
   LiveRun: [LiveRunSchema, 'output'], LiveRunStart: [LiveRunStartSchema, 'input'], LiveRunUpdate: [LiveRunUpdateSchema, 'input'],
   ServerEditableSettings: [ServerEditableSettingsSchema, 'input'], ServerSettingsSnapshot: [ServerSettingsSnapshotSchema, 'output'],
+  GcPolicy: [GcPolicySchema, 'input'], GcSnapshot: [GcSnapshotSchema, 'output'], GcRunResult: [GcRunResultSchema, 'output'],
   Problem: [ProblemSchema, 'output'], Health: [HealthSchema, 'output'], Ready: [ReadySchema, 'output'], ServerInfo: [ServerInfoSchema, 'output'],
   EffectiveEvidence: [EffectiveEvidenceSchema, 'output'], EffectiveDelta: [EffectiveDeltaSchema, 'output'], ReportStatus: [ReportStatusSchema, 'output'],
   PublishChecks: [PublishChecksSchema.partial({ recordedAtMs: true }), 'input'], ChecksResult: [ChecksResultSchema, 'output'],
@@ -123,15 +124,33 @@ const BASE_OPERATIONS: readonly Operation[] = [
   },
   {
     route: 'GET /api/settings', path: '/api/settings', operationId: 'getSettings', tag: 'Operations', role: 'admin',
-    summary: 'Read server settings', description: 'Returns editable persisted storage/report settings, active settings, a revision, and configuration precedence. Authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.',
+    summary: 'Read server settings', description: 'Returns the editable report and live-run settings saved in the user state in S3, active settings, a revision, and configuration precedence. Storage and authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.',
     responses: { '200': json('Settings and revision.', 'ServerSettingsSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '503': problem('Configuration is managed by the embedding application.') }
   },
   {
     route: 'PUT /api/settings', path: '/api/settings', operationId: 'saveSettings', tag: 'Operations', role: 'admin',
-    summary: 'Save settings for the next restart', description: 'Replaces editable storage/report settings, preserving authentication and other file fields. Atomically persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.',
+    summary: 'Save settings for the next restart', description: 'Replaces the editable report and live-run settings in the user state in S3 (`server/state.json`), preserving the garbage collection policy and other fields. Persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.',
     parameters: [{ name: 'If-Match', in: 'header', required: true, description: 'The quoted revision returned by GET /api/settings.', schema: str }],
-    body: { description: 'Editable fields from ServerConfig, excluding authentication, host, port and site. Maximum 64 KiB.', contentType: 'application/json', required: true, schema: ref('ServerEditableSettings') },
+    body: { description: 'Editable fields from ServerConfig, excluding storage, authentication, host, port and site. Maximum 64 KiB.', contentType: 'application/json', required: true, schema: ref('ServerEditableSettings') },
     responses: { '200': json('Saved settings and new revision. Restart required.', 'ServerSettingsSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('Settings changed; reload before saving.'), '413': problem('Settings exceed the body limit.'), '422': problem('Invalid configuration.'), '428': problem('A quoted settings revision is required.'), '503': problem('Configuration is managed by the embedding application.') }
+  },
+  {
+    route: 'GET /api/settings/gc', path: '/api/settings/gc', operationId: 'getGarbageCollectionPolicy', tag: 'Operations', role: 'admin',
+    summary: 'Read the garbage collection policy', description: 'Returns the policy kept in the user state in S3 (`server/state.json`), or `policy: null, saved: false` when none has been saved yet, in which case garbage collection is off and nothing is deleted. Also returns the revision to send back when saving and the last pass over each project. Requires an admin Bearer token. If the stored user state is unreadable the answer is 503 and the stored object is left untouched.',
+    responses: { '200': json('The policy, its revision and the last passes.', 'GcSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '503': problem('The user state in S3 cannot be read, or settings are managed by the embedding application.') }
+  },
+  {
+    route: 'PUT /api/settings/gc', path: '/api/settings/gc', operationId: 'saveGarbageCollectionPolicy', tag: 'Operations', role: 'admin',
+    summary: 'Save the garbage collection policy', description: 'Replaces the policy in the user state in S3 and leaves the rest of that document alone. The server reads the policy from S3 each time it collects, so the new policy applies at the next pass, without a restart. Requires an admin Bearer token, same-origin requests in browsers, and the current revision.',
+    parameters: [{ name: 'If-Match', in: 'header', required: true, description: 'The quoted revision returned by GET /api/settings/gc.', schema: str }],
+    body: { description: 'The policy. Maximum 16 KiB.', contentType: 'application/json', required: true, schema: ref('GcPolicy') },
+    responses: { '200': json('The saved policy and the new revision.', 'GcSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('The state changed; reload before saving.'), '413': problem('The body exceeds the limit.'), '422': problem('Invalid policy.'), '428': problem('A quoted revision is required.'), '503': problem('The user state in S3 cannot be read, or settings are managed by the embedding application.') }
+  },
+  {
+    route: 'POST /api/settings/gc/run', path: '/api/settings/gc/run', operationId: 'runGarbageCollection', tag: 'Operations', role: 'admin',
+    summary: 'Collect garbage now, or preview it', description: 'Applies the policy saved in S3 to every project now, instead of waiting for the schedule. Only report layers that were read and no longer decide any result, older than the policy allows and beyond its `keepLatest`, are deleted, with the captured files only they used. With `dryRun=1` nothing is deleted and each run reports what it would delete (a disabled policy is previewed as if enabled). Answers 409 when no policy has been saved, and, without `dryRun`, when the saved policy is disabled. Requires an admin Bearer token and a same-origin request in browsers.',
+    parameters: [{ name: 'dryRun', in: 'query', required: false, description: '`1` or `true` to only count what would be deleted.', schema: str }],
+    responses: { '200': json('One run per project.', 'GcRunResult'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('No policy has been saved, or it is disabled.') }
   },
   {
     route: 'GET /healthz', path: '/healthz', operationId: 'getHealth', tag: 'Operations', role: 'none',
@@ -453,7 +472,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
   }
 ];
 
-const NODE_OPERATIONS = new Set(['/api/projects', '/api/settings', '/api/server', '/api/openapi.json']);
+const NODE_OPERATIONS = new Set(['/api/projects', '/api/settings', '/api/settings/gc', '/api/settings/gc/run', '/api/server', '/api/openapi.json']);
 const PROJECT_PARAMETER: Param = { name: 'project', in: 'query', description: 'Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.', schema: { type: 'string', pattern: '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$', maxLength: 64 }, example: 'todo-app' };
 /** Every node operation and the same stable report protocol inside each project namespace. */
 export const OPERATIONS: readonly Operation[] = BASE_OPERATIONS.flatMap(operation => {

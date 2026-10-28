@@ -1019,7 +1019,7 @@
           "Operations"
         ],
         "summary": "Read server settings",
-        "description": "Returns editable persisted storage/report settings, active settings, a revision, and configuration precedence. Authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.\n\nRole needed: `admin`.",
+        "description": "Returns the editable report and live-run settings saved in the user state in S3, active settings, a revision, and configuration precedence. Storage and authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.\n\nRole needed: `admin`.",
         "x-atlas-role": "admin",
         "security": [
           {
@@ -1075,7 +1075,7 @@
           "Operations"
         ],
         "summary": "Save settings for the next restart",
-        "description": "Replaces editable storage/report settings, preserving authentication and other file fields. Atomically persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.\n\nRole needed: `admin`.",
+        "description": "Replaces the editable report and live-run settings in the user state in S3 (`server/state.json`), preserving the garbage collection policy and other fields. Persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.\n\nRole needed: `admin`.",
         "x-atlas-role": "admin",
         "security": [
           {
@@ -1095,7 +1095,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Editable fields from ServerConfig, excluding authentication, host, port and site. Maximum 64 KiB.",
+          "description": "Editable fields from ServerConfig, excluding storage, authentication, host, port and site. Maximum 64 KiB.",
           "content": {
             "application/json": {
               "schema": {
@@ -1177,6 +1177,251 @@
           },
           "503": {
             "description": "Configuration is managed by the embedding application.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/gc": {
+      "get": {
+        "operationId": "getGarbageCollectionPolicy",
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Read the garbage collection policy",
+        "description": "Returns the policy kept in the user state in S3 (`server/state.json`), or `policy: null, saved: false` when none has been saved yet, in which case garbage collection is off and nothing is deleted. Also returns the revision to send back when saving and the last pass over each project. Requires an admin Bearer token. If the stored user state is unreadable the answer is 503 and the stored object is left untouched.\n\nRole needed: `admin`.",
+        "x-atlas-role": "admin",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The policy, its revision and the last passes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GcSnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The user state in S3 cannot be read, or settings are managed by the embedding application.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveGarbageCollectionPolicy",
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Save the garbage collection policy",
+        "description": "Replaces the policy in the user state in S3 and leaves the rest of that document alone. The server reads the policy from S3 each time it collects, so the new policy applies at the next pass, without a restart. Requires an admin Bearer token, same-origin requests in browsers, and the current revision.\n\nRole needed: `admin`.",
+        "x-atlas-role": "admin",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "If-Match",
+            "in": "header",
+            "description": "The quoted revision returned by GET /api/settings/gc.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The policy. Maximum 16 KiB.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GcPolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The saved policy and the new revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GcSnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The state changed; reload before saving.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body exceeds the limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid policy.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "A quoted revision is required.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The user state in S3 cannot be read, or settings are managed by the embedding application.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/gc/run": {
+      "post": {
+        "operationId": "runGarbageCollection",
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Collect garbage now, or preview it",
+        "description": "Applies the policy saved in S3 to every project now, instead of waiting for the schedule. Only report layers that were read and no longer decide any result, older than the policy allows and beyond its `keepLatest`, are deleted, with the captured files only they used. With `dryRun=1` nothing is deleted and each run reports what it would delete (a disabled policy is previewed as if enabled). Answers 409 when no policy has been saved, and, without `dryRun`, when the saved policy is disabled. Requires an admin Bearer token and a same-origin request in browsers.\n\nRole needed: `admin`.",
+        "x-atlas-role": "admin",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "dryRun",
+            "in": "query",
+            "description": "`1` or `true` to only count what would be deleted.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One run per project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GcRunResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No policy has been saved, or it is disabled.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6676,47 +6921,6 @@
       "ServerEditableSettings": {
         "type": "object",
         "properties": {
-          "data": {
-            "default": "./atlas-data",
-            "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
-            "type": "string"
-          },
-          "backends": {
-            "default": [],
-            "description": "Further backends, read together with the data folder: S3, another server, a device lab",
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "pattern": "^[a-z0-9-]+$",
-                  "description": "Lowercase letters, digits and hyphens. Names where a result came from"
-                },
-                "label": {
-                  "type": "string"
-                },
-                "url": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)"
-                },
-                "write": {
-                  "description": "Uploads go here instead of the data folder. At most one backend is the write target",
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "id",
-                "url"
-              ],
-              "additionalProperties": false
-            }
-          },
-          "write": {
-            "description": "The id of the backend uploads go to. Default: the data folder",
-            "type": "string"
-          },
           "outlineBranch": {
             "description": "Which branch's specs the report is laid over. Default main, then master, then the newest",
             "type": "string"
@@ -6813,47 +7017,6 @@
           "settings": {
             "type": "object",
             "properties": {
-              "data": {
-                "default": "./atlas-data",
-                "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
-                "type": "string"
-              },
-              "backends": {
-                "default": [],
-                "description": "Further backends, read together with the data folder: S3, another server, a device lab",
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9-]+$",
-                      "description": "Lowercase letters, digits and hyphens. Names where a result came from"
-                    },
-                    "label": {
-                      "type": "string"
-                    },
-                    "url": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)"
-                    },
-                    "write": {
-                      "description": "Uploads go here instead of the data folder. At most one backend is the write target",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "url"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "write": {
-                "description": "The id of the backend uploads go to. Default: the data folder",
-                "type": "string"
-              },
               "outlineBranch": {
                 "description": "Which branch's specs the report is laid over. Default main, then master, then the newest",
                 "type": "string"
@@ -6948,47 +7111,6 @@
           "active": {
             "type": "object",
             "properties": {
-              "data": {
-                "default": "./atlas-data",
-                "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
-                "type": "string"
-              },
-              "backends": {
-                "default": [],
-                "description": "Further backends, read together with the data folder: S3, another server, a device lab",
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9-]+$",
-                      "description": "Lowercase letters, digits and hyphens. Names where a result came from"
-                    },
-                    "label": {
-                      "type": "string"
-                    },
-                    "url": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)"
-                    },
-                    "write": {
-                      "description": "Uploads go here instead of the data folder. At most one backend is the write target",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "url"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "write": {
-                "description": "The id of the backend uploads go to. Default: the data folder",
-                "type": "string"
-              },
               "outlineBranch": {
                 "description": "Which branch's specs the report is laid over. Default main, then master, then the newest",
                 "type": "string"
@@ -7093,6 +7215,268 @@
           "active",
           "restartRequired",
           "precedence"
+        ],
+        "additionalProperties": {}
+      },
+      "GcPolicy": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Delete eligible layers on a schedule. `false` keeps the policy but deletes nothing"
+          },
+          "maxAgeDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650,
+            "description": "A superseded layer is eligible once it was recorded more than this many days ago"
+          },
+          "keepLatest": {
+            "default": 20,
+            "description": "Always keep this many of the newest layers, however old, so recent history stays",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "intervalHours": {
+            "default": 24,
+            "description": "How often the server applies the policy",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 720
+          }
+        },
+        "required": [
+          "enabled",
+          "maxAgeDays"
+        ],
+        "additionalProperties": false
+      },
+      "GcSnapshot": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Delete eligible layers on a schedule. `false` keeps the policy but deletes nothing"
+                  },
+                  "maxAgeDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3650,
+                    "description": "A superseded layer is eligible once it was recorded more than this many days ago"
+                  },
+                  "keepLatest": {
+                    "default": 20,
+                    "description": "Always keep this many of the newest layers, however old, so recent history stays",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "intervalHours": {
+                    "default": 24,
+                    "description": "How often the server applies the policy",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 720
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "maxAgeDays",
+                  "keepLatest",
+                  "intervalHours"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "saved": {
+            "type": "boolean",
+            "description": "Whether a policy exists in S3. `false` means garbage collection is off: nothing is deleted"
+          },
+          "lastRuns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "project": {
+                  "type": "string"
+                },
+                "dryRun": {
+                  "type": "boolean"
+                },
+                "at": {
+                  "type": "string",
+                  "description": "When the pass finished, ISO 8601"
+                },
+                "candidates": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Layers the policy would delete"
+                },
+                "deletedLayers": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "deletedBlobs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "keptLayers": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "error": {
+                  "description": "Why the pass stopped early, when it did",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "project",
+                "dryRun",
+                "at",
+                "candidates",
+                "deletedLayers",
+                "deletedBlobs",
+                "keptLayers"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "The most recent pass over each project, newest first; empty before the first pass"
+          },
+          "stateKey": {
+            "type": "string",
+            "description": "Where the user state lives in the bucket, relative to the configured prefix"
+          }
+        },
+        "required": [
+          "revision",
+          "policy",
+          "saved",
+          "lastRuns",
+          "stateKey"
+        ],
+        "additionalProperties": {}
+      },
+      "GcRunResult": {
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "project": {
+                  "type": "string"
+                },
+                "dryRun": {
+                  "type": "boolean"
+                },
+                "at": {
+                  "type": "string",
+                  "description": "When the pass finished, ISO 8601"
+                },
+                "candidates": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Layers the policy would delete"
+                },
+                "deletedLayers": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "deletedBlobs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "keptLayers": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "error": {
+                  "description": "Why the pass stopped early, when it did",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "project",
+                "dryRun",
+                "at",
+                "candidates",
+                "deletedLayers",
+                "deletedBlobs",
+                "keptLayers"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Delete eligible layers on a schedule. `false` keeps the policy but deletes nothing"
+                  },
+                  "maxAgeDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3650,
+                    "description": "A superseded layer is eligible once it was recorded more than this many days ago"
+                  },
+                  "keepLatest": {
+                    "default": 20,
+                    "description": "Always keep this many of the newest layers, however old, so recent history stays",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "intervalHours": {
+                    "default": 24,
+                    "description": "How often the server applies the policy",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 720
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "maxAgeDays",
+                  "keepLatest",
+                  "intervalHours"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "runs",
+          "policy"
         ],
         "additionalProperties": {}
       },
