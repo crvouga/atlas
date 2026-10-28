@@ -2,14 +2,14 @@
 
 This is the production setup. A project runs **one Atlas server**. Developers' machines and every CI job send
 their results to it, as they finish or when they are done, and it shows everyone, developers and the business
-alike, the whole project at once, live. It keeps results on its own disk by default, or in an object-store bucket
-if you prefer; either way nothing is partitioned by run, branch or person: results are layered. The server's API,
+alike, the whole project at once, live. It keeps results (and all its user state) in an S3-compatible bucket and
+nowhere else; nothing is partitioned by run, branch or person: results are layered. The server's API,
 configuration and protocol are in **[the Atlas server](server.md)**; this page is the path to production.
 
 ```
   a developer's worktree ─┐                                       ┌─▶ developers   (browser, live)
-  a CI job, any branch ───┼─ atlas report publish|stream ─▶ SERVER ◀┤   atlas serve: keeps layers in ./atlas-data
-  a device lab, nightly ──┘   (immutable layers, over HTTP)  or S3  ├─▶ business      or in a bucket (--write)
+  a CI job, any branch ───┼─ atlas report publish|stream ─▶ SERVER ◀┤   atlas serve: keeps layers in S3
+  a device lab, nightly ──┘   (immutable layers, over HTTP)  ──▶ S3  ├─▶ business      (required, nothing else)
                                                                     └─▶ CI gate     atlas report status
 ```
 
@@ -18,7 +18,7 @@ Why this holds together:
 - **Publishing never conflicts.** A layer is one immutable file named by its content. Two machines that
   publish at once write different files; a retry writes the same one. There is no lock, no index to
   corrupt, nothing to merge.
-- **The server is replaceable.** What it knows is its write backend (a folder, or a bucket). Replace it, restore it
+- **The server is replaceable.** What it knows is in its bucket. Replace it, restore it
   from a backup, or run a copy on a laptop: they show the same report, because a report is a function of the
   layers ([the contract](report-contract.md)).
 - **One view.** The newest completed result of every check, in every environment, from anyone. A
@@ -36,13 +36,15 @@ Why this holds together:
 
 ## 1. Where results are kept
 
-**By default, on the server's own disk** (`./atlas-data`, or the volume you mount at `ATLAS_DATA`). Nothing else
-needs to exist: skip to [section 3](#3-send-results-from-ci-and-from-laptops). Back that folder up like any data
-directory; starting a new server on a restored copy shows the same report.
+**The server keeps everything in one S3-compatible bucket** (reports and user state, such as the garbage collection
+policy), set by the required `ATLAS_S3_ENDPOINT`, `ATLAS_S3_BUCKET`, `ATLAS_S3_REGION`, `ATLAS_S3_ACCESS_KEY_ID` and
+`ATLAS_S3_SECRET_ACCESS_KEY` variables ([details](server.md#required-s3-storage), template in
+[`.env.example`](https://github.com/crvouga/atlas/blob/main/.env.example)). Without them it refuses to start, listing
+every variable and what is wrong. There is no disk or database to fall back to, so the server is replaceable:
+a new one started on the same bucket shows the same report.
 
-**To keep results in a bucket instead** (so a replaced server loses nothing, or CI already has bucket access),
-name it and make it the place uploads go: `ATLAS_STORE=project=s3://my-bucket/atlas/my-project ATLAS_WRITE=project`.
-The rest of this section is that setup. A store is named by a URL. Keys never go in it.
+**Clients and CI** name stores by URL, and a client may publish straight to a bucket or folder as well as to the
+server. A store is named by a URL. Keys never go in it.
 
 | Store | URL |
 | --- | --- |
@@ -190,18 +192,16 @@ A run is uploaded only when its privacy scan passed: the same rule the static cl
 ## 4. The server
 
 ```sh
-atlas serve                    # ATLAS_STORE says where; listens on :8080
+atlas serve                    # ATLAS_S3_* says where; listens on :8080
 ```
 
-It serves the client, the report and the project's specs and runs from all configured backends. It also
-accepts uploads and announces new results on its event stream. Uploads go to `--data` by default;
-use a named `--store project=s3://… --write project` to put uploads in a shared bucket, with publisher permissions.
+It serves the client, the report and the project's specs and runs from its bucket. It also
+accepts uploads and announces new results on its event stream. The bucket's credentials need list, read, write and delete
+permissions (`atlas report policy` prints a least-privilege policy; delete is for the garbage collection you define in the UI).
 
 | Flag | Environment | Meaning |
 | --- | --- | --- |
-| `--store <url>` (repeatable) | `ATLAS_STORE` | Where layers are. Several stores are one report: repeat the flag, or separate them in the variable with commas or new lines. |
-| `--data <dir>` | `ATLAS_DATA` | Local upload backend. Default `./atlas-data`. |
-| `--write <id>` | `ATLAS_WRITE` | Backend that accepts uploads. Default `data`. |
+| | `ATLAS_S3_ENDPOINT`, `ATLAS_S3_BUCKET`, `ATLAS_S3_REGION`, `ATLAS_S3_ACCESS_KEY_ID`, `ATLAS_S3_SECRET_ACCESS_KEY` | **Required.** The S3-compatible bucket that holds all reports and user state. Optional: `ATLAS_S3_PREFIX`, `ATLAS_S3_PATH_STYLE`, `ATLAS_S3_SESSION_TOKEN`. |
 | `--port <n>` | `ATLAS_PORT` or `PORT` | Default 8080. `0` picks a free one. |
 | `--host <h>` | `ATLAS_HOST` or `HOST` | Default `127.0.0.1`. Listening beyond this machine requires tokens or `--insecure`. |
 | `--site <dir>` | `ATLAS_SITE` | The built client. Default: `./atlas-site`, else built once into `~/.cache/atlas/site`. |
@@ -228,9 +228,10 @@ updated `latest`. Pull request builds and failed publications are labelled accor
    Leave the start command unset: the image includes the server and the prebuilt viewer.
 2. Add `ATLAS_TOKEN` with a long random value (generate one with `openssl rand -hex 24`). It grants admin
    access; optionally add separate `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for publishers and readers.
-3. Attach a volume at `/data` and set `RAILWAY_RUN_UID=0`: Railway mounts volumes as root, while the image
-   normally runs as `bun` ([Railway volume permissions](https://docs.railway.com/volumes#permissions)).
-   Keep one replica. The volume retains reports and server settings when the image is replaced.
+3. Add the five required storage variables (`ATLAS_S3_ENDPOINT`, `ATLAS_S3_BUCKET`, `ATLAS_S3_REGION`,
+   `ATLAS_S3_ACCESS_KEY_ID`, `ATLAS_S3_SECRET_ACCESS_KEY`) for a bucket you own. The service keeps nothing on its own
+   disk, so no volume is needed and a replaced image loses nothing; without the variables it exits and lists each one.
+   Keep one replica.
 4. Set the healthcheck path to `/readyz` and generate a public domain. The image listens on `0.0.0.0` and
    honors Railway's `PORT`; leave `ATLAS_PORT` unset. Open the domain and sign in with your token as the
    password (any username), or use the viewer's token sign-in.
@@ -244,8 +245,7 @@ Projects publish to that domain with `ATLAS_STORE=https://YOUR-DOMAIN` and their
 [sending results](#3-send-results-from-ci-and-from-laptops). Hosting Atlas needs no project checkout; publishing
 your project's test results still needs the integration described there.
 
-For bucket storage instead, set `ATLAS_STORE=project=s3://my-bucket/atlas/my-project`, `ATLAS_WRITE=project`,
-and the bucket credentials. Keep the `/data` volume for server settings and local state.
+Then open `/admin` to define the garbage collection policy; until you save one, nothing is deleted.
 
 ### Deploy without authentication
 
@@ -261,12 +261,11 @@ In Railway, create a **Docker image** service with:
 ghcr.io/crvouga/atlas-insecure:latest
 ```
 
-Leave the start command unset. Attach a persistent volume at `/data`, set `RAILWAY_RUN_UID=0`, keep one
+Leave the start command unset. Add the required `ATLAS_S3_*` storage variables, keep one
 replica, set the healthcheck to `/readyz` and generate a public domain. Leave `ATLAS_PORT` unset so Railway's
 `PORT` is used. Enable **Settings → Source → Configure Auto Updates → Anytime** to follow `latest`.
 Do not set `ATLAS_TOKEN`, `ATLAS_PUBLISH_TOKEN` or `ATLAS_READ_TOKEN`, or add `auth.tokens` to
-`/data/atlas.server.json`: configured tokens still enable authentication. When reusing a volume from an
-authenticated deployment, remove its saved auth tokens first. Open the domain directly, including `/admin`
+a configuration file: configured tokens still enable authentication. Open the domain directly, including `/admin`
 for settings (leave the token field blank and choose **Load settings**).
 
 Verify anonymous reads and uploads without an Authorization header:
@@ -287,7 +286,7 @@ leave its `ATLAS_TOKEN` unset. Use the same publishing commands described in
 For local Docker:
 
 ```sh
-docker run --pull always -p 8080:8080 -v atlas-data:/data ghcr.io/crvouga/atlas-insecure:latest
+docker run --pull always -p 8080:8080 --env-file .env ghcr.io/crvouga/atlas-insecure:latest
 ```
 
 Both images publish full commit tags for pinning or rollback. A new GHCR package must be made Public
@@ -297,10 +296,11 @@ once before Railway can pull without registry credentials; see
 ### Docker
 
 The same published image works anywhere Docker runs. It already contains the client (the same
-for every project: the server tells the page where its data is), and keeps results on the volume at `/data`:
+for every project: the server tells the page where its data is), and keeps nothing on its own disk: it needs the
+`ATLAS_S3_*` variables (copy `.env.example` to `.env` and fill it in):
 
 ```sh
-docker run --pull always -p 8080:8080 -v atlas-data:/data \
+docker run --pull always -p 8080:8080 --env-file .env \
   -e ATLAS_TOKEN=$(openssl rand -hex 24) ghcr.io/crvouga/atlas:latest
 ```
 
@@ -309,17 +309,15 @@ back, replace `latest` with the full commit SHA. To build from this repository, 
 [`examples/deploy/Dockerfile`](https://github.com/crvouga/atlas/blob/main/examples/deploy/Dockerfile) is the
 alternative for building from an npm version or a local package tarball.
 
-For a bucket as the system of record add `-e ATLAS_STORE=project=s3://my-bucket/atlas/my-project -e ATLAS_WRITE=project -e AWS_REGION=us-east-1`.
-On ECS, EKS or EC2, attach the combined **both** policy (including `server/live/*` for producer leases) to the task, service account or
-instance and set no keys.
+The bucket's account needs the combined **both** policy (including `server/live/*` for producer leases and `server/state.json`
+for user state) plus `s3:DeleteObject` for garbage collection. The server does not use ambient AWS roles: pass the keys.
 
 **Try it on one machine.** [`examples/deploy/compose.yaml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/compose.yaml)
-starts the published image on a volume; `compose.s3.yaml` starts it with an S3 server and a bucket as its storage.
+starts the published image with an S3 server (SeaweedFS) and a bucket as its storage; `compose.s3.yaml` is the same stack without tokens.
 Publish to `http://localhost:8080` from your project and open it.
 
 **Kubernetes.** [`examples/deploy/kubernetes.yaml`](https://github.com/crvouga/atlas/blob/main/examples/deploy/kubernetes.yaml):
-one copy (the server is a singleton for the project), results in the bucket, readiness on `/readyz`, an IRSA
-service account.
+one copy (the server is a singleton for the project), results in the bucket (keys from a Secret), readiness on `/readyz`.
 
 **Without a container.** `bun add -d @crvouga/atlas`, then `bunx atlas client build --no-data --out
 atlas-site` and `bunx atlas serve`. Everything it can be told is in
@@ -392,12 +390,13 @@ Narrow it by choice, per consumer, never by moving data:
   listing (one request per thousand layers) runs at the start and every 30 refreshes (five minutes by
   default), which is also how a layer recorded with an old timestamp is found. One small `GET` per new
   layer, once.
-- **Retention.** Atlas deletes nothing. `atlas report doctor` shows what the bucket holds.
-- **Disaster recovery.** The write backend (the data folder, or the bucket) is the only state. Back it up, replicate or version it as you
+- **Retention.** Atlas deletes nothing until you define a garbage collection policy in the UI (`/admin`); it is kept in the bucket as JSON and
+  then removes only superseded layers older than you allow ([details](server.md#user-state-and-garbage-collection)). `atlas report doctor` shows what the bucket holds.
+- **Disaster recovery.** The bucket is the only state (reports and user state). Back it up, replicate or version it as you
   do any data; a server is rebuilt from nothing in the time it takes to read the layers (below). It listens at once
   and answers `/readyz` 503 until it has, so a liveness probe never kills one that is still reading.
-- **A second bucket.** Another team's layers, a device lab, an archive: pass several `--store`s. They are one
-  report, attributed to the store they came from.
+- **A second bucket.** The server reads one bucket. To combine another team's layers or an archive into the
+  report, copy them in with `atlas report merge --into <store>`; clients and `atlas report status` may read several stores.
 
 ## 7. Performance
 

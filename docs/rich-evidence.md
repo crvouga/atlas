@@ -27,6 +27,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
 | `specPath` | check | The spec a check belongs to (a `.feature`, a test file), relative to the repository. Checks are grouped by it. |
 | `specs[]` (`path`, `domain`, `kind`, `title`) | layer | Names each spec and its group (`domain`), so a server can group checks by spec with a title even when no [spec set](integrating.md#tell-atlas-which-spec-a-check-belongs-to) has been published. |
@@ -61,6 +62,83 @@ attachments with that tag, and says how many match. Tags describe evidence; they
   from the producer's tags. See [Tagging artifacts](server.md#tagging-artifacts). A producer's own tags stay as uploaded.
 - **Older layers.** A layer without attachment tags reads exactly as before. Tags on an attachment that cannot be read
   (not a list of strings) are dropped, and the attachment, check and layer stay.
+
+## Evidence scope
+
+A green result and a video do not say whether the speech was real, the replies scripted, the audio recorded, the device
+physical or a vendor substituted. Declare it where the evidence is, in an optional `scope`, and the viewer shows it as
+short badges above the recording (before it is played), with the exact declaration on demand:
+
+```ts
+{
+  name: 'checkout.webm', role: 'video',
+  scope: {
+    surface: 'browser',               // where the product ran: browser, native-app, api…
+    deviceKind: 'simulator',          // simulator, emulator, physical, virtual-machine, desktop…
+    syntheticData: true,              // made-up data (false: real, absent: unknown)
+    dependencies: 'scripted',         // scripted, live or mixed
+    audioCaptured: false,             // false: silent, absent: unknown
+    pacing: 'paced',                  // paced, real-time
+    asserted: ['the receipt is shown'],           // what the result stands on
+    limitations: ['Replies are scripted'],
+    declaredBy: 'checkout e2e suite',
+    verified: ['deviceKind'],         // fields something independent checked
+    verifiedBy: 'device farm session log',
+    provenance: [{ url: 'https://farm.example/session/1', name: 'Device session' }]
+  }
+}
+```
+
+Every field is optional, and every value except the booleans is an open string.
+
+- **Unknown is not live.** A recording with no scope, or a scope that does not say a thing, shows `Scope unknown` or
+  `Not declared`. It is never assumed live, physical, audible or end to end.
+- **Declared is not verified.** Atlas shows `scope` as the producer's word. Only the fields named in `verified` are
+  marked verified (with `verifiedBy`), and `provenance` links where to check them. Atlas does not check any of it.
+- **Only what was asserted.** `asserted` lists the boundaries the result stands on. The viewer says that other activity
+  visible in the clip is not verified behavior; with no `asserted` it says that no boundary was declared.
+- **The nearest declaration, whole.** A recording takes the `scope` of the attachment, else its attempt, its check, its
+  part, its layer, in that order. It is never merged field by field, so a retry on a physical phone does not borrow
+  the limitations declared for the simulator try, and the badges change with the exact recording opened.
+- **Filtering.** `GET /api/reports/tests?scope=device:physical,audio:recorded` (and the explorer's *Recording scope*
+  filter) lists tests with one playable recording that states every token: `surface:<v>`, `device:<v>`,
+  `data:synthetic` or `data:real`, `dependencies:<v>`, `audio:recorded` or `audio:silent`, `pacing:<v>`. A simulator
+  and a physical phone are separate values. Evidence that did not declare a value is never included, and `unknown`
+  asks for recordings that declared nothing. Each test lists its recordings' tokens as `scopeProfiles`, the facets as
+  `scopes`, and the search box finds the words in them.
+- **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
+  dropped, and the attachment, check and layer stay.
+
+## Finding runs and artifacts
+
+The viewer's **Runs** and **Artifacts** tabs and the API answer one query, so a link means the same thing everywhere.
+"Demo videos for checkout on iPhone, including failed attempts" is:
+
+```sh
+curl "$ATLAS_SERVER_URL/api/reports/artifacts?artifactTag=demo&type=video&domain=checkout&label=device%3DiPhone"
+```
+
+- **Dimensions.** `artifactTag`, `type` (the media type as a role: `video`, `image`, `audio`, `snapshot`, `text`,
+  `file`; `video` means a playable recording), `label` (`key=value`, or `key`), `domain` and `spec` (artifacts only),
+  `environment` (the device or client), `producer`, `branch`, `sha` (seven or more characters), `outcome` (`passed`,
+  `failed`, `running`, `not-run`), `since` and `until` (epoch milliseconds or an ISO date), and `q` (words).
+- **Semantics.** Filters combine with AND across dimensions and OR within one (`environment=ios,android`). With both
+  `artifactTag` and `type`, one attachment must be both where the report says which video carries which tag: a tagged
+  screenshot beside an untagged video is not a tagged video. `inherited=1` also counts the tags an attachment inherits
+  from its check and run. A comma or backslash inside a value is written `\,` or `\\`; the viewer encodes `#` and spaces.
+- **History.** Artifacts are recorded results, not only the report's current winners: a recording tagged `demo` is
+  found with its original run, commit and status even when a later attempt of the test is untagged. Tags a reviewer
+  added after upload are kept apart from the layer and are not searched here.
+- **Facets.** Each answer carries `facets`: for every dimension the values on offer. The count beside a value is what
+  the list would hold if that value alone were chosen in its dimension with every other filter applied, so the
+  chosen value's count is the list's and the others show what adding them would give.
+- **Older servers.** A response names the filters it applied in `filters`. A viewer that asked for one that is missing
+  filters what a run summary can answer itself and says plainly that the server cannot filter by the rest (tags, types,
+  labels); it never presents an unfiltered list as narrowed. A server without `/api/reports/artifacts` is reported as
+  such on the Artifacts tab.
+- **Views.** *Views* saves the current filters under a name in this browser, per project and tab. A saved view is a
+  **live query**: opening it asks again and shows what matches the newest report. It is not a snapshot; an immutable
+  review collection is a separate feature. *Copy link* gives the address, which holds the whole query.
 
 ## Labels describe, parameters split
 
@@ -224,6 +302,29 @@ or the command line, an attachment may name a `path` instead; `atlas report publ
 ([attach evidence](extending.md#attach-evidence)). A CTRF report already carries most of this, and
 `atlas report publish --ctrf` keeps it ([native runner reporters](runners.md) cover CodeceptJS, Mocha, Jest and Node's
 test runner).
+
+## Run artifacts and direct links
+
+Files attached to a run as a whole (top-level `attachments`: a review movie, a ZIP, an HTML gallery, a summary) are
+shown under **Artifacts** when you open a run in the viewer's Runs tab, without opening any test. The movie plays
+inline, an archive is a download, and each file keeps its name, role, type, size, duration and tags. They are grouped
+by the layer that carries them, with who recorded it and when. A layer may hold no checks at all, only files: it is
+listed with `No checks in this layer`, and a run of only such layers shows `No checks recorded`, never `0 passed`.
+
+- **Direct link.** *Link to this file* gives an address that names the project, the run, one immutable layer and one
+  attachment: `#/?tab=runs&openRun=<run key>&layer=<layer id>&artifact=<id:… | key:… | name:…>`. Opened in a fresh tab
+  it selects that same file of that same layer, whatever runs arrived since. A link whose file is not in the layer says
+  so instead of showing another file.
+- **Shared recordings.** Tests that reference the same bytes (same SHA-256 or bundle key) are one recording. The run's
+  *Recordings in tests* lists each once, with every test that references it, and a run-level file that a test also
+  references says so.
+- **Unplayable files.** A file with no stored bytes, with an address that is not a web address, in a type the viewer
+  has no preview for, or that the browser cannot play, shows what is wrong and, when it can, a download.
+- **Safety is unchanged.** Files are served only through the attachment route (never sniffed, sandboxed), and an HTML
+  archive renders in an iframe with an empty `sandbox`: it cannot run script.
+- **API.** `GET /api/reports/runs/detail` lists the run's `layers` (backend, check count, file count) and
+  `GET /api/reports/evidence/detail/{backend}/{id}` returns what a layer carries as a whole (and, as `parts`, what its
+  parts carry). Both only gained optional fields.
 
 ## Recording completeness
 

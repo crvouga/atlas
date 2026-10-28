@@ -1,14 +1,16 @@
 import type { CheckDetail, EvidenceHolder } from '@crvouga/atlas/reports/evidence-detail';
-import { roleOfType } from '@crvouga/atlas/reports/evidence-detail';
+import { isVideoAttachment, roleOfType } from '@crvouga/atlas/reports/evidence-detail';
+import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { LayerHeader, LayerRow } from '@crvouga/atlas/reports/evidence-types';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
 import type { Annotation, Attachment, Attempt, Step } from '@crvouga/atlas/schema';
-import { Accordion, Alert, Anchor, Box, Code, Flex, Image, List, Stack, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Anchor, Badge, Box, Code, Flex, Image, List, Stack, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArtifactTagList, ArtifactTagsProvider, TagFilterBar, useFilteredAttachments } from './artifact-tags';
 import { reportAssetUrl, reportJson, reportText } from './api';
-import { duration, plural } from './format';
+import { ScopeNotice, ScopeProvider, useScope } from './evidence-scope';
+import { duration, plural, safeUri } from './format';
 import { StatusMark } from './marks';
 /**
  * How one kind of attachment is shown. The first renderer that matches wins, so a new kind of artifact (a
@@ -33,15 +35,22 @@ export type ArtifactRenderer = {
 const mediaType = (attachment: Attachment) =>
   (attachment.contentType ?? contentTypeOf(attachment.name)).split(';')[0]!.trim().toLowerCase();
 const label = (attachment: Attachment) => attachment.description ?? attachment.name;
-/** Only addresses a browser may follow: never `javascript:` or `data:` from a producer. */
-function safeUri(uri: string | undefined): string | null {
-  if (!uri) return null;
-  try {
-    const url = new URL(uri, 'https://atlas.invalid/');
-    return url.protocol === 'http:' || url.protocol === 'https:' ? uri : null;
-  } catch {
-    return null;
-  }
+/** A video that plays inline; when the file cannot be loaded or this browser cannot play it, it says so and offers the file, instead of an empty player. */
+function VideoPlayer({ attachment, url }: { attachment: Attachment; url: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed)
+    return (
+      <Alert role="alert" color="orange" title="This video cannot be played">
+        <Text component="div">
+          {label(attachment)} could not be loaded, or this browser cannot play its format. Nothing is wrong with the report: the file may be missing from the
+          store or in an unsupported codec.{' '}
+          <Anchor href={url} download={attachment.name} target="_blank" rel="noreferrer">
+            Download {attachment.name}
+          </Anchor>
+        </Text>
+      </Alert>
+    );
+  return <Box src={url} controls preload="metadata" aria-label={label(attachment)} component="video" maw="100%" w="100%" onError={() => setFailed(true)} />;
 }
 function TextValue({ attachment, path }: { attachment: Attachment; path: string | null }) {
   const stored = useQuery({
@@ -100,8 +109,7 @@ export const artifactRenderers: ArtifactRenderer[] = [
     id: 'video',
     wide: true,
     matches: (_, type) => type.startsWith('video/'),
-    render: (a, { url }) =>
-      url ? <Box src={url} controls preload="metadata" aria-label={label(a)} component="video" maw="100%" w="100%" /> : null
+    render: (a, { url }) => (url ? <VideoPlayer attachment={a} url={url} /> : null)
   },
   {
     id: 'audio',
@@ -145,18 +153,39 @@ export function attachmentSource(attachment: Attachment, layer: string): { path:
     : null;
   return { path, url: path ? reportAssetUrl(path) : safeUri(attachment.uri) };
 }
-function Artifact({ attachment, layer }: { attachment: Attachment; layer: string }) {
+/**
+ * One attachment as a card: it plays or shows itself when it can, and always says what it is (name, role, type, size,
+ * duration, tags) and how to get it. A file that has no address, has an address that is not a web address, or that
+ * nothing can preview says so in words. Pass `link` for a control that opens this one artifact, `note` for how it
+ * relates to the rest of the report, and `selected` to mark the one a link pointed at (it scrolls into view).
+ */
+export function ArtifactCard({ attachment, layer, link, note, selected }: { attachment: Attachment; layer: string; link?: ReactNode; note?: ReactNode; selected?: boolean }) {
   const type = mediaType(attachment);
   const { path, url } = attachmentSource(attachment, layer);
   const renderer = artifactRenderers.find((candidate) => candidate.matches(attachment, type));
   const body = renderer?.render(attachment, { url, path, type });
+  const item = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (selected) item.current?.scrollIntoView?.({ block: 'center' });
+  }, [selected]);
+  const scope = effectiveScope(attachment.scope, useScope());
+  // A recording says what it shows before it is played; evidence that declared a scope of its own says so too.
+  const scoped = isVideoAttachment(attachment) || attachment.scope !== undefined;
   return (
-    <List.Item data-wide={renderer?.wide || undefined} data-role={attachment.role ?? roleOfType(type)}>
+    <List.Item
+      ref={item}
+      data-wide={renderer?.wide || undefined}
+      data-role={attachment.role ?? roleOfType(type)}
+      data-selected={selected || undefined}
+      {...(selected ? { bg: 'blue.0', p: 'sm', bd: '2px solid var(--mantine-color-blue-6)' } : {})}
+    >
+      {scoped && <ScopeNotice scope={scope} name={attachment.name} />}
       {body}
       <Box component="figcaption">
         <Text span inherit fw={600}>
           {attachment.name}
         </Text>
+        {selected && <Badge variant="light">Selected</Badge>}
         {attachment.role && (
           <Text span inherit>
             {attachment.role}
@@ -170,12 +199,21 @@ function Artifact({ attachment, layer }: { attachment: Attachment; layer: string
             {body ? 'Download' : 'Open'}
           </Anchor>
         )}
-        {!url && attachment.text === undefined && (
-          <Text span inherit>
-            No file to show
-          </Text>
-        )}
+        {link}
       </Box>
+      {!url && attachment.text === undefined && (
+        <Alert role={selected ? 'alert' : undefined} color="orange" data-unavailable my="xs">
+          {attachment.uri
+            ? 'No file to show. This file is only given by an address that is not a web address, so Atlas will not follow it. Ask the producer for a web address or to upload the file.'
+            : 'No file to show. The report lists this file, but it was never stored, so it cannot be shown or downloaded. Publish it again with the file attached.'}
+        </Alert>
+      )}
+      {url && !renderer && (
+        <Text component="div" c="dimmed" data-no-preview>
+          Atlas has no preview for this kind of file. Open or download it to inspect it.
+        </Text>
+      )}
+      {note}
       <ArtifactTagList attachment={attachment} />
     </List.Item>
   );
@@ -190,7 +228,7 @@ export function Attachments({ attachments: all, layer }: { attachments: readonly
       </Title>
       <List spacing="xs" listStyleType="none">
         {attachments.map((attachment, index) => (
-          <Artifact key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} />
+          <ArtifactCard key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} />
         ))}
       </List>
     </Box>
@@ -304,7 +342,7 @@ function Tries({ attempts, layer }: { attempts: readonly Attempt[]; layer: strin
       </Title>
       <List spacing="xs" listStyleType="none" type="ordered">
         {attempts.map((attempt) => (
-          <List.Item key={attempt.index}>
+          <List.Item key={attempt.index} data-attempt={attempt.index}>
             <Flex gap="xs" align="center" wrap="wrap">
               <StatusMark status={attempt.status} size={14} />
               <Text span inherit>
@@ -316,7 +354,9 @@ function Tries({ attempts, layer }: { attempts: readonly Attempt[]; layer: strin
               </Text>
             </Flex>
             {attempt.detail && <Text component="div">{attempt.detail}</Text>}
-            {attempt.attachments && <Attachments attachments={attempt.attachments} layer={layer} />}
+            <ScopeProvider scope={attempt.scope}>
+              {attempt.attachments && <Attachments attachments={attempt.attachments} layer={layer} />}
+            </ScopeProvider>
           </List.Item>
         ))}
       </List>
@@ -375,14 +415,14 @@ function Facts({ holder }: { holder: EvidenceHolder }) {
 }
 function Evidence({ holder, layer, steps }: { holder: EvidenceHolder; layer: string; steps?: boolean }) {
   return (
-    <>
+    <ScopeProvider scope={holder.scope}>
       <Facts holder={holder} />
       {holder.annotations && <Notes notes={holder.annotations} />}
       {steps && holder.steps && holder.steps.length > 0 && <Timeline steps={holder.steps} layer={layer} />}
       {holder.attempts && holder.attempts.length > 1 && <Tries attempts={holder.attempts} layer={layer} />}
       {holder.attachments && <Attachments attachments={holder.attachments} layer={layer} />}
       {holder.extensions && <Raw extensions={holder.extensions} />}
-    </>
+    </ScopeProvider>
   );
 }
 /** The full evidence of one result, read only when `enabled` and the result has some to read (an archived layer). Shared by every view of the result, so it is read once. */
@@ -417,7 +457,8 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
         What this result carries could not be read.
       </Text>
     );
-  const { check, run } = detail.data;
+  const { check, run, inheritedScope } = detail.data;
+  const declared = effectiveScope(check.scope, inheritedScope);
   const hasRun = Object.values(run).some((value) =>
     Array.isArray(value) ? value.length > 0 : value && typeof value === 'object' ? Object.keys(value).length > 0 : false
   );
@@ -425,7 +466,14 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
     <ArtifactTagsProvider layer={layer.id} kind={row.kind} check={row.id} holders={[check, run]}>
       <Stack aria-label="Evidence" gap="sm" miw={0}>
         <TagFilterBar holders={[check, run]} />
-        <Evidence holder={check} layer={layer.id} steps />
+        {declared && (
+          <Box aria-label="Scope of this result" component="section">
+            <ScopeNotice scope={declared} name={row.title} />
+          </Box>
+        )}
+        <ScopeProvider scope={inheritedScope}>
+          <Evidence holder={check} layer={layer.id} steps />
+        </ScopeProvider>
         {hasRun && (
           <Box aria-label="From the run" component="section" mb="lg">
             <Title order={4} mb="sm">

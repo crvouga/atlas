@@ -33,14 +33,17 @@ import { ReportIndex, type IndexChange } from '../../reports/src/report-index';
 import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
 import { catalogHealth, healthMarkdown, parseRootMappings } from '../../reports/src/catalog-health';
-import { catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
+import { parseArtifactFilter } from '../../reports/src/artifact-query';
+import { artifactList, artifactsMarkdown, catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
 import { llmsTxt } from './llms';
 import { openApiDocument } from './openapi';
 import { asProblem, problemResponse } from './problem';
 import { LiveRunStartSchema, LiveRunUpdateSchema } from '../../schema/src/live-run';
 import { LiveRuns, LiveRunError } from './live-runs';
 import { ConfigError } from './config';
-import { renderSettingsPage, type ServerSettings } from './settings';
+import { renderSettingsPage, type GcSettings, type ServerSettings } from './settings';
+import { collectGarbage, planGarbage } from '../../reports/src/garbage';
+import type { GcPolicy, GcRun } from '../../schema/src/user-state';
 import { Refusal } from './validate';
 import { createAuth, type Auth } from './auth';
 import type { ResolvedToken } from './config';
@@ -75,8 +78,12 @@ export type AtlasServerOptions = {
   readonly log?: (line: Record<string, unknown>) => void;
   readonly now?: () => number;
   readonly version?: string;
-  /** Admin configuration persistence, supplied by atlas serve. Changes apply on restart. */
+  /** Admin configuration persistence, supplied by atlas serve; kept in S3. Changes apply on restart. */
   readonly settings?: ServerSettings;
+  /** The garbage collection policy, kept in S3 and read from there each time the server collects. Supplied by atlas serve. */
+  readonly gc?: GcSettings;
+  /** How often (ms) the server checks whether a garbage collection pass is due. Default 60 000; for tests. */
+  readonly gcCheckMs?: number;
   /** Extra runtime configuration written into the page. */
   readonly page?: Record<string, unknown>;
 };
@@ -90,6 +97,12 @@ export type AtlasServer = {
   readonly routes: readonly { readonly method: string; readonly path: string }[];
   /** Resolves when the first pass over the backends is done. */
   readonly ready: Promise<void>;
+  /**
+   * Apply a garbage collection policy to this project's upload backend. Deletes only layers the report has read and
+   * that no longer decide any result, older than the policy allows and beyond its `keepLatest`. With `dryRun` it only
+   * counts. Never throws: a failure is the `error` of the returned run.
+   */
+  collectGarbage(policy: GcPolicy, options: { readonly dryRun: boolean; readonly project: string }): Promise<GcRun>;
   /** Stop refreshing and end every live connection. */
   close(): void;
 };
@@ -300,7 +313,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true }
     });
   });
 
@@ -353,6 +366,34 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       let input: unknown;
       try { input = JSON.parse(new TextDecoder().decode(bytes)); } catch { return problemResponse(422, 'The body is not JSON.'); }
       return c.json(await options.settings.save(input, revision), 200, { 'cache-control': 'no-store' });
+    } catch (error) {
+      if (error instanceof ConfigError) return problemResponse(error.message.startsWith('Settings changed') ? 409 : 422, error.message);
+      if (error instanceof Refusal) return problemResponse(error.status, error.message);
+      throw error;
+    }
+  });
+
+  // The garbage collection policy: its own document in the user state, saved in S3 with the same revision rules.
+  app.get('/api/settings/gc', async c => {
+    const verdict = auth.check(c.req.raw, 'admin');
+    if (!verdict.ok) return unauthorized(verdict);
+    if (!options.gc) return problemResponse(503, 'Garbage collection settings are managed by the embedding application.');
+    try { return c.json(await options.gc.read(), 200, { 'cache-control': 'no-store' }); } catch (error) {
+      if (error instanceof ConfigError) return problemResponse(503, error.message);
+      throw error;
+    }
+  });
+  app.put('/api/settings/gc', async c => {
+    const verdict = auth.check(c.req.raw, 'admin');
+    if (!verdict.ok) return unauthorized(verdict);
+    if (!options.gc) return problemResponse(503, 'Garbage collection settings are managed by the embedding application.');
+    const revision = /^"([a-f0-9]{64})"$/.exec(c.req.header('if-match') ?? '')?.[1];
+    if (!revision) return problemResponse(428, 'Load the policy first and send its revision in If-Match.');
+    try {
+      const bytes = await readLimited(c.req.raw, Math.min(limits.json, 16 * 1024));
+      let input: unknown;
+      try { input = JSON.parse(new TextDecoder().decode(bytes)); } catch { return problemResponse(422, 'The body is not JSON.'); }
+      return c.json(await options.gc.save(input, revision), 200, { 'cache-control': 'no-store' });
     } catch (error) {
       if (error instanceof ConfigError) return problemResponse(error.message.startsWith('Settings changed') ? 409 : 422, error.message);
       if (error instanceof Refusal) return problemResponse(error.status, error.message);
@@ -436,9 +477,18 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     if (!index.ready) return notReady(c);
     const found = await catalog();
     const limit = /^\d+$/.test(c.req.query('limit') ?? '') ? Number(c.req.query('limit')) : 100;
-    const video = ['1', 'true'].includes(c.req.query('video') ?? '');
-    const document = () => runList(index.history, found.version, limit, { video });
-    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${limit}|${video}|${wantsMarkdown(c)}`);
+    const search = new URL(c.req.url).searchParams;
+    const document = () => runList(index.history, found.version, limit, parseArtifactFilter(search));
+    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${search.toString()}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/artifacts', async c => {
+    if (!index.ready) return notReady(c);
+    const found = await catalog();
+    const search = new URL(c.req.url).searchParams;
+    const number = (name: string, fallback: number) => (/^\d+$/.test(search.get(name) ?? '') ? Number(search.get(name)) : fallback);
+    const domains = new Map(found.facets.specs.map(spec => [spec.path, spec.domain]));
+    const document = () => artifactList(index.history, found.version, parseArtifactFilter(search), { limit: number('limit', 100), offset: number('offset', 0), domainOf: path => domains.get(path) });
+    return answer(c, found.version, document, () => artifactsMarkdown(document()), `artifacts|${search.toString()}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/runs/detail', async c => {
     if (!index.ready) return notReady(c);
@@ -620,11 +670,27 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     return c.json({ error: 'Something went wrong on the server. It has been logged.' }, 500);
   });
 
+  async function collect(policy: GcPolicy, run: { readonly dryRun: boolean; readonly project: string }): Promise<GcRun> {
+    const base = { project: run.project, dryRun: run.dryRun };
+    try {
+      // Look at the store once more first, so "superseded" is judged on everything uploaded so far.
+      await index.refreshNow();
+      const plan = await planGarbage(writeBackend!.store, { policy, nowMs: now(), eligible: index.superseded() });
+      const outcome = run.dryRun ? { deletedLayers: 0, deletedBlobs: 0 } : await collectGarbage(writeBackend!.store, plan);
+      if (outcome.deletedLayers) options.log?.({ at: new Date(now()).toISOString(), level: 'info', gc: run.project, deletedLayers: outcome.deletedLayers, deletedBlobs: outcome.deletedBlobs });
+      return { ...base, at: new Date(now()).toISOString(), candidates: plan.candidates.length, ...outcome, keptLayers: plan.kept };
+    } catch (error) {
+      options.log?.({ at: new Date(now()).toISOString(), level: 'error', gc: run.project, error: String(error) });
+      return { ...base, at: new Date(now()).toISOString(), candidates: 0, deletedLayers: 0, deletedBlobs: 0, keptLayers: 0, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   return {
     fetch: async request => app.fetch(request),
     routes: app.routes.map(({ method, path }) => ({ method, path })),
     index,
     events,
+    collectGarbage: collect,
     ready: index.start(options.refreshMs ?? 10_000),
     close: () => { clearInterval(leaseTimer); stopListening(); index.stop(); events.close(); }
   };

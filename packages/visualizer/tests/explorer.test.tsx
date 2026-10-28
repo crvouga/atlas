@@ -294,8 +294,8 @@ test('runs show how many recordings they have, filter to those with video, and k
   // The row opens the recordings: the run's results that have one, each with who holds it.
   await atlas.click('section[aria-label="Runs"] a', 'Watch 1 recording in run #3');
   await atlas.sees('Run #3');
-  await atlas.until(() => document.querySelectorAll('section[aria-label="Run #3"] li').length === 1, 'the result with the video');
-  const result = document.querySelector('section[aria-label="Run #3"] li')!.textContent!;
+  await atlas.until(() => document.querySelectorAll('section[aria-label="Run #3"] li[data-status]').length === 1, 'the result with the video');
+  const result = document.querySelector('section[aria-label="Run #3"] li[data-status]')!.textContent!;
   expect(result).toContain('1 video (step “Open the inbox”, try 1)');
   const detailFilter = document.querySelector<HTMLButtonElement>('section[aria-label="Run #3"] button[aria-label^="Has video"]')!;
   expect(detailFilter.getAttribute('aria-label')).toBe('Has video: 1 result');

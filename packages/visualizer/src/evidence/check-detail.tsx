@@ -307,7 +307,7 @@ export function CheckDetail(props: Props) {
   );
 }
 function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pin }: Props) {
-  const { evidence, backends } = useEvidence();
+  const { evidence, backends, ready, pending } = useEvidence();
   const now = useNow();
   const [variant, setVariant] = useState(0);
   const history = useMemo(() => checkHistory(evidence, slot.specPath, slot.id), [evidence, slot.specPath, slot.id]);
@@ -352,6 +352,11 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
       {note && (
         <Alert color={'blue'} my="sm">
           {note}
+        </Alert>
+      )}
+      {layerId && !earlier && ready && pending === 0 && (
+        <Alert role="status" color={'blue'} my="sm">
+          The layer this link names is not among the results held for this check. Showing the current result instead.
         </Alert>
       )}
       {failure && (

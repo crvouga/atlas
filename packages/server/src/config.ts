@@ -1,11 +1,13 @@
 /**
  * @module Server configuration
  *
- * Loads how the server runs: `atlas.server.json`, then environment variables, then flags, each overriding the last, checked
- * against `ServerConfigSchema` and resolved (paths made absolute, backends named, tokens read). Every mistake is a
- * `ConfigError` that says what to change, and a server that would listen beyond this machine with no tokens refuses to
- * start. `SERVER_SETTINGS` documents every setting once; the table in docs/server.md is generated from it and a test proves
- * each row.
+ * Loads how the server runs: the settings saved in S3 (the user state), then `atlas.server.json`, then environment
+ * variables, then flags, each overriding the last, checked against `ServerConfigSchema` and resolved (storage read from
+ * the required `ATLAS_S3_*` variables, tokens read). Storage is never optional: all reports and user state live in
+ * S3-compatible object storage, so missing or invalid storage variables are an `S3ConfigError` naming every variable.
+ * Every other mistake is a `ConfigError` that says what to change, and a server that would listen beyond this machine
+ * with no tokens refuses to start. `SERVER_SETTINGS` documents every setting once; the table in docs/server.md is
+ * generated from it and a test proves each row.
  *
  * @see docs/server.md#configuration
  */
@@ -15,21 +17,16 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { ServerConfigSchema, type ServerConfig, type ServerRole } from '../../schema/src/server-config';
+import { resolveS3Config, S3_VARIABLES, type S3Config } from './storage';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
 /** A token as the server holds it: the `name` it is shown under in logs, its `role`, and the secret `token`. */
 export type ResolvedToken = { readonly name: string; readonly role: ServerRole; readonly token: string };
-/** A backend as configured: its `id`, the `label` people see, and the `url` (a folder, `s3://…`, or another server) to open. */
-export type BackendSpec = { readonly id: string; readonly label: string; readonly url: string };
-
 /** The configuration the server runs with: the file, then the environment, then the flags, checked and resolved. */
-export type ResolvedServerConfig = Omit<ServerConfig, 'backends' | 'auth' | 'write'> & {
-  /** The folder that is the default backend, absolute. */
-  readonly data: string;
-  /** Every backend, the data folder first. All are read; uploads go to `writeId`. */
-  readonly backends: readonly BackendSpec[];
-  readonly writeId: string;
+export type ResolvedServerConfig = Omit<ServerConfig, 'auth'> & {
+  /** The S3-compatible storage that holds every report and all user state. Required; there is no other. */
+  readonly s3: S3Config;
   readonly tokens: readonly ResolvedToken[];
   readonly anonymousRead: boolean;
   readonly insecure: boolean;
@@ -44,7 +41,7 @@ const DEFAULT_FILE = 'atlas.server.json';
 const MIN_TOKEN = 12;
 
 const OPTIONS = {
-  config: { type: 'string' }, data: { type: 'string' }, store: { type: 'string', multiple: true }, write: { type: 'string' },
+  config: { type: 'string' },
   host: { type: 'string' }, port: { type: 'string' }, site: { type: 'string' }, 'outline-branch': { type: 'string' },
   branch: { type: 'string', multiple: true }, 'ignore-modified': { type: 'boolean' }, refresh: { type: 'string' },
   insecure: { type: 'boolean' }, 'no-log': { type: 'boolean' }, 'anonymous-read': { type: 'boolean' }
@@ -79,11 +76,23 @@ export type ServerSetting = {
  * table; one documented here that the loader ignores fails the test.
  */
 export const SERVER_SETTINGS: readonly ServerSetting[] = [
+  // Storage is required and comes only from the environment: reports and user state live in S3 and nowhere else.
+  ...(Object.entries({
+    ATLAS_S3_ENDPOINT: ['endpoint', 'S3 endpoint URL', c => c.s3.endpoint, 'https://s3.example.com'],
+    ATLAS_S3_BUCKET: ['bucket', 'Bucket for all reports and user state', c => c.s3.bucket, 'atlas-reports'],
+    ATLAS_S3_REGION: ['region', 'Bucket region', c => c.s3.region, 'eu-west-1'],
+    ATLAS_S3_ACCESS_KEY_ID: ['accessKeyId', 'Access key id', c => c.s3.accessKeyId, 'AKIAEXAMPLE'],
+    ATLAS_S3_SECRET_ACCESS_KEY: ['secretAccessKey', 'Secret access key', c => c.s3.secretAccessKey, 'secret-example-key'],
+    ATLAS_S3_PREFIX: ['prefix', 'Folder in the bucket for everything Atlas writes', c => c.s3.prefix, 'atlas'],
+    ATLAS_S3_PATH_STYLE: ['pathStyle', 'Path-style bucket addressing (`0` for virtual-hosted)', c => c.s3.pathStyle, '0'],
+    ATLAS_S3_SESSION_TOKEN: ['sessionToken', 'Session token for temporary credentials', c => c.s3.sessionToken, 'session-example-token']
+  } as Record<string, [string, string, (config: ResolvedServerConfig) => unknown, string]>).map(([variable, [field, summary, read, value]]): ServerSetting => {
+    const required = S3_VARIABLES.find(item => item.name === variable)!.required;
+    const expected = field === 'pathStyle' ? false : value;
+    return { summary: `${summary} (${required ? '**required**' : 'optional'})`, key: `storage.s3.${field}`, flag: null, env: [variable], default: required ? '**none: the server refuses to start**' : field === 'pathStyle' ? 'yes' : field === 'prefix' ? 'the bucket root' : 'none', example: { value, read, expected } };
+  })),
   { summary: 'Address to listen on', key: 'host', flag: '--host <address>', env: ['ATLAS_HOST', 'HOST'], default: '`127.0.0.1`', example: { value: '0.0.0.0', read: c => c.host, expected: '0.0.0.0' } },
   { summary: 'Port (`0` picks a free one)', key: 'port', flag: '--port <n>', env: ['ATLAS_PORT', 'PORT'], default: '`8080`', example: { value: '9191', read: c => c.port, expected: 9191 } },
-  { summary: 'The server\'s own folder: the default backend and write target', key: 'data', flag: '--data <dir>', env: ['ATLAS_DATA'], default: '`./atlas-data`', example: { value: 'results', read: c => path.basename(c.data), expected: 'results' } },
-  { summary: 'More backends, read together with the data folder', key: 'backends', flag: '--store <[id=]url>` (repeatable)', env: ['ATLAS_STORE'], default: 'none', example: { value: 'lab=https://lab.example.com', read: c => c.backends.map(backend => backend.id), expected: ['data', 'lab'] } },
-  { summary: 'The backend uploads go to', key: 'write', flag: '--write <id>', env: ['ATLAS_WRITE'], default: '`data`', example: { value: 'data', read: c => c.writeId, expected: 'data' } },
   { summary: 'The built client', key: 'site', flag: '--site <dir>', env: ['ATLAS_SITE'], default: '`./atlas-site`, else built once', example: { value: 'client', read: c => path.basename(c.site ?? ''), expected: 'client' } },
   { summary: 'Whose specs the report is laid over', key: 'outlineBranch', flag: '--outline-branch <branch>', env: ['ATLAS_OUTLINE_BRANCH'], default: '`main`, then `master`, then the newest', example: { value: 'trunk', read: c => c.outlineBranch, expected: 'trunk' } },
   { summary: 'Only layers recorded on these branches take part', key: 'include.branches', flag: '--branch <name>` (repeatable)', env: ['ATLAS_ONLY_BRANCH'], default: 'all', example: { value: 'main', read: c => c.include.branches, expected: ['main'] } },
@@ -105,14 +114,18 @@ export const SERVER_SETTINGS: readonly ServerSetting[] = [
 /** The text `atlas serve --help` prints. Also the source of the `atlas serve` section of `docs/reference/cli.md`. */
 export const SERVER_USAGE = `atlas serve: the Atlas server
 
-  atlas serve [--config atlas.server.json] [--data <dir>] [--port 8080] [--host 127.0.0.1]
-              [--store <url|id=url>]... [--write <id>] [--site <dir>]
+  atlas serve [--config atlas.server.json] [--port 8080] [--host 127.0.0.1] [--site <dir>]
               [--outline-branch <b>] [--branch <name>]... [--ignore-modified] [--refresh <seconds>]
               [--anonymous-read] [--insecure] [--no-log]
 
   One process serves the client and the API. Test results are uploaded to it from anywhere (laptops, CI) and it
-  shows everyone the combined report, live. It keeps its data in --data (default ./atlas-data) and can read more
-  backends (--store): S3, other servers, folders. Uploads go to the data folder unless --write names another.
+  shows everyone the combined report, live.
+
+  Storage is required. ALL reports and ALL user state (the garbage collection policy, saved settings) are kept in
+  S3-compatible object storage and nowhere else; there is no local-disk, in-memory or database fallback. Without
+  these environment variables the server prints every one of them with what is wrong, and exits with status 2:
+    ATLAS_S3_ENDPOINT  ATLAS_S3_BUCKET  ATLAS_S3_REGION  ATLAS_S3_ACCESS_KEY_ID  ATLAS_S3_SECRET_ACCESS_KEY
+  Optional: ATLAS_S3_PREFIX, ATLAS_S3_PATH_STYLE, ATLAS_S3_SESSION_TOKEN. See .env.example.
 
   Tokens (ATLAS_TOKEN admin, ATLAS_PUBLISH_TOKEN, ATLAS_READ_TOKEN, or "auth.tokens" in the config) are required
   to listen beyond this machine unless --insecure. Every option has an environment variable (docs/deploying.md).
@@ -129,23 +142,16 @@ function parseFlags(argv: readonly string[]) {
 const list = (text: string | undefined) => (text ?? '').split(/[\n,]+/).map(item => item.trim()).filter(Boolean);
 const truthy = (value: string | undefined) => value === '1' || value === 'true';
 
-/** `id=url`, or a bare url with an id made from it. */
-function backendOf(spec: string, taken: Set<string>): { id: string; url: string } {
-  const named = /^([a-z0-9-]+)=(.+)$/.exec(spec);
-  if (named) return { id: named[1]!, url: named[2]! };
-  const base = spec.replace(/^[a-z0-9+.-]+:\/\//i, '').replace(/[?#].*$/, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase().slice(0, 40) || 'store';
-  let id = base;
-  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
-  return { id, url: spec };
-}
-
 /**
  * Read the file named by `--config`/`ATLAS_CONFIG`, or `atlas.server.json` in the folder if there is one, lay the
- * environment and then the flags over it, and check the result. Every problem is a {@link ConfigError} that says
- * what to change.
+ * environment and then the flags over it, and check the result. `saved` is the settings kept in S3 (the user state),
+ * the lowest layer. Every problem is a {@link ConfigError} that says what to change; missing or invalid storage
+ * variables are an `S3ConfigError` that names all of them, and are checked first.
  */
-export function loadServerConfig(argv: readonly string[], env: Env, cwd: string, read: (file: string) => string = file => readFileSync(file, 'utf8')): ResolvedServerConfig {
+export function loadServerConfig(argv: readonly string[], env: Env, cwd: string, read: (file: string) => string = file => readFileSync(file, 'utf8'), saved: Record<string, unknown> = {}): ResolvedServerConfig {
   const flags = parseFlags(argv);
+  // Storage first: nothing else matters while there is nowhere to keep the reports. Throws S3ConfigError naming every variable.
+  const s3 = resolveS3Config(env);
   const named = flags.config ?? env.ATLAS_CONFIG;
   const file = named ? path.resolve(cwd, named) : existsSync(path.join(cwd, DEFAULT_FILE)) ? path.join(cwd, DEFAULT_FILE) : null;
   let raw: Record<string, unknown> = {};
@@ -156,17 +162,19 @@ export function loadServerConfig(argv: readonly string[], env: Env, cwd: string,
       throw new ConfigError(`Cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+  for (const removed of ['data', 'backends', 'write']) {
+    if (removed in raw) throw new ConfigError(`${file}: "${removed}" is no longer supported. Reports and user state are kept only in S3-compatible storage, set with the required ATLAS_S3_* environment variables (see .env.example). Remove "${removed}" from the file.`);
+  }
   const base = file ? path.dirname(file) : cwd;
+  // The settings saved in S3 are the lowest layer: the file, the environment and the flags all override them.
   const auth = { ...(raw.auth as Record<string, unknown> | undefined) };
-  const include = { ...(raw.include as Record<string, unknown> | undefined) };
-  const merged: Record<string, unknown> = { ...raw, auth, include };
+  const include = { ...(saved.include as Record<string, unknown> | undefined), ...(raw.include as Record<string, unknown> | undefined) };
+  const merged: Record<string, unknown> = { ...saved, ...raw, auth, include };
   const set = (key: string, value: unknown) => { if (value !== undefined) merged[key] = value; };
   // ATLAS_HOST and ATLAS_PORT first: HOST is often the machine's own name, and PORT belongs to whatever else is running here.
   set('host', flags.host ?? env.ATLAS_HOST ?? env.HOST);
   const port = env.ATLAS_PORT ?? env.PORT;
   set('port', flags.port !== undefined ? Number(flags.port) : port !== undefined ? Number(port) : undefined);
-  set('data', flags.data ?? env.ATLAS_DATA);
-  set('write', flags.write ?? env.ATLAS_WRITE);
   set('site', flags.site ?? env.ATLAS_SITE);
   set('outlineBranch', flags['outline-branch'] ?? env.ATLAS_OUTLINE_BRANCH);
   set('refreshSeconds', flags.refresh !== undefined ? Number(flags.refresh) : env.ATLAS_REFRESH_SECONDS !== undefined ? Number(env.ATLAS_REFRESH_SECONDS) : undefined);
@@ -175,7 +183,7 @@ export function loadServerConfig(argv: readonly string[], env: Env, cwd: string,
   set('runTimeoutSeconds', env.ATLAS_RUN_TIMEOUT_SECONDS === undefined ? undefined : Number(env.ATLAS_RUN_TIMEOUT_SECONDS));
   set('runStallSeconds', env.ATLAS_RUN_STALL_SECONDS === undefined ? undefined : Number(env.ATLAS_RUN_STALL_SECONDS));
   set('heartbeatSeconds', env.ATLAS_HEARTBEAT_SECONDS === undefined ? undefined : Number(env.ATLAS_HEARTBEAT_SECONDS));
-  const limits = { ...(raw.limits as Record<string, unknown> | undefined) };
+  const limits = { ...(saved.limits as Record<string, unknown> | undefined), ...(raw.limits as Record<string, unknown> | undefined) };
   for (const [key, variable] of [['maxObjectMiB', 'ATLAS_MAX_OBJECT_MIB'], ['maxJsonMiB', 'ATLAS_MAX_JSON_MIB'], ['maxStreams', 'ATLAS_MAX_STREAMS']] as const) {
     if (env[variable] !== undefined) limits[key] = Number(env[variable]);
   }
@@ -190,26 +198,6 @@ export function loadServerConfig(argv: readonly string[], env: Env, cwd: string,
   if (!parsed.success) throw new ConfigError(`${file ? `${file}: ` : 'Configuration: '}${parsed.error.issues.map(issue => `${issue.path.join('.') || '(config)'}: ${issue.message}`).join('; ')}`);
   const config = parsed.data;
 
-  // Backends: the data folder, then those in the file, then --store and ATLAS_STORE.
-  const taken = new Set<string>(['data']);
-  const backends: BackendSpec[] = [{ id: 'data', label: 'Server data', url: path.resolve(base, config.data) }];
-  const extra = config.backends.map(item => ({ id: item.id, label: item.label ?? item.id, url: item.url, write: item.write === true }));
-  for (const item of extra) {
-    if (taken.has(item.id)) throw new ConfigError(`Two backends are called "${item.id}" ("data" is the data folder)`);
-    taken.add(item.id);
-    backends.push({ id: item.id, label: item.label, url: item.url });
-  }
-  for (const spec of [...(flags.store ?? []), ...(flags.store ? [] : list(env.ATLAS_STORE))]) {
-    const item = backendOf(spec, taken);
-    if (taken.has(item.id)) throw new ConfigError(`Two backends are called "${item.id}"`);
-    taken.add(item.id);
-    backends.push({ id: item.id, label: item.id, url: item.url });
-  }
-  const marked = extra.filter(item => item.write).map(item => item.id);
-  if (marked.length > 1) throw new ConfigError(`Only one backend can take uploads; ${marked.join(', ')} are all marked write`);
-  const writeId = config.write ?? marked[0] ?? 'data';
-  if (!backends.some(item => item.id === writeId)) throw new ConfigError(`write names "${writeId}", which is not a backend (${backends.map(item => item.id).join(', ')})`);
-
   // Tokens: the file's, then the environment's.
   const tokens: ResolvedToken[] = [];
   for (const item of config.auth.tokens) {
@@ -223,8 +211,8 @@ export function loadServerConfig(argv: readonly string[], env: Env, cwd: string,
   for (const item of tokens) if (item.token.length < MIN_TOKEN) throw new ConfigError(`Token "${item.name}" is shorter than ${MIN_TOKEN} characters: use a long random one (openssl rand -hex 24)`);
   if (new Set(tokens.map(item => item.token)).size !== tokens.length) throw new ConfigError('Two tokens are the same: each token must say who it is');
 
-  const { backends: _backends, auth: _auth, write: _write, ...rest } = config;
-  const resolved: ResolvedServerConfig = { ...rest, data: backends[0]!.url, backends, writeId, tokens, anonymousRead: config.auth.anonymousRead, insecure: config.auth.insecure, configFile: file, ...(config.site ? { site: path.resolve(base, config.site) } : {}) };
+  const { auth: _auth, ...rest } = config;
+  const resolved: ResolvedServerConfig = { ...rest, s3, tokens, anonymousRead: config.auth.anonymousRead, insecure: config.auth.insecure, configFile: file, ...(config.site ? { site: path.resolve(base, config.site) } : {}) };
   assertSafeToListen(resolved);
   return resolved;
 }

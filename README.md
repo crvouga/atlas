@@ -18,7 +18,7 @@ backends, and tells you in one command whether the product still does what it wa
   versioned layer format with a golden fixture, and an `ObjectStore` interface any bucket fits.
 - **One node, many projects.** `atlas server` runs a Bun API and serves the Atlas client from the same host. Reports, specs, recordings and live progress are partitioned by project slug.
   Every laptop and CI job sends results to it as they finish (`atlas report publish`, or `atlas report stream` while
-  a suite runs), it keeps them on its own disk (or in S3, R2, MinIO), and every client sees the combined report
+  a suite runs), it keeps them in an S3-compatible bucket (AWS S3, R2, MinIO; required, nothing else is used), and every client sees the combined report
   update live, receiving only what changed ([the server](docs/server.md), [deploying](docs/deploying.md)).
 - **Fast and fail-closed.** Publishing is two small writes. A thousand layers of a hundred checks
   combine in about a second. An unreadable layer, a downed backend or a check still running is never
@@ -67,7 +67,7 @@ bun atlas          # starts the project-agnostic Atlas node at http://localhost:
 bun example:run    # runs tests and streams results, current steps and progress as they execute
 ```
 
-The server starts independently with data in `./atlas-data`; it never loads example specs or reports. `bun example:run` publishes the Todo example under `todo-app`. Select a project using the top-right picker, then use the spec dropdown breadcrumbs to navigate. Other projects set `ATLAS_SERVER_URL`, `ATLAS_PROJECT` (for example `checkout-service`) and their publish token. Every uploader talks to the node; storage credentials stay on the server.
+The server starts independently; it never loads example specs or reports. **It needs S3-compatible storage** (see [Required S3 storage](#required-s3-storage)): copy `.env.example` to `.env` and fill in the `ATLAS_S3_*` variables first, or it exits at once and lists every one that is missing. `bun example:run` publishes the Todo example under `todo-app`. Select a project using the top-right picker, then use the spec dropdown breadcrumbs to navigate. Other projects set `ATLAS_SERVER_URL`, `ATLAS_PROJECT` (for example `checkout-service`) and their publish token. Every uploader talks to the node; storage credentials stay on the server.
 
 Every Gherkin scenario runs, including sharing and renaming. Test reports show running spinners,
 live step logs and a Running status filter. Producers send heartbeats every
@@ -88,8 +88,11 @@ or package installation. [`latest` on GHCR](https://github.com/users/crvouga/pac
 the newest checked `main` image, independently of npm releases.
 
 1. Leave the start command unset. Add a long random secret as `ATLAS_TOKEN` (at least 12 characters;
-   use 48 or more) and set `RAILWAY_RUN_UID=0` for [Railway volume permissions](https://docs.railway.com/volumes#permissions).
-2. Attach a persistent volume at `/data` and keep one replica so reports and server settings survive updates.
+   use 48 or more).
+2. Add the five required storage variables (`ATLAS_S3_ENDPOINT`, `ATLAS_S3_BUCKET`, `ATLAS_S3_REGION`,
+   `ATLAS_S3_ACCESS_KEY_ID`, `ATLAS_S3_SECRET_ACCESS_KEY`; see [Required S3 storage](#required-s3-storage)) for a
+   bucket you own, and keep one replica. All reports and settings live in that bucket, so no volume is needed and
+   the service refuses to start, listing what is missing, without them.
 3. Set the healthcheck path to `/readyz` and generate a public domain. Railway supplies `PORT`;
    leave `ATLAS_PORT` unset. Open the domain and sign in with the token as the password (any username).
 4. Enable **Settings → Source → Configure Auto Updates → Anytime** to follow `latest`.
@@ -100,7 +103,7 @@ For the exact image from a run, open **[CI](https://github.com/crvouga/atlas/act
 run → Summary → Atlas CI**. The summary includes a copyable full commit tag, the immutable registry digest,
 whether that run updated `latest`, all job results, npm release details and artifact links. Use the commit
 tag to pin or roll back a deployment. The [deployment guide](docs/deploying.md#run-it) covers optional reader
-and publisher tokens, bucket storage and sending results from your projects.
+and publisher tokens, the S3 bucket and sending results from your projects.
 
 ### Deploy without authentication
 
@@ -231,8 +234,8 @@ flag).
 
 **The server** is `atlas serve`: one process that serves the client, takes in results and streams the report to
 every client. Point `ATLAS_STORE` at it and every developer's laptop and every CI job sends results with the same
-commands that write to a folder; everyone then looks at one report, live. Results are kept in its data folder
-unless you choose a bucket. `atlas dev` runs the same server with the client's dev server in front, so
+commands that write to a folder; everyone then looks at one report, live. Results are kept in an S3-compatible bucket
+and nowhere else ([required storage](#required-s3-storage)). `atlas dev` runs the same server with the client's dev server in front, so
 development is one host too. See [the server](docs/server.md) and
 [running Atlas for a project](docs/deploying.md).
 
@@ -240,13 +243,54 @@ Deploy the server using the [Railway setup above](#deploy-to-railway-without-cod
 [deployment guide](docs/deploying.md#run-it) for other hosts.
 
 ```sh
-atlas serve                                          # the project's server, at :8080 (ATLAS_TOKEN says who may upload)
+atlas serve                                          # the project's server, at :8080 (needs ATLAS_S3_*; ATLAS_TOKEN says who may upload)
 
 export ATLAS_STORE=https://atlas.example.com ATLAS_TOKEN=…   # on every laptop and CI job
 atlas report publish --producer unit --junit out.xml --specs ./specs     # when a suite is done
 my-suite --json | atlas report stream --producer e2e --environment ios  # or as its checks finish
 atlas report status --branch main --ignore-modified  # the gate, answered by the server
 ```
+
+### Required S3 storage
+
+The Atlas server keeps **all reports and all user state in S3-compatible object storage, and nowhere else**: no local
+disk, no memory, no database, no browser storage. *User state* is one JSON document in the bucket,
+`server/state.json`, that holds the **garbage collection policy** (defined in the Atlas UI at `/admin`) and the
+settings saved there. The server reads the policy from that document each time it collects. Until someone saves a
+policy, garbage collection is off and nothing is ever deleted.
+
+Because of that, the storage settings are **required environment variables with no defaults** (see
+[`.env.example`](https://github.com/crvouga/atlas/blob/main/.env.example)), and the server **refuses to start** (exit status 2) without them:
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `ATLAS_S3_ENDPOINT` | yes | S3 API endpoint, e.g. `https://s3.eu-west-1.amazonaws.com` |
+| `ATLAS_S3_BUCKET` | yes | Bucket for reports and user state; it must already exist |
+| `ATLAS_S3_REGION` | yes | Bucket region (`auto` for Cloudflare R2) |
+| `ATLAS_S3_ACCESS_KEY_ID` | yes | Access key of an account that may list, read, write and delete in the bucket |
+| `ATLAS_S3_SECRET_ACCESS_KEY` | yes | Its secret key |
+| `ATLAS_S3_PREFIX` | no | Folder inside the bucket (default: the bucket root) |
+| `ATLAS_S3_PATH_STYLE` | no | `1` (default) for `endpoint/bucket/key`, `0` for virtual-hosted style |
+| `ATLAS_S3_SESSION_TOKEN` | no | Only for temporary credentials |
+
+If a variable is missing or malformed, or S3 rejects the settings, Atlas lists **every** variable with `[MISSING]`
+or `[INVALID]` next to the ones that are wrong, says why storage is required, and exits non-zero:
+
+```text
+==============================================================================
+  ATLAS CANNOT START: S3 STORAGE IS NOT USABLE
+==============================================================================
+  Why:    the S3 configuration is missing or invalid.
+  Reason: Atlas stores ALL reports and ALL user state (the garbage collection policy and saved
+          settings) in S3-compatible object storage, and nowhere else. …
+  Required environment variables:
+  [MISSING] ATLAS_S3_ENDPOINT           S3 API endpoint of the object storage service
+  [ok]      ATLAS_S3_BUCKET             Bucket that holds reports and user state; it must already exist
+  …
+```
+
+See [the server guide](docs/server.md#required-s3-storage) for the details and
+[user state and garbage collection](docs/server.md#user-state-and-garbage-collection) for how the policy works.
 
 **The client** shows each spec (Gherkin, Quint, DMN, Alloy, OpenSLO, and the rest by file type) with
 its combined result per environment and the layer behind it. See

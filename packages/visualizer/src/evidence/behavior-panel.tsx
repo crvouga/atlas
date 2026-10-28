@@ -8,6 +8,7 @@
  */
 import type { EvidenceHolder } from '@crvouga/atlas/reports/evidence-detail';
 import { isVideoAttachment } from '@crvouga/atlas/reports/evidence-detail';
+import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import type { Attachment } from '@crvouga/atlas/schema';
@@ -18,6 +19,7 @@ import { attachmentSource, useCheckDetail } from './artifacts';
 import { COVERAGE, COVERAGE_ORDER, type Behavior, type CoverageCounts, type CoverageState, type Revision } from './behavior';
 import { PlainSteps } from './check-detail';
 import { useEvidence } from './evidence-context';
+import { ScopeNotice } from './evidence-scope';
 import { plural, statusWord, useNow } from './format';
 import { exampleIndexFor, exampleRows, fillExample, type FeatureStep } from './gherkin';
 import { Origin, StatusMark } from './marks';
@@ -123,17 +125,23 @@ function Player({ result }: { result: EvidenceResult }) {
   return (
     <Stack gap="sm">
       {sources.slice(0, 1).map(({ attachment, url }) => (
-        <Box
-          key={url}
-          component="video"
-          src={url}
-          controls
-          preload="metadata"
-          aria-label={`Recording: ${attachment.description ?? attachment.name}`}
-          maw="100%"
-          w="100%"
-          mah="70vh"
-        />
+        <Stack key={url} gap="xs">
+          {/* What the recording does and does not show, as its producer declared it; undeclared says unknown. */}
+          <ScopeNotice
+            scope={effectiveScope(attachment.scope, detail.data?.check.scope, detail.data?.inheritedScope)}
+            name={attachment.name}
+          />
+          <Box
+            component="video"
+            src={url}
+            controls
+            preload="metadata"
+            aria-label={`Recording: ${attachment.description ?? attachment.name}`}
+            maw="100%"
+            w="100%"
+            mah="70vh"
+          />
+        </Stack>
       ))}
       {sources.length > 1 && (
         <Text component="div" c="dimmed">
