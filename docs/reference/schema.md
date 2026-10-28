@@ -744,6 +744,29 @@ export const MomentSchema = …
 
 Where in a check something happened: at a step, and/or this long after the check started.
 
+#### `EvidenceScopeSchema`
+
+```ts
+export const EvidenceScopeSchema = …
+```
+
+What a piece of evidence does and does not show, declared by the producer that made it: where it ran, whether its
+data and dependencies were real, whether audio was captured, how it was paced and which assertions the result
+stands on. Every field is optional and a field that is absent is unknown, never assumed live, physical or end to end.
+
+It is a declaration, not a finding: Atlas shows it as the producer's word, apart from the dimensions the producer
+names in `verified` (facts something independent checked). It describes evidence and never decides a status, a slot
+or a winner. The nearest declaration wins as a whole, never field by field: an attachment's `scope`, else its
+attempt's, else its check's, else its part's, else its layer's.
+
+#### `EvidenceScope`
+
+```ts
+export type EvidenceScope = z.output<typeof EvidenceScopeSchema>;
+```
+
+A producer-declared evidence scope as stored in a layer, parsed from `EvidenceScopeSchema`.
+
 #### `AttachmentSchema`
 
 ```ts

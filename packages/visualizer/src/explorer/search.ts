@@ -30,6 +30,8 @@ export const ExplorerSearchFields = {
   domain: text,
   spec: text,
   tag: text,
+  /** Only tests with one recording that declares every one of these scope tokens (`device:physical,audio:recorded`). */
+  scope: text,
   /** Only the tests a CI run recorded (a `RunSummary.key`). Not `run`, which already names a recorded statechart run. */
   inRun: text,
   group: z.enum(TEST_GROUPS).optional().catch(undefined),
@@ -53,6 +55,7 @@ export type ExplorerSearch = {
   readonly domain?: string;
   readonly spec?: string;
   readonly tag?: string;
+  readonly scope?: string;
   readonly inRun?: string;
   readonly group?: TestGroup;
   readonly sort?: TestSort;
@@ -88,6 +91,7 @@ export function queryOf(search: ExplorerSearch): TestQuery {
     domain: values(search.domain),
     spec: values(search.spec),
     tag: values(search.tag),
+    ...(values(search.scope).length ? { scope: values(search.scope) } : {}),
     sort: search.sort ?? 'spec'
   };
 }
@@ -99,5 +103,5 @@ export function explorerSearch(search: Record<string, unknown>): ExplorerSearch 
 
 /** True when any filter or search narrows the list. */
 export function narrowed(search: ExplorerSearch): boolean {
-  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.inRun);
+  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.scope || search.inRun);
 }

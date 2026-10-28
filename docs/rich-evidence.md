@@ -27,6 +27,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
 | `specPath` | check | The spec a check belongs to (a `.feature`, a test file), relative to the repository. Checks are grouped by it. |
 | `specs[]` (`path`, `domain`, `kind`, `title`) | layer | Names each spec and its group (`domain`), so a server can group checks by spec with a title even when no [spec set](integrating.md#tell-atlas-which-spec-a-check-belongs-to) has been published. |
@@ -61,6 +62,52 @@ attachments with that tag, and says how many match. Tags describe evidence; they
   from the producer's tags. See [Tagging artifacts](server.md#tagging-artifacts). A producer's own tags stay as uploaded.
 - **Older layers.** A layer without attachment tags reads exactly as before. Tags on an attachment that cannot be read
   (not a list of strings) are dropped, and the attachment, check and layer stay.
+
+## Evidence scope
+
+A green result and a video do not say whether the speech was real, the replies scripted, the audio recorded, the device
+physical or a vendor substituted. Declare it where the evidence is, in an optional `scope`, and the viewer shows it as
+short badges above the recording (before it is played), with the exact declaration on demand:
+
+```ts
+{
+  name: 'checkout.webm', role: 'video',
+  scope: {
+    surface: 'browser',               // where the product ran: browser, native-app, api…
+    deviceKind: 'simulator',          // simulator, emulator, physical, virtual-machine, desktop…
+    syntheticData: true,              // made-up data (false: real, absent: unknown)
+    dependencies: 'scripted',         // scripted, live or mixed
+    audioCaptured: false,             // false: silent, absent: unknown
+    pacing: 'paced',                  // paced, real-time
+    asserted: ['the receipt is shown'],           // what the result stands on
+    limitations: ['Replies are scripted'],
+    declaredBy: 'checkout e2e suite',
+    verified: ['deviceKind'],         // fields something independent checked
+    verifiedBy: 'device farm session log',
+    provenance: [{ url: 'https://farm.example/session/1', name: 'Device session' }]
+  }
+}
+```
+
+Every field is optional, and every value except the booleans is an open string.
+
+- **Unknown is not live.** A recording with no scope, or a scope that does not say a thing, shows `Scope unknown` or
+  `Not declared`. It is never assumed live, physical, audible or end to end.
+- **Declared is not verified.** Atlas shows `scope` as the producer's word. Only the fields named in `verified` are
+  marked verified (with `verifiedBy`), and `provenance` links where to check them. Atlas does not check any of it.
+- **Only what was asserted.** `asserted` lists the boundaries the result stands on. The viewer says that other activity
+  visible in the clip is not verified behavior; with no `asserted` it says that no boundary was declared.
+- **The nearest declaration, whole.** A recording takes the `scope` of the attachment, else its attempt, its check, its
+  part, its layer, in that order. It is never merged field by field, so a retry on a physical phone does not borrow
+  the limitations declared for the simulator try, and the badges change with the exact recording opened.
+- **Filtering.** `GET /api/reports/tests?scope=device:physical,audio:recorded` (and the explorer's *Recording scope*
+  filter) lists tests with one playable recording that states every token: `surface:<v>`, `device:<v>`,
+  `data:synthetic` or `data:real`, `dependencies:<v>`, `audio:recorded` or `audio:silent`, `pacing:<v>`. A simulator
+  and a physical phone are separate values. Evidence that did not declare a value is never included, and `unknown`
+  asks for recordings that declared nothing. Each test lists its recordings' tokens as `scopeProfiles`, the facets as
+  `scopes`, and the search box finds the words in them.
+- **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
+  dropped, and the attachment, check and layer stay.
 
 ## Labels describe, parameters split
 
