@@ -401,6 +401,11 @@ export class TestHistory {
     return this.#specs;
   }
 
+  /** Every test the history holds a result for (keyed as `TestSummary.key`), including tests the report no longer has a current result for. */
+  tests(): readonly { readonly key: string; readonly id: string; readonly specPath: string | null }[] {
+    return [...this.#idents.values()].map(({ slot, id, specPath }) => ({ key: slot, id, specPath }));
+  }
+
   /** How many layers were added. */
   get layers(): number {
     return this.#seen.size;
@@ -628,6 +633,8 @@ export type CatalogModel = {
   readonly facets: CatalogFacets;
   readonly haystacks: ReadonlyMap<string, string>;
   readonly history: TestHistory | null;
+  /** The specs the report is laid over, sorted by path: the given ones, else those the layers recorded. What `catalogHealth` calls defined. Absent on a model built from a server's catalog document. */
+  readonly specs?: readonly SpecEntry[];
 };
 
 function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: string) => SpecEntry | undefined): TestSummary {
@@ -762,7 +769,7 @@ export function catalogModel(layers: readonly LayerEvidence[], sources: CatalogS
     branches: facet(tests, test => test.stats.branches),
     labels: Object.fromEntries([...labelKeys].sort().map(key => [key, facet(tests, test => (test.labels[key] === undefined ? [] : [test.labels[key]!]))])),
   };
-  return { version: sources.version ?? '', generatedAtMs: sources.now ?? Date.now(), tests, byKey, summary, facets, haystacks, history };
+  return { version: sources.version ?? '', generatedAtMs: sources.now ?? Date.now(), tests, byKey, summary, facets, haystacks, history, specs: recorded.entries() };
 }
 
 const SORTERS: Record<TestSort, (a: TestSummary, b: TestSummary) => number> = {
