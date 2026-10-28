@@ -21,7 +21,7 @@ Given only the repository link, start at docs/agents.md: install `@crvouga/atlas
 
 - [The report contract](https://raw.githubusercontent.com/crvouga/atlas/main/docs/report-contract.md): This is the normative description of what Atlas reads and writes when it reports on specs of any kind:
 - [Evidence: attachments, timelines, snapshots and everything else](https://raw.githubusercontent.com/crvouga/atlas/main/docs/extending.md): Atlas is opinionated about specs and open about evidence.
-- [Report backends and live snapshots](https://raw.githubusercontent.com/crvouga/atlas/main/docs/report-backends.md): Atlas maps the product's areas, screens, events and journeys from a spec, then overlays evidence of what the product did.
+- [docs/report-backends.md](https://raw.githubusercontent.com/crvouga/atlas/main/docs/report-backends.md): 
 - [Executable statecharts](https://raw.githubusercontent.com/crvouga/atlas/main/docs/statecharts.md): Write down how a product behaves as statecharts in open formats, then let Atlas lint them, plan paths that cover every transition, run those paths against the real product through any driver (a browser, a phone, a pla…
 
 ## Working with this project

@@ -210,7 +210,7 @@ are part of the contract:
 | **Partition independence** | Splitting the same layers across any number of backends, machines or branches, with any overlap, gives the same report. This is what makes partial runs on separate nodes safe. |
 | **Idempotence** | A layer present twice, in one backend or several, counts once. Publishing the same checks again writes the same layer. |
 | **Monotonic** | A layer changes only the slots it fills. Adding a layer never changes a result it did not record. |
-| **Deletion-free** | Nothing in the contract removes or rewrites a layer. Retention is the operator's choice. |
+| **Deletion-free** | Nothing in the contract removes or rewrites a layer. Retention is the operator's choice: Atlas deletes only under a garbage collection policy an operator saved in the UI, and then only layers that no longer decide any result ([the server](server.md#user-state-and-garbage-collection)). |
 | **Unknown is not a pass** | A layer that cannot be read, a backend that is down, and a check that is `running` or `not-run` never count as passing. The gate fails closed. |
 | **Aggregation by copying** | Layers are immutable and never share a key with different bytes, so combining stores is copying files (`atlas report merge`, `cp -R`, `rsync`, a CI artifact download). Copying is idempotent and commutative. |
 

@@ -16,7 +16,7 @@ atlas — executable statecharts
                [--no-retry] [--output <dir>]
   atlas merge  [--config atlas.config.ts] [--output <dir>] <run-dir> <run-dir>...
   atlas export --specs <dir> --format scxml|mermaid|markdown|json [--out <file>]
-  atlas server [--data <dir>] [--port 8080] [--store <url>]...   one Atlas node: API, projects and client
+  atlas server [--port 8080]                                     one Atlas node: API, projects and client; needs ATLAS_S3_* (atlas serve --help)
   atlas client build [--no-data] [--out <dir>]                    build the project-agnostic Atlas client
   atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
@@ -53,14 +53,18 @@ atlas init — integrate a project with an Atlas server
 ```text
 atlas serve: the Atlas server
 
-  atlas serve [--config atlas.server.json] [--data <dir>] [--port 8080] [--host 127.0.0.1]
-              [--store <url|id=url>]... [--write <id>] [--site <dir>]
+  atlas serve [--config atlas.server.json] [--port 8080] [--host 127.0.0.1] [--site <dir>]
               [--outline-branch <b>] [--branch <name>]... [--ignore-modified] [--refresh <seconds>]
               [--anonymous-read] [--insecure] [--no-log]
 
   One process serves the client and the API. Test results are uploaded to it from anywhere (laptops, CI) and it
-  shows everyone the combined report, live. It keeps its data in --data (default ./atlas-data) and can read more
-  backends (--store): S3, other servers, folders. Uploads go to the data folder unless --write names another.
+  shows everyone the combined report, live.
+
+  Storage is required. ALL reports and ALL user state (the garbage collection policy, saved settings) are kept in
+  S3-compatible object storage and nowhere else; there is no local-disk, in-memory or database fallback. Without
+  these environment variables the server prints every one of them with what is wrong, and exits with status 2:
+    ATLAS_S3_ENDPOINT  ATLAS_S3_BUCKET  ATLAS_S3_REGION  ATLAS_S3_ACCESS_KEY_ID  ATLAS_S3_SECRET_ACCESS_KEY
+  Optional: ATLAS_S3_PREFIX, ATLAS_S3_PATH_STYLE, ATLAS_S3_SESSION_TOKEN. See .env.example.
 
   Tokens (ATLAS_TOKEN admin, ATLAS_PUBLISH_TOKEN, ATLAS_READ_TOKEN, or "auth.tokens" in the config) are required
   to listen beyond this machine unless --insecure. Every option has an environment variable (docs/deploying.md).
@@ -71,11 +75,12 @@ atlas serve: the Atlas server
 ```text
 atlas dev: the Atlas server and the client, for working on either
 
-  atlas dev [--port 5180] [--host 127.0.0.1] [--data <dir>] [--store <url|id=url>]... [--config atlas.server.json]
+  atlas dev [--port 5180] [--host 127.0.0.1] [--config atlas.server.json]
 
   Starts the server (API only, on a port of its own) and the client's dev server, which proxies /api to it, so the
   browser talks to one host and a change to the client shows at once. In production `atlas serve` does both from
-  one process.
+  one process. Storage is the same as for `atlas serve`: the required ATLAS_S3_* environment variables name the S3
+  bucket that holds all reports and user state; without them it exits with status 2 and lists every variable.
 ```
 
 ## atlas report

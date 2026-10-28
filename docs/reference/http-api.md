@@ -116,7 +116,7 @@ Responses: `200` Settings editor.; `401` No token, or an unknown one. Send `Auth
 
 `GET /api/settings` · role: admin
 
-Returns editable persisted storage/report settings, active settings, a revision, and configuration precedence. Authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.
+Returns the editable report and live-run settings saved in the user state in S3, active settings, a revision, and configuration precedence. Storage and authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.
 
 Responses: `200` Settings and revision.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `503` Configuration is managed by the embedding application.
 
@@ -124,11 +124,39 @@ Responses: `200` Settings and revision.; `401` No token, or an unknown one. Send
 
 `PUT /api/settings` · role: admin
 
-Replaces editable storage/report settings, preserving authentication and other file fields. Atomically persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.
+Replaces the editable report and live-run settings in the user state in S3 (`server/state.json`), preserving the garbage collection policy and other fields. Persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.
 
 - `If-Match` (header, required): The quoted revision returned by GET /api/settings.
 
 Responses: `200` Saved settings and new revision. Restart required.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` Settings changed; reload before saving.; `413` Settings exceed the body limit.; `422` Invalid configuration.; `428` A quoted settings revision is required.; `503` Configuration is managed by the embedding application.
+
+### Read the garbage collection policy
+
+`GET /api/settings/gc` · role: admin
+
+Returns the policy kept in the user state in S3 (`server/state.json`), or `policy: null, saved: false` when none has been saved yet, in which case garbage collection is off and nothing is deleted. Also returns the revision to send back when saving and the last pass over each project. Requires an admin Bearer token. If the stored user state is unreadable the answer is 503 and the stored object is left untouched.
+
+Responses: `200` The policy, its revision and the last passes.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `503` The user state in S3 cannot be read, or settings are managed by the embedding application.
+
+### Save the garbage collection policy
+
+`PUT /api/settings/gc` · role: admin
+
+Replaces the policy in the user state in S3 and leaves the rest of that document alone. The server reads the policy from S3 each time it collects, so the new policy applies at the next pass, without a restart. Requires an admin Bearer token, same-origin requests in browsers, and the current revision.
+
+- `If-Match` (header, required): The quoted revision returned by GET /api/settings/gc.
+
+Responses: `200` The saved policy and the new revision.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` The state changed; reload before saving.; `413` The body exceeds the limit.; `422` Invalid policy.; `428` A quoted revision is required.; `503` The user state in S3 cannot be read, or settings are managed by the embedding application.
+
+### Collect garbage now, or preview it
+
+`POST /api/settings/gc/run` · role: admin
+
+Applies the policy saved in S3 to every project now, instead of waiting for the schedule. Only report layers that were read and no longer decide any result, older than the policy allows and beyond its `keepLatest`, are deleted, with the captured files only they used. With `dryRun=1` nothing is deleted and each run reports what it would delete (a disabled policy is previewed as if enabled). Answers 409 when no policy has been saved, and, without `dryRun`, when the saved policy is disabled. Requires an admin Bearer token and a same-origin request in browsers.
+
+- `dryRun` (query): `1` or `true` to only count what would be deleted.
+
+Responses: `200` One run per project.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` No policy has been saved, or it is disabled.
 
 ### Is the process up
 
