@@ -95,6 +95,14 @@ first commit, they are `null`: that is provenance missing, not an error, and nev
 result wins. `--param key=value` (repeatable) adds a parameter that makes a result its own slot, such
 as `--param device=iphone-15`.
 
+Without a CI run URL, layers recorded at one branch and commit group into one run, so repeating a local demo
+looks like one execution. To keep invocations apart, name each one: `--run-id <id>` (or `ATLAS_RUN_ID`), with
+`--run-title <title>` (or `ATLAS_RUN_TITLE`) for a human name and `--run-started-at` / `--run-ended-at` for when
+it ran. Every shard or batch of one invocation passes the same id and is one run; the next invocation passes a new
+one. A run recorded from a checkout with uncommitted changes keeps saying so beside its commit. The id only
+groups: it is not part of which result a check fills or which wins, and a producer that never passes it keeps
+the CI-run-URL, then `branch@sha`, grouping.
+
 The time the checks ran comes from the report (CTRF `summary.stop`, a JUnit `timestamp`, a manifest's
 `finishedAt`), or failing that from the report file's modification time, in milliseconds. Publish in
 the same job that wrote the report and that is the time it ran. If you copy the report first, pass
