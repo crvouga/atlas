@@ -1,0 +1,400 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/catalog-health.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "version": {
+      "type": "string",
+      "description": "Changes whenever the report or its history does"
+    },
+    "generatedAtMs": {
+      "type": "number"
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when there is no warning-severity finding"
+    },
+    "counts": {
+      "type": "object",
+      "properties": {
+        "specs": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Spec files the report is laid over, before any root mapping"
+            },
+            "defined": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Logical specs: files joined by a declared root mapping count once"
+            },
+            "withTests": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Logical specs, defined or not, that have at least one test"
+            },
+            "executed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Defined logical specs with a test that passed or failed"
+            },
+            "withoutExecution": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Defined logical specs with no passed or failed test: the defined coverage gaps"
+            }
+          },
+          "required": [
+            "files",
+            "defined",
+            "withTests",
+            "executed",
+            "withoutExecution"
+          ],
+          "additionalProperties": {}
+        },
+        "tests": {
+          "type": "object",
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "withSpec": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "withoutSpec": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "passed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Tests whose current status is passed"
+            },
+            "historicalOnly": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Tests only the history holds a result for"
+            }
+          },
+          "required": [
+            "total",
+            "withSpec",
+            "withoutSpec",
+            "passed",
+            "historicalOnly"
+          ],
+          "additionalProperties": {}
+        },
+        "scenarios": {
+          "type": "object",
+          "properties": {
+            "outlines": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Tests sharing the label `outline` count once; a test without it is its own outline"
+            },
+            "examples": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Tests (check identities), however many environments ran them"
+            },
+            "observations": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Current results per producer, environment and parameter set"
+            },
+            "executedObservations": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "passedObservations": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "outlines",
+            "examples",
+            "observations",
+            "executedObservations",
+            "passedObservations"
+          ],
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "specs",
+        "tests",
+        "scenarios"
+      ],
+      "additionalProperties": {}
+    },
+    "reconciliation": {
+      "type": "object",
+      "properties": {
+        "specs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "What the Specs view counts: spec files"
+        },
+        "testSpecs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "What the Tests view groups by: logical specs with at least one test"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "delta": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "label",
+              "delta"
+            ],
+            "additionalProperties": {}
+          },
+          "description": "From `specs` to `testSpecs`: each step adds its `delta`"
+        },
+        "testsWithoutSpec": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "explanation": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "specs",
+        "testSpecs",
+        "steps",
+        "testsWithoutSpec",
+        "explanation"
+      ],
+      "additionalProperties": {}
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "fallbackIdentity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Checks whose id equals their title"
+        },
+        "basis": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checks",
+        "fallbackIdentity",
+        "basis"
+      ],
+      "additionalProperties": {}
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "specs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "name",
+          "specs"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "Specs per domain, most first"
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "matched": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Distinct paths the mapping changed"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "matched"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "path",
+          "sources"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "Logical specs seen under more than one original path, joined by a root mapping"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "An open set: treat a code you do not know as informational"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "warning",
+              "info"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "candidates": {
+                  "description": "Other paths it could be the same promise as. Atlas has not merged them",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "reason"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "At most 25; `count` is the whole"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message",
+          "count",
+          "items"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "version",
+    "generatedAtMs",
+    "ok",
+    "counts",
+    "reconciliation",
+    "identity",
+    "domains",
+    "roots",
+    "aliases",
+    "findings"
+  ],
+  "additionalProperties": {}
+}

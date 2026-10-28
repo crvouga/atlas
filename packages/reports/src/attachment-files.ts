@@ -12,6 +12,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { contentTypeOf } from './media-types';
+import { isVideoAttachment } from './recording-receipt';
 
 type Loose = Record<string, unknown>;
 
@@ -53,7 +54,9 @@ export type ReadOptions = {
  * attachment gave none.
  *
  * A file that is missing, not allowed or too large is left out with a warning: evidence that could not be
- * found never stops the results from being published. Attachments without a `path` are kept untouched.
+ * found never stops the results from being published. The exception in kind is a video of a check that declared
+ * `recordingExpectation: "required"`: it stays as an attachment without bytes whose `omitted` says why (`not-found`,
+ * `not-allowed`, `too-large`, `over-budget`), so the recording receipt can name the gap. Attachments without a `path` are kept untouched.
  *
  * @param holder A check, step, attempt or any object that may have `attachments`, `steps` and `attempts`.
  * @param roots Folders a relative path is resolved against (in order), and the only folders an untrusted path may name.
@@ -63,7 +66,7 @@ export async function readAttachmentFiles(holder: Loose, roots: readonly string[
   const warnings: string[] = [];
   const maxBytes = options.maxBytes ?? 512 * 1024 * 1024;
   let attached = 0, bytes = 0;
-  async function walk(value: Loose): Promise<Loose> {
+  async function walk(value: Loose, expectsRecording = value.recordingExpectation === 'required'): Promise<Loose> {
     const out: Loose = { ...value };
     if (Array.isArray(out.attachments)) {
       const kept: Loose[] = [];
@@ -73,18 +76,21 @@ export async function readAttachmentFiles(holder: Loose, roots: readonly string[
         const name = String(given.name ?? file);
         const { path: _path, ...rest } = given;
         const found = await locate(file, roots, options.trusted === true);
-        if (found.problem) { warnings.push(`${name}: ${found.problem}`); continue; }
+        // A video that a check was expected to have stays in the layer as metadata with the reason it was left out
+        // (never the path), so the recording receipt can name the gap instead of the file vanishing.
+        const left = (reason: string) => { if (expectsRecording && isVideoAttachment({ ...rest, contentType: rest.contentType ?? contentTypeOf(name) })) kept.push({ ...rest, omitted: reason }); };
+        if (found.problem) { warnings.push(`${name}: ${found.problem}`); left(found.problem.startsWith('file not found') ? 'not-found' : 'not-allowed'); continue; }
         const size = (await stat(found.file!)).size;
-        if (size > maxBytes) { warnings.push(`${name}: ${(size / 1024 / 1024).toFixed(0)} MiB is over the limit of ${Math.round(maxBytes / 1024 / 1024)} MiB`); continue; }
-        if (options.budget && size > options.budget.remaining) { warnings.push(`${name}: the total size of attachments would pass the budget (raise --max-total-attachment-mb, or attach a uri)`); continue; }
+        if (size > maxBytes) { warnings.push(`${name}: ${(size / 1024 / 1024).toFixed(0)} MiB is over the limit of ${Math.round(maxBytes / 1024 / 1024)} MiB`); left('too-large'); continue; }
+        if (options.budget && size > options.budget.remaining) { warnings.push(`${name}: the total size of attachments would pass the budget (raise --max-total-attachment-mb, or attach a uri)`); left('over-budget'); continue; }
         if (options.budget) options.budget.remaining -= size;
         attached += 1; bytes += size;
         kept.push({ ...rest, data: new Uint8Array(await readFile(found.file!)), ...(rest.contentType ? {} : { contentType: contentTypeOf(found.file!) }) });
       }
       out.attachments = kept;
     }
-    if (Array.isArray(out.steps)) { const steps: Loose[] = []; for (const step of out.steps as Loose[]) steps.push(await walk(step)); out.steps = steps; }
-    if (Array.isArray(out.attempts)) { const attempts: Loose[] = []; for (const attempt of out.attempts as Loose[]) attempts.push(await walk(attempt)); out.attempts = attempts; }
+    if (Array.isArray(out.steps)) { const steps: Loose[] = []; for (const step of out.steps as Loose[]) steps.push(await walk(step, expectsRecording)); out.steps = steps; }
+    if (Array.isArray(out.attempts)) { const attempts: Loose[] = []; for (const attempt of out.attempts as Loose[]) attempts.push(await walk(attempt, expectsRecording)); out.attempts = attempts; }
     return out;
   }
   return { value: await walk(holder), attached, bytes, warnings };
