@@ -82,12 +82,28 @@ export function CountLine({ summary, noun, nouns }: { summary: SpecSummary; noun
 export function backendLabel(backends: readonly BackendInfo[], id: string) {
   return backends.find((backend) => backend.id === id)?.label ?? id;
 }
+/**
+ * Recording completeness of a layer, apart from its test outcomes: how many expected videos were published. A layer
+ * that declared no expectations returns null (its completeness is unknown, so nothing is claimed).
+ */
+export function recordingLabel(layer: Pick<LayerHeader, 'recordings'>): { text: string; incomplete: boolean } | null {
+  const recordings = layer.recordings;
+  if (!recordings || recordings.expected === 0) return null;
+  const published = recordings.uploaded + recordings.referenced;
+  return { text: `Recordings ${published} of ${recordings.expected}`, incomplete: recordings.skipped + recordings.unresolved > 0 };
+}
 /** A result's provenance; incomplete origin data is stated explicitly. */
 export function Origin({ layer, backends, now }: { layer: LayerHeader; backends: readonly BackendInfo[]; now: number }) {
   const sha = shortSha(layer.sha);
+  const recording = recordingLabel(layer);
   return (
     <Flex component="span" display="inline-flex" wrap="wrap" gap="xs" align="center" c="dimmed" fz="xs">
       {layer.live && <Badge size="sm">Running now</Badge>}
+      {recording && (
+        <Badge size="sm" variant="light" color={recording.incomplete ? 'orange' : 'gray'} title={recording.incomplete ? 'Some expected recordings were not published. The test outcomes are unaffected.' : 'Every expected recording was published.'}>
+          {recording.incomplete ? `${recording.text}: incomplete` : recording.text}
+        </Badge>
+      )}
       <Text span inherit>
         {backendLabel(backends, layer.backend)}
       </Text>
