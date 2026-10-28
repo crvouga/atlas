@@ -248,7 +248,7 @@ export const TestHistorySchema = …
 export const ReportRunSchema = …
 ```
 
-A run: the layers that share a run URL (else a branch and commit), with what they recorded.
+A run: the layers that name the same execution (else share a run URL, else a branch and commit), with what they recorded.
 
 #### `RunListSchema`
 
@@ -632,6 +632,25 @@ export const FRESHNESS = …
 Why a layer's origin is advisory: `modified` (recorded from a checkout with uncommitted changes) or `unknown`
 (origin not captured). Absent on a layer from a clean commit. It never changes a status. A closed vocabulary: it
 changes only with a new `schemaVersion`.
+
+#### `LayerRunSchema`
+
+```ts
+export const LayerRunSchema = …
+```
+
+The execution a layer belongs to, named by the producer: one invocation of a local or manual run, which several
+layers (shards, batches, producers) may share. Presentation and history grouping only: it never takes part in the
+slot a result fills, in which result wins, or in a status. Absent, a run is told by its CI run URL, else `branch@sha`.
+Within one project, layers that carry the same `id` are one run; a later invocation gets another `id`.
+
+#### `LayerRun`
+
+```ts
+export type LayerRun = z.output<typeof LayerRunSchema>;
+```
+
+The execution of a layer, parsed from `LayerRunSchema`.
 
 #### `MeasurementSchema`
 

@@ -9,6 +9,7 @@
  * @see docs/report-contract.md
  */
 import type { EvidenceMeasurement, EvidenceStatus } from './explorer-types';
+import type { LayerRun } from '../../schema/src/layer';
 import type { LayerParameters } from './layer-types';
 
 /** Where a recorded test's timeline and captured files are read from. */
@@ -75,6 +76,8 @@ export type LayerHeader = {
   readonly parameters: LayerParameters;
   /** `modified`: recorded from a checkout with uncommitted changes; `unknown`: origin not captured; absent: clean. Advisory; never changes a status. */
   readonly freshness?: 'unknown' | 'modified';
+  /** The execution the producer named for it (one local or manual invocation), or absent. Grouping and display only; never part of the slot. */
+  readonly run?: LayerRun;
   /** Where this layer's recorded timelines and captured files are read from, or null when it has none. */
   readonly recording: RecordingAddress | null;
   /** From a spec run that has not been collected into a layer yet. */

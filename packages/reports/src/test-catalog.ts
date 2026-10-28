@@ -245,10 +245,19 @@ export type TestHistoryDocument = {
   readonly history: readonly TestResultEntry[];
 };
 
-/** A CI run (or any group of layers sharing a run URL, else a branch and commit): when, where, and how its tests went. */
+/**
+ * A run: the layers that name the same execution (`run.id`), else share a CI run URL, else a branch and commit. When,
+ * where, and how its tests went.
+ */
 export type RunSummary = {
-  /** Stable key: the run URL, or `branch@sha`. */
+  /** Stable key: `run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. */
   readonly key: string;
+  /** The execution id a producer named for it, when it did. Layers that share it are one run, however many uploads they took; another invocation at the same commit has another. */
+  readonly runId?: string;
+  /** The human title the producer gave the execution (the newest layer's). Presentation only: the key, the commit and `freshness` are unaffected. */
+  readonly title?: string;
+  /** `modified` when any of its layers was recorded from a checkout with uncommitted changes, else `unknown` when any origin was not captured; absent when every layer is from a clean commit. Advisory; never changes a status. */
+  readonly freshness?: 'unknown' | 'modified';
   readonly runUrl: string | null;
   readonly branch: string | null;
   readonly sha: string | null;
@@ -300,8 +309,12 @@ export type RunDetail = {
   readonly results: readonly RunResult[];
 };
 
-/** The run a layer belongs to: its run URL, else `branch@sha`, else `local`. Layers with the same key are one run. */
-export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'>): string {
+/**
+ * The run a layer belongs to: the execution its producer named (`run:<id>`), else its run URL, else `branch@sha`, else
+ * `local`. Layers with the same key are one run. Only grouping: it is never part of the slot a result fills.
+ */
+export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'> & { readonly run?: { readonly id: string } }): string {
+  if (layer.run?.id) return `run:${layer.run.id}`;
   if (layer.runUrl) return layer.runUrl;
   if (layer.branch || layer.sha) return `${layer.branch ?? ''}@${layer.sha ?? ''}`;
   return 'local';
@@ -357,7 +370,11 @@ function newer(a: Held, b: Held): number {
 /** What a run is told by, kept per run: small, whatever how many results it recorded. */
 type RunAcc = {
   key: string; runUrl: string | null; branch: string | null; sha: string | null;
-  start: number; end: number; first: string; producers: Set<string>; environments: Set<string>; layers: number;
+  /** The earliest and latest times the run is told by: a layer's `recordedAtMs`, or the start and end its execution declared. */
+  start: number; end: number;
+  /** When its first layer was recorded: which layer tells the branch and commit. */
+  firstAt: number; first: string; producers: Set<string>; environments: Set<string>; layers: number;
+  runId: string | undefined; title: string | undefined; titledAt: number; titledBy: string; freshness: 'unknown' | 'modified' | undefined;
 };
 /** A test as history names it: its key and the newest title seen. */
 type Ident = { readonly slot: string; readonly id: string; title: string; titledAt: number; readonly specPath: string | null };
@@ -415,17 +432,28 @@ export class TestHistory {
     const key = runKey(layer);
     let run = this.#runs.get(key);
     if (!run) {
-      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0 };
+      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined };
       this.#runs.set(key, run);
     }
     // A run is told by its first layer (by time, then id), whatever order its layers arrive in.
-    if (layer.recordedAtMs < run.start || (layer.recordedAtMs === run.start && layer.id < run.first)) {
-      run.start = layer.recordedAtMs;
+    if (layer.recordedAtMs < run.firstAt || (layer.recordedAtMs === run.firstAt && layer.id < run.first)) {
+      run.firstAt = layer.recordedAtMs;
       run.first = layer.id;
       run.branch = layer.branch;
       run.sha = layer.sha;
+      run.runUrl = layer.runUrl;
     }
-    run.end = Math.max(run.end, layer.recordedAtMs);
+    run.start = Math.min(run.start, layer.recordedAtMs, layer.run?.startedAtMs ?? Infinity);
+    run.end = Math.max(run.end, layer.recordedAtMs, layer.run?.endedAtMs ?? -Infinity);
+    // The newest title wins, so a person can rename a run by sending its id again with another title.
+    const title = layer.run?.title;
+    if (title && (layer.recordedAtMs > run.titledAt || (layer.recordedAtMs === run.titledAt && layer.id > run.titledBy))) {
+      run.title = title;
+      run.titledAt = layer.recordedAtMs;
+      run.titledBy = layer.id;
+    }
+    // Local changes are never lost to a clean sibling: the run is as modified as its most modified layer.
+    if (layer.freshness === 'modified' || (layer.freshness === 'unknown' && run.freshness !== 'modified')) run.freshness = layer.freshness;
     run.producers.add(layer.producer);
     if (layer.environment) run.environments.add(layer.environment);
     run.layers += 1;
@@ -525,7 +553,8 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
   failed.sort((a, b) => compareText(a.i.slot, b.i.slot) || compareText(a.r.o.place, b.r.o.place) || compareText(a.r.k, b.r.k));
   const failing = failed.slice(0, 20).map(cell => ({ key: cell.i.slot, title: cell.i.title, environment: cell.r.o.environment, detail: (cell.r.t.split('\n')[0] ?? '').slice(0, 500) }));
   return {
-    key: run.key, runUrl: run.runUrl, branch: run.branch, sha: run.sha,
+    key: run.key, ...(run.runId ? { runId: run.runId } : {}), ...(run.title ? { title: run.title } : {}), ...(run.freshness ? { freshness: run.freshness } : {}),
+    runUrl: run.runUrl, branch: run.branch, sha: run.sha,
     startedAtMs: run.start, endedAtMs: run.end, spanMs: run.end - run.start,
     producers: [...run.producers].sort(), environments: [...run.environments].sort(),
     layers: run.layers, tests: tests.size, counts, totalDurationMs: measured ? total : null, failing,
@@ -918,6 +947,11 @@ export function historyMarkdown(document: TestHistoryDocument): string {
   ].join('\n')}\n`;
 }
 
+/** What to say beside a commit that was not recorded from a clean checkout: nothing, ` (modified)` or ` (origin unknown)`. */
+function freshnessNote(freshness: 'unknown' | 'modified' | undefined): string {
+  return freshness === 'modified' ? ' (modified: local changes)' : freshness === 'unknown' ? ' (origin unknown)' : '';
+}
+
 /** The run list as Markdown. */
 export function runsMarkdown(list: RunList): string {
   return `${[
@@ -925,7 +959,7 @@ export function runsMarkdown(list: RunList): string {
     '',
     '| Ended | Branch | Commit | Environments | Tests | Passed | Failed | Not run | Span | Run |',
     '|---|---|---|---|---:|---:|---:|---:|---:|---|',
-    ...list.runs.map(r => `| ${iso(r.endedAtMs)} | ${cell(r.branch ?? '—')} | ${r.sha?.slice(0, 10) ?? '—'} | ${r.environments.join(', ') || '—'} | ${r.tests} | ${r.counts.passed} | ${r.counts.failed} | ${r.counts['not-run']} | ${formatMs(r.spanMs)} | ${cell(r.key)} |`),
+    ...list.runs.map(r => `| ${iso(r.endedAtMs)} | ${cell(r.branch ?? '—')} | ${r.sha?.slice(0, 10) ?? '—'}${freshnessNote(r.freshness)} | ${r.environments.join(', ') || '—'} | ${r.tests} | ${r.counts.passed} | ${r.counts.failed} | ${r.counts['not-run']} | ${formatMs(r.spanMs)} | ${cell(r.title ? `${r.title} (${r.key})` : r.key)} |`),
   ].join('\n')}\n`;
 }
 
@@ -935,7 +969,8 @@ export function runMarkdown(detail: RunDetail): string {
   return `${[
     `# Run ${run.key}`,
     '',
-    `- Branch ${run.branch ?? '—'}, commit ${run.sha ?? '—'}`,
+    ...(run.title ? [`- Title: ${run.title}`] : []),
+    `- Branch ${run.branch ?? '—'}, commit ${run.sha ?? '—'}${freshnessNote(run.freshness)}`,
     `- ${iso(run.startedAtMs)} to ${iso(run.endedAtMs)} (${formatMs(run.spanMs)}); ${run.layers} layers from ${run.producers.join(', ')}`,
     `- Environments: ${run.environments.join(', ') || '—'}`,
     `- ${run.tests} tests: ${counted(run.counts)}${run.totalDurationMs === null ? '' : `; ${formatMs(run.totalDurationMs)} of test time`}`,

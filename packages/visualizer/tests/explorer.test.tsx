@@ -231,6 +231,27 @@ test('the runs view lists CI runs, opens one, and shows its tests in the explore
   await atlas.until(() => rows().length === 4, 'every test again');
 });
 
+test('the runs view names an execution by its title, keeps two demos at one commit apart, and states local changes beside the commit', async () => {
+  const localStore = memoryStore();
+  const demo = { sha: 'c'.repeat(40), branch: 'main', producer: 'demo', environment: 'desktop-web' };
+  await publishChecks(localStore, { ...demo, recordedAtMs: 300_000, freshness: 'modified', run: { id: 'demo-1', title: 'Clean release demo' }, checks: [{ ...PAY, status: 'failed', detail: 'Declined' }] });
+  await publishChecks(localStore, { ...demo, recordedAtMs: 400_000, run: { id: 'demo-2' }, checks: [{ ...PAY, status: 'passed' }] });
+  atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
+  await atlas.until(() => shows('Pay an invoice'), 'the tests');
+  await atlas.click('[role="tablist"] button', 'Runs');
+  await atlas.until(() => document.querySelectorAll('section[aria-label="Runs"] tbody tr').length === 2, 'two runs at one commit');
+  const rowsText = [...document.querySelectorAll('section[aria-label="Runs"] tbody tr')].map((row) => row.textContent ?? '');
+  expect(rowsText[0]).toContain('1 passed');
+  expect(rowsText[1]).toContain('1 failed');
+  expect(rowsText[1]).toContain('Clean release demo');
+  // The title never replaces the qualification: the modified run says so beside its commit.
+  expect(rowsText[1]).toContain('with local changes');
+  expect(rowsText[0]).not.toContain('with local changes');
+  await atlas.click('section[aria-label="Runs"] a', 'Open run Clean release demo');
+  await atlas.sees('Run Clean release demo');
+  expect(document.querySelector('section[aria-label="Run Clean release demo"]')?.textContent).toContain('with local changes');
+});
+
 test('the left index lists domains and specs from the recorded tests and filters the explorer', async () => {
   const localStore = memoryStore();
   await publish(localStore);
