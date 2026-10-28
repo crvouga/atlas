@@ -61,12 +61,15 @@ export function ResultRow({
   slot,
   open,
   onToggle,
+  badge,
   children
 }: {
   label: string;
   slot: CheckSlot | null;
   open: boolean;
   onToggle: () => void;
+  /** A short extra mark after the label, such as a coverage state. */
+  badge?: ReactNode;
   children: ReactNode;
 }) {
   const now = useNow();
@@ -96,6 +99,7 @@ export function ResultRow({
                   </Flex>
                 )}
               </Text>
+              {badge}
               {slot?.live && (
                 <Text span inherit>
                   Running now

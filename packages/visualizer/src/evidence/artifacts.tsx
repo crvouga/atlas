@@ -138,12 +138,16 @@ function sizeOf(bytes: number | undefined) {
   if (bytes < 1024) return `${bytes} B`;
   return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
 }
-function Artifact({ attachment, layer }: { attachment: Attachment; layer: string }) {
-  const type = mediaType(attachment);
+/** Where an attachment's bytes are, if a browser can reach them: its stored file in the layer, else its safe `http(s)` address. */
+export function attachmentSource(attachment: Attachment, layer: string): { path: string | null; url: string | null } {
   const path = attachment.bundleKey
     ? `/layers/${encodeURIComponent(layer)}/blobs/${attachment.bundleKey.split('/').map(encodeURIComponent).join('/')}`
     : null;
-  const url = path ? reportAssetUrl(path) : safeUri(attachment.uri);
+  return { path, url: path ? reportAssetUrl(path) : safeUri(attachment.uri) };
+}
+function Artifact({ attachment, layer }: { attachment: Attachment; layer: string }) {
+  const type = mediaType(attachment);
+  const { path, url } = attachmentSource(attachment, layer);
   const renderer = artifactRenderers.find((candidate) => candidate.matches(attachment, type));
   const body = renderer?.render(attachment, { url, path, type });
   return (
@@ -381,20 +385,25 @@ function Evidence({ holder, layer, steps }: { holder: EvidenceHolder; layer: str
     </>
   );
 }
-/** Everything one result carries beyond its outcome, read when it is opened, and what the run around it carried. */
-export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerRow }) {
+/** The full evidence of one result, read only when `enabled` and the result has some to read (an archived layer). Shared by every view of the result, so it is read once. */
+export function useCheckDetail(layer: LayerHeader, row: LayerRow, enabled = true) {
   const wanted = row.evidence !== undefined || layer.evidence !== undefined;
-  const detail = useQuery({
+  return useQuery({
     queryKey: ['evidence-detail', layer.backend, layer.id, row.kind, row.id],
     queryFn: ({ signal }) =>
       reportJson<CheckDetail>(
         `/evidence/detail/${encodeURIComponent(layer.backend)}/${encodeURIComponent(layer.id)}?check=${encodeURIComponent(row.id)}&kind=${encodeURIComponent(row.kind)}`,
         signal
       ),
-    enabled: wanted && /^[0-9a-f]{64}$/.test(layer.id),
+    enabled: enabled && wanted && /^[0-9a-f]{64}$/.test(layer.id),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false
   });
+}
+/** Everything one result carries beyond its outcome, read when it is opened, and what the run around it carried. */
+export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerRow }) {
+  const wanted = row.evidence !== undefined || layer.evidence !== undefined;
+  const detail = useCheckDetail(layer, row);
   if (!wanted) return null;
   if (detail.isLoading)
     return (
