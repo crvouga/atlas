@@ -275,6 +275,7 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | Every test, a summary (by status, environment, producer, domain), insights (failing, flaky, slowest) and facets | `GET /api/reports/tests` |
 | Only some: `q` (all words), `status` (or `flaky`), `environment`, `producer`, `domain`, `spec`, `tag`, `run`; `sort`, `offset`, `limit` | `GET /api/reports/tests?status=failed&environment=ios` |
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
+| Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
 | The runs that recorded the report (by CI run URL, else branch and commit) | `GET /api/reports/runs` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 
@@ -287,6 +288,13 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
   `stats` describes its recorded history: pass rate, flips, whether it is flaky and why (it passed and failed on the
   same commit, passed only after a retry, or its producer said so), durations (avg, p50, p95, min, max, last), runs
   and branches.
+- The **health** document explains the numbers instead of adding one. It keeps spec files, defined specs, specs with an
+  executed test, tests, outlines, examples and per-environment observations apart, and walks from the Specs total to
+  the Tests total. Two spec paths are one logical spec only when a mapping says so
+  (`?root=<from>><to>`, for example `?root=%3Especs/` to put `checkout/cart.feature` under `specs/`); similar paths
+  are reported as ambiguous and never merged, and a similar title is never an identity. Give a check the label
+  `outline` to say which scenario outline an example belongs to. A domain shared by nearly every spec is flagged, but
+  explicit domain metadata always stays authoritative. The document only reads: it changes no status.
 - The server keeps the newest 100 results of every test (progress reported as `running` is not history) and every run's last result per test, in memory, as layers
   arrive; it is rebuilt from the layers on restart. History never changes a result.
 - Without a published spec set, tests are grouped under the specs their layers recorded (`specs[]`: path, domain,
@@ -338,6 +346,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
 | `GET /api/reports/tests` | read | Every test, with insights, facets and history statistics. |
 | `GET /api/projects/{project}/reports/tests` | read | Every test, with insights, facets and history statistics. |
+| `GET /api/reports/tests/health` | read | Why specs, domains and counts disagree. |
+| `GET /api/projects/{project}/reports/tests/health` | read | Why specs, domains and counts disagree. |
 | `GET /api/reports/tests/history` | read | One test and every result recorded for it. |
 | `GET /api/projects/{project}/reports/tests/history` | read | One test and every result recorded for it. |
 | `GET /api/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |

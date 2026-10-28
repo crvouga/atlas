@@ -5,7 +5,7 @@ import { act } from 'react';
 
 import { createNode } from '../../server/tests/node-compat';
 import { setFinderOpen } from '../src/find/open';
-import { memoryStore, openAtlas, type Atlas } from './atlas';
+import { memoryStore, openAtlas, publishRun, step, type Atlas } from './atlas';
 
 class FinderResizeObserver {
   observe() {}
@@ -229,6 +229,138 @@ test('the runs view lists CI runs, opens one, and shows its tests in the explore
   expect(document.querySelector('[aria-label="Find tests"]')?.textContent).toContain('Run: #2');
   await atlas.click('button', 'Remove Run: #2');
   await atlas.until(() => rows().length === 4, 'every test again');
+});
+
+test('the runs view names an execution by its title, keeps two demos at one commit apart, and states local changes beside the commit', async () => {
+  const localStore = memoryStore();
+  const demo = { sha: 'c'.repeat(40), branch: 'main', producer: 'demo', environment: 'desktop-web' };
+  await publishChecks(localStore, { ...demo, recordedAtMs: 300_000, freshness: 'modified', run: { id: 'demo-1', title: 'Clean release demo' }, checks: [{ ...PAY, status: 'failed', detail: 'Declined' }] });
+  await publishChecks(localStore, { ...demo, recordedAtMs: 400_000, run: { id: 'demo-2' }, checks: [{ ...PAY, status: 'passed' }] });
+  atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
+  await atlas.until(() => shows('Pay an invoice'), 'the tests');
+  await atlas.click('[role="tablist"] button', 'Runs');
+  await atlas.until(() => document.querySelectorAll('section[aria-label="Runs"] tbody tr').length === 2, 'two runs at one commit');
+  const rowsText = [...document.querySelectorAll('section[aria-label="Runs"] tbody tr')].map((row) => row.textContent ?? '');
+  expect(rowsText[0]).toContain('1 passed');
+  expect(rowsText[1]).toContain('1 failed');
+  expect(rowsText[1]).toContain('Clean release demo');
+  // The title never replaces the qualification: the modified run says so beside its commit.
+  expect(rowsText[1]).toContain('with local changes');
+  expect(rowsText[0]).not.toContain('with local changes');
+  await atlas.click('section[aria-label="Runs"] a', 'Open run Clean release demo');
+  await atlas.sees('Run Clean release demo');
+  expect(document.querySelector('section[aria-label="Run Clean release demo"]')?.textContent).toContain('with local changes');
+});
+
+const detailOf = () => document.querySelector<HTMLElement>('aside[aria-label="Test detail"]');
+const scope = () => detailOf()?.textContent ?? '';
+const evidenceOf = () => detailOf()?.querySelector('[aria-label="Evidence"]')?.textContent ?? '';
+
+test('opening a result from a run pins the detail to that run, with a way back to the latest combined evidence', async () => {
+  const localStore = memoryStore();
+  await publish(localStore);
+  atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
+  await atlas.until(() => shows('Refund a payment'), 'the tests');
+  await atlas.click('[role="tablist"] button', 'Runs');
+  await atlas.until(() => document.querySelectorAll('section[aria-label="Runs"] tbody tr').length === 2, 'two runs');
+  // Run #1 recorded the failure that run #2 later fixed.
+  await atlas.click('section[aria-label="Runs"] a', 'Open run #1');
+  await atlas.sees('Run #1');
+  await atlas.click('section[aria-label="Run #1"] li a', /Escalate a ticket\s*Api/);
+  await atlas.until(() => scope().includes('This run: #1'), 'the pinned detail');
+  expect(atlas.router.state.location.search).toMatchObject({ test: KEY(ESCALATE) });
+  expect(atlas.router.state.location.search.layer).toMatch(/^[0-9a-f]{64}$/);
+  await atlas.until(() => evidenceOf().includes('Expected 200, got 500'), "the run's own failure");
+  expect(scope()).toContain('What this run recorded');
+  expect(scope()).toContain('main');
+  expect(scope()).toContain('aaaaaaa');
+  // A newer result is a notice, and the pinned evidence stays.
+  expect(scope()).toContain('A newer result exists: Passed');
+  expect(scope()).not.toContain('Latest combined evidence');
+  expect(detailOf()!.querySelector('[aria-label="Evidence scope"]')).toBeNull();
+
+  // Switching is an explicit action, and the scope says so.
+  const pinnedAt = atlas.router.state.location.search;
+  await atlas.click('aside[aria-label="Test detail"] a', 'Show latest combined evidence');
+  await atlas.until(() => scope().includes('Latest combined evidence'), 'the latest combined evidence');
+  expect(atlas.router.state.location.search).not.toHaveProperty('layer');
+  expect(scope()).toContain('What the current result carries');
+  expect(evidenceOf()).not.toContain('Expected 200, got 500');
+
+  // Back restores the pinned run.
+  await act(async () => atlas!.router.history.back());
+  await atlas.until(() => scope().includes('This run: #1'), 'the pinned run after Back');
+  expect(atlas.router.state.location.search).toMatchObject({ layer: pinnedAt.layer, test: KEY(ESCALATE) });
+
+  // A copied link opens straight on the same evidence, with its filters.
+  await atlas.go(`/?test=${encodeURIComponent(KEY(ESCALATE))}&layer=${pinnedAt.layer}&status=failed`);
+  await atlas.until(() => evidenceOf().includes('Expected 200, got 500'), 'the copied link');
+  expect(atlas.router.state.location.search).toMatchObject({ status: 'failed', layer: pinnedAt.layer });
+
+  // The pinned result leads back to its run.
+  await atlas.click('aside[aria-label="Test detail"] a', 'Back to run #1');
+  await atlas.until(() => document.querySelector('section[aria-label="Run #1"]') !== null, 'the run again');
+  expect(atlas.router.state.location.search).not.toHaveProperty('layer');
+});
+
+test('a pinned result that is not in the report says so and shows nothing in its place', async () => {
+  const localStore = memoryStore();
+  await publish(localStore);
+  atlas = await openAtlas({
+    at: `/?test=${encodeURIComponent(KEY(ESCALATE))}&layer=${'f'.repeat(64)}`,
+    specs: {},
+    deps: { localStore }
+  });
+  await atlas.until(() => scope().includes('That result is not available'), 'the unavailable notice');
+  expect(scope()).toContain('No other result is shown in its place');
+  expect(evidenceOf()).not.toContain('Expected 200, got 500');
+  expect(evidenceOf()).not.toContain('Open recording');
+  await atlas.click('aside[aria-label="Test detail"] a', 'Show latest combined evidence');
+  await atlas.until(() => scope().includes('Latest combined evidence'), 'the latest combined evidence');
+});
+
+test('on a node a pinned run is read from its own layer although the report holds only the winners', async () => {
+  const store = memoryStore();
+  await publish(store);
+  const node = createNode({ stores: [{ id: 'shared', store }], refreshMs: 60_000 });
+  await node.ready;
+  atlas = await openAtlas({ at: '/', specs: {}, deps: {}, node });
+  await atlas.until(() => shows('Refund a payment'), 'the tests');
+  await atlas.click('[role="tablist"] button', 'Runs');
+  await atlas.until(() => document.querySelectorAll('section[aria-label="Runs"] tbody tr').length === 2, 'two runs');
+  await atlas.click('section[aria-label="Runs"] a', 'Open run #1');
+  await atlas.sees('Run #1');
+  await atlas.click('section[aria-label="Run #1"] li a', /Escalate a ticket\s*Api/);
+  await atlas.until(() => scope().includes('This run: #1') && evidenceOf().includes('Expected 200, got 500'), "the run's own failure");
+  expect(scope()).toContain('A newer result exists: Passed');
+  node.close();
+});
+
+test('opening the recording of a selected environment plays that environment, not the combined winner', async () => {
+  const localStore = memoryStore();
+  const frames = (index: number) => ({ frames: [{ index, capturedAtMs: index, snapshots: [] }] });
+  const add = (count: number) => ({
+    test: 'add',
+    title: 'Share a list: Add an item',
+    status: 'passed' as const,
+    steps: Array.from({ length: count }, (_, index) => step(index + 1, `Step ${index + 1}`, 'passed', frames(index + 1)))
+  });
+  await publishRun(localStore, { at: 10, environment: 'desktop-web', checks: [add(2)] });
+  await publishRun(localStore, { at: 20, environment: 'ios', checks: [add(3)] });
+  const key = JSON.stringify(['specs/lists/add.feature', 'lists/add']);
+  atlas = await openAtlas({ at: `/?test=${encodeURIComponent(key)}`, specs: {}, deps: { localStore } });
+  await atlas.until(() => evidenceOf().includes('Open recording'), 'the newest environment');
+  expect(evidenceOf()).toContain('3 moments');
+  await atlas.click('aside[aria-label="Test detail"] [aria-label="Environments"] button', 'Desktop web');
+  await atlas.until(() => evidenceOf().includes('2 moments'), 'the selected environment');
+  await atlas.click('aside[aria-label="Test detail"] button', /Open recording/);
+  await atlas.sees('of 2');
+  expect(atlas.text()).toContain('Desktop web');
+  expect(atlas.text()).not.toContain('of 3');
+  // The address does not change scope just because a recording was opened.
+  expect(atlas.router.state.location.search).not.toHaveProperty('layer');
+  await atlas.click('button', 'Test detail');
+  await atlas.until(() => evidenceOf().includes('Open recording'), 'the detail again');
 });
 
 test('the left index lists domains and specs from the recorded tests and filters the explorer', async () => {

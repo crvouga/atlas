@@ -23,6 +23,19 @@ export function RunsView() {
   const search = useExplorerSearch();
   return search.openRun ? <RunDetailView runKey={search.openRun} /> : <RunTable />;
 }
+/** What a run is called: the title its producer gave it, else its CI run number or `branch@sha`. */
+function runLabel(run: RunSummary): string {
+  return run.title ?? runName(run.key);
+}
+/** Beside a commit: said whenever the run was not recorded from a clean checkout, whatever the run is titled. */
+function Freshness({ run }: { run: RunSummary }) {
+  if (!run.freshness) return null;
+  return (
+    <Text span inherit c="dimmed">
+      {run.freshness === 'modified' ? 'with local changes' : 'origin not captured'}
+    </Text>
+  );
+}
 function Counts({ run }: { run: RunSummary }) {
   return (
     <Text span inherit>
@@ -98,19 +111,24 @@ function RunTable() {
               <Table.Tr key={run.key} data-status={run.counts.failed ? 'failed' : 'passed'}>
                 <Table.Td title={exactTime(run.endedAtMs)}>
                   <Anchor
-                    aria-label={`Open run ${runName(run.key)}`}
+                    aria-label={`Open run ${runLabel(run)}`}
                     renderRoot={(props) => (
                       <Link {...props} to="/" search={patched({ openRun: run.key })} resetScroll={false} activeOptions={{ exact: true }} />
                     )}
                   >
                     {ago(run.endedAtMs, now)}
                   </Anchor>
+                  {run.title && (
+                    <Text c="dimmed" fz="xs">
+                      {run.title}
+                    </Text>
+                  )}
                 </Table.Td>
                 <Table.Td title={run.branch ?? ''} c="dimmed">
                   {run.branch ?? '—'}
                 </Table.Td>
                 <Table.Td>
-                  <Code>{shortSha(run.sha) ?? '—'}</Code>
+                  <Code>{shortSha(run.sha) ?? '—'}</Code> <Freshness run={run} />
                 </Table.Td>
                 <Table.Td>{run.environments.map((env) => environmentLabel(env)).join(', ') || '—'}</Table.Td>
                 <Table.Td>{run.tests}</Table.Td>
@@ -215,10 +233,10 @@ function RunDetailView({ runKey }: { runKey: string }) {
     );
   const { run } = detail.data;
   return (
-    <Box aria-label={`Run ${runName(run.key)}`} component="section" mb="lg">
+    <Box aria-label={`Run ${runLabel(run)}`} component="section" mb="lg">
       {back}
       <Title order={2} mb="sm">
-        Run {runName(run.key)}
+        Run {runLabel(run)}
       </Title>
       <Text component="div">
         {run.branch && (
@@ -227,6 +245,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
           </Text>
         )}
         {run.sha && <Code>{shortSha(run.sha)}</Code>}
+        <Freshness run={run} />
         <Text title={exactTime(run.endedAtMs)} span inherit>
           ended {ago(run.endedAtMs, now)}
         </Text>
@@ -262,7 +281,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
             <Link
               {...props}
               to="/"
-              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined })}
+              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined, layer: undefined })}
               resetScroll={false}
               activeOptions={{ exact: true }}
             />
@@ -328,7 +347,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
                     <Link
                       {...props}
                       to="/"
-                      search={patched({ tab: undefined, openRun: undefined, test: result.key })}
+                      search={patched({ tab: undefined, openRun: undefined, test: result.key, layer: result.layer })}
                       resetScroll={false}
                       activeOptions={{ exact: true }}
                     />

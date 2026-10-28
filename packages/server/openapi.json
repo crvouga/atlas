@@ -3427,6 +3427,204 @@
         }
       }
     },
+    "/api/reports/tests/health": {
+      "get": {
+        "operationId": "getCatalogHealth",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Why specs, domains and counts disagree",
+        "description": "Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.\n\n`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.\n\nTwo paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "root",
+            "in": "query",
+            "description": "A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.",
+            "example": ">specs/",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for a Markdown report instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The diagnostics.",
+            "headers": {
+              "ETag": {
+                "description": "Changes with the report, its history and the mappings.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogHealth"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/tests/health": {
+      "get": {
+        "operationId": "getCatalogHealthForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Why specs, domains and counts disagree",
+        "description": "Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.\n\n`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.\n\nTwo paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "root",
+            "in": "query",
+            "description": "A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.",
+            "example": ">specs/",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for a Markdown report instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The diagnostics.",
+            "headers": {
+              "ETag": {
+                "description": "Changes with the report, its history and the mappings.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogHealth"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/tests/history": {
       "get": {
         "operationId": "getTestHistory",
@@ -7722,6 +7920,36 @@
                         "modified"
                       ]
                     },
+                    "run": {
+                      "description": "The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot",
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256,
+                          "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+                        },
+                        "title": {
+                          "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                          "type": "string"
+                        },
+                        "startedAtMs": {
+                          "description": "When the execution started, epoch milliseconds",
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "endedAtMs": {
+                          "description": "When the execution ended, epoch milliseconds",
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "recording": {
                       "anyOf": [
                         {},
@@ -8178,6 +8406,36 @@
                         "unknown",
                         "modified"
                       ]
+                    },
+                    "run": {
+                      "description": "The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot",
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256,
+                          "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+                        },
+                        "title": {
+                          "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                          "type": "string"
+                        },
+                        "startedAtMs": {
+                          "description": "When the execution started, epoch milliseconds",
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "endedAtMs": {
+                          "description": "When the execution ended, epoch milliseconds",
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": {}
                     },
                     "recording": {
                       "anyOf": [
@@ -9879,6 +10137,36 @@
               "modified"
             ]
           },
+          "run": {
+            "description": "Name the execution these checks belong to, so repeated local runs at one commit stay separate runs and shards of one execution stay together",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+              },
+              "title": {
+                "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                "type": "string"
+              },
+              "startedAtMs": {
+                "description": "When the execution started, epoch milliseconds",
+                "type": "number",
+                "minimum": 0
+              },
+              "endedAtMs": {
+                "description": "When the execution ended, epoch milliseconds",
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": {}
+          },
           "specs": {
             "default": [],
             "type": "array",
@@ -10373,6 +10661,36 @@
                     "unknown",
                     "modified"
                   ]
+                },
+                "run": {
+                  "description": "The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+                    },
+                    "title": {
+                      "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                      "type": "string"
+                    },
+                    "startedAtMs": {
+                      "description": "When the execution started, epoch milliseconds",
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "endedAtMs": {
+                      "description": "When the execution ended, epoch milliseconds",
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
                 },
                 "recording": {
                   "anyOf": [
@@ -13202,6 +13520,404 @@
         ],
         "additionalProperties": {}
       },
+      "CatalogHealth": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "type": "string",
+            "description": "Changes whenever the report or its history does"
+          },
+          "generatedAtMs": {
+            "type": "number"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True when there is no warning-severity finding"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "specs": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Spec files the report is laid over, before any root mapping"
+                  },
+                  "defined": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Logical specs: files joined by a declared root mapping count once"
+                  },
+                  "withTests": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Logical specs, defined or not, that have at least one test"
+                  },
+                  "executed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Defined logical specs with a test that passed or failed"
+                  },
+                  "withoutExecution": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Defined logical specs with no passed or failed test: the defined coverage gaps"
+                  }
+                },
+                "required": [
+                  "files",
+                  "defined",
+                  "withTests",
+                  "executed",
+                  "withoutExecution"
+                ],
+                "additionalProperties": {}
+              },
+              "tests": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "withSpec": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "withoutSpec": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "passed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Tests whose current status is passed"
+                  },
+                  "historicalOnly": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Tests only the history holds a result for"
+                  }
+                },
+                "required": [
+                  "total",
+                  "withSpec",
+                  "withoutSpec",
+                  "passed",
+                  "historicalOnly"
+                ],
+                "additionalProperties": {}
+              },
+              "scenarios": {
+                "type": "object",
+                "properties": {
+                  "outlines": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Tests sharing the label `outline` count once; a test without it is its own outline"
+                  },
+                  "examples": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Tests (check identities), however many environments ran them"
+                  },
+                  "observations": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Current results per producer, environment and parameter set"
+                  },
+                  "executedObservations": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "passedObservations": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "outlines",
+                  "examples",
+                  "observations",
+                  "executedObservations",
+                  "passedObservations"
+                ],
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "specs",
+              "tests",
+              "scenarios"
+            ],
+            "additionalProperties": {}
+          },
+          "reconciliation": {
+            "type": "object",
+            "properties": {
+              "specs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "What the Specs view counts: spec files"
+              },
+              "testSpecs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "What the Tests view groups by: logical specs with at least one test"
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "delta": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "label",
+                    "delta"
+                  ],
+                  "additionalProperties": {}
+                },
+                "description": "From `specs` to `testSpecs`: each step adds its `delta`"
+              },
+              "testsWithoutSpec": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "explanation": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "specs",
+              "testSpecs",
+              "steps",
+              "testsWithoutSpec",
+              "explanation"
+            ],
+            "additionalProperties": {}
+          },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "checks": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "fallbackIdentity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Checks whose id equals their title"
+              },
+              "basis": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "checks",
+              "fallbackIdentity",
+              "basis"
+            ],
+            "additionalProperties": {}
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "specs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "name",
+                "specs"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Specs per domain, most first"
+          },
+          "roots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "matched": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Distinct paths the mapping changed"
+                }
+              },
+              "required": [
+                "from",
+                "to",
+                "matched"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "sources"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Logical specs seen under more than one original path, joined by a root mapping"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "An open set: treat a code you do not know as informational"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "warning",
+                    "info"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "candidates": {
+                        "description": "Other paths it could be the same promise as. Atlas has not merged them",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "reason"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  "description": "At most 25; `count` is the whole"
+                }
+              },
+              "required": [
+                "code",
+                "severity",
+                "message",
+                "count",
+                "items"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "version",
+          "generatedAtMs",
+          "ok",
+          "counts",
+          "reconciliation",
+          "identity",
+          "domains",
+          "roots",
+          "aliases",
+          "findings"
+        ],
+        "additionalProperties": {}
+      },
       "TestHistory": {
         "type": "object",
         "properties": {
@@ -13882,7 +14598,23 @@
               "properties": {
                 "key": {
                   "type": "string",
-                  "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+                  "description": "`run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+                },
+                "runId": {
+                  "description": "The execution id the producer named, when it did. Layers that share it are one run however many uploads they took",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The human title of the execution (the newest layer's). Presentation only: the key, commit and `freshness` are unaffected",
+                  "type": "string"
+                },
+                "freshness": {
+                  "description": "`modified` when any layer of the run was recorded from a checkout with uncommitted changes; `unknown` when an origin was not captured; absent when all are clean. Shown beside the commit, never replaced by the title",
+                  "type": "string",
+                  "enum": [
+                    "unknown",
+                    "modified"
+                  ]
                 },
                 "runUrl": {
                   "type": [
@@ -14036,7 +14768,23 @@
             "properties": {
               "key": {
                 "type": "string",
-                "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+                "description": "`run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+              },
+              "runId": {
+                "description": "The execution id the producer named, when it did. Layers that share it are one run however many uploads they took",
+                "type": "string"
+              },
+              "title": {
+                "description": "The human title of the execution (the newest layer's). Presentation only: the key, commit and `freshness` are unaffected",
+                "type": "string"
+              },
+              "freshness": {
+                "description": "`modified` when any layer of the run was recorded from a checkout with uncommitted changes; `unknown` when an origin was not captured; absent when all are clean. Shown beside the commit, never replaced by the title",
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "modified"
+                ]
               },
               "runUrl": {
                 "type": [

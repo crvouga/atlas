@@ -15,7 +15,7 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, TestHistorySchema, RunListSchema, RunDetailSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, RunListSchema, RunDetailSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
@@ -65,7 +65,7 @@ const COMPONENTS = {
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
-  TestCatalog: [TestCatalogSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -313,6 +313,22 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'format', in: 'query', description: '`markdown` for a Markdown report instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': { ...json('The catalog.', 'TestCatalog'), headers: { ETag: { description: 'Changes with the report, its history and the query.', schema: str } } }, '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/tests/health', path: '/api/reports/tests/health', operationId: 'getCatalogHealth', tag: 'Report', role: 'read',
+    summary: 'Why specs, domains and counts disagree',
+    description: [
+      'Diagnoses the report\'s metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.',
+      '',
+      '`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.',
+      '',
+      'Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check\'s label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.'
+    ].join('\n'),
+    parameters: [
+      { name: 'root', in: 'query', description: 'A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.', schema: str, example: '>specs/' },
+      { name: 'format', in: 'query', description: '`markdown` for a Markdown report instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': { ...json('The diagnostics.', 'CatalogHealth'), headers: { ETag: { description: 'Changes with the report, its history and the mappings.', schema: str } } }, '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/tests/history', path: '/api/reports/tests/history', operationId: 'getTestHistory', tag: 'Report', role: 'read',
