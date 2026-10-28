@@ -31,6 +31,7 @@ import { reportStatus } from '../../reports/src/report-status';
 import { ReportIndex, type IndexChange } from '../../reports/src/report-index';
 import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
+import { catalogHealth, healthMarkdown, parseRootMappings } from '../../reports/src/catalog-health';
 import { catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
 import { llmsTxt } from './llms';
 import { openApiDocument } from './openapi';
@@ -413,6 +414,13 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const query = parseTestQuery(new URL(c.req.url).searchParams);
     const document = () => testCatalog(found, query);
     return answer(c, found.version, document, () => catalogMarkdown(document()), `tests|${new URL(c.req.url).search}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/tests/health', async c => {
+    if (!index.ready) return notReady(c);
+    const found = await catalog();
+    const params = new URL(c.req.url).searchParams;
+    const document = () => catalogHealth(found, parseRootMappings(params));
+    return answer(c, found.version, document, () => healthMarkdown(document()), `health|${params.getAll('root').join('\u0001')}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/tests/history', async c => {
     if (!index.ready) return notReady(c);

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 
 import { publishChecks } from '../../reports/src/publish-checks';
 import { memoryStore } from '../../reports/tests/memory-store';
-import { RunDetailSchema, RunListSchema, TestCatalogSchema, TestHistorySchema } from '../../schema/src/api';
+import { CatalogHealthSchema, RunDetailSchema, RunListSchema, TestCatalogSchema, TestHistorySchema } from '../../schema/src/api';
 import { ReportStatusSchema } from '../../schema/src/layer';
 import { createNode, type Node } from './node-compat';
 
@@ -160,5 +160,39 @@ describe('GET /api/reports/runs', () => {
     expect(detail.results.map(result => [result.title, result.status])).toEqual([['Find by email', 'not-run'], ['Pay with a card', 'passed']]);
     expect((await get(node, `/api/reports/runs/detail?key=nope`)).status).toBe(404);
     expect(await (await get(node, '/api/reports/runs?format=markdown')).text()).toContain('# Runs (2 of 2)');
+  });
+});
+
+describe('GET /api/reports/tests/health', () => {
+  /** Results published under `checkout/cart.feature` while the specs are recorded under `specs/`. */
+  async function drifted() {
+    const store = memoryStore();
+    const specs = [{ path: 'specs/checkout/cart.feature', domain: 'checkout', kind: 'feature', title: 'Cart' }];
+    await publishChecks(store, { producer: 'gherkin-web', environment: 'desktop-web', recordedAtMs: 1_000, specs, checks: [{ id: 'add', title: 'add', status: 'passed', specPath: 'checkout/cart.feature' }] });
+    const node = createNode({ stores: [{ id: 'main', label: 'Main', store }], refreshMs: 60_000 });
+    nodes.push(node);
+    await node.ready;
+    return node;
+  }
+
+  test('reports the ambiguity, and joins the paths once a root mapping is declared', async () => {
+    const node = await drifted();
+    const before = CatalogHealthSchema.parse(await (await get(node, '/api/reports/tests/health')).json());
+    expect(before.ok).toBe(false);
+    expect(before.findings.map(item => item.code)).toContain('ambiguous-spec-path');
+    expect(before.counts.specs).toMatchObject({ files: 1, withTests: 1, withoutExecution: 1 });
+    const after = CatalogHealthSchema.parse(await (await get(node, `/api/reports/tests/health?root=${encodeURIComponent('>specs/')}`)).json());
+    expect(after.findings.map(item => item.code)).not.toContain('ambiguous-spec-path');
+    expect(after.aliases).toEqual([{ path: 'specs/checkout/cart.feature', sources: ['checkout/cart.feature', 'specs/checkout/cart.feature'] }]);
+    expect(after.counts.specs).toMatchObject({ files: 1, defined: 1, withTests: 1, executed: 1, withoutExecution: 0 });
+  });
+
+  test('answers Markdown and is revalidated by ETag', async () => {
+    const node = await drifted();
+    const response = await get(node, '/api/reports/tests/health?format=markdown');
+    expect(response.headers.get('content-type')).toContain('text/markdown');
+    expect(await response.text()).toContain('# Catalog health');
+    const json = await get(node, '/api/reports/tests/health');
+    expect((await get(node, '/api/reports/tests/health', { 'if-none-match': json.headers.get('etag')! })).status).toBe(304);
   });
 });
