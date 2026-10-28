@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import { useAtlas } from '../app/atlas-context';
 import { keys, specKey, useAdapter } from '../data/queries';
 import { useEvidence } from '../evidence/evidence-context';
+import { plural } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { kindOfFile } from '../spec-kind';
 import { corpusFrom } from './corpus';
@@ -41,15 +42,29 @@ function isTypingTarget(target: EventTarget | null) {
   const tag = target.tagName;
   return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A';
 }
-function useSpecTexts(files: readonly string[]) {
+/**
+ * Reads the text of every spec for search, a few at a time, once `enabled`. Each file lands as it arrives, so a search
+ * can use what is read so far; `read` of `total` say how far it is, and `failed` how many could not be read at all.
+ */
+function useSpecTexts(files: readonly string[], enabled: boolean, open: boolean) {
   const adapter = useAdapter();
   const client = useQueryClient();
   const source = specKey(adapter);
   const cache = useRef(new Map<string, string>());
+  const unreadable = useRef(new Set<string>());
   const [texts, setTexts] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [pending, setPending] = useState(false);
+  const [failedFiles, setFailedFiles] = useState<ReadonlySet<string>>(() => new Set());
   const key = files.join('\n');
+  // Opening the finder is another chance for the files that could not be read.
   useEffect(() => {
+    if (!open || unreadable.current.size === 0) return;
+    for (const file of unreadable.current) cache.current.delete(file);
+    unreadable.current.clear();
+    setFailedFiles(new Set());
+  }, [open]);
+  useEffect(() => {
+    if (!enabled) return;
     const wanted = key.length === 0 ? [] : key.split('\n');
     let cancelled = false;
     const missing = wanted.filter((file) => !cache.current.has(file));
@@ -65,13 +80,15 @@ function useSpecTexts(files: readonly string[]) {
         if (file === undefined || cancelled) return;
         let text = '';
         try {
-          text = await client.fetchQuery({ queryKey: keys.specFile(source, file), queryFn: () => adapter.specFile(file) });
+          text = await client.fetchQuery({ queryKey: keys.specFile(source, file), queryFn: () => adapter.specFile(file), retry: false });
         } catch {
           text = '';
+          unreadable.current.add(file);
         }
         if (cancelled) return;
         cache.current.set(file, text);
         setTexts(new Map(cache.current));
+        if (unreadable.current.has(file)) setFailedFiles(new Set(unreadable.current));
       }
     };
     void Promise.all([pull(), pull(), pull(), pull()]).then(() => {
@@ -80,8 +97,10 @@ function useSpecTexts(files: readonly string[]) {
     return () => {
       cancelled = true;
     };
-  }, [adapter, client, key, source]);
-  return { texts, pending };
+  }, [adapter, client, enabled, key, source]);
+  const read = useMemo(() => files.filter((file) => texts.has(file)).length, [files, texts]);
+  const failed = useMemo(() => files.filter((file) => failedFiles.has(file)).length, [files, failedFiles]);
+  return { texts, pending, total: files.length, read, failed };
 }
 /** The vector cache outlives a keystroke, so a live run does not embed the suite again. */
 const vectorCache = new Map<string, Float32Array>();
@@ -101,12 +120,25 @@ export function Finder() {
   const navigate = useNavigate();
   const routeSearch = useSearch({ strict: false });
   const readable = useMemo(() => evidence.files.filter((file) => kindOfFile(file)), [evidence.files]);
-  const { texts, pending } = useSpecTexts(readable);
+  // Reading every spec's text is for search, and a focused page needs its own spec first: start only once search is wanted.
+  const [wanted, setWanted] = useState(false);
+  useEffect(() => {
+    if (open) setWanted(true);
+  }, [open]);
+  const { texts, pending, total, read, failed } = useSpecTexts(readable, wanted, open);
   const docs = useMemo(
     () => corpusFrom(view, evidence.files, evidence.titleOf, evidence.view, texts),
     [view, evidence.files, evidence.titleOf, evidence.view, texts]
   );
   const index = useMemo(() => indexCorpus(docs), [docs]);
+  // What search has not covered yet, so an empty answer is not read as "no such behavior".
+  const unindexed = evidence.filesPending
+    ? 'The spec list is still loading'
+    : pending
+      ? `${total - read} of ${total} specs are still being read`
+      : !evidence.ready && !evidence.unavailable
+        ? 'Recorded results are still loading'
+        : '';
   const [query, setQuery] = useState('');
   const store = finderStore;
   const spotlightState = useSpotlight(store);
@@ -254,7 +286,13 @@ export function Finder() {
         <Spotlight.ActionsList id="atlas-finder-actions" role="listbox" aria-label="Flows, specs and runs">
           {shown.length === 0 && (
             <Spotlight.Empty>
-              {query.trim() ? 'Nothing close to that.' : 'Type what someone does. For example, add a todo.'}
+              {!query.trim()
+                ? 'Type what someone does. For example, add a todo.'
+                : unindexed
+                  ? `No match yet. ${unindexed}, so this is not the final answer.`
+                  : failed > 0
+                    ? `Nothing close to that. ${plural(failed, 'spec', 'specs')} could not be read, so search may miss ${failed === 1 ? 'it' : 'them'}.`
+                    : 'Nothing close to that.'}
             </Spotlight.Empty>
           )}
           {FIND_GROUPS.map((group) => {
@@ -285,7 +323,7 @@ export function Finder() {
         <Spotlight.Footer>
           <Group gap="md" justify="space-between">
             <Text size="xs" c="dimmed">
-              {pending ? 'Reading specs…' : '↑↓ move'}
+              {unindexed ? `Searching what is read so far: ${unindexed}` : failed > 0 ? `${plural(failed, 'spec', 'specs')} could not be read and ${failed === 1 ? 'is' : 'are'} not searched` : '↑↓ move'}
             </Text>
             <Text size="xs" c="dimmed">
               ↵ open · esc close
