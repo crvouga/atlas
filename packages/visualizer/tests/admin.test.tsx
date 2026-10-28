@@ -98,6 +98,8 @@ test('the storage section says reports and user state are in S3 and offers no lo
 });
 test('with no policy saved the page says nothing is deleted, and saving one writes it through the API with the revision', async () => {
   const calls = server();
+  // Browser storage is shared with other test files, so compare against what was there before this page ran.
+  const before = JSON.stringify([{ ...localStorage }, { ...sessionStorage }]);
   await open();
   await type('token', 'admin-secret');
   await click('load');
@@ -116,8 +118,7 @@ test('with no policy saved the page says nothing is deleted, and saving one writ
   expect(JSON.parse(put.init.body as string)).toEqual(policy);
   expect(document.getElementById('status')!.textContent).toContain('saved to S3');
   expect(document.getElementById('gc-empty')).toBeNull();
-  expect(localStorage.length).toBe(0);
-  expect(sessionStorage.length).toBe(0);
+  expect(JSON.stringify([{ ...localStorage }, { ...sessionStorage }])).toBe(before);
 });
 test('a saved policy is shown as loaded from S3, and a preview lists what would be deleted without deleting', async () => {
   const calls = server({ policy });
