@@ -9,6 +9,7 @@
  * @see docs/report-contract.md
  */
 import type { EvidenceMeasurement, EvidenceStatus } from './explorer-types';
+import type { LayerRun } from '../../schema/src/layer';
 import type { LayerParameters } from './layer-types';
 
 /** Where a recorded test's timeline and captured files are read from. */
@@ -32,6 +33,38 @@ export type BackendInfo = {
 /** How many results have each status (`passed`, `failed`, `running`, `not-run`). */
 export type StatusCounts = Readonly<Record<EvidenceStatus, number>>;
 
+/** Who holds a recording: the whole layer (or one of its parts), one check, one retry attempt of a check, or one step. */
+export type VideoOwner = 'layer' | 'check' | 'attempt' | 'step';
+
+/**
+ * One reference to a video, found by its effective media type (the producer's `contentType`, else the one the file
+ * name implies; a `video` role alone counts only when nothing else says what the file is). A reference is not a
+ * recording: the same bytes referenced from three checks are three references and one recording.
+ */
+export type VideoRef = {
+  /** The attachment's name, for a person. */
+  readonly name: string;
+  readonly owner: VideoOwner;
+  /** The try that holds it, when `owner` is `attempt` or the step is inside one. */
+  readonly attempt?: number;
+  /** The name of the step that holds it, when `owner` is `step`. */
+  readonly step?: string;
+  /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
+  readonly recording?: string;
+  /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
+  readonly available: boolean;
+};
+
+/** Video availability as counts: references, distinct playable recordings (deduplicated), and references that cannot be played. */
+export type VideoCounts = {
+  /** Every reference to a video, playable or not. */
+  readonly references: number;
+  /** Distinct playable recordings: identical bytes referenced twice are one. */
+  readonly recordings: number;
+  /** References that name no bytes. A report that predates availability metadata has none of these and none of the others. */
+  readonly unavailable: number;
+};
+
 /**
  * What a result (or a run) carries beyond its outcome, as counts and short facts: attachments, steps,
  * annotations, retries, tags, labels, links. It is only there when there is something. The evidence itself
@@ -46,9 +79,13 @@ export type EvidenceSummary = {
   readonly attempts: number;
   readonly links: number;
   readonly tags: readonly string[];
+  /** The normalized tags of the attachments themselves (`#demo` is `demo`), sorted and distinct. Absent when no attachment is tagged. Unlike `tags` they are never inherited from a check or run. */
+  readonly artifactTags?: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   /** The distinct roles of its attachments (or what their media types say), to show what kind of evidence there is. */
   readonly roles: readonly string[];
+  /** Its references to videos, wherever they are held (layer, check, attempt, step). Only there when it has any. */
+  readonly videos?: readonly VideoRef[];
 };
 
 /** A report layer's origin and totals. Its checks are read separately, once. */
@@ -75,6 +112,8 @@ export type LayerHeader = {
   readonly parameters: LayerParameters;
   /** `modified`: recorded from a checkout with uncommitted changes; `unknown`: origin not captured; absent: clean. Advisory; never changes a status. */
   readonly freshness?: 'unknown' | 'modified';
+  /** The execution the producer named for it (one local or manual invocation), or absent. Grouping and display only; never part of the slot. */
+  readonly run?: LayerRun;
   /** Where this layer's recorded timelines and captured files are read from, or null when it has none. */
   readonly recording: RecordingAddress | null;
   /** From a spec run that has not been collected into a layer yet. */
@@ -85,6 +124,24 @@ export type LayerHeader = {
   readonly execution: string;
   /** What the run as a whole carries: its logs, links and labels. */
   readonly evidence?: EvidenceSummary;
+  /** Counts from the layer's recording receipt: how many expected recordings were published. Absent when the layer declared no expectations: its completeness is unknown, not complete. Never changes a status. */
+  readonly recordings?: RecordingCounts;
+};
+
+/** How many recordings a layer expected and what became of them (see `RecordingReceipt`). */
+export type RecordingCounts = {
+  /** Checks that required a recording: `uploaded + referenced + skipped + unresolved`. */
+  readonly expected: number;
+  /** Stored in the layer, with a checksum. */
+  readonly uploaded: number;
+  /** Given only by `uri`: Atlas cannot vouch for it. */
+  readonly referenced: number;
+  /** Captured but left out, with a reason (too large, not allowed…). */
+  readonly skipped: number;
+  /** No video was attached at all. */
+  readonly unresolved: number;
+  /** Intentionally unrecorded checks: neither expected nor missing. */
+  readonly notApplicable: number;
 };
 
 /** One check of one report part. */
@@ -108,6 +165,8 @@ export type LayerRow = {
   readonly durationMs: number | null;
   /** What this result carries beyond its outcome. Absent when nothing. */
   readonly evidence?: EvidenceSummary;
+  /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
+  readonly recording?: { readonly state: string; readonly reason?: string };
 };
 
 /** The checks of one layer, read separately from its header. */

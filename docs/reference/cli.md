@@ -86,12 +86,15 @@ atlas report — layered evidence for any kind of spec
   atlas report publish [--store <dir|s3://bucket/prefix>] [--producer <name>]
                        ( --ctrf <file> | --junit <file> | --manifest <file> | --checks <file.json> )
                        [--environment <name>] [--branch <b>] [--sha <s>] [--run-url <u>]
+                       [--run-id <id>] [--run-title <t>] [--run-started-at <iso|ms>] [--run-ended-at <iso|ms>]
                        [--spec <path> | --specs <dir>] [--upload-run]
                        [--param key=value]... [--kind <k>] [--title <t>] [--recorded-at <iso|ms>]
                        [--attach [role=]<file>]... [--label key=value]... [--link [name=]<url>]...
                        [--attach-root <dir>]... [--max-attachment-mb <n>] [--max-total-attachment-mb <n>]
+                       [--require-recordings]
   atlas report stream  [--store <dir|s3://…|https://atlas.example.com>] --producer <name> [--environment <name>]
                        [--branch <b>] [--sha <s>] [--run-url <u>] [--kind <k>] [--param key=value]...
+                       [--run-id <id>] [--run-title <t>]
                        [--flush-ms 1000] [--batch 100]       (checks as JSON lines on standard input)
   atlas report status  [--store <dir|s3://…|id=url>]... [--backends <module>]
                        [--specs <dir>] [--format text|json|markdown]
@@ -112,6 +115,11 @@ atlas report — layered evidence for any kind of spec
             --specs <dir>   link checks to the spec files in <dir> by path, or by the suite, class or
                             file name the report gives; also publishes the specs themselves, so the
                             node can show them without a checkout
+            --run-id <id>   name this execution (a local or manual run with no CI run URL; also ATLAS_RUN_ID).
+                            Layers that share an id are one run, however many shards or batches uploaded them;
+                            another invocation at the same commit gets another id. Never part of what a check is
+            --run-title <t> a human name for the run (also ATLAS_RUN_TITLE); --run-started-at and --run-ended-at
+                            record when it ran. Without --run-id a run is its CI run URL, else branch@sha
             --upload-run    with --manifest: also upload the run's screenshots and clips for the viewer
             --attach <file>   attach a file to the whole layer: a CI log, a coverage report, a trace archive
                               (screenshots, videos and traces of a single test go in its CTRF or checks file)
@@ -120,6 +128,10 @@ atlas report — layered evidence for any kind of spec
             Files a report names (CTRF attachments, JUnit [[ATTACHMENT|path]] lines) come from the report's own
             folder and each --attach-root, and never from a hidden file or a link out: a report is data from a
             test run, not instructions. One that is missing or not allowed is skipped with a warning.
+            --require-recordings   exit 1 when a check that declared recordingExpectation "required" has no
+                              uploaded video (absent, left out as too large or not allowed, or refused). The layer is
+                              still written and the checks keep their results; only this command fails. The receipt of
+                              what was uploaded (counts, sizes, checksums) is in the JSON result under layer.recordings.
             From a checkout with uncommitted changes the layer is marked "modified".
   stream    Send checks as they finish: one JSON object per line on standard input (the fields of one
             check: id, title, status, and any evidence). Each second's worth becomes one layer, so a server

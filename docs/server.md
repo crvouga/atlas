@@ -216,6 +216,26 @@ against a server unchanged. A client uploads **in dependency order**: blobs, the
 entry that makes it visible. The server checks each step and says no to a catalog entry whose manifest is not
 there (`409`), so nothing half-uploaded is ever shown.
 
+## Tagging artifacts
+
+A reviewer can mark a recording `#demo` after it was uploaded without uploading it again. The layer is immutable, so the
+tag is kept beside it: each edit is one small object under `curation/artifact-tags/` in the write backend (or the live
+store of a relay), named by time, never changed or removed. It records the attachment (layer, check, and the attachment's
+`id`, else its bytes' key, else its name), the normalized tags added and removed, the name of the token that made the
+edit, and the server's time. Nothing about the layer, its results or the report's winners changes.
+
+- `GET /api/reports/artifact-tags` (read) returns every edit, oldest first. Fold them to get the tags that stand now: the
+  last edit of a tag wins.
+- `POST /api/reports/artifact-tags` (publish, `Authorization: Bearer`) records an edit. A read token, an anonymous reader
+  and the browser's sign-in box are refused (`403`/`401`) like any upload, so a read-only visitor can see the tags and
+  not change them. The viewer asks for a token when a reviewer adds a tag and keeps it only in that tab.
+- Producer tags (`tags` on the attachment) and reviewer tags are kept apart everywhere: the viewer says who added a
+  reviewer tag and when, and a reviewer can remove only reviewer tags. `capabilities.artifactTags` on `/api/server` says
+  a server has this.
+
+See [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos) for the tag rules. Reviewer tags are
+shown in the viewer's evidence; the tests API (`artifactTag`) searches the producers' tags.
+
 ## Streaming
 
 `GET /api/events` is a server-sent-events stream:
@@ -255,7 +275,8 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | Every test, a summary (by status, environment, producer, domain), insights (failing, flaky, slowest) and facets | `GET /api/reports/tests` |
 | Only some: `q` (all words), `status` (or `flaky`), `environment`, `producer`, `domain`, `spec`, `tag`, `run`; `sort`, `offset`, `limit` | `GET /api/reports/tests?status=failed&environment=ios` |
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
-| The runs that recorded the report (by CI run URL, else branch and commit) | `GET /api/reports/runs` |
+| Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
+| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video | `GET /api/reports/runs` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 
 ```sh
@@ -267,6 +288,13 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
   `stats` describes its recorded history: pass rate, flips, whether it is flaky and why (it passed and failed on the
   same commit, passed only after a retry, or its producer said so), durations (avg, p50, p95, min, max, last), runs
   and branches.
+- The **health** document explains the numbers instead of adding one. It keeps spec files, defined specs, specs with an
+  executed test, tests, outlines, examples and per-environment observations apart, and walks from the Specs total to
+  the Tests total. Two spec paths are one logical spec only when a mapping says so
+  (`?root=<from>><to>`, for example `?root=%3Especs/` to put `checkout/cart.feature` under `specs/`); similar paths
+  are reported as ambiguous and never merged, and a similar title is never an identity. Give a check the label
+  `outline` to say which scenario outline an example belongs to. A domain shared by nearly every spec is flagged, but
+  explicit domain metadata always stays authoritative. The document only reads: it changes no status.
 - The server keeps the newest 100 results of every test (progress reported as `running` is not history) and every run's last result per test, in memory, as layers
   arrive; it is rebuilt from the layers on restart. History never changes a result.
 - Without a published spec set, tests are grouped under the specs their layers recorded (`specs[]`: path, domain,
@@ -318,8 +346,14 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
 | `GET /api/reports/tests` | read | Every test, with insights, facets and history statistics. |
 | `GET /api/projects/{project}/reports/tests` | read | Every test, with insights, facets and history statistics. |
+| `GET /api/reports/tests/health` | read | Why specs, domains and counts disagree. |
+| `GET /api/projects/{project}/reports/tests/health` | read | Why specs, domains and counts disagree. |
 | `GET /api/reports/tests/history` | read | One test and every result recorded for it. |
 | `GET /api/projects/{project}/reports/tests/history` | read | One test and every result recorded for it. |
+| `GET /api/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
+| `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
+| `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
+| `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `GET /api/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |

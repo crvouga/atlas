@@ -26,11 +26,13 @@ import { layerCatalogKey } from '../../reports/src/layer-store';
 import { createLayersApp } from '../../reports/src/layers-route';
 import type { ReportOutline } from '../../reports/src/layer-types';
 import type { ObjectStore } from '../../reports/src/object-store';
+import { readArtifactTagEntries, recordArtifactTags, ArtifactTagError } from '../../reports/src/artifact-tag-store';
 import { publishChecks } from '../../reports/src/publish-checks';
 import { reportStatus } from '../../reports/src/report-status';
 import { ReportIndex, type IndexChange } from '../../reports/src/report-index';
 import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
+import { catalogHealth, healthMarkdown, parseRootMappings } from '../../reports/src/catalog-health';
 import { catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
 import { llmsTxt } from './llms';
 import { openApiDocument } from './openapi';
@@ -298,7 +300,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true }
     });
   });
 
@@ -414,6 +416,13 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const document = () => testCatalog(found, query);
     return answer(c, found.version, document, () => catalogMarkdown(document()), `tests|${new URL(c.req.url).search}|${wantsMarkdown(c)}`);
   });
+  app.get('/api/reports/tests/health', async c => {
+    if (!index.ready) return notReady(c);
+    const found = await catalog();
+    const params = new URL(c.req.url).searchParams;
+    const document = () => catalogHealth(found, parseRootMappings(params));
+    return answer(c, found.version, document, () => healthMarkdown(document()), `health|${params.getAll('root').join('\u0001')}|${wantsMarkdown(c)}`);
+  });
   app.get('/api/reports/tests/history', async c => {
     if (!index.ready) return notReady(c);
     const key = c.req.query('key');
@@ -427,8 +436,9 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     if (!index.ready) return notReady(c);
     const found = await catalog();
     const limit = /^\d+$/.test(c.req.query('limit') ?? '') ? Number(c.req.query('limit')) : 100;
-    const document = () => runList(index.history, found.version, limit);
-    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${limit}|${wantsMarkdown(c)}`);
+    const video = ['1', 'true'].includes(c.req.query('video') ?? '');
+    const document = () => runList(index.history, found.version, limit, { video });
+    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${limit}|${video}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/runs/detail', async c => {
     if (!index.ready) return notReady(c);
@@ -438,6 +448,28 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const document = runDetail(index.history, found.version, key);
     if (!document) return problemResponse(404, 'No run has that key.');
     return answer(c, found.version, () => document, () => runMarkdown(document), `run|${key}|${wantsMarkdown(c)}`);
+  });
+  // Reviewer tags for attachments: an audit trail of edits kept beside the layers, which they never change. Read
+  // with a read token; an edit needs a publish token in a Bearer header, and is recorded under that token's name.
+  const tagStore = options.liveStore ?? writeBackend.store;
+  // Edits are ordered by time, so two in one millisecond are told apart by moving the later one on.
+  let lastTagAt = 0;
+  const artifactTags = cached(() => readArtifactTagEntries(tagStore), 5_000);
+  app.get('/api/reports/artifact-tags', async c => c.json({ schemaVersion: 1, entries: await artifactTags() }, 200, { 'cache-control': 'no-store' }));
+  app.post('/api/reports/artifact-tags', async c => {
+    const verdict = auth.check(c.req.raw, 'publish');
+    if (!verdict.ok) return unauthorized(verdict);
+    try {
+      const bytes = await readLimited(c.req.raw, Math.min(limits.json, 64 * 1024));
+      let input: unknown;
+      try { input = JSON.parse(new TextDecoder().decode(bytes)); } catch { return problemResponse(422, 'The body is not JSON.'); }
+      const entry = await recordArtifactTags(tagStore, input, verdict.identity.name, lastTagAt = Math.max(now(), lastTagAt + 1));
+      await artifactTags.invalidate();
+      return c.json(entry, 201, { 'cache-control': 'no-store' });
+    } catch (error) {
+      if (error instanceof ArtifactTagError || error instanceof Refusal) return problemResponse(error.status, error.message);
+      throw error;
+    }
   });
   app.route('/api/reports', layers);
 
