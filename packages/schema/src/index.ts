@@ -15,6 +15,7 @@ export * from './spec.js';
 export * from './report-sources';
 export * from './layer';
 export * from './server-config';
+export * from './user-state';
 export * from './api';
 export * from './cli-results';
 

@@ -1662,9 +1662,10 @@ export const RunsIndexSchema = …
 Source: `packages/schema/src/server-config.ts`
 
 The schema of `atlas.server.json`, the file that configures `atlas serve` and `atlas dev`: where to listen, which
-folder and further backends hold the data, which bearer tokens may read, publish or administer, and limits. Every
-field has a default, so an empty file is a working server. Unlike the report format, unknown keys are an error, so
-a typo is reported instead of ignored. Flags and environment variables override the file.
+bearer tokens may read, publish or administer, and limits. Where reports are kept is not here: the server stores
+everything in S3-compatible storage named by required `ATLAS_S3_*` environment variables, never in this file.
+Every field has a default. Unlike the report format, unknown keys are an error, so a typo (or a removed `data`,
+`backends` or `write` key) is reported instead of ignored. Flags and environment variables override the file.
 
 See docs/deploying.md
 See docs/server.md
@@ -1685,15 +1686,6 @@ export type ServerRole = z.infer<typeof ServerRoleSchema>;
 
 One of the roles of `ServerRoleSchema`.
 
-#### `ServerBackendSchema`
-
-```ts
-export const ServerBackendSchema = …
-```
-
-A further store the server reads together with its data folder, and optionally writes to: an id, a label and a
-location URL.
-
 #### `ServerTokenSchema`
 
 ```ts
@@ -1709,8 +1701,7 @@ A bearer token: a name for logs, a role, and the token itself or the name of the
 export const ServerConfigSchema = …
 ```
 
-The whole `atlas.server.json`: listening address, data folder, backends and write target, authentication, the
-viewer to serve, which layers take part in the report, refresh and heartbeat intervals, request limits and logging.
+The whole `atlas.server.json`: listening address, authentication, the viewer to serve, which layers take part in the report, refresh and heartbeat intervals, request limits and logging.
 
 #### `ServerConfig`
 
@@ -1734,7 +1725,7 @@ A server configuration as written, before defaults are applied.
 export const ServerEditableSettingsSchema = …
 ```
 
-Storage and report settings editable by an admin. Authentication, listeners and the served site stay deployment-owned. Replaces the editable portion of the file; omitted fields use defaults after restart.
+Report and live-run settings editable by an admin. Storage, authentication, listeners and the served site stay deployment-owned. Replaces the saved portion of the user state; omitted fields use defaults after restart.
 
 #### `ServerSettingsSnapshotSchema`
 
@@ -1742,7 +1733,7 @@ Storage and report settings editable by an admin. Authentication, listeners and 
 export const ServerSettingsSnapshotSchema = …
 ```
 
-The settings API response: persisted editable configuration, active values, concurrency revision and restart/precedence guidance. Authentication token settings are excluded.
+The settings API response: editable configuration saved in the user state in S3, active values, concurrency revision and restart/precedence guidance. Authentication token settings are excluded.
 
 ### Statechart spec schemas
 
@@ -1994,3 +1985,98 @@ export function isStatechartFile(path: string)
 ```
 
 Whether a spec-relative path (using `/`) matches `STATECHART_FILE_PATTERNS`.
+
+### User state schema
+
+Source: `packages/schema/src/user-state.ts`
+
+The one JSON document that holds everything a person using Atlas has chosen, as opposed to what an operator deployed:
+the garbage collection policy and the saved server settings. The server keeps it in S3-compatible object storage
+(`server/state.json` under the configured prefix) and nowhere else: not in a file, a database or the browser. A
+document that does not exist yet means nothing has been chosen; a document that cannot be read is an error, never
+an empty state. Unknown keys are kept, so an older server does not drop what a newer one wrote.
+
+See docs/server.md#user-state-and-garbage-collection
+
+#### `GcPolicySchema`
+
+```ts
+export const GcPolicySchema = …
+```
+
+The garbage collection policy: which report layers the server may delete from S3, and when. Only layers that the
+report has loaded and that no longer decide any result (every check they carry has since been superseded by a newer
+layer) are ever candidates, and the newest `keepLatest` layers are always kept. With `enabled: false` nothing is deleted.
+
+#### `GcPolicy`
+
+```ts
+export type GcPolicy = z.output<typeof GcPolicySchema>;
+```
+
+A garbage collection policy as stored, defaults applied.
+
+#### `GcPolicyInput`
+
+```ts
+export type GcPolicyInput = z.input<typeof GcPolicySchema>;
+```
+
+A garbage collection policy as written, before defaults are applied.
+
+#### `GcRunSchema`
+
+```ts
+export const GcRunSchema = …
+```
+
+What one pass of garbage collection found and did, for one project.
+
+#### `GcRun`
+
+```ts
+export type GcRun = z.output<typeof GcRunSchema>;
+```
+
+One pass of garbage collection, see {@link GcRunSchema}.
+
+#### `UserStateSchema`
+
+```ts
+export const UserStateSchema = …
+```
+
+The user state document stored in S3. Both parts are optional: absent means "never chosen".
+
+#### `UserState`
+
+```ts
+export type UserState = z.output<typeof UserStateSchema>;
+```
+
+The user state document, see {@link UserStateSchema}.
+
+#### `GcSnapshotSchema`
+
+```ts
+export const GcSnapshotSchema = …
+```
+
+`GET /api/settings/gc` and `PUT /api/settings/gc`: the policy as saved in S3 (`null` when none has been saved), the
+revision to send back in `If-Match`, and the result of the last pass this server ran.
+
+#### `GcSnapshot`
+
+```ts
+export type GcSnapshot = z.output<typeof GcSnapshotSchema>;
+```
+
+The garbage collection settings response, see {@link GcSnapshotSchema}.
+
+#### `GcRunResultSchema`
+
+```ts
+export const GcRunResultSchema = …
+```
+
+`POST /api/settings/gc/run`: the passes that ran, one per project.
