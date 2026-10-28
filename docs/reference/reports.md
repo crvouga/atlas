@@ -330,6 +330,227 @@ export async function readBundleIndex(
 
 Reads and parses the bundle index at `key`; an index that is not there is an empty bundle (`{}`). Invalid JSON throws.
 
+### Catalog health: spec identity, domains and denominators
+
+Source: `packages/reports/src/catalog-health.ts`. Import: `@crvouga/atlas/reports/catalog-health`
+
+Explains why the Specs and the Tests of a report may disagree, and what a producer or an operator can change about it.
+`catalogHealth` reads a `CatalogModel` (the tests of a report and the specs it is laid over) and writes a
+`CatalogHealth` document:
+
+- **Spec identity.** The same promise can reach Atlas under two paths (`checkout/cart.feature` published,
+  `specs/checkout/cart.feature` recorded). Atlas joins two paths only when a declared root mapping (`RootMapping`)
+  relates them, and then shows one logical spec with its original paths. Without a mapping it never merges by a
+  similar title or file name: it reports the pair as ambiguous and names the candidates.
+- **Domains.** A domain is whatever the spec's metadata says. When almost every spec shares one value, often the root
+  folder, the document says so; it never replaces explicit metadata.
+- **Denominators.** Defined specs, specs with an executed test, tests (check identities), examples and per-environment
+  observations are different numbers. `reconciliation` walks from the number the Specs view shows to the number the
+  Tests view groups by, step by step, and `counts.scenarios` tells one outline, its examples and their observations apart.
+- **Fallback identity.** A check whose id is its title has no stable id; renaming it starts a new check. Counted, not
+  guessed at.
+
+It only reads: it never changes a status, a slot or a winner, so it cannot disagree with the report it describes.
+Optional label `outline` on a check names the scenario outline its example belongs to.
+
+See docs/server.md#reading-the-report-as-an-agent
+
+#### `CATALOG_HEALTH_VERSION`
+
+```ts
+export const CATALOG_HEALTH_VERSION = …
+```
+
+The version of the `CatalogHealth` document. Only optional fields are added within it.
+
+#### `HEALTH_ITEM_LIMIT`
+
+```ts
+export const HEALTH_ITEM_LIMIT = …
+```
+
+The most paths listed in one finding; its `count` is always the whole.
+
+#### `RootMapping`
+
+```ts
+export type RootMapping = { readonly from: string; readonly to: string };
+```
+
+Declares that paths under `from` are the same specs as paths under `to`, e.g. `{ from: '', to: 'specs/' }`. Empty `from` matches every path.
+
+#### `HealthItem`
+
+```ts
+export type HealthItem = {
+  readonly path: string;
+  /** Other paths it could be the same promise as, when any; Atlas has not merged them. */
+  readonly candidates?: readonly { readonly path: string; readonly reason: string }[];
+};
+```
+
+One thing worth a look.
+
+#### `HealthCode`
+
+```ts
+export type HealthCode =
+  | 'ambiguous-spec-path'
+  | 'unmatched-spec-path'
+  | 'duplicate-spec-content'
+  | 'duplicate-spec-title'
+  | 'generic-domain'
+  | 'tests-without-spec'
+  | 'no-spec-definitions'
+  | 'fallback-identity'
+  | 'unused-root-mapping'
+  | 'spec-without-execution'
+  | 'historical-only';
+```
+
+Codes of `HealthFinding.code`. The set grows; a reader treats an unknown code as informational.
+
+#### `HealthFinding`
+
+```ts
+export type HealthFinding = {
+  readonly code: HealthCode;
+  /** `warning` is something that makes a count or a filter misleading; `info` explains a number. */
+  readonly severity: 'warning' | 'info';
+  readonly message: string;
+  /** How many paths, specs or tests it affects. */
+  readonly count: number;
+  /** Up to `HEALTH_ITEM_LIMIT` of them. */
+  readonly items: readonly HealthItem[];
+};
+```
+
+A finding: what is inconsistent, how many it affects, and what to change.
+
+#### `SpecAlias`
+
+```ts
+export type SpecAlias = {
+  /** The logical spec's path after mapping. */
+  readonly path: string;
+  /** Every original path it was seen under, sorted. */
+  readonly sources: readonly string[];
+};
+```
+
+A spec that reached Atlas under more than one path and was joined by a declared root mapping.
+
+#### `ReconciliationStep`
+
+```ts
+export type ReconciliationStep = {
+  readonly code: 'merged-by-mapping' | 'defined-without-results' | 'results-without-definition';
+  readonly label: string;
+  /** The change to the running total: negative removes specs, positive adds them. */
+  readonly delta: number;
+};
+```
+
+One step from the Specs count to the Tests count.
+
+#### `CatalogHealth`
+
+```ts
+export type CatalogHealth = {
+  readonly schemaVersion: typeof CATALOG_HEALTH_VERSION;
+  readonly version: string;
+  readonly generatedAtMs: number;
+  /** True when there is no warning. Informational findings do not count. */
+  readonly ok: boolean;
+  readonly counts: {
+    readonly specs: {
+      /** Spec files the report is laid over (before mapping). */
+      readonly files: number;
+      /** Logical specs among them: files joined by a root mapping count once. */
+      readonly defined: number;
+      /** Logical specs, defined or not, with at least one test. */
+      readonly withTests: number;
+      /** Defined logical specs with a test that has a passed or failed result. They are the denominator of execution coverage. */
+      readonly executed: number;
+      /** Defined logical specs with no test that has a passed or failed result: the defined coverage gaps. */
+      readonly withoutExecution: number;
+    };
+    readonly tests: {
+      readonly total: number;
+      readonly withSpec: number;
+      readonly withoutSpec: number;
+      /** Tests whose current status is `passed`. A definition with no test never adds to it. */
+      readonly passed: number;
+      /** Tests the history holds but the report has no current result for. */
+      readonly historicalOnly: number;
+    };
+    readonly scenarios: {
+      /** Outlines: tests sharing the label `outline` count once; a test without it is its own outline. */
+      readonly outlines: number;
+      /** Concrete examples: tests (a check identity), however many environments ran them. */
+      readonly examples: number;
+      /** Current results per producer, environment and parameter set. */
+      readonly observations: number;
+      /** Observations that passed or failed. */
+      readonly executedObservations: number;
+      readonly passedObservations: number;
+    };
+  };
+  …
+```
+
+The `GET /api/reports/tests/health` document.
+
+#### `parseRootMapping`
+
+```ts
+export function parseRootMapping(text: string): RootMapping | null
+```
+
+Parses `from>to` (as `?root=` gives it) into a mapping. Returns null when there is no `>`. Whitespace around each side is trimmed.
+
+#### `parseRootMappings`
+
+```ts
+export function parseRootMappings(params: URLSearchParams): RootMapping[]
+```
+
+Reads the repeatable `root` search parameter: each value `from>to`, several may be comma-separated. Values without `>` are ignored.
+
+#### `canonicalSpecPath`
+
+```ts
+export function canonicalSpecPath(path: string, roots: readonly RootMapping[]): { readonly path: string; readonly mapping: RootMapping | null }
+```
+
+The logical path of a spec path: the path Atlas already normalises (`specPath`), after the first mapping whose `from`
+is a prefix of it (the longest `from` wins). A path already under `to` is left alone. Returns the path and the mapping
+that changed it, if any.
+
+#### `catalogHealth`
+
+```ts
+export function catalogHealth(model: CatalogModel, roots: readonly RootMapping[] = []): CatalogHealth
+```
+
+Diagnoses a report's spec identity, domains and counts. `roots` are the declared path-root mappings. Pure: the same
+model and mappings give the same document, and nothing in it changes what the report says passed.
+
+**Example**
+
+```ts
+const health = catalogHealth(model, [{ from: '', to: 'specs/' }]);
+if (!health.ok) console.log(healthMarkdown(health));
+```
+
+#### `healthMarkdown`
+
+```ts
+export function healthMarkdown(health: CatalogHealth): string
+```
+
+The health document as Markdown, for an agent or a terminal.
+
 ### Catalog search, filter, group and sort
 
 Source: `packages/reports/src/catalog.ts`. Import: `@crvouga/atlas/reports/catalog`
@@ -7576,6 +7797,7 @@ const catalog = testCatalog(catalogModel(layers, { history }));
 
 - `get rev(): number { return this.#rev; }` — Changes each time a layer is added.
 - `get specs(): RecordedSpecs { return this.#specs; }` — The specs the added layers recorded.
+- `tests(): readonly { readonly key: string; readonly id: string; readonly specPath: string | null }[]` — Every test the history holds a result for (keyed as `TestSummary.key`), including tests the report no longer has a current result for.
 - `get layers(): number { return this.#seen.size; }` — How many layers were added.
 - `add(layer: LayerHeader, rows: readonly LayerRow[], specs: readonly SpecEntry[] = [], backend = layer.backend): void` — Takes in one layer: its header, its rows, the specs it recorded and the backend it was read from. A layer id already added is ignored.
 - `of(key: string): readonly TestResultEntry[]` — The recorded results of one test (by `TestSummary.key`), newest first. Empty when none.
@@ -7628,6 +7850,8 @@ export type CatalogModel = {
   readonly facets: CatalogFacets;
   readonly haystacks: ReadonlyMap<string, string>;
   readonly history: TestHistory | null;
+  /** The specs the report is laid over, sorted by path: the given ones, else those the layers recorded. What `catalogHealth` calls defined. Absent on a model built from a server's catalog document. */
+  readonly specs?: readonly SpecEntry[];
 };
 ```
 

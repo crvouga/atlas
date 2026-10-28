@@ -308,6 +308,58 @@ export const TestCatalogSchema = z.looseObject({
   tests: z.array(TestSummarySchema)
 });
 
+const nonneg = z.number().int().nonnegative();
+const HealthItemSchema = z.looseObject({
+  path: z.string(),
+  candidates: z.array(z.looseObject({ path: z.string(), reason: z.string() })).optional().describe('Other paths it could be the same promise as. Atlas has not merged them')
+});
+
+/**
+ * `GET /api/reports/tests/health`: why the report's Specs, domains and counts may disagree. Counts keep the denominators
+ * apart (spec files, defined specs, specs with an executed test, tests, outlines, examples, observations), `reconciliation`
+ * walks from one to another, and `findings` name what to fix. It reads the report; it never changes what passed.
+ */
+export const CatalogHealthSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string().describe('Changes whenever the report or its history does'),
+  generatedAtMs: z.number(),
+  ok: z.boolean().describe('True when there is no warning-severity finding'),
+  counts: z.looseObject({
+    specs: z.looseObject({
+      files: nonneg.describe('Spec files the report is laid over, before any root mapping'),
+      defined: nonneg.describe('Logical specs: files joined by a declared root mapping count once'),
+      withTests: nonneg.describe('Logical specs, defined or not, that have at least one test'),
+      executed: nonneg.describe('Defined logical specs with a test that passed or failed'),
+      withoutExecution: nonneg.describe('Defined logical specs with no passed or failed test: the defined coverage gaps')
+    }),
+    tests: z.looseObject({ total: nonneg, withSpec: nonneg, withoutSpec: nonneg, passed: nonneg.describe('Tests whose current status is passed'), historicalOnly: nonneg.describe('Tests only the history holds a result for') }),
+    scenarios: z.looseObject({
+      outlines: nonneg.describe('Tests sharing the label `outline` count once; a test without it is its own outline'),
+      examples: nonneg.describe('Tests (check identities), however many environments ran them'),
+      observations: nonneg.describe('Current results per producer, environment and parameter set'),
+      executedObservations: nonneg, passedObservations: nonneg
+    })
+  }),
+  reconciliation: z.looseObject({
+    specs: nonneg.describe('What the Specs view counts: spec files'),
+    testSpecs: nonneg.describe('What the Tests view groups by: logical specs with at least one test'),
+    steps: z.array(z.looseObject({ code: z.string(), label: z.string(), delta: z.number().int() })).describe('From `specs` to `testSpecs`: each step adds its `delta`'),
+    testsWithoutSpec: nonneg,
+    explanation: z.array(z.string())
+  }),
+  identity: z.looseObject({ checks: nonneg, fallbackIdentity: nonneg.describe('Checks whose id equals their title'), basis: z.string() }),
+  domains: z.array(z.looseObject({ name: z.string(), specs: nonneg })).describe('Specs per domain, most first'),
+  roots: z.array(z.looseObject({ from: z.string(), to: z.string(), matched: nonneg.describe('Distinct paths the mapping changed') })),
+  aliases: z.array(z.looseObject({ path: z.string(), sources: z.array(z.string()) })).describe('Logical specs seen under more than one original path, joined by a root mapping'),
+  findings: z.array(z.looseObject({
+    code: z.string().describe('An open set: treat a code you do not know as informational'),
+    severity: z.enum(['warning', 'info']),
+    message: z.string(),
+    count: nonneg,
+    items: z.array(HealthItemSchema).describe('At most 25; `count` is the whole')
+  }))
+});
+
 /** `GET /api/reports/tests/history`: one test and every result recorded for it (at most 100), newest first. */
 export const TestHistorySchema = z.looseObject({
   schemaVersion: z.literal(1),

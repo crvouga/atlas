@@ -234,6 +234,16 @@ export const TestCatalogSchema = …
 `GET /api/reports/tests`: every test of the report with a summary, insights and facets. The summary and facets cover
 every test; `tests` is the page of those the query matched.
 
+#### `CatalogHealthSchema`
+
+```ts
+export const CatalogHealthSchema = …
+```
+
+`GET /api/reports/tests/health`: why the report's Specs, domains and counts may disagree. Counts keep the denominators
+apart (spec files, defined specs, specs with an executed test, tests, outlines, examples, observations), `reconciliation`
+walks from one to another, and `findings` name what to fix. It reads the report; it never changes what passed.
+
 #### `TestHistorySchema`
 
 ```ts

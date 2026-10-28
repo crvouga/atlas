@@ -281,7 +281,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
             <Link
               {...props}
               to="/"
-              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined })}
+              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined, layer: undefined })}
               resetScroll={false}
               activeOptions={{ exact: true }}
             />
@@ -347,7 +347,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
                     <Link
                       {...props}
                       to="/"
-                      search={patched({ tab: undefined, openRun: undefined, test: result.key })}
+                      search={patched({ tab: undefined, openRun: undefined, test: result.key, layer: result.layer })}
                       resetScroll={false}
                       activeOptions={{ exact: true }}
                     />
