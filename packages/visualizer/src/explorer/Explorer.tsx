@@ -1,5 +1,5 @@
 import { SpecLogo } from '../components/SpecLogo';
-import { IconX } from '@tabler/icons-react';
+import { IconVideo, IconX } from '@tabler/icons-react';
 import {
   Accordion,
   Alert,
@@ -36,11 +36,9 @@ import {
   durationStats,
   formatMs,
   matchesQuery,
-  TEST_SORTS,
   testCatalog,
   type CatalogModel,
   type TestQuery,
-  type TestSort,
   type TestSummary
 } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
@@ -49,12 +47,17 @@ import { useEvidence } from '../evidence/evidence-context';
 import { ago, plural, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
 import { SPEC_KINDS } from '../spec-kind';
+import { behaviorDocs, behaviorId, describeHit, testHasVideo } from '../find/behaviors';
+import { useDocSearch } from '../find/doc-search';
+import { hasFilters, passesFilters, withoutToken, type FilterKey, type ParsedSearch } from '../find/query';
+import type { FindDoc, Ranked } from '../find/rank';
 import { useRunDetail, useTestCatalog } from './catalog';
 import { groupTests, tally, type TestGroupView } from './groups';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, EnvironmentChips, projectTitle, runName } from './parts';
 import { RunsView } from './RunsView';
-import { narrowed, queryOf, TEST_GROUPS, toggled, values, type ExplorerSearch, type TestGroup } from './search';
+import { SearchNotes, TypedFilters } from './search-notes';
+import { EXPLORER_SORTS, narrowed, queryOf, sortOf, TEST_GROUPS, toggled, values, type ExplorerSearch, type ExplorerSort, type TestGroup } from './search';
 import { TestDetail } from './TestDetail';
 /** Groups start closed when there are more of them than this, unless the list is short. */
 const OPEN_GROUPS = 40;
@@ -69,7 +72,8 @@ const GROUP_LABEL: Record<TestGroup, string> = {
   producer: 'Producer',
   none: 'None'
 };
-const SORT_LABEL: Record<TestSort, string> = {
+const SORT_LABEL: Record<ExplorerSort, string> = {
+  relevance: 'Best match',
   spec: 'Spec',
   title: 'Title',
   recent: 'Most recent',
@@ -89,30 +93,59 @@ const STATUS_FILTERS = [
 function percent(rate: number | null): string {
   return rate === null ? '—' : `${Math.round(rate * 100)}%`;
 }
-/** What the explorer lists for an address: the tests shown, and the scope the insight strip and filter counts describe. */
+const NO_STRUCTURE: ReadonlySet<FilterKey> = new Set();
+const WITHOUT_STATUS_AND_ENVIRONMENT: ReadonlySet<FilterKey> = new Set<FilterKey>(['status', 'env']);
+const WITHOUT_STATUS: ReadonlySet<FilterKey> = new Set<FilterKey>(['status']);
+const WITHOUT_ENVIRONMENT: ReadonlySet<FilterKey> = new Set<FilterKey>(['env']);
+const WITHOUT_VIDEO: ReadonlySet<FilterKey> = new Set<FilterKey>(['video']);
+/**
+ * What the explorer lists for an address: the tests shown, and the scope the insight strip and filter counts describe.
+ * The words, quoted phrases and filters typed in the search box are read by the shared search (`find/`), over every
+ * test, before anything is counted or ordered; nothing is cut to a page here.
+ */
 function useListing(model: CatalogModel | null, search: ExplorerSearch, q: string | undefined) {
   const run = useRunDetail(search.inRun);
   const inRun = useMemo(
     () => (search.inRun ? new Set(run.data?.results.map((result) => result.key) ?? []) : null),
     [search.inRun, run.data]
   );
-  return useMemo(() => {
+  const docs = useMemo(() => ((q || search.video) && model ? behaviorDocs(model.tests) : new Map<string, FindDoc>()), [q, search.video, model?.tests]);
+  const list = useMemo(() => [...docs.values()], [docs]);
+  const found = useDocSearch(list, q);
+  const sort = sortOf(search);
+  const listing = useMemo(() => {
     if (!model) return null;
-    const query: TestQuery = { ...queryOf(search), ...(q ? { q } : { q: undefined }) };
-    const shown = testCatalog(model, { ...query, limit: 20000 }).tests.filter((test) => !inRun || inRun.has(test.key));
+    const query: TestQuery = { ...queryOf(search), q: undefined };
+    // `has:video` typed in the box and the Has video button are the same filter.
+    const operator = { ...found.parsed.filters, video: found.parsed.filters.video || search.video === true };
+    const structured = hasFilters(operator);
+    const hits = found.hits;
+    const passes = (test: TestSummary, omit: ReadonlySet<FilterKey>) =>
+      (!hits || hits.has(behaviorId(test.key))) && (!structured || passesFilters(docs.get(test.key)?.facets, operator, omit));
+    let shown = testCatalog(model, { ...query, limit: 20000 }).tests.filter((test) => (!inRun || inRun.has(test.key)) && passes(test, NO_STRUCTURE));
+    if (sort === 'relevance' && hits) {
+      const order = new Map([...hits.keys()].map((id, at) => [id, at] as const));
+      shown = [...shown].sort((a, b) => (order.get(behaviorId(a.key)) ?? 0) - (order.get(behaviorId(b.key)) ?? 0));
+    }
     // The strip and the status and environment counts describe what the other filters leave.
-    const scope = model.tests.filter((test) => matchesQuery(model, test, { ...query, status: [], environment: [] }, inRun));
-    const byEnvironment = scope.filter((test) => matchesQuery(model, test, { environment: query.environment }));
-    const byStatus = scope.filter((test) => matchesQuery(model, test, { status: query.status }));
+    const scope = model.tests.filter((test) => matchesQuery(model, test, { ...query, status: [], environment: [] }, inRun) && passes(test, WITHOUT_STATUS_AND_ENVIRONMENT));
+    const byEnvironment = scope.filter((test) => matchesQuery(model, test, { environment: query.environment }) && passes(test, WITHOUT_STATUS));
+    const byStatus = scope.filter((test) => matchesQuery(model, test, { status: query.status }) && passes(test, WITHOUT_ENVIRONMENT));
+    const videoScope = model.tests.filter((test) => matchesQuery(model, test, query, inRun) && passes(test, WITHOUT_VIDEO));
     return {
       shown,
+      withVideo: videoScope.filter((test) => docs.get(test.key)?.facets?.video ?? testHasVideo(test)).length,
       scope,
       byEnvironment,
       byStatus,
+      hits: hits as ReadonlyMap<string, Ranked> | null,
+      parsed: found.parsed,
+      semantic: found.status,
       runPending: !!search.inRun && run.isPending,
       runMissing: !!search.inRun && run.isSuccess && run.data === null
     };
-  }, [model, search, q, inRun, run.isPending, run.isSuccess, run.data]);
+  }, [model, search, found, docs, sort, inRun, run.isPending, run.isSuccess, run.data]);
+  return listing;
 }
 /** The project home: the published spec kinds, the insight strip, the toolbar, the grouped list and the open test. */
 export function Explorer() {
@@ -243,7 +276,7 @@ export function Explorer() {
                   That run is not in the report any more.
                 </Alert>
               )}
-              <TestList tests={listing.shown} search={search} total={model.tests.length} />
+              <TestList tests={listing.shown} search={search} total={model.tests.length} hits={listing.hits} sort={search.sort ?? (listing.hits ? 'relevance' : 'spec')} />
             </>
           ))}
       </Box>
@@ -487,6 +520,9 @@ function Toolbar({
   onSearch: (value: string) => void;
 }) {
   const go = useExplorerNavigate();
+  // Best match is the order of a search with words; without words the list is in spec order.
+  const defaultSort: ExplorerSort = listing.hits ? 'relevance' : 'spec';
+  const sort: ExplorerSort = search.sort ?? defaultSort;
   const [draft, setDraft] = useState(search.q ?? '');
   // The address may change from elsewhere (a link, the index, back): follow it.
   useEffect(() => setDraft((current) => (current.trim() === (search.q ?? '').trim() ? current : (search.q ?? ''))), [search.q]);
@@ -516,7 +552,7 @@ function Toolbar({
           miw={{ base: '100%', sm: '15rem' }}
           type="search"
           aria-label="Search tests"
-          placeholder="Search titles, specs, domains, tags, environments…"
+          placeholder='Search titles, specs, tags… or filter: status:failed has:video "exact phrase"'
           value={draft}
           onChange={(event) => {
             setDraft(event.target.value);
@@ -545,12 +581,12 @@ function Toolbar({
           </Text>
           <NativeSelect
             aria-label="Sort"
-            value={search.sort ?? 'spec'}
-            onChange={(event) => go({ sort: event.target.value === 'spec' ? undefined : (event.target.value as TestSort) })}
+            value={sort}
+            onChange={(event) => go({ sort: event.target.value === defaultSort ? undefined : (event.target.value as ExplorerSort) })}
           >
-            {TEST_SORTS.map((sort) => (
-              <option key={sort} value={sort}>
-                {SORT_LABEL[sort]}
+            {EXPLORER_SORTS.filter((option) => option !== 'relevance' || listing.hits !== null || sort === 'relevance').map((option) => (
+              <option key={option} value={option}>
+                {SORT_LABEL[option]}
               </option>
             ))}
           </NativeSelect>
@@ -597,6 +633,26 @@ function Toolbar({
             ))}
           </Flex>
         )}
+        <Button
+          type="button"
+          aria-pressed={search.video === true || listing.parsed.filters.video}
+          aria-label={`Has video: ${plural(listing.withVideo, 'test', 'tests')}`}
+          onClick={() => {
+            if (listing.parsed.filters.video) {
+              const token = listing.parsed.tokens.find((item) => item.key === 'video')!;
+              const next = withoutToken(draft, token);
+              setDraft(next);
+              onSearch(next);
+            } else go({ video: search.video ? undefined : true });
+          }}
+          variant={search.video === true || listing.parsed.filters.video ? 'light' : 'subtle'}
+          leftSection={<IconVideo size={16} aria-hidden="true" />}
+        >
+          Has video{' '}
+          <Text span inherit>
+            {listing.withVideo.toLocaleString()}
+          </Text>
+        </Button>
         {model.facets.producers.length > 1 && (
           <Box component="label">
             <VisuallyHidden>Producer</VisuallyHidden>
@@ -638,6 +694,14 @@ function Toolbar({
             ? plural(model.tests.length, 'test', 'tests')
             : `${listing.shown.length.toLocaleString()} of ${plural(model.tests.length, 'test', 'tests')}`}
         </Text>
+        <TypedFilters
+          parsed={listing.parsed}
+          query={draft}
+          onChange={(next) => {
+            setDraft(next);
+            onSearch(next);
+          }}
+        />
         {chips.map((chip) => (
           <Button key={chip.label} type="button" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light">
             {chip.label}{' '}
@@ -659,7 +723,8 @@ function Toolbar({
                 domain: undefined,
                 spec: undefined,
                 tag: undefined,
-                inRun: undefined
+                inRun: undefined,
+                video: undefined
               });
             }}
             variant="subtle"
@@ -668,12 +733,13 @@ function Toolbar({
           </Button>
         )}
       </Flex>
+      <SearchNotes issues={listing.parsed.issues} semantic={listing.semantic} />
     </Box>
   );
 }
-function TestList({ tests, search, total }: { tests: readonly TestSummary[]; search: ExplorerSearch; total: number }) {
+function TestList({ tests, search, total, hits, sort }: { tests: readonly TestSummary[]; search: ExplorerSearch; total: number; hits: ReadonlyMap<string, Ranked> | null; sort: ExplorerSort }) {
   const by = search.group ?? 'spec';
-  const groups = useMemo(() => groupTests(tests, by, (search.sort ?? 'spec') === 'spec'), [tests, by, search.sort]);
+  const groups = useMemo(() => groupTests(tests, by, sort === 'spec'), [tests, by, sort]);
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(new Map());
   const defaultOpen = groups.length <= OPEN_GROUPS || tests.length <= OPEN_TESTS;
   const isOpen = (group: TestGroupView) => by === 'none' || (overrides.get(`${by}|${group.key}`) ?? defaultOpen);
@@ -733,6 +799,7 @@ function TestList({ tests, search, total }: { tests: readonly TestSummary[]; sea
               by={by}
               open={isOpen(group)}
               selected={search.test}
+              hits={hits}
               onToggle={() => setOverrides(new Map(overrides).set(`${by}|${group.key}`, !isOpen(group)))}
             />
           </Stack>
@@ -746,12 +813,14 @@ function TestGroupSection({
   by,
   open,
   selected,
+  hits,
   onToggle
 }: {
   group: TestGroupView;
   by: TestGroup;
   open: boolean;
   selected: string | undefined;
+  hits: ReadonlyMap<string, Ranked> | null;
   onToggle: () => void;
 }) {
   const [shown, setShown] = useState(by === 'none' ? 100 : GROUP_ROWS);
@@ -759,7 +828,7 @@ function TestGroupSection({
   const rows = (
     <List spacing="xs" listStyleType="none">
       {group.tests.slice(0, shown).map((test) => (
-        <TestRow key={test.key} test={test} selected={selected === test.key} now={now} />
+        <TestRow key={test.key} test={test} selected={selected === test.key} now={now} hit={hits?.get(behaviorId(test.key))} />
       ))}
       {group.tests.length > shown && (
         <List.Item>
@@ -804,7 +873,8 @@ function TestGroupSection({
     </Box>
   );
 }
-function TestRow({ test, selected, now }: { test: TestSummary; selected: boolean; now: number }) {
+function TestRow({ test, selected, now, hit }: { test: TestSummary; selected: boolean; now: number; hit: Ranked | undefined }) {
+  const why = hit ? describeHit(hit) : '';
   const failure = test.status === 'failed' ? test.outcomes.find((outcome) => outcome.status === 'failed')?.detail.split('\n')[0] : '';
   return (
     <List.Item data-status={test.status}>
@@ -836,6 +906,16 @@ function TestRow({ test, selected, now }: { test: TestSummary; selected: boolean
             {failure && (
               <Text size="xs" c="red.7" lineClamp={2}>
                 {failure}
+              </Text>
+            )}
+            {why && (
+              <Text size="xs" c="dimmed" data-why>
+                {hit?.exact && (
+                  <Badge component="span" color="blue" mr="xs">
+                    Exact
+                  </Badge>
+                )}
+                {why}
               </Text>
             )}
           </Stack>

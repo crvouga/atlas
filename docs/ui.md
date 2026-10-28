@@ -74,6 +74,16 @@ visible notation label; marks are decorative. Sources, licenses and the DMN nota
 and update this mapping when adding a format. Brand artwork preserves upstream colors independently of
 Atlas's theme. SVG data plots and statechart arrow markers are geometry, not handcrafted UI icons.
 
+## Search
+
+All search boxes (finder, test list, Runs tab, an opened run) use `src/find/query.ts` for the query language and
+`src/find/rank.ts` for matching; do not add a second matcher or filter on `includes`. Build documents from
+`src/find/behaviors.ts` so a behavior has the same fields and facets everywhere. Match first, then count, filter and sort
+the whole set, then page. Show filters typed in the box as removable chips, show what was not understood
+(`SearchNotes`), show why a result matched and mark exact ones, and say when matching is words only (no embedder, or
+a failed one). A bounded list says it is bounded and offers all results. Selection follows result identity, never a
+position, when results change. The query, filters and sort stay in the address.
+
 ## Accessibility and responsive behavior
 
 The shell collapses its index below Mantine's `md` breakpoint; its named Burger toggles mobile navigation.
@@ -124,7 +134,7 @@ The narrowly scoped exceptions are:
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |
 | Evidence | Steps, retries, annotations, facts, unknown extensions, safe downloads and previews | List, Badge, Accordion, Code, Image, native media |
 | Recordings | Pictures/video/timeline, actor selection, moments, failure jumps, timing, model-state differences | Tabs, Slider, Button, ScrollArea, Table, Progress |
-| Search/help | Ranked and semantic search, shortcut help, recording shortcuts | Spotlight, Modal, Kbd |
+| Search/help | Ranked, filterable and semantic search across behaviors, runs and results; complete results; shortcut help, recording shortcuts | Spotlight, TextInput, NativeSelect, Button chips, Alert, Modal, Kbd |
 | Administration | Token access, storage backends/write destination, live timeouts, report rules, limits, raw JSON, conflicts | Same provider/theme, Fieldset, Mantine inputs, Accordion, Alert |
 
 The hash routes (`/`, `/chart/$chartId`, `/specs/$kind`), query contracts, project scoping, streaming,

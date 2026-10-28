@@ -40,6 +40,8 @@ import { useEvidence } from '../evidence/evidence-context';
 
 /** How many runs the Runs tab lists. */
 export const RUNS_SHOWN = 500;
+/** How many runs are read to search them all (a search must see every run, not only the newest). */
+export const RUNS_SEARCHED = 20_000;
 /** The server's catalog is read again at most this often while results keep arriving. */
 const SERVER_REREAD_MS = 5_000;
 /** Layers read one after another are folded into the page's catalog at most this often. */
@@ -237,21 +239,22 @@ export function useTestHistory(key: string | undefined) {
 /**
  * CI runs, newest first. With `video`, only the runs that have a playable video recording: the server filters every run
  * before it pages them, so the count is the whole dataset's. A server that does not know the parameter answers with
- * every run (and no video information), which is filtered here.
+ * every run (and no video information), which is filtered here. With `all` every run is read (up to {@link RUNS_SEARCHED}),
+ * because a search must match the whole history rather than the newest page of it.
  */
-export function useRunList(enabled = true, video = false) {
+export function useRunList(enabled = true, video = false, all = false) {
   const catalog = useTestCatalog();
   return useQuery({
-    queryKey: ['test-runs', catalog.version, video],
+    queryKey: ['test-runs', catalog.version, video, all],
     queryFn: async ({ signal }): Promise<RunList> => {
       if (catalog.source === 'server') {
-        const list = await reportJson<RunList>(`/runs?limit=${RUNS_SHOWN}${video ? '&video=true' : ''}`, signal);
+        const list = await reportJson<RunList>(`/runs?limit=${all ? RUNS_SEARCHED : RUNS_SHOWN}${video ? '&video=true' : ''}`, signal);
         if (!video || list.withVideo !== undefined) return list;
         const runs = list.runs.filter(hasVideo);
         return { ...list, total: runs.length, runs };
       }
       const history = catalog.model?.history;
-      return history ? runList(history, catalog.version, RUNS_SHOWN, { video }) : { schemaVersion: 1, version: catalog.version, total: 0, runs: [] };
+      return history ? runList(history, catalog.version, all ? RUNS_SEARCHED : RUNS_SHOWN, { video }) : { schemaVersion: 1, version: catalog.version, total: 0, runs: [] };
     },
     enabled: enabled && catalog.model !== null,
     placeholderData: keepPreviousData,

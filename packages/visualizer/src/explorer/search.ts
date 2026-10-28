@@ -5,13 +5,18 @@
  * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, and the exact layer a test's detail is pinned to. Filters that
  * take several values are comma-separated (`status=failed,flaky`). Anything unreadable is dropped, never an error.
  */
-import { TEST_SORTS, type TestQuery, type TestSort } from '@crvouga/atlas/reports/test-catalog';
+import { TEST_SORTS, type TestQuery } from '@crvouga/atlas/reports/test-catalog';
 import { z } from 'zod/v4';
 
 /** How the explorer groups its tests. `spec` is the default. */
 export const TEST_GROUPS = ['spec', 'domain', 'environment', 'status', 'producer', 'none'] as const;
 /** One of {@link TEST_GROUPS}. */
 export type TestGroup = (typeof TEST_GROUPS)[number];
+
+/** The orders the explorer offers: `relevance` (best match first, only with words to match) and those of the catalog. */
+export const EXPLORER_SORTS = ['relevance', ...TEST_SORTS] as const;
+/** One of {@link EXPLORER_SORTS}. */
+export type ExplorerSort = (typeof EXPLORER_SORTS)[number];
 
 /** A search value as text: the router reads `123` as a number and `["a"]` as an array, both of which are meant as text here. */
 const text = z
@@ -33,7 +38,7 @@ export const ExplorerSearchFields = {
   /** Only the tests a CI run recorded (a `RunSummary.key`). Not `run`, which already names a recorded statechart run. */
   inRun: text,
   group: z.enum(TEST_GROUPS).optional().catch(undefined),
-  sort: z.enum(TEST_SORTS).optional().catch(undefined),
+  sort: z.enum(EXPLORER_SORTS).optional().catch(undefined),
   tab: z.enum(['runs']).optional().catch(undefined),
   /** The run opened in the Runs tab. */
   openRun: text,
@@ -55,7 +60,7 @@ export type ExplorerSearch = {
   readonly tag?: string;
   readonly inRun?: string;
   readonly group?: TestGroup;
-  readonly sort?: TestSort;
+  readonly sort?: ExplorerSort;
   readonly tab?: 'runs';
   readonly openRun?: string;
   readonly layer?: string;
@@ -78,7 +83,12 @@ export function toggled(value: string | undefined, item: string): string | undef
   return joined(list.includes(item) ? list.filter((entry) => entry !== item) : [...list, item]);
 }
 
-/** The catalog query an address asks for, without the run (it is matched separately) and without paging. */
+/** The order a list is in: what the address says, else best match when words are searched, else by spec. */
+export function sortOf(search: ExplorerSearch): ExplorerSort {
+  return search.sort ?? (search.q ? 'relevance' : 'spec');
+}
+
+/** The catalog query an address asks for, without the run (it is matched separately) and without paging. The words in `q` are matched by the shared search, not by the catalog. */
 export function queryOf(search: ExplorerSearch): TestQuery {
   return {
     ...(search.q ? { q: search.q } : {}),
@@ -88,7 +98,7 @@ export function queryOf(search: ExplorerSearch): TestQuery {
     domain: values(search.domain),
     spec: values(search.spec),
     tag: values(search.tag),
-    sort: search.sort ?? 'spec'
+    sort: search.sort === 'relevance' || !search.sort ? 'spec' : search.sort
   };
 }
 
@@ -99,5 +109,5 @@ export function explorerSearch(search: Record<string, unknown>): ExplorerSearch 
 
 /** True when any filter or search narrows the list. */
 export function narrowed(search: ExplorerSearch): boolean {
-  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.inRun);
+  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.inRun || search.video);
 }
