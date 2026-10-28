@@ -199,7 +199,7 @@ export async function openAtlas(args: {
     ...args.deps
   });
   const requests: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://atlas.test/api/projects' && args.projects) return args.projects();
     if (url === 'http://atlas.test/api/live' && args.live) return Response.json({ runs: await args.live() });
@@ -208,8 +208,8 @@ export async function openAtlas(args: {
     if (args.down?.value) return new Response('{"error":"reports_unavailable"}', { status: 503 });
     // What a node answers beyond the report itself: one result's evidence, the files it points to, and the test catalog,
     // a test's history and the runs, which only a node keeps, and the layers behind the winners (an earlier run's own record).
-    if (args.node && /^\/(evidence(\/(effective|detail|rows)|\?|$)|layers\/|(tests|runs)(\/|\?|$))/.test(url.slice(REPORTS_URL.length)))
-      return args.node.fetch(new Request(url));
+    if (args.node && /^\/(evidence(\/(effective|detail|rows)|\?|$)|layers\/|(tests|runs)(\/|\?|$)|artifact-tags$)/.test(url.slice(REPORTS_URL.length)))
+      return args.node.fetch(new Request(url, init));
     return app.request(url.slice(REPORTS_URL.length));
   }) as typeof fetch;
   const adapter: AtlasAdapter = {

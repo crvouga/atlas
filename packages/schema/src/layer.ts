@@ -125,6 +125,7 @@ export const AttachmentSchema = z.looseObject({
   height: z.number().nonnegative().optional(),
   durationMs: z.number().nonnegative().optional().describe('For video and audio'),
   description: z.string().optional(),
+  tags: z.array(z.string()).optional().describe('Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result'),
   at: MomentSchema.optional(),
   poster: z.string().optional().describe('The `id` of an attachment that stands for this one before it is opened'),
   captions: z.array(z.string()).optional().describe('The `id`s of attachments (WebVTT, SRT) that caption this one'),
@@ -331,12 +332,21 @@ function lenientList<T>(value: unknown, schema: z.ZodType<T>, prepare: (item: un
 
 const object = (value: unknown): Record<string, unknown> | null => (typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
 
+/** An attachment whose `tags` cannot be read keeps its file: only the tags that are strings are kept. */
+function lenientAttachment(item: unknown): unknown {
+  const attachment = object(item);
+  if (!attachment || !('tags' in attachment)) return item;
+  const { tags, ...rest } = attachment;
+  const kept = lenientList(tags, z.string());
+  return kept ? { ...rest, tags: kept } : rest;
+}
+
 function lenientEvidence(holder: Record<string, unknown>, nested: readonly string[] = []): Record<string, unknown> {
   const out: Record<string, unknown> = { ...holder };
   const set = (key: string, value: unknown) => { if (value === undefined) delete out[key]; else out[key] = value; };
   if ('tags' in out) set('tags', lenientList(out.tags, z.string()));
   if ('links' in out) set('links', lenientList(out.links, LinkSchema));
-  if ('attachments' in out) set('attachments', lenientList(out.attachments, AttachmentSchema));
+  if ('attachments' in out) set('attachments', lenientList(out.attachments, AttachmentSchema, lenientAttachment));
   if ('annotations' in out) set('annotations', lenientList(out.annotations, AnnotationSchema));
   if ('labels' in out) set('labels', z.record(z.string(), z.string()).safeParse(out.labels).data);
   if ('extensions' in out) set('extensions', ExtensionsSchema.safeParse(out.extensions).data);

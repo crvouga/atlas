@@ -197,6 +197,13 @@
                       "type": "string"
                     }
                   },
+                  "artifactTags": {
+                    "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "labels": {
                     "type": "object",
                     "propertyNames": {
@@ -391,6 +398,20 @@
             "type": "string"
           }
         },
+        "artifactTags": {
+          "description": "Normalized tags of the attachments of its current results, such as `demo` (shown `#demo`). Not inherited from a check or run, unlike `tags`",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inheritedArtifactTags": {
+          "description": "Normalized tags its attachments inherit from their check and run, apart from `artifactTags`: what `?artifactTag=…&inherited=1` also matches",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "labels": {
           "type": "object",
           "propertyNames": {
@@ -568,6 +589,13 @@
                 "maximum": 9007199254740991
               },
               "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "artifactTags": {
+                "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                 "type": "array",
                 "items": {
                   "type": "string"

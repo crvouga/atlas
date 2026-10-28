@@ -185,6 +185,38 @@ export const ChecksResultSchema = …
 
 `POST /api/checks` answered: the layer that was written.
 
+#### `ArtifactTargetSchema`
+
+```ts
+export const ArtifactTargetSchema = …
+```
+
+Which attachment a reviewer's tags belong to: one attachment of one check of one archived layer.
+
+#### `ArtifactTagEditSchema`
+
+```ts
+export const ArtifactTagEditSchema = …
+```
+
+The body of `POST /api/reports/artifact-tags`: tags to add to and to remove from one attachment. At least one tag overall.
+
+#### `ArtifactTagEntrySchema`
+
+```ts
+export const ArtifactTagEntrySchema = …
+```
+
+One recorded edit of an attachment's reviewer tags. Entries are never changed or removed: they are the audit trail.
+
+#### `ArtifactTagsSchema`
+
+```ts
+export const ArtifactTagsSchema = …
+```
+
+`GET /api/reports/artifact-tags`: every recorded edit, oldest first. Fold them with `foldArtifactTags`.
+
 #### `HelloEventSchema`
 
 ```ts

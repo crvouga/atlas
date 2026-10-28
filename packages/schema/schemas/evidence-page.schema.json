@@ -177,6 +177,13 @@
                   "type": "string"
                 }
               },
+              "artifactTags": {
+                "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "labels": {
                 "type": "object",
                 "propertyNames": {
