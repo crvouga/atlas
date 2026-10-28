@@ -870,6 +870,47 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "videos": {
+                      "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The attachment name"
+                          },
+                          "owner": {
+                            "type": "string",
+                            "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                          },
+                          "attempt": {
+                            "description": "The retry attempt that holds it, or that holds the step that does",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "step": {
+                            "description": "The name of the step that holds it",
+                            "type": "string"
+                          },
+                          "recording": {
+                            "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "owner",
+                          "available"
+                        ],
+                        "additionalProperties": {}
+                      }
                     }
                   },
                   "required": [

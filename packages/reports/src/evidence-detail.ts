@@ -10,7 +10,7 @@
  * @see docs/report-contract.md (evidence)
  */
 import type { Annotation, Attachment, Attempt, Check, Step } from '../../schema/src/layer';
-import type { EvidenceSummary } from './evidence-types';
+import type { EvidenceSummary, VideoCounts, VideoOwner, VideoRef } from './evidence-types';
 import { contentTypeOf } from './media-types';
 
 /** Anything that may carry evidence: a layer, a part or a check. */
@@ -37,20 +37,42 @@ function count(holder: EvidenceHolder): number {
  * Several holders (for example a check and its layer) are summed: `attachments` also counts those on steps and
  * attempts, `steps` counts only each holder's own top-level steps, tags are de-duplicated, and for a repeated
  * label the later holder wins. `roles` are the attachments' roles (or, without one, what their media type or file
- * name implies), sorted and distinct.
+ * name implies), sorted and distinct. `videos` lists every attachment whose effective media type is video, with the
+ * check, retry attempt or step that holds it (see {@link isVideoAttachment}).
  */
 export function summarizeEvidence(...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined {
+  return summarize(holders, 'check');
+}
+
+/**
+ * Like {@link summarizeEvidence} for a layer and its parts: the same summary, but a video attached to the layer or a
+ * part is owned by the `layer`, not by a check.
+ */
+export function summarizeLayerEvidence(...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined {
+  return summarize(holders, 'layer');
+}
+
+function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner): EvidenceSummary | undefined {
   if (!holders.some(holder => count(holder) > 0)) return undefined;
   const roles = new Set<string>();
   const tags = new Set<string>();
   const labels: Record<string, string> = {};
+  const videos: VideoRef[] = [];
   let attachments = 0, steps = 0, annotations = 0, attempts = 0, links = 0;
-  const attachmentsOf = (list: readonly Attachment[] | undefined) => { for (const item of list ?? []) { attachments += 1; roles.add(item.role ?? roleOfType(item.contentType ?? contentTypeOf(item.name))); } };
+  const attachmentsOf = (list: readonly Attachment[] | undefined, by: VideoOwner, where: { attempt?: number; step?: string } = {}) => {
+    for (const item of list ?? []) {
+      attachments += 1;
+      roles.add(item.role ?? roleOfType(item.contentType ?? contentTypeOf(item.name)));
+      const video = videoOf(item, by, where);
+      if (video) videos.push(video);
+    }
+  };
+  const stepsOf = (list: readonly Step[] | undefined, attempt?: number) => { for (const step of list ?? []) attachmentsOf(step.attachments, 'step', { ...(attempt === undefined ? {} : { attempt }), step: step.name }); };
   for (const holder of holders) {
-    attachmentsOf(holder.attachments);
+    attachmentsOf(holder.attachments, owner);
     // Attachments on steps and attempts are part of the check too.
-    for (const step of holder.steps ?? []) attachmentsOf(step.attachments);
-    for (const attempt of holder.attempts ?? []) { attachmentsOf(attempt.attachments); for (const step of attempt.steps ?? []) attachmentsOf(step.attachments); }
+    stepsOf(holder.steps);
+    for (const attempt of holder.attempts ?? []) { attachmentsOf(attempt.attachments, 'attempt', { attempt: attempt.index }); stepsOf(attempt.steps, attempt.index); }
     steps += holder.steps?.length ?? 0;
     annotations += holder.annotations?.length ?? 0;
     attempts += holder.attempts?.length ?? 0;
@@ -58,7 +80,38 @@ export function summarizeEvidence(...holders: readonly EvidenceHolder[]): Eviden
     for (const tag of holder.tags ?? []) tags.add(tag);
     Object.assign(labels, holder.labels);
   }
-  return { attachments, steps, annotations, attempts, links, tags: [...tags], labels, roles: [...roles].sort() };
+  return { attachments, steps, annotations, attempts, links, tags: [...tags], labels, roles: [...roles].sort(), ...(videos.length ? { videos } : {}) };
+}
+
+/**
+ * Whether an attachment is a video, by its effective media type: the producer's `contentType`, else the one its file
+ * name implies. A role never decides this on its own (`demo` on a PNG is not a video), except that a `video` role
+ * settles a file whose type nothing says (`application/octet-stream`).
+ */
+export function isVideoAttachment(attachment: Pick<Attachment, 'name' | 'role' | 'contentType'>): boolean {
+  const type = (attachment.contentType ?? contentTypeOf(attachment.name)).toLowerCase();
+  return type.startsWith('video/') || (attachment.role === 'video' && type.startsWith('application/octet-stream'));
+}
+
+function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }): VideoRef | undefined {
+  if (!isVideoAttachment(item)) return undefined;
+  const recording = item.sha256 ? `sha256:${item.sha256}` : item.bundleKey ?? item.uri ?? (item.text === undefined ? undefined : `inline:${item.name}`);
+  return { name: item.name, owner, ...where, ...(recording === undefined ? {} : { recording }), available: recording !== undefined };
+}
+
+/**
+ * Counts references, distinct playable recordings and unplayable references. Undefined when there is no reference, so
+ * "no video" and "nothing known about video" look the same on the wire.
+ */
+export function videoCounts(videos: readonly VideoRef[] | undefined): VideoCounts | undefined {
+  if (!videos?.length) return undefined;
+  const distinct = new Set<string>();
+  let unavailable = 0;
+  for (const video of videos) {
+    if (video.available && video.recording !== undefined) distinct.add(video.recording);
+    else unavailable += 1;
+  }
+  return { references: videos.length, recordings: distinct.size, unavailable };
 }
 
 /** A role to show when a producer gave none, from the media type: `image`, `video`, `audio`, `snapshot` (text/html), `text` (text, JSON, XML) or `file`. Roles are an open vocabulary; a producer's own role always wins. */

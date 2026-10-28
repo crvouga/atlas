@@ -69,6 +69,22 @@ export const BackendInfoSchema = …
 
 A backend as the report shows it: where results came from, and whether it could be read.
 
+#### `VideoRefSchema`
+
+```ts
+export const VideoRefSchema = …
+```
+
+One reference to a video held by a layer, check, retry attempt or step, found by the attachment's effective media type.
+
+#### `VideoCountsSchema`
+
+```ts
+export const VideoCountsSchema = …
+```
+
+Video references as counts: how many are referenced, how many distinct recordings can be played, how many cannot.
+
 #### `EvidenceSummarySchema`
 
 ```ts

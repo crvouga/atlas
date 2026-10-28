@@ -427,8 +427,9 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     if (!index.ready) return notReady(c);
     const found = await catalog();
     const limit = /^\d+$/.test(c.req.query('limit') ?? '') ? Number(c.req.query('limit')) : 100;
-    const document = () => runList(index.history, found.version, limit);
-    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${limit}|${wantsMarkdown(c)}`);
+    const video = ['1', 'true'].includes(c.req.query('video') ?? '');
+    const document = () => runList(index.history, found.version, limit, { video });
+    return answer(c, found.version, document, () => runsMarkdown(document()), `runs|${limit}|${video}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/runs/detail', async c => {
     if (!index.ready) return notReady(c);

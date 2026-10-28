@@ -36,7 +36,9 @@ export const ExplorerSearchFields = {
   sort: z.enum(TEST_SORTS).optional().catch(undefined),
   tab: z.enum(['runs']).optional().catch(undefined),
   /** The run opened in the Runs tab. */
-  openRun: text
+  openRun: text,
+  /** Only the runs, and the results of an opened run, that have a playable video recording. */
+  video: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined)
 };
 
 /** The explorer's search parameters as the route holds them. */
@@ -54,6 +56,7 @@ export type ExplorerSearch = {
   readonly sort?: TestSort;
   readonly tab?: 'runs';
   readonly openRun?: string;
+  readonly video?: true;
 };
 
 /** The values of a comma-separated filter, empty when it is not set. */

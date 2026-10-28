@@ -32,6 +32,38 @@ export type BackendInfo = {
 /** How many results have each status (`passed`, `failed`, `running`, `not-run`). */
 export type StatusCounts = Readonly<Record<EvidenceStatus, number>>;
 
+/** Who holds a recording: the whole layer (or one of its parts), one check, one retry attempt of a check, or one step. */
+export type VideoOwner = 'layer' | 'check' | 'attempt' | 'step';
+
+/**
+ * One reference to a video, found by its effective media type (the producer's `contentType`, else the one the file
+ * name implies; a `video` role alone counts only when nothing else says what the file is). A reference is not a
+ * recording: the same bytes referenced from three checks are three references and one recording.
+ */
+export type VideoRef = {
+  /** The attachment's name, for a person. */
+  readonly name: string;
+  readonly owner: VideoOwner;
+  /** The try that holds it, when `owner` is `attempt` or the step is inside one. */
+  readonly attempt?: number;
+  /** The name of the step that holds it, when `owner` is `step`. */
+  readonly step?: string;
+  /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
+  readonly recording?: string;
+  /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
+  readonly available: boolean;
+};
+
+/** Video availability as counts: references, distinct playable recordings (deduplicated), and references that cannot be played. */
+export type VideoCounts = {
+  /** Every reference to a video, playable or not. */
+  readonly references: number;
+  /** Distinct playable recordings: identical bytes referenced twice are one. */
+  readonly recordings: number;
+  /** References that name no bytes. A report that predates availability metadata has none of these and none of the others. */
+  readonly unavailable: number;
+};
+
 /**
  * What a result (or a run) carries beyond its outcome, as counts and short facts: attachments, steps,
  * annotations, retries, tags, labels, links. It is only there when there is something. The evidence itself
@@ -49,6 +81,8 @@ export type EvidenceSummary = {
   readonly labels: Readonly<Record<string, string>>;
   /** The distinct roles of its attachments (or what their media types say), to show what kind of evidence there is. */
   readonly roles: readonly string[];
+  /** Its references to videos, wherever they are held (layer, check, attempt, step). Only there when it has any. */
+  readonly videos?: readonly VideoRef[];
 };
 
 /** A report layer's origin and totals. Its checks are read separately, once. */

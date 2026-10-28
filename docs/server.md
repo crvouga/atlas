@@ -255,7 +255,7 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | Every test, a summary (by status, environment, producer, domain), insights (failing, flaky, slowest) and facets | `GET /api/reports/tests` |
 | Only some: `q` (all words), `status` (or `flaky`), `environment`, `producer`, `domain`, `spec`, `tag`, `run`; `sort`, `offset`, `limit` | `GET /api/reports/tests?status=failed&environment=ios` |
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
-| The runs that recorded the report (by CI run URL, else branch and commit) | `GET /api/reports/runs` |
+| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video | `GET /api/reports/runs` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 
 ```sh

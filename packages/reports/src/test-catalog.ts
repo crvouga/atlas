@@ -21,7 +21,8 @@
  * @see docs/server.md#reading-the-report-as-an-agent
  */
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
-import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
+import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
+import { videoCounts } from './evidence-detail';
 import { checkSlots, type CheckSlot } from './evidence-view';
 import { combineEvidence, emptyCounts, slotKey, specPath as normalSpecPath, type EvidenceResult } from './layer-merge';
 import { RecordedSpecs } from './recorded-specs';
@@ -267,14 +268,28 @@ export type RunSummary = {
   readonly totalDurationMs: number | null;
   /** Up to twenty tests that failed in it. */
   readonly failing: readonly { readonly key: string; readonly title: string; readonly environment: string | null; readonly detail: string }[];
+  /**
+   * Its videos, from the run's layers and from the last result of each test: references, distinct playable recordings
+   * and references that cannot be played. Absent when it has none, and in a report that carries no video information.
+   */
+  readonly videos?: VideoCounts;
+};
+
+/** What `runList` can be asked. */
+export type RunQuery = {
+  /** Only runs that have at least one playable video recording. `total` then counts only those. */
+  readonly video?: boolean;
 };
 
 /** `GET /api/reports/runs`: runs, newest first. */
 export type RunList = {
   readonly schemaVersion: typeof TEST_CATALOG_VERSION;
   readonly version: string;
+  /** Runs that matched, before `limit`. */
   readonly total: number;
   readonly runs: readonly RunSummary[];
+  /** How many of all runs (whatever was asked, before `limit`) have a playable video recording. */
+  readonly withVideo?: number;
 };
 
 /** One test's last result within one run. */
@@ -290,6 +305,8 @@ export type RunResult = {
   readonly at: number;
   readonly layer: string;
   readonly detail: string;
+  /** Every video its evidence references, with who holds it (check, retry attempt or step). Absent when there is none. */
+  readonly videos?: readonly VideoRef[];
 };
 
 /** `GET /api/reports/runs/detail`: one run and every result it recorded. */
@@ -358,6 +375,8 @@ function newer(a: Held, b: Held): number {
 type RunAcc = {
   key: string; runUrl: string | null; branch: string | null; sha: string | null;
   start: number; end: number; first: string; producers: Set<string>; environments: Set<string>; layers: number;
+  /** Videos attached to its layers (not to a check). */
+  videos: VideoRef[];
 };
 /** A test as history names it: its key and the newest title seen. */
 type Ident = { readonly slot: string; readonly id: string; title: string; titledAt: number; readonly specPath: string | null };
@@ -415,7 +434,7 @@ export class TestHistory {
     const key = runKey(layer);
     let run = this.#runs.get(key);
     if (!run) {
-      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0 };
+      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, videos: [] };
       this.#runs.set(key, run);
     }
     // A run is told by its first layer (by time, then id), whatever order its layers arrive in.
@@ -429,6 +448,7 @@ export class TestHistory {
     run.producers.add(layer.producer);
     if (layer.environment) run.environments.add(layer.environment);
     run.layers += 1;
+    if (layer.evidence?.videos) run.videos.push(...layer.evidence.videos);
     const origin = originOf(layer, backend);
     for (const row of rows) {
       // "Still running" is progress, not history: a test running now shows it as its current outcome.
@@ -500,6 +520,7 @@ export class TestHistory {
     const results = cells.map(({ i, r }) => ({
       key: i.slot, id: i.id, title: i.title, specPath: i.specPath, environment: r.o.environment, producer: r.o.producer,
       status: r.s, durationMs: r.d, at: r.o.at, layer: r.o.layer, detail: shortDetail(r.t),
+      ...(r.e?.videos ? { videos: r.e.videos } : {}),
     }));
     results.sort((a, b) => FAILURE_RANK[b.status] - FAILURE_RANK[a.status] || compareText(a.specPath ?? '', b.specPath ?? '') || compareText(a.title, b.title) || compareText(a.environment ?? '', b.environment ?? '') || compareText(a.producer, b.producer) || compareText(a.key, b.key));
     return { run: runSummary(run, cells), results };
@@ -516,19 +537,23 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
   const tests = new Set<string>();
   let total = 0, measured = false;
   const failed: RunCell[] = [];
+  const videos = [...run.videos];
   for (const cell of cells) {
+    if (cell.r.e?.videos) videos.push(...cell.r.e.videos);
     counts[cell.r.s] += 1;
     tests.add(cell.i.slot);
     if (cell.r.d !== null) { total += cell.r.d; measured = true; }
     if (cell.r.s === 'failed') failed.push(cell);
   }
   failed.sort((a, b) => compareText(a.i.slot, b.i.slot) || compareText(a.r.o.place, b.r.o.place) || compareText(a.r.k, b.r.k));
+  const video = videoCounts(videos);
   const failing = failed.slice(0, 20).map(cell => ({ key: cell.i.slot, title: cell.i.title, environment: cell.r.o.environment, detail: (cell.r.t.split('\n')[0] ?? '').slice(0, 500) }));
   return {
     key: run.key, runUrl: run.runUrl, branch: run.branch, sha: run.sha,
     startedAtMs: run.start, endedAtMs: run.end, spanMs: run.end - run.start,
     producers: [...run.producers].sort(), environments: [...run.environments].sort(),
     layers: run.layers, tests: tests.size, counts, totalDurationMs: measured ? total : null, failing,
+    ...(video ? { videos: video } : {}),
   };
 }
 
@@ -807,10 +832,21 @@ export function testHistory(model: CatalogModel, key: string): TestHistoryDocume
   return { schemaVersion: TEST_CATALOG_VERSION, version: model.version, test, history: model.history?.of(key) ?? test.outcomes };
 }
 
-/** Every run the history knows of, newest first, `limit` at most (default 100). */
-export function runList(history: TestHistory, version: string, limit = 100): RunList {
-  const runs = history.runs();
-  return { schemaVersion: TEST_CATALOG_VERSION, version, total: runs.length, runs: runs.slice(0, Math.max(0, limit)) };
+/** Whether a run has at least one playable video recording. */
+export function hasVideo(run: Pick<RunSummary, 'videos'>): boolean {
+  return (run.videos?.recordings ?? 0) > 0;
+}
+
+/**
+ * Every run the history knows of, newest first, `limit` at most (default 100). With `query.video` only the runs that
+ * have a playable video recording: the filter and `total` apply to every run before `limit`, and nothing is read from
+ * any recording's bytes. `withVideo` always counts every run that has one.
+ */
+export function runList(history: TestHistory, version: string, limit = 100, query: RunQuery = {}): RunList {
+  const all = history.runs();
+  const withVideo = all.filter(hasVideo).length;
+  const runs = query.video ? all.filter(hasVideo) : all;
+  return { schemaVersion: TEST_CATALOG_VERSION, version, total: runs.length, runs: runs.slice(0, Math.max(0, limit)), withVideo };
 }
 
 /** One run with every result it recorded, or null when no run has that key. */
@@ -918,14 +954,20 @@ export function historyMarkdown(document: TestHistoryDocument): string {
   ].join('\n')}\n`;
 }
 
+/** Video counts in a few words: `2 (3 references)`, with how many cannot be played, or `—` when there are none. */
+function videosText(videos: VideoCounts | undefined): string {
+  if (!videos) return '—';
+  return `${videos.recordings}${videos.references !== videos.recordings ? ` (${videos.references} references)` : ''}${videos.unavailable ? `, ${videos.unavailable} unavailable` : ''}`;
+}
+
 /** The run list as Markdown. */
 export function runsMarkdown(list: RunList): string {
   return `${[
     `# Runs (${list.runs.length} of ${list.total})`,
     '',
-    '| Ended | Branch | Commit | Environments | Tests | Passed | Failed | Not run | Span | Run |',
-    '|---|---|---|---|---:|---:|---:|---:|---:|---|',
-    ...list.runs.map(r => `| ${iso(r.endedAtMs)} | ${cell(r.branch ?? '—')} | ${r.sha?.slice(0, 10) ?? '—'} | ${r.environments.join(', ') || '—'} | ${r.tests} | ${r.counts.passed} | ${r.counts.failed} | ${r.counts['not-run']} | ${formatMs(r.spanMs)} | ${cell(r.key)} |`),
+    '| Ended | Branch | Commit | Environments | Tests | Passed | Failed | Not run | Span | Videos | Run |',
+    '|---|---|---|---|---:|---:|---:|---:|---:|---|---|',
+    ...list.runs.map(r => `| ${iso(r.endedAtMs)} | ${cell(r.branch ?? '—')} | ${r.sha?.slice(0, 10) ?? '—'} | ${r.environments.join(', ') || '—'} | ${r.tests} | ${r.counts.passed} | ${r.counts.failed} | ${r.counts['not-run']} | ${formatMs(r.spanMs)} | ${videosText(r.videos)} | ${cell(r.key)} |`),
   ].join('\n')}\n`;
 }
 
@@ -939,9 +981,10 @@ export function runMarkdown(detail: RunDetail): string {
     `- ${iso(run.startedAtMs)} to ${iso(run.endedAtMs)} (${formatMs(run.spanMs)}); ${run.layers} layers from ${run.producers.join(', ')}`,
     `- Environments: ${run.environments.join(', ') || '—'}`,
     `- ${run.tests} tests: ${counted(run.counts)}${run.totalDurationMs === null ? '' : `; ${formatMs(run.totalDurationMs)} of test time`}`,
+    ...(run.videos ? [`- Videos: ${videosText(run.videos)}`] : []),
     '',
-    '| Status | Test | Spec | Environment | Duration | Detail |',
-    '|---|---|---|---|---:|---|',
-    ...detail.results.map(r => `| ${r.status} | ${cell(r.title)} | ${cell(r.specPath ?? '—')} | ${r.environment ?? '—'} | ${formatMs(r.durationMs)} | ${cell(r.detail.split('\n')[0] ?? '')} |`),
+    '| Status | Test | Spec | Environment | Duration | Videos | Detail |',
+    '|---|---|---|---|---:|---|---|',
+    ...detail.results.map(r => `| ${r.status} | ${cell(r.title)} | ${cell(r.specPath ?? '—')} | ${r.environment ?? '—'} | ${formatMs(r.durationMs)} | ${videosText(videoCounts(r.videos))} | ${cell(r.detail.split('\n')[0] ?? '')} |`),
   ].join('\n')}\n`;
 }

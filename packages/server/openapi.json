@@ -3610,7 +3610,7 @@
           "Report"
         ],
         "summary": "The runs that recorded the report",
-        "description": "Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
+        "description": "Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
         "x-atlas-role": "read",
         "security": [
           {
@@ -3629,6 +3629,15 @@
             "schema": {
               "type": "integer",
               "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "video",
+            "in": "query",
+            "description": "`true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -3701,7 +3710,7 @@
           "Report"
         ],
         "summary": "The runs that recorded the report",
-        "description": "Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "description": "Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures and their video counts (references, distinct playable recordings, unavailable). Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
         "x-atlas-role": "read",
         "security": [
           {
@@ -3732,6 +3741,15 @@
             "schema": {
               "type": "integer",
               "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "video",
+            "in": "query",
+            "description": "`true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -7267,6 +7285,47 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "videos": {
+                            "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "description": "The attachment name"
+                                },
+                                "owner": {
+                                  "type": "string",
+                                  "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                                },
+                                "attempt": {
+                                  "description": "The retry attempt that holds it, or that holds the step that does",
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "step": {
+                                  "description": "The name of the step that holds it",
+                                  "type": "string"
+                                },
+                                "recording": {
+                                  "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                                  "type": "string"
+                                },
+                                "available": {
+                                  "type": "boolean",
+                                  "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "owner",
+                                "available"
+                              ],
+                              "additionalProperties": {}
+                            }
                           }
                         },
                         "required": [
@@ -7462,6 +7521,47 @@
                           "type": "array",
                           "items": {
                             "type": "string"
+                          }
+                        },
+                        "videos": {
+                          "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "description": "The attachment name"
+                              },
+                              "owner": {
+                                "type": "string",
+                                "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                              },
+                              "attempt": {
+                                "description": "The retry attempt that holds it, or that holds the step that does",
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "step": {
+                                "description": "The name of the step that holds it",
+                                "type": "string"
+                              },
+                              "recording": {
+                                "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                                "type": "string"
+                              },
+                              "available": {
+                                "type": "boolean",
+                                "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "owner",
+                              "available"
+                            ],
+                            "additionalProperties": {}
                           }
                         }
                       },
@@ -7710,6 +7810,47 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "videos": {
+                            "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "description": "The attachment name"
+                                },
+                                "owner": {
+                                  "type": "string",
+                                  "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                                },
+                                "attempt": {
+                                  "description": "The retry attempt that holds it, or that holds the step that does",
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "step": {
+                                  "description": "The name of the step that holds it",
+                                  "type": "string"
+                                },
+                                "recording": {
+                                  "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                                  "type": "string"
+                                },
+                                "available": {
+                                  "type": "boolean",
+                                  "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "owner",
+                                "available"
+                              ],
+                              "additionalProperties": {}
+                            }
                           }
                         },
                         "required": [
@@ -7905,6 +8046,47 @@
                           "type": "array",
                           "items": {
                             "type": "string"
+                          }
+                        },
+                        "videos": {
+                          "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "description": "The attachment name"
+                              },
+                              "owner": {
+                                "type": "string",
+                                "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                              },
+                              "attempt": {
+                                "description": "The retry attempt that holds it, or that holds the step that does",
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "step": {
+                                "description": "The name of the step that holds it",
+                                "type": "string"
+                              },
+                              "recording": {
+                                "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                                "type": "string"
+                              },
+                              "available": {
+                                "type": "boolean",
+                                "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "owner",
+                              "available"
+                            ],
+                            "additionalProperties": {}
                           }
                         }
                       },
@@ -10059,6 +10241,47 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "videos": {
+                      "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The attachment name"
+                          },
+                          "owner": {
+                            "type": "string",
+                            "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                          },
+                          "attempt": {
+                            "description": "The retry attempt that holds it, or that holds the step that does",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "step": {
+                            "description": "The name of the step that holds it",
+                            "type": "string"
+                          },
+                          "recording": {
+                            "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "owner",
+                          "available"
+                        ],
+                        "additionalProperties": {}
+                      }
                     }
                   },
                   "required": [
@@ -10285,6 +10508,47 @@
                       "type": "array",
                       "items": {
                         "type": "string"
+                      }
+                    },
+                    "videos": {
+                      "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The attachment name"
+                          },
+                          "owner": {
+                            "type": "string",
+                            "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                          },
+                          "attempt": {
+                            "description": "The retry attempt that holds it, or that holds the step that does",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "step": {
+                            "description": "The name of the step that holds it",
+                            "type": "string"
+                          },
+                          "recording": {
+                            "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "owner",
+                          "available"
+                        ],
+                        "additionalProperties": {}
                       }
                     }
                   },
@@ -12236,6 +12500,47 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "videos": {
+                            "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "description": "The attachment name"
+                                },
+                                "owner": {
+                                  "type": "string",
+                                  "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                                },
+                                "attempt": {
+                                  "description": "The retry attempt that holds it, or that holds the step that does",
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "step": {
+                                  "description": "The name of the step that holds it",
+                                  "type": "string"
+                                },
+                                "recording": {
+                                  "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                                  "type": "string"
+                                },
+                                "available": {
+                                  "type": "boolean",
+                                  "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "owner",
+                                "available"
+                              ],
+                              "additionalProperties": {}
+                            }
                           }
                         },
                         "required": [
@@ -12710,6 +13015,47 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "videos": {
+                          "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "description": "The attachment name"
+                              },
+                              "owner": {
+                                "type": "string",
+                                "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                              },
+                              "attempt": {
+                                "description": "The retry attempt that holds it, or that holds the step that does",
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "step": {
+                                "description": "The name of the step that holds it",
+                                "type": "string"
+                              },
+                              "recording": {
+                                "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                                "type": "string"
+                              },
+                              "available": {
+                                "type": "boolean",
+                                "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "owner",
+                              "available"
+                            ],
+                            "additionalProperties": {}
+                          }
                         }
                       },
                       "required": [
@@ -13086,6 +13432,47 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "videos": {
+                      "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The attachment name"
+                          },
+                          "owner": {
+                            "type": "string",
+                            "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                          },
+                          "attempt": {
+                            "description": "The retry attempt that holds it, or that holds the step that does",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "step": {
+                            "description": "The name of the step that holds it",
+                            "type": "string"
+                          },
+                          "recording": {
+                            "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "owner",
+                          "available"
+                        ],
+                        "additionalProperties": {}
+                      }
                     }
                   },
                   "required": [
@@ -13142,7 +13529,8 @@
           "total": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Runs that matched, before `limit`"
           },
           "runs": {
             "type": "array",
@@ -13260,6 +13648,36 @@
                     ],
                     "additionalProperties": {}
                   }
+                },
+                "videos": {
+                  "description": "Its videos, from its layers and the last result of each test. Absent when it has none or the report carries no video information",
+                  "type": "object",
+                  "properties": {
+                    "references": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Every reference to a video; identical bytes referenced twice count twice"
+                    },
+                    "recordings": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Distinct playable recordings"
+                    },
+                    "unavailable": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "References that name no bytes"
+                    }
+                  },
+                  "required": [
+                    "references",
+                    "recordings",
+                    "unavailable"
+                  ],
+                  "additionalProperties": {}
                 }
               },
               "required": [
@@ -13280,6 +13698,12 @@
               ],
               "additionalProperties": {}
             }
+          },
+          "withVideo": {
+            "description": "How many of all runs (before `video` and `limit`) have a playable video recording",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [
@@ -13414,6 +13838,36 @@
                   ],
                   "additionalProperties": {}
                 }
+              },
+              "videos": {
+                "description": "Its videos, from its layers and the last result of each test. Absent when it has none or the report carries no video information",
+                "type": "object",
+                "properties": {
+                  "references": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Every reference to a video; identical bytes referenced twice count twice"
+                  },
+                  "recordings": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Distinct playable recordings"
+                  },
+                  "unavailable": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "References that name no bytes"
+                  }
+                },
+                "required": [
+                  "references",
+                  "recordings",
+                  "unavailable"
+                ],
+                "additionalProperties": {}
               }
             },
             "required": [
@@ -13486,6 +13940,47 @@
                 },
                 "detail": {
                   "type": "string"
+                },
+                "videos": {
+                  "description": "Every video its evidence references, with who holds it",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "The attachment name"
+                      },
+                      "owner": {
+                        "type": "string",
+                        "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                      },
+                      "attempt": {
+                        "description": "The retry attempt that holds it, or that holds the step that does",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "step": {
+                        "description": "The name of the step that holds it",
+                        "type": "string"
+                      },
+                      "recording": {
+                        "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                        "type": "string"
+                      },
+                      "available": {
+                        "type": "boolean",
+                        "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "owner",
+                      "available"
+                    ],
+                    "additionalProperties": {}
+                  }
                 }
               },
               "required": [
