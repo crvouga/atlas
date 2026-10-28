@@ -19,6 +19,7 @@ import type { CheckSlot, EvidenceView } from '@crvouga/atlas/reports/evidence-vi
 import {
   catalogModel,
   haystackOf,
+  hasVideo,
   runDetail,
   runList,
   testHistory,
@@ -233,15 +234,24 @@ export function useTestHistory(key: string | undefined) {
   });
 }
 
-/** CI runs, newest first. */
-export function useRunList(enabled = true) {
+/**
+ * CI runs, newest first. With `video`, only the runs that have a playable video recording: the server filters every run
+ * before it pages them, so the count is the whole dataset's. A server that does not know the parameter answers with
+ * every run (and no video information), which is filtered here.
+ */
+export function useRunList(enabled = true, video = false) {
   const catalog = useTestCatalog();
   return useQuery({
-    queryKey: ['test-runs', catalog.version],
-    queryFn: ({ signal }): Promise<RunList> | RunList => {
-      if (catalog.source === 'server') return reportJson<RunList>(`/runs?limit=${RUNS_SHOWN}`, signal);
+    queryKey: ['test-runs', catalog.version, video],
+    queryFn: async ({ signal }): Promise<RunList> => {
+      if (catalog.source === 'server') {
+        const list = await reportJson<RunList>(`/runs?limit=${RUNS_SHOWN}${video ? '&video=true' : ''}`, signal);
+        if (!video || list.withVideo !== undefined) return list;
+        const runs = list.runs.filter(hasVideo);
+        return { ...list, total: runs.length, runs };
+      }
       const history = catalog.model?.history;
-      return history ? runList(history, catalog.version, RUNS_SHOWN) : { schemaVersion: 1, version: catalog.version, total: 0, runs: [] };
+      return history ? runList(history, catalog.version, RUNS_SHOWN, { video }) : { schemaVersion: 1, version: catalog.version, total: 0, runs: [] };
     },
     enabled: enabled && catalog.model !== null,
     placeholderData: keepPreviousData,

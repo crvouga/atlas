@@ -59,6 +59,12 @@ export type AtlasPlaywrightReporterOptions = {
   readonly branch?: string;
   /** Where to read the CI run. Default the GitHub Actions run (or the CI's own run URL variable). */
   readonly runUrl?: string;
+  /**
+   * Names this execution, for a local or manual run with no CI run URL: every shard and project that gets the same `id`
+   * is one run, and the next invocation gets another. Default: `ATLAS_RUN_ID` (and `ATLAS_RUN_TITLE`) when set. Only
+   * groups and labels runs; it never changes what a check is or which result wins.
+   */
+  readonly run?: { readonly id: string; readonly title?: string; readonly startedAtMs?: number; readonly endedAtMs?: number };
   /** The spec a test belongs to, relative to the repository. Default: the `.feature` of a playwright-bdd test, else the test file. */
   readonly specPath?: (test: TestCase) => string | undefined;
   /** Paths are relative to this directory. Default the git root above Playwright's `rootDir`, else `rootDir`. */
@@ -123,7 +129,7 @@ export default class AtlasPlaywrightReporter implements PlaywrightReporter {
   private store: ObjectStore | null = null;
   private label = '';
   private root = process.cwd();
-  private identity: { sha: string | null; branch: string | null; runUrl: string | null; freshness?: 'modified' | 'unknown' } = { sha: null, branch: null, runUrl: null };
+  private identity: { sha: string | null; branch: string | null; runUrl: string | null; run?: NonNullable<AtlasPlaywrightReporterOptions['run']>; freshness?: 'modified' | 'unknown' } = { sha: null, branch: null, runUrl: null };
   private readonly streams = new Map<Suite | undefined, Stream | null>();
   private readonly identities = new WeakMap<TestCase, Identity>();
   private readonly specPaths = new Map<string, string>();
@@ -187,14 +193,15 @@ export default class AtlasPlaywrightReporter implements PlaywrightReporter {
       this.warn(`not publishing: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (!this.store) return;
+    const run = options.run ?? (env.ATLAS_RUN_ID ? { id: env.ATLAS_RUN_ID, ...(env.ATLAS_RUN_TITLE ? { title: env.ATLAS_RUN_TITLE } : {}) } : undefined);
     try {
       const explicitSha = options.sha ?? env.ATLAS_SHA;
       const origin = detectOrigin(env);
       const sha = explicitSha ?? origin.sha;
       const freshness = detectFreshness({ sha, ci: origin.ci && !explicitSha });
-      this.identity = { sha, branch: options.branch ?? env.ATLAS_BRANCH ?? origin.branch, runUrl: options.runUrl ?? origin.runUrl, ...(freshness ? { freshness } : {}) };
+      this.identity = { sha, branch: options.branch ?? env.ATLAS_BRANCH ?? origin.branch, runUrl: options.runUrl ?? origin.runUrl, ...(run ? { run } : {}), ...(freshness ? { freshness } : {}) };
     } catch {
-      this.identity = { sha: options.sha ?? env.ATLAS_SHA ?? null, branch: options.branch ?? env.ATLAS_BRANCH ?? null, runUrl: options.runUrl ?? null, freshness: 'unknown' };
+      this.identity = { sha: options.sha ?? env.ATLAS_SHA ?? null, branch: options.branch ?? env.ATLAS_BRANCH ?? null, runUrl: options.runUrl ?? null, ...(run ? { run } : {}), freshness: 'unknown' };
     }
   }
 
@@ -254,6 +261,7 @@ export default class AtlasPlaywrightReporter implements PlaywrightReporter {
           sha: this.identity.sha,
           branch: this.identity.branch,
           runUrl: this.identity.runUrl,
+          ...(this.identity.run ? { run: this.identity.run } : {}),
           ...(this.identity.freshness ? { freshness: this.identity.freshness } : {}),
           environment,
           parameters: { ...parameters },

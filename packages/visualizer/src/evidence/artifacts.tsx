@@ -6,6 +6,7 @@ import type { Annotation, Attachment, Attempt, Step } from '@crvouga/atlas/schem
 import { Accordion, Alert, Anchor, Box, Code, Flex, Image, List, Stack, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, type ReactNode } from 'react';
+import { ArtifactTagList, ArtifactTagsProvider, TagFilterBar, useFilteredAttachments } from './artifact-tags';
 import { reportAssetUrl, reportJson, reportText } from './api';
 import { duration, plural } from './format';
 import { StatusMark } from './marks';
@@ -171,10 +172,12 @@ function Artifact({ attachment, layer }: { attachment: Attachment; layer: string
           </Text>
         )}
       </Box>
+      <ArtifactTagList attachment={attachment} />
     </List.Item>
   );
 }
-export function Attachments({ attachments, layer }: { attachments: readonly Attachment[]; layer: string }) {
+export function Attachments({ attachments: all, layer }: { attachments: readonly Attachment[]; layer: string }) {
+  const attachments = useFilteredAttachments(all);
   if (!attachments.length) return null;
   return (
     <Box aria-label="Attachments" component="section" mb="lg">
@@ -410,16 +413,19 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
     Array.isArray(value) ? value.length > 0 : value && typeof value === 'object' ? Object.keys(value).length > 0 : false
   );
   return (
-    <Stack aria-label="Evidence" gap="sm" miw={0}>
-      <Evidence holder={check} layer={layer.id} steps />
-      {hasRun && (
-        <Box aria-label="From the run" component="section" mb="lg">
-          <Title order={4} mb="sm">
-            From the run
-          </Title>
-          <Evidence holder={run} layer={layer.id} />
-        </Box>
-      )}
-    </Stack>
+    <ArtifactTagsProvider layer={layer.id} kind={row.kind} check={row.id} holders={[check, run]}>
+      <Stack aria-label="Evidence" gap="sm" miw={0}>
+        <TagFilterBar holders={[check, run]} />
+        <Evidence holder={check} layer={layer.id} steps />
+        {hasRun && (
+          <Box aria-label="From the run" component="section" mb="lg">
+            <Title order={4} mb="sm">
+              From the run
+            </Title>
+            <Evidence holder={run} layer={layer.id} />
+          </Box>
+        )}
+      </Stack>
+    </ArtifactTagsProvider>
   );
 }

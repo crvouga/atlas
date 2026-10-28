@@ -70,6 +70,36 @@
         "modified"
       ]
     },
+    "run": {
+      "description": "The execution this layer belongs to, when the producer names one (a local or manual run without a CI run URL). Grouping and display only; it never partitions a report or decides a result",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+        },
+        "title": {
+          "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+          "type": "string"
+        },
+        "startedAtMs": {
+          "description": "When the execution started, epoch milliseconds",
+          "type": "number",
+          "minimum": 0
+        },
+        "endedAtMs": {
+          "description": "When the execution ended, epoch milliseconds",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": {}
+    },
     "specs": {
       "default": [],
       "type": "array",
@@ -211,6 +241,10 @@
                   "type": "number",
                   "minimum": 0
                 },
+                "recordingExpectation": {
+                  "description": "`required`: expect a video of this check, and report whether it was published. `not-applicable`: intentionally unrecorded. Absent: no expectation. Never changes the check's status",
+                  "type": "string"
+                },
                 "tags": {
                   "description": "Free labels to filter and group by: smoke, slow, flaky…",
                   "type": "array",
@@ -306,6 +340,17 @@
                       },
                       "description": {
                         "type": "string"
+                      },
+                      "omitted": {
+                        "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                        "type": "string"
+                      },
+                      "tags": {
+                        "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       },
                       "at": {
                         "type": "object",
@@ -534,6 +579,17 @@
                             },
                             "description": {
                               "type": "string"
+                            },
+                            "omitted": {
+                              "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                              "type": "string"
+                            },
+                            "tags": {
+                              "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "at": {
                               "type": "object",
@@ -800,6 +856,17 @@
                                   "description": {
                                     "type": "string"
                                   },
+                                  "omitted": {
+                                    "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                                    "type": "string"
+                                  },
+                                  "tags": {
+                                    "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
                                   "at": {
                                     "type": "object",
                                     "properties": {
@@ -999,6 +1066,17 @@
                             },
                             "description": {
                               "type": "string"
+                            },
+                            "omitted": {
+                              "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                              "type": "string"
+                            },
+                            "tags": {
+                              "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "at": {
                               "type": "object",
@@ -1249,6 +1327,17 @@
                 },
                 "description": {
                   "type": "string"
+                },
+                "omitted": {
+                  "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                  "type": "string"
+                },
+                "tags": {
+                  "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "at": {
                   "type": "object",
@@ -1515,6 +1604,10 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "recordingExpectation": {
+                          "description": "`required`: expect a video of this check, and report whether it was published. `not-applicable`: intentionally unrecorded. Absent: no expectation. Never changes the check's status",
+                          "type": "string"
+                        },
                         "tags": {
                           "description": "Free labels to filter and group by: smoke, slow, flaky…",
                           "type": "array",
@@ -1610,6 +1703,17 @@
                               },
                               "description": {
                                 "type": "string"
+                              },
+                              "omitted": {
+                                "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                                "type": "string"
+                              },
+                              "tags": {
+                                "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
                               "at": {
                                 "type": "object",
@@ -1838,6 +1942,17 @@
                                     },
                                     "description": {
                                       "type": "string"
+                                    },
+                                    "omitted": {
+                                      "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                                      "type": "string"
+                                    },
+                                    "tags": {
+                                      "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
                                     },
                                     "at": {
                                       "type": "object",
@@ -2104,6 +2219,17 @@
                                           "description": {
                                             "type": "string"
                                           },
+                                          "omitted": {
+                                            "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                                            "type": "string"
+                                          },
+                                          "tags": {
+                                            "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          },
                                           "at": {
                                             "type": "object",
                                             "properties": {
@@ -2303,6 +2429,17 @@
                                     },
                                     "description": {
                                       "type": "string"
+                                    },
+                                    "omitted": {
+                                      "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+                                      "type": "string"
+                                    },
+                                    "tags": {
+                                      "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
                                     },
                                     "at": {
                                       "type": "object",
@@ -2624,6 +2761,111 @@
         "additionalProperties": {}
       }
     },
+    "recordings": {
+      "description": "Which expected recordings were published. Absent: the producer expected none, or predates this field; a reader reports Unknown",
+      "type": "object",
+      "properties": {
+        "expected": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Checks that required a recording: uploaded + referenced + skipped + unresolved"
+        },
+        "uploaded": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "referenced": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unresolved": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "notApplicable": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Checks intentionally unrecorded. They are not expected and not missing"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The id of the check"
+              },
+              "state": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "description": "Why the recording is not uploaded. Never contains a path, a token or payload data",
+                "type": "string"
+              },
+              "files": {
+                "description": "Every video attachment of the check, at any level",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "sha256": {
+                      "description": "The checksum of the stored bytes: proof the layer holds this exact file",
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "check",
+              "state"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "expected",
+        "uploaded",
+        "referenced",
+        "skipped",
+        "unresolved",
+        "notApplicable",
+        "items"
+      ],
+      "additionalProperties": {}
+    },
     "tags": {
       "description": "Free labels to filter and group by: smoke, slow, flaky…",
       "type": "array",
@@ -2719,6 +2961,17 @@
           },
           "description": {
             "type": "string"
+          },
+          "omitted": {
+            "description": "Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell \"left out\" from \"never recorded\"",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "at": {
             "type": "object",

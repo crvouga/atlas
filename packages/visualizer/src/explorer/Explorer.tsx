@@ -143,7 +143,7 @@ export function Explorer() {
           {model && model.tests.length > 0 && (
             <Tabs
               value={search.tab ?? 'tests'}
-              onChange={(value) => go({ tab: value === 'runs' ? 'runs' : undefined, test: undefined, openRun: undefined })}
+              onChange={(value) => go({ tab: value === 'runs' ? 'runs' : undefined, test: undefined, openRun: undefined, layer: undefined })}
             >
               <Tabs.List aria-label="Explorer view">
                 <Tabs.Tab
@@ -247,7 +247,7 @@ export function Explorer() {
             </>
           ))}
       </Box>
-      <Drawer opened={split} onClose={() => go({ test: undefined })} title="Test detail" size="xl">
+      <Drawer opened={split} onClose={() => go({ test: undefined, layer: undefined })} title="Test detail" size="xl">
         <Box aria-label="Test detail" component="aside">
           {selected ? (
             <TestDetail test={selected} slot={slots.get(selected.key)} />
@@ -258,7 +258,7 @@ export function Explorer() {
               </Alert>
               <Anchor
                 renderRoot={(props) => (
-                  <Link {...props} to="/" search={patched({ test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+                  <Link {...props} to="/" search={patched({ test: undefined, layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
                 )}
               >
                 Close
@@ -358,7 +358,7 @@ function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: re
                 <Link
                   {...props}
                   to="/"
-                  search={patched({ tab: 'runs', test: undefined })}
+                  search={patched({ tab: 'runs', test: undefined, layer: undefined })}
                   resetScroll={false}
                   activeOptions={{ exact: true }}
                 />
@@ -443,7 +443,7 @@ function MoreInsights({ scope }: { scope: readonly TestSummary[] }) {
             <List.Item key={test.key}>
               <Anchor
                 renderRoot={(props) => (
-                  <Link {...props} to="/" search={patched({ test: test.key })} resetScroll={false} activeOptions={{ exact: true }} />
+                  <Link {...props} to="/" search={patched({ test: test.key, layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
                 )}
               >
                 <StatusMark status={test.status} size={12} />
@@ -819,7 +819,7 @@ function TestRow({ test, selected, now }: { test: TestSummary; selected: boolean
           <Link
             {...props}
             to="/"
-            search={patched({ test: selected ? undefined : test.key })}
+            search={patched({ test: selected ? undefined : test.key, layer: undefined })}
             resetScroll={false}
             activeOptions={{ exact: true }}
           />
