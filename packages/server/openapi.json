@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Atlas server API",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "summary": "Take in test results from every environment, keep them, and show everyone the combined report, live.",
     "description": "One Atlas node serves multiple projects. Clients select a project using ?project=<slug>, X-Atlas-Project, or /api/projects/<slug>/… . Each project has independent specs, layers, recordings, status, and event streams. Within each project, the newest completed result of every check wins its slot. Unqualified requests address the legacy default project.\n\n**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `publish` < `admin`. Uploading needs a Bearer token; a browser's HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.\n\n**Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`) with a `detail` that says what to do. `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not valid, `503` still starting (retry after `Retry-After`).\n\n**Compatibility.** Within `/api` the API only grows: optional parameters, optional response fields, new events. Ignore what you do not know.\n\nGuides: `/llms.txt`. Source: https://github.com/crvouga/atlas.",
     "license": {
@@ -3060,6 +3060,29 @@
           },
           {
             "required": false,
+            "name": "artifactTag",
+            "in": "query",
+            "description": "Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.",
+            "example": "demo",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "inherited",
+            "in": "query",
+            "description": "With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "true"
+              ]
+            }
+          },
+          {
+            "required": false,
             "name": "run",
             "in": "query",
             "description": "Only tests recorded in this run (a `key` from `/api/reports/runs`).",
@@ -3272,6 +3295,29 @@
             "description": "Only tests with this tag. Repeatable or comma-separated.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "artifactTag",
+            "in": "query",
+            "description": "Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.",
+            "example": "demo",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "inherited",
+            "in": "query",
+            "description": "With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "true"
+              ]
             }
           },
           {
@@ -3592,6 +3638,298 @@
           },
           "503": {
             "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/artifact-tags": {
+      "get": {
+        "operationId": "getArtifactTags",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Reviewer tags of attachments: every recorded edit",
+        "description": "The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer's own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The edits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTags"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "editArtifactTags",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Tag or untag one attachment after upload",
+        "description": "Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer's tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The attachment and the tags to add and remove. At most 20 of each, 64 KiB.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactTagEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The recorded entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTagEntry"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/artifact-tags": {
+      "get": {
+        "operationId": "getArtifactTagsForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Reviewer tags of attachments: every recorded edit",
+        "description": "The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer's own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The edits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTags"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "editArtifactTagsForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Tag or untag one attachment after upload",
+        "description": "Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer's tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The attachment and the tags to add and remove. At most 20 of each, 64 KiB.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactTagEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The recorded entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTagEntry"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7253,6 +7591,13 @@
                               "type": "string"
                             }
                           },
+                          "artifactTags": {
+                            "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labels": {
                             "type": "object",
                             "propertyNames": {
@@ -7444,6 +7789,13 @@
                           "maximum": 9007199254740991
                         },
                         "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "artifactTags": {
+                          "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -7696,6 +8048,13 @@
                               "type": "string"
                             }
                           },
+                          "artifactTags": {
+                            "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labels": {
                             "type": "object",
                             "propertyNames": {
@@ -7887,6 +8246,13 @@
                           "maximum": 9007199254740991
                         },
                         "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "artifactTags": {
+                          "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -8544,6 +8910,13 @@
                       "description": {
                         "type": "string"
                       },
+                      "tags": {
+                        "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "at": {
                         "type": "object",
                         "properties": {
@@ -8780,6 +9153,13 @@
                             },
                             "description": {
                               "type": "string"
+                            },
+                            "tags": {
+                              "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "at": {
                               "type": "object",
@@ -9055,6 +9435,13 @@
                                   "description": {
                                     "type": "string"
                                   },
+                                  "tags": {
+                                    "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
                                   "at": {
                                     "type": "object",
                                     "properties": {
@@ -9264,6 +9651,13 @@
                             },
                             "description": {
                               "type": "string"
+                            },
+                            "tags": {
+                              "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "at": {
                               "type": "object",
@@ -9614,6 +10008,13 @@
                 },
                 "description": {
                   "type": "string"
+                },
+                "tags": {
+                  "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "at": {
                   "type": "object",
@@ -10045,6 +10446,13 @@
                         "type": "string"
                       }
                     },
+                    "artifactTags": {
+                      "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "labels": {
                       "type": "object",
                       "propertyNames": {
@@ -10267,6 +10675,13 @@
                       "maximum": 9007199254740991
                     },
                     "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "artifactTags": {
+                      "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -10503,6 +10918,13 @@
                     "description": {
                       "type": "string"
                     },
+                    "tags": {
+                      "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "at": {
                       "type": "object",
                       "properties": {
@@ -10730,6 +11152,13 @@
                           },
                           "description": {
                             "type": "string"
+                          },
+                          "tags": {
+                            "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "at": {
                             "type": "object",
@@ -10996,6 +11425,13 @@
                                 "description": {
                                   "type": "string"
                                 },
+                                "tags": {
+                                  "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
                                 "at": {
                                   "type": "object",
                                   "properties": {
@@ -11196,6 +11632,13 @@
                           "description": {
                             "type": "string"
                           },
+                          "tags": {
+                            "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "at": {
                             "type": "object",
                             "properties": {
@@ -11363,6 +11806,224 @@
           "kind",
           "check",
           "run"
+        ],
+        "additionalProperties": {}
+      },
+      "ArtifactTagEdit": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "layer": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "The id of the archived layer that holds the check"
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The check's id"
+              },
+              "kind": {
+                "description": "The kind of the part holding the check, when the same id exists in several parts",
+                "type": "string",
+                "minLength": 1
+              },
+              "artifact": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "description": "The attachment: `id:<id>` when it has an id, else `key:<bundleKey>`, else `name:<name>` (see `artifactRef`)"
+              }
+            },
+            "required": [
+              "layer",
+              "check",
+              "artifact"
+            ],
+            "additionalProperties": {}
+          },
+          "add": {
+            "description": "Tags to add. `demo` and `#demo` are the same tag",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "remove": {
+            "description": "Reviewer tags to remove. Tags the producer wrote are part of the immutable layer and stay",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": {}
+      },
+      "ArtifactTagEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique and time-ordered"
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "layer": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "The id of the archived layer that holds the check"
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The check's id"
+              },
+              "kind": {
+                "description": "The kind of the part holding the check, when the same id exists in several parts",
+                "type": "string",
+                "minLength": 1
+              },
+              "artifact": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "description": "The attachment: `id:<id>` when it has an id, else `key:<bundleKey>`, else `name:<name>` (see `artifactRef`)"
+              }
+            },
+            "required": [
+              "layer",
+              "check",
+              "artifact"
+            ],
+            "additionalProperties": {}
+          },
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Normalized tags added"
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Normalized tags removed"
+          },
+          "by": {
+            "type": "string",
+            "description": "The name of the token that made the edit (never the token)"
+          },
+          "atMs": {
+            "type": "number",
+            "description": "When the server recorded it, epoch milliseconds"
+          }
+        },
+        "required": [
+          "id",
+          "target",
+          "add",
+          "remove",
+          "by",
+          "atMs"
+        ],
+        "additionalProperties": {}
+      },
+      "ArtifactTags": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Unique and time-ordered"
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "layer": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "The id of the archived layer that holds the check"
+                    },
+                    "check": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "The check's id"
+                    },
+                    "kind": {
+                      "description": "The kind of the part holding the check, when the same id exists in several parts",
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "artifact": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024,
+                      "description": "The attachment: `id:<id>` when it has an id, else `key:<bundleKey>`, else `name:<name>` (see `artifactRef`)"
+                    }
+                  },
+                  "required": [
+                    "layer",
+                    "check",
+                    "artifact"
+                  ],
+                  "additionalProperties": {}
+                },
+                "add": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Normalized tags added"
+                },
+                "remove": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Normalized tags removed"
+                },
+                "by": {
+                  "type": "string",
+                  "description": "The name of the token that made the edit (never the token)"
+                },
+                "atMs": {
+                  "type": "number",
+                  "description": "When the server recorded it, epoch milliseconds"
+                }
+              },
+              "required": [
+                "id",
+                "target",
+                "add",
+                "remove",
+                "by",
+                "atMs"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "entries"
         ],
         "additionalProperties": {}
       },
@@ -11956,6 +12617,27 @@
                   "additionalProperties": {}
                 }
               },
+              "artifactTags": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
               "branches": {
                 "type": "array",
                 "items": {
@@ -12222,6 +12904,13 @@
                               "type": "string"
                             }
                           },
+                          "artifactTags": {
+                            "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labels": {
                             "type": "object",
                             "propertyNames": {
@@ -12411,6 +13100,20 @@
                   "additionalProperties": {}
                 },
                 "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "artifactTags": {
+                  "description": "Normalized tags of the attachments of its current results, such as `demo` (shown `#demo`). Not inherited from a check or run, unlike `tags`",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "inheritedArtifactTags": {
+                  "description": "Normalized tags its attachments inherit from their check and run, apart from `artifactTags`: what `?artifactTag=…&inherited=1` also matches",
                   "type": "array",
                   "items": {
                     "type": "string"
@@ -12696,6 +13399,13 @@
                             "type": "string"
                           }
                         },
+                        "artifactTags": {
+                          "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
                         "labels": {
                           "type": "object",
                           "propertyNames": {
@@ -12890,6 +13600,20 @@
                   "type": "string"
                 }
               },
+              "artifactTags": {
+                "description": "Normalized tags of the attachments of its current results, such as `demo` (shown `#demo`). Not inherited from a check or run, unlike `tags`",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "inheritedArtifactTags": {
+                "description": "Normalized tags its attachments inherit from their check and run, apart from `artifactTags`: what `?artifactTag=…&inherited=1` also matches",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "labels": {
                 "type": "object",
                 "propertyNames": {
@@ -13067,6 +13791,13 @@
                       "maximum": 9007199254740991
                     },
                     "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "artifactTags": {
+                      "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                       "type": "array",
                       "items": {
                         "type": "string"

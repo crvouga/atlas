@@ -216,6 +216,26 @@ against a server unchanged. A client uploads **in dependency order**: blobs, the
 entry that makes it visible. The server checks each step and says no to a catalog entry whose manifest is not
 there (`409`), so nothing half-uploaded is ever shown.
 
+## Tagging artifacts
+
+A reviewer can mark a recording `#demo` after it was uploaded without uploading it again. The layer is immutable, so the
+tag is kept beside it: each edit is one small object under `curation/artifact-tags/` in the write backend (or the live
+store of a relay), named by time, never changed or removed. It records the attachment (layer, check, and the attachment's
+`id`, else its bytes' key, else its name), the normalized tags added and removed, the name of the token that made the
+edit, and the server's time. Nothing about the layer, its results or the report's winners changes.
+
+- `GET /api/reports/artifact-tags` (read) returns every edit, oldest first. Fold them to get the tags that stand now: the
+  last edit of a tag wins.
+- `POST /api/reports/artifact-tags` (publish, `Authorization: Bearer`) records an edit. A read token, an anonymous reader
+  and the browser's sign-in box are refused (`403`/`401`) like any upload, so a read-only visitor can see the tags and
+  not change them. The viewer asks for a token when a reviewer adds a tag and keeps it only in that tab.
+- Producer tags (`tags` on the attachment) and reviewer tags are kept apart everywhere: the viewer says who added a
+  reviewer tag and when, and a reviewer can remove only reviewer tags. `capabilities.artifactTags` on `/api/server` says
+  a server has this.
+
+See [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos) for the tag rules. Reviewer tags are
+shown in the viewer's evidence; the tests API (`artifactTag`) searches the producers' tags.
+
 ## Streaming
 
 `GET /api/events` is a server-sent-events stream:
@@ -320,6 +340,10 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/tests` | read | Every test, with insights, facets and history statistics. |
 | `GET /api/reports/tests/history` | read | One test and every result recorded for it. |
 | `GET /api/projects/{project}/reports/tests/history` | read | One test and every result recorded for it. |
+| `GET /api/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
+| `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
+| `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
+| `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `GET /api/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |

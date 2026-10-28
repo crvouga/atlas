@@ -1005,6 +1005,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `steps` (`parentId`, `offsetMs`, `durationMs`, `status`, `kind`) | check, attempt | Draws the check's timeline: nested steps, when each started, how long it took, which one failed. |
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
+| `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
 | `specPath` | check | The spec a check belongs to (a `.feature`, a test file), relative to the repository. Checks are grouped by it. |
 | `specs[]` (`path`, `domain`, `kind`, `title`) | layer | Names each spec and its group (`domain`), so a server can group checks by spec with a title even when no [spec set](integrating.md#tell-atlas-which-spec-a-check-belongs-to) has been published. |
@@ -1012,6 +1013,33 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 
 Send `sha`, `branch` and `runUrl` on every layer too. They never change a result, but they tie results to a commit
 and to the CI run that produced them.
+
+## Tagging artifacts and demos
+
+To mark one recording as a demo, tag the attachment itself. A tag on a check says something about the result; a tag on
+an attachment says something about that file, and no Gherkin tag, label, environment or producer name is needed:
+
+```ts
+{ name: 'checkout.webm', role: 'video', tags: ['demo'], labels: { audience: 'business' } }
+```
+
+The viewer shows it as a `#demo` chip on the artifact card. Selecting the chip filters the result's evidence to the
+attachments with that tag, and says how many match. Tags describe evidence; they never change a status or a slot.
+
+- **One spelling.** A tag is normalized before it is compared or stored: a leading `#` is dropped, letters are
+  lower-cased, each run of whitespace becomes `-`, and surrounding space is trimmed, so `demo`, `#demo` and `#Demo ` are
+  `demo`. Empty tags and tags over 64 characters are not tags and are ignored (or refused, when a reviewer enters them).
+  Everything else is a valid tag (`team/payments`, `release=2`), and repeats are shown once.
+- **Inherited.** An attachment is also searchable by the tags of its check and its run. The viewer says `inherited` on
+  such a chip, and a switch decides whether the filter counts them: a recording without a tag of its own under a run
+  tagged `demo` is found by the inherited query and not by the exact one. In the API,
+  `GET /api/reports/tests?artifactTag=demo` is exact and adding `&inherited=1` includes inherited tags.
+- **Reviewers.** After upload, a person with a publish token can add tags to an attachment (the viewer's *Add tag*
+  button) and remove the ones a reviewer added. Those tags are not written into the layer, which is immutable: the
+  server keeps them as an audit trail (who, when, which tags) and the viewer shows them as `added by <name>`, apart
+  from the producer's tags. See [Tagging artifacts](server.md#tagging-artifacts). A producer's own tags stay as uploaded.
+- **Older layers.** A layer without attachment tags reads exactly as before. Tags on an attachment that cannot be read
+  (not a list of strings) are dropped, and the attachment, check and layer stay.
 
 ## Labels describe, parameters split
 
@@ -1396,6 +1424,26 @@ against a server unchanged. A client uploads **in dependency order**: blobs, the
 entry that makes it visible. The server checks each step and says no to a catalog entry whose manifest is not
 there (`409`), so nothing half-uploaded is ever shown.
 
+## Tagging artifacts
+
+A reviewer can mark a recording `#demo` after it was uploaded without uploading it again. The layer is immutable, so the
+tag is kept beside it: each edit is one small object under `curation/artifact-tags/` in the write backend (or the live
+store of a relay), named by time, never changed or removed. It records the attachment (layer, check, and the attachment's
+`id`, else its bytes' key, else its name), the normalized tags added and removed, the name of the token that made the
+edit, and the server's time. Nothing about the layer, its results or the report's winners changes.
+
+- `GET /api/reports/artifact-tags` (read) returns every edit, oldest first. Fold them to get the tags that stand now: the
+  last edit of a tag wins.
+- `POST /api/reports/artifact-tags` (publish, `Authorization: Bearer`) records an edit. A read token, an anonymous reader
+  and the browser's sign-in box are refused (`403`/`401`) like any upload, so a read-only visitor can see the tags and
+  not change them. The viewer asks for a token when a reviewer adds a tag and keeps it only in that tab.
+- Producer tags (`tags` on the attachment) and reviewer tags are kept apart everywhere: the viewer says who added a
+  reviewer tag and when, and a reviewer can remove only reviewer tags. `capabilities.artifactTags` on `/api/server` says
+  a server has this.
+
+See [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos) for the tag rules. Reviewer tags are
+shown in the viewer's evidence; the tests API (`artifactTag`) searches the producers' tags.
+
 ## Streaming
 
 `GET /api/events` is a server-sent-events stream:
@@ -1500,6 +1548,10 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/tests` | read | Every test, with insights, facets and history statistics. |
 | `GET /api/reports/tests/history` | read | One test and every result recorded for it. |
 | `GET /api/projects/{project}/reports/tests/history` | read | One test and every result recorded for it. |
+| `GET /api/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
+| `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
+| `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
+| `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `GET /api/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |
@@ -2522,6 +2574,9 @@ carry any of these. Every one is optional.
 | `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
 | `measurements[]` | Numbers, with units and an allowance (already part of the contract). |
+
+An attachment may carry its own `tags[]` (`demo`): shown as `#demo` and searchable; see
+[Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos).
 
 On a **layer** the same fields describe the whole run: its CI log, a coverage report, an archive of traces, the
 build number, a link to the pipeline.
@@ -4768,6 +4823,8 @@ Send `format=markdown` (or `Accept: text/markdown`) for the same as a Markdown r
 - `domain` (query): Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.
 - `spec` (query): Only tests of this spec path. Repeatable or comma-separated.
 - `tag` (query): Only tests with this tag. Repeatable or comma-separated.
+- `artifactTag` (query): Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.
+- `inherited` (query): With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.
 - `run` (query): Only tests recorded in this run (a `key` from `/api/reports/runs`).
 - `sort` (query): The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.
 - `offset` (query): Skip this many matching tests.
@@ -4797,6 +4854,8 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `domain` (query): Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.
 - `spec` (query): Only tests of this spec path. Repeatable or comma-separated.
 - `tag` (query): Only tests with this tag. Repeatable or comma-separated.
+- `artifactTag` (query): Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.
+- `inherited` (query): With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.
 - `run` (query): Only tests recorded in this run (a `key` from `/api/reports/runs`).
 - `sort` (query): The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.
 - `offset` (query): Skip this many matching tests.
@@ -4830,6 +4889,50 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `format` (query): `markdown` for Markdown instead of JSON.
 
 Responses: `200` The test and its history.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No test in the report has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Reviewer tags of attachments: every recorded edit
+
+`GET /api/reports/artifact-tags` · role: read
+
+The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer's own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The edits.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Reviewer tags of attachments: every recorded edit
+
+`GET /api/projects/{project}/reports/artifact-tags` · role: read
+
+The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer's own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The edits.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Tag or untag one attachment after upload
+
+`POST /api/reports/artifact-tags` · role: publish
+
+Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer's tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded entry.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.
+
+### Tag or untag one attachment after upload
+
+`POST /api/projects/{project}/reports/artifact-tags` · role: publish
+
+Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer's tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded entry.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.
 
 ### The runs that recorded the report
 

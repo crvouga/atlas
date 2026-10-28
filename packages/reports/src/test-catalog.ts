@@ -20,6 +20,7 @@
  *
  * @see docs/server.md#reading-the-report-as-an-agent
  */
+import { displayTag, normalizeTag, normalizeTags } from './artifact-tags';
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
 import { checkSlots, type CheckSlot } from './evidence-view';
@@ -128,6 +129,10 @@ export type TestSummary = {
   readonly outcomes: readonly TestOutcome[];
   readonly stats: TestStats;
   readonly tags: readonly string[];
+  /** The normalized tags of the attachments of its current results (`demo`, shown as `#demo`). Never inherited from a check or run; the `tags` above are. Absent in documents of older servers. */
+  readonly artifactTags?: readonly string[];
+  /** The normalized tags its attachments inherit from their check and run (those of the results that have attachments), apart from `artifactTags`. What an inherited artifact query also matches. */
+  readonly inheritedArtifactTags?: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   /** What its current results carry: attachments, steps, retries, and the kinds of attachment. */
   readonly evidence: { readonly attachments: number; readonly steps: number; readonly attempts: number; readonly roles: readonly string[] };
@@ -193,6 +198,8 @@ export type CatalogFacets = {
   readonly domains: readonly FacetValue[];
   readonly specs: readonly (CatalogSpec & { readonly tests: number; readonly counts: StatusCounts })[];
   readonly tags: readonly FacetValue[];
+  /** The tags of attachments, normalized. Absent in documents of older servers. */
+  readonly artifactTags?: readonly FacetValue[];
   readonly branches: readonly FacetValue[];
   readonly labels: Readonly<Record<string, readonly FacetValue[]>>;
 };
@@ -214,6 +221,10 @@ export type TestQuery = {
   /** Spec paths (`specs/...`). */
   readonly spec?: readonly string[];
   readonly tag?: readonly string[];
+  /** Only tests with an attachment carrying this tag (`demo` and `#demo` are the same), not counting tags inherited from a check or run: the exact artifact query. `tag` is the inherited one. */
+  readonly artifactTag?: readonly string[];
+  /** With `artifactTag`: also match the tags an attachment inherits from its check and run (a recording without a tag of its own under a run tagged `demo`). Default false: the exact query. */
+  readonly inherited?: boolean;
   /** Only tests recorded in this run (a key from `runList`). */
   readonly run?: string;
   readonly sort?: TestSort;
@@ -633,13 +644,17 @@ export type CatalogModel = {
 function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: string) => SpecEntry | undefined): TestSummary {
   const outcomes = slot.outcomes.map(outcomeOf);
   const tags = new Set<string>();
+  const artifactTags = new Set<string>();
+  const inheritedTags = new Set<string>();
   const labels: Record<string, string> = {};
   let attachments = 0, steps = 0, attempts = 0;
   const roles = new Set<string>();
-  for (const outcome of outcomes) {
+  for (const [at, outcome] of outcomes.entries()) {
     const evidence = outcome.evidence;
     if (!evidence) continue;
+    if (evidence.attachments > 0) for (const tag of normalizeTags([...evidence.tags, ...(slot.outcomes[at]?.layer.evidence?.tags ?? [])])) inheritedTags.add(tag);
     for (const tag of evidence.tags) tags.add(tag);
+    for (const tag of evidence.artifactTags ?? []) artifactTags.add(tag);
     Object.assign(labels, evidence.labels);
     attachments += evidence.attachments;
     steps += evidence.steps;
@@ -659,6 +674,8 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
     outcomes,
     stats: statsOf(history?.of(slot.key) ?? [], outcomes, tagList, labels),
     tags: tagList,
+    ...(artifactTags.size ? { artifactTags: [...artifactTags].sort() } : {}),
+    ...([...inheritedTags].some(tag => !artifactTags.has(tag)) ? { inheritedArtifactTags: [...inheritedTags].filter(tag => !artifactTags.has(tag)).sort() } : {}),
     labels,
     evidence: { attachments, steps, attempts, roles: [...roles].sort() },
     lastRecordedAtMs: slot.latestAtMs,
@@ -669,7 +686,7 @@ function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: s
 /** The lowercase text a search matches a test against: title, id, spec, domain, tags, labels, environments and producers. */
 export function haystackOf(test: TestSummary): string {
   return [
-    test.title, test.id, test.specPath ?? '', test.spec?.title ?? '', test.spec?.domain ?? '', ...test.tags,
+    test.title, test.id, test.specPath ?? '', test.spec?.title ?? '', test.spec?.domain ?? '', ...test.tags, ...(test.artifactTags ?? []).map(displayTag),
     ...Object.entries(test.labels).flatMap(([key, value]) => [key, value]), ...test.environments, ...test.producers,
   ].join('\n').toLowerCase();
 }
@@ -759,6 +776,7 @@ export function catalogModel(layers: readonly LayerEvidence[], sources: CatalogS
     domains: facet(tests, test => [test.spec?.domain || '(no spec)']),
     specs: [...specGroups].map(([, list]) => { const g = group(list[0]!.spec!.path, list); return { ...list[0]!.spec!, tests: g.tests, counts: g.counts }; }).sort((a, b) => compareText(a.domain, b.domain) || compareText(a.title, b.title)),
     tags: facet(tests, test => test.tags),
+    artifactTags: facet(tests, test => test.artifactTags ?? []),
     branches: facet(tests, test => test.stats.branches),
     labels: Object.fromEntries([...labelKeys].sort().map(key => [key, facet(tests, test => (test.labels[key] === undefined ? [] : [test.labels[key]!]))])),
   };
@@ -785,6 +803,7 @@ export function matchesQuery(model: CatalogModel, test: TestSummary, query: Test
   if (query.domain?.length && !query.domain.includes(test.spec?.domain || '(no spec)')) return false;
   if (query.spec?.length && !query.spec.some(path => test.specPath !== null && normalSpecPath(path) === test.specPath)) return false;
   if (query.tag?.length && !query.tag.some(tag => test.tags.includes(tag))) return false;
+  if (query.artifactTag?.length && !query.artifactTag.some(tag => { const wanted = normalizeTag(tag); return wanted !== null && ((test.artifactTags?.includes(wanted) ?? false) || (query.inherited === true && (test.inheritedArtifactTags?.includes(wanted) ?? false))); })) return false;
   if (inRun && !inRun.has(test.key)) return false;
   return true;
 }
@@ -819,7 +838,7 @@ export function runDetail(history: TestHistory, version: string, key: string): R
   return found ? { schemaVersion: TEST_CATALOG_VERSION, version, ...found } : null;
 }
 
-/** Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`. */
+/** Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, and `inherited=1`. */
 export function parseTestQuery(params: URLSearchParams): TestQuery {
   const many = (name: string) => params.getAll(name).flatMap(value => value.split(',')).map(value => value.trim()).filter(Boolean);
   const number = (name: string) => { const value = params.get(name); return value !== null && /^\d+$/.test(value) ? Number(value) : undefined; };
@@ -827,7 +846,8 @@ export function parseTestQuery(params: URLSearchParams): TestQuery {
   const query: Record<string, unknown> = {};
   const q = params.get('q');
   if (q) query.q = q;
-  for (const name of ['status', 'environment', 'producer', 'domain', 'spec', 'tag']) { const values = many(name); if (values.length) query[name] = values; }
+  for (const name of ['status', 'environment', 'producer', 'domain', 'spec', 'tag', 'artifactTag']) { const values = many(name); if (values.length) query[name] = values; }
+  if (['1', 'true'].includes(params.get('inherited') ?? '')) query.inherited = true;
   const run = params.get('run');
   if (run) query.run = run;
   if (sort && (TEST_SORTS as readonly string[]).includes(sort)) query.sort = sort;
@@ -901,6 +921,7 @@ export function historyMarkdown(document: TestHistoryDocument): string {
     `- Results: ${test.stats.results} recorded, ${test.stats.passed} passed, ${test.stats.failed} failed${test.stats.passRate === null ? '' : `, pass rate ${Math.round(test.stats.passRate * 100)}%`}, in ${test.stats.runs} runs`,
     `- Duration: ${d ? `avg ${formatMs(d.avgMs)}, p50 ${formatMs(d.p50Ms)}, p95 ${formatMs(d.p95Ms)}, min ${formatMs(d.minMs)}, max ${formatMs(d.maxMs)}, last ${formatMs(d.lastMs)}` : 'not measured'}`,
     ...(test.tags.length ? [`- Tags: ${test.tags.join(', ')}`] : []),
+    ...(test.artifactTags?.length ? [`- Artifact tags: ${test.artifactTags.map(displayTag).join(', ')}`] : []),
     ...(Object.keys(test.labels).length ? [`- Labels: ${Object.entries(test.labels).map(([k, v]) => `${k}=${v}`).join(', ')}`] : []),
     `- Evidence: ${test.evidence.attachments} attachments${test.evidence.roles.length ? ` (${test.evidence.roles.join(', ')})` : ''}, ${test.evidence.steps} steps`,
     '',

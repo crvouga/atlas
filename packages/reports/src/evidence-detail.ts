@@ -11,6 +11,7 @@
  */
 import type { Annotation, Attachment, Attempt, Check, Step } from '../../schema/src/layer';
 import type { EvidenceSummary } from './evidence-types';
+import { normalizeTags } from './artifact-tags';
 import { contentTypeOf } from './media-types';
 
 /** Anything that may carry evidence: a layer, a part or a check. */
@@ -36,16 +37,17 @@ function count(holder: EvidenceHolder): number {
  *
  * Several holders (for example a check and its layer) are summed: `attachments` also counts those on steps and
  * attempts, `steps` counts only each holder's own top-level steps, tags are de-duplicated, and for a repeated
- * label the later holder wins. `roles` are the attachments' roles (or, without one, what their media type or file
+ * label the later holder wins. `artifactTags` are the attachments' own normalized tags and are never inherited. `roles` are the attachments' roles (or, without one, what their media type or file
  * name implies), sorted and distinct.
  */
 export function summarizeEvidence(...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined {
   if (!holders.some(holder => count(holder) > 0)) return undefined;
   const roles = new Set<string>();
   const tags = new Set<string>();
+  const artifactTags = new Set<string>();
   const labels: Record<string, string> = {};
   let attachments = 0, steps = 0, annotations = 0, attempts = 0, links = 0;
-  const attachmentsOf = (list: readonly Attachment[] | undefined) => { for (const item of list ?? []) { attachments += 1; roles.add(item.role ?? roleOfType(item.contentType ?? contentTypeOf(item.name))); } };
+  const attachmentsOf = (list: readonly Attachment[] | undefined) => { for (const item of list ?? []) { attachments += 1; for (const tag of normalizeTags(item.tags)) artifactTags.add(tag); roles.add(item.role ?? roleOfType(item.contentType ?? contentTypeOf(item.name))); } };
   for (const holder of holders) {
     attachmentsOf(holder.attachments);
     // Attachments on steps and attempts are part of the check too.
@@ -58,7 +60,7 @@ export function summarizeEvidence(...holders: readonly EvidenceHolder[]): Eviden
     for (const tag of holder.tags ?? []) tags.add(tag);
     Object.assign(labels, holder.labels);
   }
-  return { attachments, steps, annotations, attempts, links, tags: [...tags], labels, roles: [...roles].sort() };
+  return { attachments, steps, annotations, attempts, links, tags: [...tags], ...(artifactTags.size ? { artifactTags: [...artifactTags].sort() } : {}), labels, roles: [...roles].sort() };
 }
 
 /** A role to show when a producer gave none, from the media type: `image`, `video`, `audio`, `snapshot` (text/html), `text` (text, JSON, XML) or `file`. Roles are an open vocabulary; a producer's own role always wins. */

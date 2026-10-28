@@ -4,6 +4,209 @@ Layered evidence for any kind of spec: publishing layers, stores (folder, S3, an
 
 > Generated from the doc comments of `packages/reports/src` by `bun run docs`. Do not edit: change the comment next to the code.
 
+### Reviewer tags in a store
+
+Source: `packages/reports/src/artifact-tag-store.ts`. Import: `@crvouga/atlas/reports/artifact-tag-store`
+
+Where a reviewer's tags for attachments are kept: one small immutable object per edit under
+`curation/artifact-tags/`, named by time and a random id so editors never overwrite one another, and never changed
+or deleted afterwards. The layers they are about are not touched. The list of edits is the audit trail: who changed
+which tags of which attachment, and when. `foldArtifactTags` turns it into the tags that stand now.
+
+See docs/server.md#tagging-artifacts
+
+#### `ARTIFACT_TAGS_PREFIX`
+
+```ts
+export const ARTIFACT_TAGS_PREFIX = …
+```
+
+The prefix of every recorded edit in a store.
+
+#### `ArtifactTagError`
+
+```ts
+export class ArtifactTagError extends Error
+```
+
+The edit was not acceptable (`status` is the HTTP status to answer).
+
+#### `recordArtifactTags`
+
+```ts
+export async function recordArtifactTags(store: ObjectStore, input: unknown, by: string, atMs: number): Promise<ArtifactTagEntry>
+```
+
+Validates an edit (`ArtifactTagEditSchema`), normalizes its tags and records it as a new object in `store`, by
+`by` at `atMs`. Throws {@link ArtifactTagError} for a body that is not an edit, a tag that is not a tag (empty, or
+over 64 characters) or an edit that changes nothing. Recording the same edit twice records two entries.
+
+#### `readArtifactTagEntries`
+
+```ts
+export async function readArtifactTagEntries(store: ObjectStore): Promise<ArtifactTagEntry[]>
+```
+
+Every recorded edit in `store`, oldest first. An object that cannot be read as an edit is skipped (unknown, never
+guessed at). A store with none gives an empty list. Transport errors throw.
+
+### Artifact tags
+
+Source: `packages/reports/src/artifact-tags.ts`. Import: `@crvouga/atlas/reports/artifact-tags`
+
+The tags of one attachment (a recording, a screenshot, a trace): how a tag is normalized so `demo` and `#demo`
+are the same tag, which tags an attachment shows (its producer's, its reviewers', and those it inherits from its
+check and run), and how a reviewer's edits fold into the tags that stand now. Pure functions, safe in a browser.
+
+Tags describe evidence; they never decide a status, a slot or a winner. A producer writes `tags` on the attachment
+inside an immutable layer. A reviewer's tags live apart, as an append-only list of edits that the server records
+with who made each and when (`artifact-tag-store.ts`); the layer is never rewritten.
+
+See docs/rich-evidence.md#tagging-artifacts-and-demos
+
+#### `MAX_TAG_LENGTH`
+
+```ts
+export const MAX_TAG_LENGTH = …
+```
+
+The longest a normalized tag may be, in characters.
+
+#### `normalizeTag`
+
+```ts
+export function normalizeTag(raw: string): string | null
+```
+
+Normalizes a tag so equal tags compare equal: Unicode NFC, any leading `#` removed, surrounding whitespace
+trimmed, letters lower-cased and each run of whitespace inside turned into one `-`. Every other character is kept,
+so `Smoke`, `#smoke` and ` smoke ` are `smoke`, and `team/payments` or `release=2` stay as they are. Returns
+`null` for a tag that is empty after that (`''`, `'#'`, `'  '`) or longer than {@link MAX_TAG_LENGTH}.
+
+**Example**
+
+```ts
+normalizeTag('#Demo'); // 'demo'
+normalizeTag('release candidate'); // 'release-candidate'
+normalizeTag('#'); // null
+```
+
+#### `normalizeTags`
+
+```ts
+export function normalizeTags(raw: Iterable<string> | undefined): string[]
+```
+
+Normalizes every tag with {@link normalizeTag}, dropping the ones that are not tags and the repeats; the first of each keeps its place.
+
+#### `displayTag`
+
+```ts
+export const displayTag = …
+```
+
+The tag as a person sees it: `#demo`.
+
+#### `artifactRef`
+
+```ts
+export function artifactRef(attachment: Pick<Attachment, 'id' | 'bundleKey' | 'name'>): string
+```
+
+How an edit names an attachment: `id:<id>` when it has an `id`, else `key:<bundleKey>` (its bytes), else
+`name:<name>`. It is stable for a layer, which never changes. Two attachments in one check with the same bytes and
+no `id` share a reference, and so share reviewer tags; give them an `id` to tag them apart.
+
+#### `ArtifactTarget`
+
+```ts
+export type ArtifactTarget = {
+  readonly layer: string;
+  readonly check: string;
+  readonly kind?: string | undefined;
+  readonly artifact: string;
+};
+```
+
+Where a reviewer's tags are about: one attachment of one check of one archived layer.
+
+#### `ArtifactTagEntry`
+
+```ts
+export type ArtifactTagEntry = {
+  readonly id: string;
+  readonly target: ArtifactTarget;
+  readonly add: readonly string[];
+  readonly remove: readonly string[];
+  readonly by: string;
+  readonly atMs: number;
+};
+```
+
+One recorded edit. Entries are never changed or removed.
+
+#### `targetKey`
+
+```ts
+export const targetKey = …
+```
+
+A string that is equal for equal targets (the part `kind` is optional and then does not matter).
+
+#### `ReviewerTag`
+
+```ts
+export type ReviewerTag = { readonly tag: string; readonly by: string; readonly atMs: number };
+```
+
+A tag a reviewer added: who added it last, and when.
+
+#### `foldArtifactTags`
+
+```ts
+export function foldArtifactTags(entries: readonly ArtifactTagEntry[]): Map<string, ReviewerTag[]>
+```
+
+Folds the recorded edits (in any order) into the reviewer tags that stand now, by target (see {@link targetKey}).
+Edits apply oldest first, ties by `id`; a tag added, removed and added again stands, with the time and author of
+the last add. A target whose tags were all removed is absent. Entries that are not understood are ignored.
+
+#### `TagSource`
+
+```ts
+export type TagSource = 'artifact' | 'reviewer' | 'inherited';
+```
+
+Where a shown tag comes from: the attachment's own producer (`artifact`), a reviewer after the upload (`reviewer`), or the check or run around it (`inherited`).
+
+#### `ArtifactTag`
+
+```ts
+export type ArtifactTag = { readonly tag: string; readonly source: TagSource; readonly by?: string; readonly atMs?: number };
+```
+
+One tag an attachment shows, with its source and, for a reviewer's tag, who added it and when.
+
+#### `artifactTagsOf`
+
+```ts
+export function artifactTagsOf(attachment: Pick<Attachment, 'tags'>, options: { readonly reviewer?: readonly ReviewerTag[]; readonly inherited?: Iterable<string> } = {}): ArtifactTag[]
+```
+
+The tags one attachment shows, normalized and without repeats: its producer's own (`artifact`), then the
+reviewers' (`reviewer`), then those of its check and run that it does not have itself (`inherited`). A tag it has
+more than once is shown once, by the first source above.
+
+#### `hasArtifactTag`
+
+```ts
+export function hasArtifactTag(tags: readonly ArtifactTag[], wanted: string, options: { readonly inherited?: boolean } = {}): boolean
+```
+
+Does an attachment match a tag (either spelling)? An exact query (`inherited: false`, the default) matches only the
+tags the attachment has itself, from its producer or a reviewer; an inherited query also matches the tags it
+inherits from its check and run. The two differ for a recording that is untagged under a tagged run.
+
 ### Reading the files attachments name
 
 Source: `packages/reports/src/attachment-files.ts`. Import: `@crvouga/atlas/reports/attachment-files`
@@ -1001,7 +1204,7 @@ read when someone asks for it. Undefined when there is none.
 
 Several holders (for example a check and its layer) are summed: `attachments` also counts those on steps and
 attempts, `steps` counts only each holder's own top-level steps, tags are de-duplicated, and for a repeated
-label the later holder wins. `roles` are the attachments' roles (or, without one, what their media type or file
+label the later holder wins. `artifactTags` are the attachments' own normalized tags and are never inherited. `roles` are the attachments' roles (or, without one, what their media type or file
 name implies), sorted and distinct.
 
 #### `roleOfType`
@@ -1197,6 +1400,8 @@ export type EvidenceSummary = {
   readonly attempts: number;
   readonly links: number;
   readonly tags: readonly string[];
+  /** The normalized tags of the attachments themselves (`#demo` is `demo`), sorted and distinct. Absent when no attachment is tagged. Unlike `tags` they are never inherited from a check or run. */
+  readonly artifactTags?: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   /** The distinct roles of its attachments (or what their media types say), to show what kind of evidence there is. */
   readonly roles: readonly string[];
@@ -7289,6 +7494,10 @@ export type TestSummary = {
   readonly outcomes: readonly TestOutcome[];
   readonly stats: TestStats;
   readonly tags: readonly string[];
+  /** The normalized tags of the attachments of its current results (`demo`, shown as `#demo`). Never inherited from a check or run; the `tags` above are. Absent in documents of older servers. */
+  readonly artifactTags?: readonly string[];
+  /** The normalized tags its attachments inherit from their check and run (those of the results that have attachments), apart from `artifactTags`. What an inherited artifact query also matches. */
+  readonly inheritedArtifactTags?: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   /** What its current results carry: attachments, steps, retries, and the kinds of attachment. */
   readonly evidence: { readonly attachments: number; readonly steps: number; readonly attempts: number; readonly roles: readonly string[] };
@@ -7379,6 +7588,8 @@ export type CatalogFacets = {
   readonly domains: readonly FacetValue[];
   readonly specs: readonly (CatalogSpec & { readonly tests: number; readonly counts: StatusCounts })[];
   readonly tags: readonly FacetValue[];
+  /** The tags of attachments, normalized. Absent in documents of older servers. */
+  readonly artifactTags?: readonly FacetValue[];
   readonly branches: readonly FacetValue[];
   readonly labels: Readonly<Record<string, readonly FacetValue[]>>;
 };
@@ -7416,6 +7627,10 @@ export type TestQuery = {
   /** Spec paths (`specs/...`). */
   readonly spec?: readonly string[];
   readonly tag?: readonly string[];
+  /** Only tests with an attachment carrying this tag (`demo` and `#demo` are the same), not counting tags inherited from a check or run: the exact artifact query. `tag` is the inherited one. */
+  readonly artifactTag?: readonly string[];
+  /** With `artifactTag`: also match the tags an attachment inherits from its check and run (a recording without a tag of its own under a run tagged `demo`). Default false: the exact query. */
+  readonly inherited?: boolean;
   /** Only tests recorded in this run (a key from `runList`). */
   readonly run?: string;
   readonly sort?: TestSort;
@@ -7685,7 +7900,7 @@ One run with every result it recorded, or null when no run has that key.
 export function parseTestQuery(params: URLSearchParams): TestQuery
 ```
 
-Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`.
+Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, and `inherited=1`.
 
 #### `formatMs`
 

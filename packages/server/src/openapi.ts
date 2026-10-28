@@ -15,11 +15,11 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, TestHistorySchema, RunListSchema, RunDetailSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, TestHistorySchema, RunListSchema, RunDetailSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
-export const API_VERSION = '1.4.0';
+export const API_VERSION = '1.5.0';
 
 /** Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`). */
 export type Role = 'none' | 'read' | 'publish' | 'admin';
@@ -64,6 +64,7 @@ const COMPONENTS = {
   PublishChecks: [PublishChecksSchema.partial({ recordedAtMs: true }), 'input'], ChecksResult: [ChecksResultSchema, 'output'],
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
+  ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
   TestCatalog: [TestCatalogSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
@@ -303,6 +304,8 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'domain', in: 'query', description: 'Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.', schema: str },
       { name: 'spec', in: 'query', description: 'Only tests of this spec path. Repeatable or comma-separated.', schema: str, example: 'specs/checkout/pay.feature' },
       { name: 'tag', in: 'query', description: 'Only tests with this tag. Repeatable or comma-separated.', schema: str },
+      { name: 'artifactTag', in: 'query', description: 'Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.', schema: str, example: 'demo' },
+      { name: 'inherited', in: 'query', description: 'With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.', schema: { type: 'string', enum: ['1', 'true'] } },
       { name: 'run', in: 'query', description: 'Only tests recorded in this run (a `key` from `/api/reports/runs`).', schema: str },
       { name: 'sort', in: 'query', description: 'The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.', schema: { type: 'string', enum: ['spec', 'title', 'recent', 'slowest', 'failures', 'flaky', 'runs'] } },
       { name: 'offset', in: 'query', description: 'Skip this many matching tests.', schema: { type: 'integer', minimum: 0 } },
@@ -320,6 +323,19 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The test and its history.', 'TestHistory'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('No `key`.'), '401': UNAUTHORIZED, '404': problem('No test in the report has that key.'), '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/artifact-tags', path: '/api/reports/artifact-tags', operationId: 'getArtifactTags', tag: 'Report', role: 'read',
+    summary: 'Reviewer tags of attachments: every recorded edit',
+    description: 'The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer\'s own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.',
+    responses: { '200': json('The edits.', 'ArtifactTags'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'POST /api/reports/artifact-tags', path: '/api/reports/artifact-tags', operationId: 'editArtifactTags', tag: 'Report', role: 'publish',
+    summary: 'Tag or untag one attachment after upload',
+    description: 'Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer\'s tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).',
+    body: { description: 'The attachment and the tags to add and remove. At most 20 of each, 64 KiB.', contentType: 'application/json', required: true, schema: ref('ArtifactTagEdit') },
+    responses: { '201': json('The recorded entry.', 'ArtifactTagEntry'), '401': UNAUTHORIZED, '403': FORBIDDEN, '413': problem('Request too large.'), '422': problem('Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.') }
   },
   {
     route: 'GET /api/reports/runs', path: '/api/reports/runs', operationId: 'getReportRuns', tag: 'Report', role: 'read',

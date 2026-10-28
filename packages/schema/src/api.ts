@@ -78,6 +78,7 @@ export const EvidenceSummarySchema = z.looseObject({
   attempts: z.number().int().nonnegative(),
   links: z.number().int().nonnegative(),
   tags: z.array(z.string()),
+  artifactTags: z.array(z.string()).optional().describe('Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run'),
   labels: z.record(z.string(), z.string()),
   roles: z.array(z.string())
 });
@@ -207,6 +208,37 @@ export const ChecksResultSchema = z.looseObject({
   checks: z.number().int().nonnegative()
 });
 
+/** Which attachment a reviewer's tags belong to: one attachment of one check of one archived layer. */
+export const ArtifactTargetSchema = z.looseObject({
+  layer: z.string().regex(/^[0-9a-f]{64}$/).describe('The id of the archived layer that holds the check'),
+  check: z.string().min(1).describe('The check\'s id'),
+  kind: z.string().min(1).optional().describe('The kind of the part holding the check, when the same id exists in several parts'),
+  artifact: z.string().min(1).max(1024).describe('The attachment: `id:<id>` when it has an id, else `key:<bundleKey>`, else `name:<name>` (see `artifactRef`)')
+});
+
+/** The body of `POST /api/reports/artifact-tags`: tags to add to and to remove from one attachment. At least one tag overall. */
+export const ArtifactTagEditSchema = z.looseObject({
+  target: ArtifactTargetSchema,
+  add: z.array(z.string()).max(20).optional().describe('Tags to add. `demo` and `#demo` are the same tag'),
+  remove: z.array(z.string()).max(20).optional().describe('Reviewer tags to remove. Tags the producer wrote are part of the immutable layer and stay')
+});
+
+/** One recorded edit of an attachment's reviewer tags. Entries are never changed or removed: they are the audit trail. */
+export const ArtifactTagEntrySchema = z.looseObject({
+  id: z.string().describe('Unique and time-ordered'),
+  target: ArtifactTargetSchema,
+  add: z.array(z.string()).describe('Normalized tags added'),
+  remove: z.array(z.string()).describe('Normalized tags removed'),
+  by: z.string().describe('The name of the token that made the edit (never the token)'),
+  atMs: z.number().describe('When the server recorded it, epoch milliseconds')
+});
+
+/** `GET /api/reports/artifact-tags`: every recorded edit, oldest first. Fold them with `foldArtifactTags`. */
+export const ArtifactTagsSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  entries: z.array(ArtifactTagEntrySchema)
+});
+
 /** The data of the `hello` event: sent first on `/api/events`. */
 export const HelloEventSchema = z.looseObject({ version: z.string(), ready: z.boolean(), time: z.number(), heartbeatMs: z.number().positive().optional() });
 
@@ -271,6 +303,8 @@ export const TestSummarySchema = z.looseObject({
     runs: z.number().int().nonnegative(), branches: z.array(z.string())
   }),
   tags: z.array(z.string()),
+  artifactTags: z.array(z.string()).optional().describe('Normalized tags of the attachments of its current results, such as `demo` (shown `#demo`). Not inherited from a check or run, unlike `tags`'),
+  inheritedArtifactTags: z.array(z.string()).optional().describe('Normalized tags its attachments inherit from their check and run, apart from `artifactTags`: what `?artifactTag=…&inherited=1` also matches'),
   labels: z.record(z.string(), z.string()),
   evidence: z.looseObject({ attachments: z.number().int().nonnegative(), steps: z.number().int().nonnegative(), attempts: z.number().int().nonnegative(), roles: z.array(z.string()) }),
   lastRecordedAtMs: z.number(),
@@ -299,7 +333,7 @@ export const TestCatalogSchema = z.looseObject({
   facets: z.looseObject({
     statuses: z.array(FacetValueSchema), environments: z.array(FacetValueSchema), producers: z.array(FacetValueSchema), domains: z.array(FacetValueSchema),
     specs: z.array(CatalogSpecSchema.extend({ tests: z.number().int().nonnegative(), counts: StatusCountsSchema })),
-    tags: z.array(FacetValueSchema), branches: z.array(FacetValueSchema), labels: z.record(z.string(), z.array(FacetValueSchema))
+    tags: z.array(FacetValueSchema), artifactTags: z.array(FacetValueSchema).optional(), branches: z.array(FacetValueSchema), labels: z.record(z.string(), z.array(FacetValueSchema))
   }),
   total: z.number().int().nonnegative().describe('Tests the query matched, before offset and limit'),
   offset: z.number().int().nonnegative(),

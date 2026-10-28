@@ -169,6 +169,13 @@
                 "description": {
                   "type": "string"
                 },
+                "tags": {
+                  "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
                 "at": {
                   "type": "object",
                   "properties": {
@@ -405,6 +412,13 @@
                       },
                       "description": {
                         "type": "string"
+                      },
+                      "tags": {
+                        "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       },
                       "at": {
                         "type": "object",
@@ -680,6 +694,13 @@
                             "description": {
                               "type": "string"
                             },
+                            "tags": {
+                              "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
                             "at": {
                               "type": "object",
                               "properties": {
@@ -889,6 +910,13 @@
                       },
                       "description": {
                         "type": "string"
+                      },
+                      "tags": {
+                        "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       },
                       "at": {
                         "type": "object",
@@ -1239,6 +1267,13 @@
           },
           "description": {
             "type": "string"
+          },
+          "tags": {
+            "description": "Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "at": {
             "type": "object",
