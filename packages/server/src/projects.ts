@@ -10,10 +10,11 @@ import { problemResponse } from './problem';
 import type { AtlasServer, AtlasServerOptions } from './app';
 import type { ObjectStore } from '../../reports/src/object-store';
 import type { HttpStore } from '../../reports/src/http-store';
+import type { GcPolicy, GcRun } from '../../schema/src/user-state';
 
 const REGISTRY = 'server/projects/';
 const SCOPED = /^\/api\/projects\/([^/]+)(\/.*)$/;
-const GLOBAL = new Set(['/api/settings', '/api/projects', '/api/openapi.json', '/api/server']);
+const GLOBAL = new Set(['/api/settings', '/api/settings/gc', '/api/settings/gc/run', '/api/projects', '/api/openapi.json', '/api/server']);
 const scopeStore = (store: ObjectStore, slug: string) => typeof (store as Partial<HttpStore>).forProject === 'function'
   ? (store as HttpStore).forProject(slug) : new ObjectStoreWithPrefix(store, `projects/${slug}`);
 
@@ -56,7 +57,55 @@ export function projectServer(options: AtlasServerOptions, create: (options: Atl
     }
   };
   const timer = setInterval(expire, 60_000); timer.unref?.();
-  const routes = [...base.routes, { method: 'GET', path: '/api/projects' }];
+  /** The application of one named project, created on first use over a store scoped to it. `null` when too many are active. */
+  const ensureChild = (slug: string) => {
+    let child = children.get(slug);
+    if (child) return child;
+    expire();
+    if (children.size >= 64) return null;
+    child = { touched: Date.now(), pending: 0, server: create({ ...options,
+      ...(options.log ? { log: line => options.log!({ ...line, project: slug }) } : {}),
+      backends: options.backends.map(backend => ({ ...backend, store: scopeStore(backend.store, slug) })),
+      ...(options.liveStore ? { liveStore: scopeStore(options.liveStore, slug) } : {}), site: undefined, settings: undefined, gc: undefined
+    }) };
+    children.set(slug, child);
+    return child;
+  };
+
+  // Garbage collection. The policy is read from S3 every time, never cached, so a policy saved in the UI is the one applied.
+  const clock = options.now ?? Date.now;
+  let collecting: Promise<GcRun[]> | undefined;
+  let lastCollectedAt = 0;
+  const collectAll = (policy: GcPolicy, dryRun: boolean): Promise<GcRun[]> => {
+    collecting ??= (async () => {
+      const runs: GcRun[] = [];
+      await discover().catch(() => {});
+      for (const slug of ['default', ...[...known].filter(item => item !== 'default').sort()]) {
+        if (closed) break;
+        if (slug === 'default') { runs.push(await base.collectGarbage(policy, { dryRun, project: slug })); continue; }
+        const child = ensureChild(slug);
+        if (!child) { runs.push({ project: slug, dryRun, at: new Date(clock()).toISOString(), candidates: 0, deletedLayers: 0, deletedBlobs: 0, keptLayers: 0, error: 'Too many active projects; this one was skipped.' }); continue; }
+        child.pending++;
+        try { await child.server.ready; runs.push(await child.server.collectGarbage(policy, { dryRun, project: slug })); }
+        finally { child.pending--; child.touched = Date.now(); }
+      }
+      if (!dryRun) options.gc?.record(runs);
+      return runs;
+    })().finally(() => { collecting = undefined; });
+    return collecting;
+  };
+  const gcTimer = options.gc ? setInterval(() => {
+    void (async () => {
+      if (closed || collecting) return;
+      const policy = await options.gc!.policy();
+      if (!policy?.enabled || clock() - lastCollectedAt < policy.intervalHours * 3_600_000) return;
+      await base.ready;
+      lastCollectedAt = clock();
+      await collectAll(policy, false);
+    })().catch(error => options.log?.({ level: 'error', gc: 'schedule', error: String(error) }));
+  }, options.gcCheckMs ?? 60_000) : undefined;
+  gcTimer?.unref?.();
+  const routes = [...base.routes, { method: 'GET', path: '/api/projects' }, { method: 'POST', path: '/api/settings/gc/run' }];
   for (const route of base.routes) if (route.path.startsWith('/api/') && route.path !== '/api/*' && !GLOBAL.has(route.path)) routes.push({ method: route.method, path: route.path.replace('/api/', '/api/projects/:project/') });
 
   return { ...base, routes, ready,
@@ -64,6 +113,19 @@ export function projectServer(options: AtlasServerOptions, create: (options: Atl
       try {
         if (closed) return problemResponse(503, 'Atlas is stopping.');
         const url = new URL(request.url);
+        if (url.pathname === '/api/settings/gc/run' && request.method === 'POST') {
+          const verdict = auth.check(request, 'admin');
+          if (!verdict.ok) return problemResponse(verdict.status, verdict.message, verdict.status === 401 ? { 'www-authenticate': 'Basic realm="Atlas"' } : {});
+          const origin = request.headers.get('origin');
+          const site = request.headers.get('sec-fetch-site');
+          if (site === 'cross-site' || (origin && origin !== url.origin && site !== 'same-origin')) return problemResponse(403, 'Changes must come from this server origin.');
+          if (!options.gc) return problemResponse(503, 'Garbage collection settings are managed by the embedding application.');
+          const policy = await options.gc.policy();
+          if (!policy) return problemResponse(409, 'No garbage collection policy has been saved yet, so nothing is deleted. Save one first.');
+          const dryRun = ['1', 'true'].includes(url.searchParams.get('dryRun') ?? '');
+          if (!dryRun && !policy.enabled) return problemResponse(409, 'The saved garbage collection policy is disabled. Enable it, or use dryRun to preview.');
+          return Response.json({ runs: await collectAll(dryRun ? { ...policy, enabled: true } : policy, dryRun), policy }, { headers: { 'cache-control': 'no-store' } });
+        }
         if (url.pathname === '/api/projects' && request.method === 'GET') {
           const verdict = auth.check(request, 'read');
           if (!verdict.ok) return problemResponse(verdict.status, verdict.message, verdict.status === 401 ? { 'www-authenticate': 'Basic realm="Atlas"' } : {});
@@ -97,17 +159,8 @@ export function projectServer(options: AtlasServerOptions, create: (options: Atl
             if (!writing) return problemResponse(404, 'Unknown project. Publish reports with this project slug first.');
           }
         }
-        let child = children.get(slug);
-        if (!child) {
-          expire();
-          if (children.size >= 64) return problemResponse(429, 'Too many active projects. Retry when another project is idle.');
-          child = { touched: Date.now(), pending: 0, server: create({ ...options,
-            ...(options.log ? { log: line => options.log!({ ...line, project: slug }) } : {}),
-            backends: options.backends.map(backend => ({ ...backend, store: scopeStore(backend.store, slug) })),
-            ...(options.liveStore ? { liveStore: scopeStore(options.liveStore, slug) } : {}), site: undefined, settings: undefined
-          }) };
-          children.set(slug, child);
-        }
+        const child = ensureChild(slug);
+        if (!child) return problemResponse(429, 'Too many active projects. Retry when another project is idle.');
         child.touched = Date.now(); child.pending++;
         try {
           await child.server.ready;
@@ -125,6 +178,6 @@ export function projectServer(options: AtlasServerOptions, create: (options: Atl
         return problemResponse(503, 'The project backend is unavailable. Retry later.');
       }
     },
-    close() { closed = true; clearInterval(timer); base.close(); for (const child of children.values()) child.server.close(); children.clear(); }
+    close() { closed = true; clearInterval(timer); if (gcTimer) clearInterval(gcTimer); base.close(); for (const child of children.values()) child.server.close(); children.clear(); }
   };
 }

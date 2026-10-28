@@ -2,9 +2,10 @@
  * @module Server configuration schema
  *
  * The schema of `atlas.server.json`, the file that configures `atlas serve` and `atlas dev`: where to listen, which
- * folder and further backends hold the data, which bearer tokens may read, publish or administer, and limits. Every
- * field has a default, so an empty file is a working server. Unlike the report format, unknown keys are an error, so
- * a typo is reported instead of ignored. Flags and environment variables override the file.
+ * bearer tokens may read, publish or administer, and limits. Where reports are kept is not here: the server stores
+ * everything in S3-compatible storage named by required `ATLAS_S3_*` environment variables, never in this file.
+ * Every field has a default. Unlike the report format, unknown keys are an error, so a typo (or a removed `data`,
+ * `backends` or `write` key) is reported instead of ignored. Flags and environment variables override the file.
  *
  * @see docs/deploying.md
  * @see docs/server.md
@@ -15,17 +16,6 @@ import { z } from 'zod/v4';
 export const ServerRoleSchema = z.enum(['read', 'publish', 'admin']);
 /** One of the roles of `ServerRoleSchema`. */
 export type ServerRole = z.infer<typeof ServerRoleSchema>;
-
-/**
- * A further store the server reads together with its data folder, and optionally writes to: an id, a label and a
- * location URL.
- */
-export const ServerBackendSchema = z.strictObject({
-  id: z.string().regex(/^[a-z0-9-]+$/).describe('Lowercase letters, digits and hyphens. Names where a result came from'),
-  label: z.string().optional(),
-  url: z.string().min(1).describe('A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)'),
-  write: z.boolean().optional().describe('Uploads go here instead of the data folder. At most one backend is the write target')
-});
 
 /**
  * A bearer token: a name for logs, a role, and the token itself or the name of the environment variable that holds it
@@ -41,16 +31,12 @@ export const ServerTokenSchema = z
   .refine((value) => (value.token === undefined) !== (value.tokenEnv === undefined), { message: 'Give exactly one of token or tokenEnv' });
 
 /**
- * The whole `atlas.server.json`: listening address, data folder, backends and write target, authentication, the
- * viewer to serve, which layers take part in the report, refresh and heartbeat intervals, request limits and logging.
+ * The whole `atlas.server.json`: listening address, authentication, the viewer to serve, which layers take part in the report, refresh and heartbeat intervals, request limits and logging.
  */
 export const ServerConfigSchema = z.strictObject({
   $schema: z.string().optional(),
   host: z.string().default('127.0.0.1').describe('Where to listen. 127.0.0.1 keeps it on this machine; 0.0.0.0 is every interface and needs tokens (or `auth.insecure`)'),
   port: z.number().int().min(0).max(65535).default(8080),
-  data: z.string().default('./atlas-data').describe('The folder that is the default backend and the default write target: layers, specs and runs live here'),
-  backends: z.array(ServerBackendSchema).default([]).describe('Further backends, read together with the data folder: S3, another server, a device lab'),
-  write: z.string().optional().describe('The id of the backend uploads go to. Default: the data folder'),
   auth: z
     .strictObject({
       tokens: z.array(ServerTokenSchema).default([]),
@@ -84,10 +70,10 @@ export type ServerConfig = z.output<typeof ServerConfigSchema>;
 /** A server configuration as written, before defaults are applied. */
 export type ServerConfigInput = z.input<typeof ServerConfigSchema>;
 
-/** Storage and report settings editable by an admin. Authentication, listeners and the served site stay deployment-owned. Replaces the editable portion of the file; omitted fields use defaults after restart. */
-export const ServerEditableSettingsSchema = ServerConfigSchema.pick({ data: true, backends: true, write: true, outlineBranch: true, include: true, refreshSeconds: true, limits: true, heartbeatSeconds: true, runTimeoutSeconds: true, runStallSeconds: true, log: true }).partial();
+/** Report and live-run settings editable by an admin. Storage, authentication, listeners and the served site stay deployment-owned. Replaces the saved portion of the user state; omitted fields use defaults after restart. */
+export const ServerEditableSettingsSchema = ServerConfigSchema.pick({ outlineBranch: true, include: true, refreshSeconds: true, limits: true, heartbeatSeconds: true, runTimeoutSeconds: true, runStallSeconds: true, log: true }).partial();
 
-/** The settings API response: persisted editable configuration, active values, concurrency revision and restart/precedence guidance. Authentication token settings are excluded. */
+/** The settings API response: editable configuration saved in the user state in S3, active values, concurrency revision and restart/precedence guidance. Authentication token settings are excluded. */
 export const ServerSettingsSnapshotSchema = z.looseObject({
   revision: z.string().regex(/^[a-f0-9]{64}$/),
   settings: ServerEditableSettingsSchema,
