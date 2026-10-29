@@ -504,6 +504,18 @@ two ways without touching a check's result:
   `--format json` prints the `verify-recordings-result` document. `--layer <id>` and `--limit <n>` narrow the work, since
   it reads blobs. A store that cannot answer is `unreadable`, never verified. Test results are unchanged either way.
 
+- **In the viewer.** A publish token starts the same read-back on the server with
+  `POST /api/reports/recordings/verification` (body optional: `{ "layers": ["<id prefix>"], "limit": 20 }`; the newest
+  20 layers by default, at most 200, one read-back at a time; a reader token, a browser sign-in box or an anonymous
+  caller is refused because it reads blobs). Anyone who can read the report then sees the result with
+  `GET /api/reports/recordings/verification` (which reads no blob): per layer, its run, how many videos were read back, how
+  many passed and each gap. The Runs tab and an opened run show `Recording unavailable: 1 of 3 stored videos failed the
+  read-back (1 file gone from storage)` beside the green outcomes, or `3 stored videos verified`, and a run whose stored
+  videos all failed offers no Watch action. A run whose layers were never read back shows nothing: unknown is not
+  verified. The result lives in the server's memory only, so a restart empties it, and a layer that garbage collection
+  removed drops out. An older server has no such route and the viewer then shows nothing. No status, slot or winner is
+  affected; `capabilities.recordingVerification` in `GET /api/server` says a server offers it.
+
 Both are statements about stored bytes. Atlas does not check that a stored video plays in a given browser (a valid header
 can still have an unsupported codec or be truncated), and acknowledging an upload is not playback. Videos given only by
 `uri` are counted as referenced and not checked.
