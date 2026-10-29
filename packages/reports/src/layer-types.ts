@@ -48,8 +48,8 @@ export type LayerSummary = LayerExtras & {
   readonly source: SourceRecord | null;
   /** Where the layer's timelines and captured files are read from: its own bundle (`layer`), an older commit-keyed recording (`commit`), or nowhere (`null`). */
   readonly recording: { readonly type: 'layer' } | { readonly type: 'commit'; readonly sha: string; readonly source: string } | null;
-  /** Bundle keys that attachments name but the layer's bundle does not hold, sorted. Derived when the layer is read (`layerSummary`), never written to a layer; absent when none, and for layers that have no bundle of their own. */
-  readonly unbundled?: readonly string[];
+  /** Bundle keys that attachments name but the layer's bundle does not hold, read from the layer's index when its summary was made (see `unstoredKeys`). Absent when there are none. In memory only: never part of the layer document. */
+  readonly unstored?: readonly string[];
 };
 /** A layer with the index that locates its captured files (screenshots, frames) in the store. */
 export type ReportLayer = LayerSummary & { readonly bundle: BundleIndex };

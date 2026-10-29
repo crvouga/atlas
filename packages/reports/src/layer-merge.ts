@@ -12,7 +12,7 @@
  */
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
-import { summarizeEvidenceWith, summarizeLayerEvidenceWith } from './evidence-detail';
+import { summarizeStoredEvidence, summarizeStoredLayerEvidence } from './evidence-detail';
 import { effectiveScope } from './evidence-scope';
 import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
@@ -106,14 +106,14 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     if (found === undefined) normalized.set(path, found = specPath(path));
     return found;
   };
+  const unstored = summary.unstored?.length ? new Set(summary.unstored) : undefined;
   const rows: LayerRow[] = [];
-  const unbundled = summary.unbundled?.length ? new Set(summary.unbundled) : undefined;
   const receipt = summary.recordings;
   const expectations = receipt ? new Map(receipt.items.map(item => [item.check, item])) : null;
   for (const part of summary.parts) {
     for (const check of part.checks) {
       const test = tests.get(check.id);
-      const evidence = summarizeEvidenceWith({ inherited: effectiveScope(part.scope, summary.scope), unbundled }, check);
+      const evidence = summarizeStoredEvidence(effectiveScope(part.scope, summary.scope), unstored, check);
       const item = expectations?.get(check.id);
       const state = uiStateOf(part.kind, check);
       rows.push({
@@ -134,7 +134,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     }
   }
   const recording = summary.recording;
-  const layerSummaryEvidence = summarizeLayerEvidenceWith({ unbundled }, summary, ...summary.parts);
+  const layerSummaryEvidence = summarizeStoredLayerEvidence(unstored, summary, ...summary.parts);
   const layer: LayerHeader = {
     ...(summary.freshness ? { freshness: summary.freshness } : {}),
     ...(summary.run ? { run: summary.run } : {}),

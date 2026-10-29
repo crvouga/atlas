@@ -110,7 +110,7 @@ describe('a video whose bundle key is missing from the layer', () => {
       ] } as never]
     }, (await readLayer(store, kept.id))!.bundle);
     const summary = layerSummary((await readLayer(store, layer.id))!);
-    expect(summary.unbundled).toEqual([`attachments/${'9'.repeat(64)}`]);
+    expect(summary.unstored).toEqual([`attachments/${'9'.repeat(64)}`]);
     const rows = layerEvidence(summary, 'ci').rows;
     const gone = rows.find(row => row.id === 'gone')!.evidence!.videos!;
     expect(gone).toMatchObject([{ name: 'gone.webm', available: false, reason: 'not-in-bundle' }]);
@@ -123,7 +123,7 @@ describe('a video whose bundle key is missing from the layer', () => {
 
   test('a layer whose bundle holds every named file is unchanged', async () => {
     const { layer } = await published();
-    expect(layerSummary(layer).unbundled).toBeUndefined();
+    expect(layerSummary(layer).unstored).toBeUndefined();
   });
 });
 

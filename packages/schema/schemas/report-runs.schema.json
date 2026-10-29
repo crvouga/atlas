@@ -169,7 +169,7 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991,
-                "description": "References that cannot be played: they name no bytes, or name a file the layer does not hold"
+                "description": "References that name no bytes, or bytes the layer does not hold"
               },
               "missing": {
                 "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",

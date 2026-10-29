@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { isVideoAttachment, summarizeEvidence, videoCounts } from '../src/evidence-detail';
+import { isVideoAttachment, summarizeEvidence, summarizeStoredEvidence, unstoredKeys, videoCounts } from '../src/evidence-detail';
 import { ReportIndex } from '../src/report-index';
 import { publishChecks } from '../src/publish-checks';
 import { hasVideo, runDetail, runList, runsMarkdown } from '../src/test-catalog';
@@ -119,5 +119,54 @@ describe('runs and videos', () => {
     expect(list.runs[0]!.videos).toBeUndefined();
     expect(list.withVideo).toBe(0);
     expect(runList(index.history, 'v', 100, { video: true }).total).toBe(0);
+  });
+});
+
+describe('a video whose file the layer does not hold', () => {
+  test('names the bundle keys no file backs, from the index alone', () => {
+    const check = { attachments: [{ name: 'here.webm', bundleKey: 'attachments/here' }, { name: 'gone.webm', bundleKey: 'attachments/gone' }], steps: [{ name: 'Pay', attachments: [{ name: 'also-gone.webm', bundleKey: 'attachments/also' }] }] };
+    expect(unstoredKeys({ parts: [{ checks: [check] }], bundle: { 'attachments/here': {} } }).sort()).toEqual(['attachments/also', 'attachments/gone']);
+    expect(unstoredKeys({ attachments: [{ name: 'run.webm', bundleKey: 'attachments/run' }], parts: [], bundle: {} })).toEqual(['attachments/run']);
+    expect(unstoredKeys({ parts: [{ checks: [check] }], bundle: { 'attachments/here': {}, 'attachments/gone': {}, 'attachments/also': {} } })).toEqual([]);
+  });
+
+  test('is unavailable, not a recording, unless an address or inline text also carries the bytes', () => {
+    const lost = new Set(['attachments/gone']);
+    const summary = summarizeStoredEvidence(undefined, lost, {
+      attachments: [
+        { name: 'here.webm', bundleKey: 'attachments/here' },
+        { name: 'gone.webm', bundleKey: 'attachments/gone', sha256: 'aa' },
+        { name: 'mirrored.webm', bundleKey: 'attachments/gone', uri: 'https://x/m.webm' },
+      ],
+    });
+    expect(summary!.videos!.map(item => [item.name, item.available, item.recording])).toEqual([
+      ['here.webm', true, 'attachments/here'],
+      ['gone.webm', false, undefined],
+      ['mirrored.webm', true, 'https://x/m.webm'],
+    ]);
+    expect(videoCounts(summary!.videos)).toEqual({ references: 3, recordings: 2, unavailable: 1, missing: 1 });
+    // Without knowing what the layer lacks, the summary is what it always was.
+    expect(summarizeStoredEvidence(undefined, undefined, { attachments: [{ name: 'gone.webm', bundleKey: 'attachments/gone' }] })!.videos![0]!.available).toBe(true);
+  });
+
+  test('a run whose only video was never stored is unavailable, does not make a run "Has video", and old runs are unchanged', async () => {
+    const store = memoryStore();
+    const base = { producer: 'web', environment: 'desktop-web' };
+    await publishChecks(store, { ...base, runUrl: RUN(1), recordedAtMs: 1_000, checks: [{ id: 'a', title: 'A', status: 'passed', attachments: [video('ok.webm', 'ok')] }] });
+    await publishChecks(store, {
+      ...base, runUrl: RUN(2), recordedAtMs: 2_000,
+      attachments: [{ name: 'review.webm', contentType: 'video/webm', bundleKey: 'attachments/never-uploaded' }],
+      checks: [{ id: 'a', title: 'A', status: 'passed', attachments: [{ name: 'gone.webm', contentType: 'video/webm', bundleKey: 'attachments/never-uploaded-either', sha256: 'f'.repeat(64) }] }],
+    });
+    const index = new ReportIndex([{ id: 'one', store }]);
+    await index.refresh();
+    const list = runList(index.history, 'v', 100, { video: true });
+    expect(list.runs.map(run => run.key)).toEqual([RUN(1)]);
+    const all = runList(index.history, 'v', 100);
+    expect(all.runs.find(run => run.key === RUN(2))!.videos).toEqual({ references: 2, recordings: 0, unavailable: 2, missing: 2 });
+    expect(all.runs.find(run => run.key === RUN(1))!.videos).toEqual({ references: 1, recordings: 1, unavailable: 0 });
+    expect(all.withVideo).toBe(1);
+    const detail = runDetail(index.history, 'v', RUN(2))!;
+    expect(detail.results[0]!.videos).toEqual([{ name: 'gone.webm', owner: 'check', available: false, reason: 'not-in-bundle' }]);
   });
 });

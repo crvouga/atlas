@@ -54,7 +54,7 @@ export type VideoRef = {
   readonly tags?: readonly string[];
   /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
   readonly recording?: string;
-  /** False when the reference names no bytes at all (no bundle key, address or inline text), or names a bundle key the layer does not hold, so it can never be played. */
+  /** False when the reference names no bytes at all (no bundle key, address or inline text), or a bundle key that the layer's own bundle does not hold, so it can never be played. */
   readonly available: boolean;
   /** Why it is unavailable, when the report can tell: `not-in-bundle` names a file the layer should hold (its bundle key) but does not, a recording that was acknowledged and is no longer there. Absent otherwise, and for an available video. An open vocabulary: treat an unknown reason as plain unavailable. */
   readonly reason?: 'not-in-bundle';
@@ -68,7 +68,7 @@ export type VideoCounts = {
   readonly references: number;
   /** Distinct playable recordings: identical bytes referenced twice are one. */
   readonly recordings: number;
-  /** References that cannot be played: they name no bytes, or name a file the layer does not hold. A report that predates availability metadata has none of these and none of the others. */
+  /** References that name no bytes, or bytes the layer does not hold. A report that predates availability metadata has none of these and none of the others. */
   readonly unavailable: number;
   /** Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none. */
   readonly missing?: number;

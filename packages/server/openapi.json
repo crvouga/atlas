@@ -10746,7 +10746,7 @@
                                 },
                                 "available": {
                                   "type": "boolean",
-                                  "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                                  "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                                 },
                                 "reason": {
                                   "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -11229,7 +11229,7 @@
                               },
                               "available": {
                                 "type": "boolean",
-                                "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                                "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                               },
                               "reason": {
                                 "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -11747,7 +11747,7 @@
                                 },
                                 "available": {
                                   "type": "boolean",
-                                  "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                                  "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                                 },
                                 "reason": {
                                   "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -12230,7 +12230,7 @@
                               },
                               "available": {
                                 "type": "boolean",
-                                "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                                "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                               },
                               "reason": {
                                 "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -15642,7 +15642,7 @@
                           },
                           "available": {
                             "type": "boolean",
-                            "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                            "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                           },
                           "reason": {
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -16140,7 +16140,7 @@
                           },
                           "available": {
                             "type": "boolean",
-                            "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                            "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                           },
                           "reason": {
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -18754,7 +18754,7 @@
                           },
                           "available": {
                             "type": "boolean",
-                            "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                            "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                           },
                           "reason": {
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -19240,7 +19240,7 @@
                               },
                               "available": {
                                 "type": "boolean",
-                                "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                                "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                               },
                               "reason": {
                                 "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -19886,7 +19886,7 @@
                           },
                           "available": {
                             "type": "boolean",
-                            "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                            "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                           },
                           "reason": {
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -21119,7 +21119,7 @@
                                 },
                                 "available": {
                                   "type": "boolean",
-                                  "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                                  "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                                 },
                                 "reason": {
                                   "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -22272,7 +22272,7 @@
                               },
                               "available": {
                                 "type": "boolean",
-                                "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                                "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                               },
                               "reason": {
                                 "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -22929,7 +22929,7 @@
                           },
                           "available": {
                             "type": "boolean",
-                            "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                            "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                           },
                           "reason": {
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -23963,7 +23963,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991,
-                      "description": "References that cannot be played: they name no bytes, or name a file the layer does not hold"
+                      "description": "References that name no bytes, or bytes the layer does not hold"
                     },
                     "missing": {
                       "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",
@@ -24508,7 +24508,7 @@
                       },
                       "available": {
                         "type": "boolean",
-                        "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                        "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                       },
                       "reason": {
                         "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -25827,7 +25827,7 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991,
-                    "description": "References that cannot be played: they name no bytes, or name a file the layer does not hold"
+                    "description": "References that name no bytes, or bytes the layer does not hold"
                   },
                   "missing": {
                     "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",
@@ -26044,7 +26044,7 @@
                       },
                       "available": {
                         "type": "boolean",
-                        "description": "False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold"
+                        "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                       },
                       "reason": {
                         "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
@@ -26250,7 +26250,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991,
-                      "description": "References that cannot be played: they name no bytes, or name a file the layer does not hold"
+                      "description": "References that name no bytes, or bytes the layer does not hold"
                     },
                     "missing": {
                       "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",
