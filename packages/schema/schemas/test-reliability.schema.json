@@ -1,0 +1,629 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/test-reliability.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "key": {
+      "type": "string",
+      "description": "The test's key"
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "producer": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parameter": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "branch": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sha": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "specRevision": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revision": {
+          "type": "string",
+          "enum": [
+            "current",
+            "any"
+          ]
+        },
+        "since": {
+          "type": "number"
+        },
+        "until": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": {},
+      "description": "What was asked: the selection the figures are about"
+    },
+    "minimumExecutions": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Completed executions below which the sample is `insufficient`"
+    },
+    "sample": {
+      "type": "string",
+      "enum": [
+        "none",
+        "insufficient",
+        "sufficient"
+      ],
+      "description": "A count only: it says nothing about whether the executions are representative; read `notes`"
+    },
+    "eventual": {
+      "type": "object",
+      "properties": {
+        "executions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Independent executions that passed or failed"
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "rate": {
+          "description": "passed / executions, or null with none",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "executions",
+        "passed",
+        "failed",
+        "rate"
+      ],
+      "additionalProperties": {},
+      "description": "Executions that passed in the end, over those that passed or failed"
+    },
+    "interval": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "wilson"
+            },
+            "level": {
+              "type": "number"
+            },
+            "lower": {
+              "type": "number"
+            },
+            "upper": {
+              "type": "number"
+            },
+            "assumptions": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "method",
+            "level",
+            "lower",
+            "upper",
+            "assumptions"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "An interval estimate with the assumptions it needs; null without an execution"
+    },
+    "firstAttempt": {
+      "type": "object",
+      "properties": {
+        "executions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Independent executions that passed or failed"
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "rate": {
+          "description": "passed / executions, or null with none",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "executions",
+        "passed",
+        "failed",
+        "rate"
+      ],
+      "additionalProperties": {},
+      "description": "Over the executions that recorded their tries: those whose first try passed"
+    },
+    "unrecordedAttempts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Counted executions that recorded no tries: their first try is unknown, never assumed to have passed"
+    },
+    "attempts": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "retried": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "recovered": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "total",
+        "retried",
+        "recovered"
+      ],
+      "additionalProperties": {}
+    },
+    "currentRevision": {
+      "description": "The spec revision `revision=current` counted, or null",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "historical": {
+      "type": "object",
+      "properties": {
+        "executions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "revisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "specRevision": {
+                "type": "string"
+              },
+              "executions": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "specRevision",
+              "executions"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "executions",
+        "passed",
+        "failed",
+        "revisions"
+      ],
+      "additionalProperties": {},
+      "description": "Earlier spec revisions: context only, counted nowhere above"
+    },
+    "excluded": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "description": "Executions in the scope that are not trials, by reason: `not-run`, `unfinished`, `unknown-status`, `historical-revision`, `revision-not-recorded`"
+    },
+    "outsideScope": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Executions the scope did not select"
+    },
+    "snapshots": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Raw recorded snapshots behind the counted executions"
+    },
+    "cohorts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "executions": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Independent executions that passed or failed"
+          },
+          "passed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "rate": {
+            "description": "passed / executions, or null with none",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "producer": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "executions",
+          "passed",
+          "failed",
+          "rate",
+          "environment",
+          "producer",
+          "parameters"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "available": {
+      "type": "object",
+      "properties": {
+        "environments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "specRevisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "environments",
+        "producers",
+        "branches",
+        "specRevisions"
+      ],
+      "additionalProperties": {},
+      "description": "What a scope could choose among, with independent executions"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "An open set: treat a code you do not know as informational"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "warning",
+              "info"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "executions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "type": "string"
+          },
+          "at": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "counted": {
+            "type": "boolean"
+          },
+          "excluded": {
+            "type": "string"
+          },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "producer": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "branch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layer": {
+            "type": "string"
+          },
+          "backend": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "specRevision": {
+            "type": "string"
+          },
+          "snapshots": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "attempts": {
+            "description": "The status of each recorded try, in order",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "firstAttempt": {
+            "type": "string"
+          },
+          "republished": {
+            "type": "boolean",
+            "description": "A failed snapshot of this execution was followed by a later one"
+          }
+        },
+        "required": [
+          "run",
+          "at",
+          "status",
+          "counted",
+          "environment",
+          "producer",
+          "kind",
+          "parameters",
+          "branch",
+          "sha",
+          "runUrl",
+          "layer",
+          "backend",
+          "durationMs",
+          "snapshots",
+          "republished"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "Every independent execution of the selection, newest first: the denominator, open to inspection"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "key",
+    "scope",
+    "minimumExecutions",
+    "sample",
+    "eventual",
+    "interval",
+    "firstAttempt",
+    "unrecordedAttempts",
+    "attempts",
+    "currentRevision",
+    "historical",
+    "excluded",
+    "outsideScope",
+    "snapshots",
+    "cohorts",
+    "available",
+    "notes",
+    "executions"
+  ],
+  "additionalProperties": {}
+}

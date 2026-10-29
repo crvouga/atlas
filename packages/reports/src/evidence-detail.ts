@@ -10,6 +10,7 @@
  * @see docs/report-contract.md (evidence)
  */
 import type { Annotation, Attachment, Attempt, Check, EvidenceScope, Step } from '../../schema/src/layer';
+import type { EvidenceStatus } from './explorer-types';
 import type { EvidenceSummary, VideoCounts, VideoOwner, VideoRef } from './evidence-types';
 import { normalizeTags } from './artifact-tags';
 import { effectiveScope } from './evidence-scope';
@@ -74,6 +75,7 @@ function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inheri
   const labels: Record<string, string> = {};
   const videos: VideoRef[] = [];
   let attachments = 0, steps = 0, annotations = 0, attempts = 0, links = 0;
+  const tried: { index: number; status: EvidenceStatus }[] = [];
   const attachmentsOf = (list: readonly Attachment[] | undefined, by: VideoOwner, scopes: readonly (EvidenceScope | undefined)[], where: { attempt?: number; step?: string } = {}) => {
     for (const item of list ?? []) {
       attachments += 1;
@@ -93,11 +95,14 @@ function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inheri
     steps += holder.steps?.length ?? 0;
     annotations += holder.annotations?.length ?? 0;
     attempts += holder.attempts?.length ?? 0;
+    for (const attempt of holder.attempts ?? []) tried.push({ index: attempt.index, status: attempt.status });
     links += holder.links?.length ?? 0;
     for (const tag of holder.tags ?? []) tags.add(tag);
     Object.assign(labels, holder.labels);
   }
-  return { attachments, steps, annotations, attempts, links, tags: [...tags], ...(artifactTags.size ? { artifactTags: [...artifactTags].sort() } : {}), labels, roles: [...roles].sort(), ...(videos.length ? { videos } : {}) };
+  // The outcome of each try in the order it was made, so a reader can tell a first-try pass from one that needed a retry.
+  const attemptStatuses = tried.sort((a, b) => a.index - b.index).map(attempt => attempt.status);
+  return { attachments, steps, annotations, attempts, ...(attemptStatuses.length ? { attemptStatuses } : {}), links, tags: [...tags], ...(artifactTags.size ? { artifactTags: [...artifactTags].sort() } : {}), labels, roles: [...roles].sort(), ...(videos.length ? { videos } : {}) };
 }
 
 /**

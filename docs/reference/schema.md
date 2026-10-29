@@ -300,6 +300,17 @@ export const TestHistorySchema = …
 
 `GET /api/reports/tests/history`: one test and every result recorded for it (at most 100), newest first.
 
+#### `TestReliabilitySchema`
+
+```ts
+export const TestReliabilitySchema = …
+```
+
+`GET /api/reports/tests/reliability`: how reliable one test is inside a scope, and exactly how that figure was counted.
+The snapshots one run recorded for one producer, environment and parameter set are one independent execution; only
+`passed` and `failed` executions are trials; `notes` say when the sample is too small, pooled, selectively rerun or
+bounded. It reads results and never changes a status. It is not a production failure probability.
+
 #### `ReportRunSchema`
 
 ```ts

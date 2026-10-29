@@ -374,6 +374,7 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | Every test, a summary (by status, environment, producer, domain), insights (failing, flaky, slowest) and facets | `GET /api/reports/tests` |
 | Only some: `q` (all words), `status` (or `flaky`), `environment`, `producer`, `domain`, `spec`, `tag`, `run`; `sort`, `offset`, `limit` | `GET /api/reports/tests?status=failed&environment=ios` |
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
+| How reliable one test is in a scope (environment, producer, parameters, branch, commit, spec revision, time window): independent executions, first-try and eventual success, what was left out and why | `GET /api/reports/tests/reliability?key=<key>&environment=phone` |
 | Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
 | The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
 | Recorded results that carry evidence, across the whole history, found by tag, media type, label, feature, environment, branch, revision, outcome and time | `GET /api/reports/artifacts?artifactTag=demo&type=video` |
@@ -388,6 +389,21 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
   `stats` describes its recorded history: pass rate, flips, whether it is flaky and why (it passed and failed on the
   same commit, passed only after a retry, or its producer said so), durations (avg, p50, p95, min, max, last), runs
   and branches.
+- The **reliability** document qualifies `stats.passRate` instead of repeating it. The snapshots one run recorded for one
+  producer, environment and parameter set (running, finished, enriched) are **one independent execution**, counted by its last
+  word with the tries it recorded; `firstAttempt` counts executions whose first try passed, `eventual` those that passed in the
+  end, and an execution that recorded no tries (`attemptStatuses` on its evidence) is never assumed to have passed first time.
+  Choose the scope with `environment`, `producer`, `parameter=key=value`, `branch`, `sha`, `specRevision`, `since` and `until`:
+  other environments never add to a phone's sample. By default only the newest recorded spec revision (the `fingerprint` of its
+  spec text, `specRevision` on each result) counts and earlier ones appear as `historical` context; `revision=any` pools them
+  and says so. Only `passed` and `failed` executions are trials; `not-run`, unfinished and unknown ones are named under
+  `excluded` and never become a pass. `sample` is `none`, `insufficient` (under `minimumExecutions`) or `sufficient`, a count
+  only: `notes` say when the figure pools environments, producers or branches, when failed cases were published again
+  (`selected-reruns`), and when history is bounded to the newest 100 results. `executions` is the denominator, one row per
+  independent execution with its tries and snapshots, so the same query can be inspected and shared. The Wilson interval states
+  its assumptions. It describes the checks Atlas holds; it is not a production failure probability. The viewer shows the same
+  figures under a test (scope in the address as `relEnv`, `relProducer`, `relBranch`, `relParam`, `relSince`, `relUntil`,
+  `relRevision=any`, `relOpen=true`).
 - The **health** document explains the numbers instead of adding one. It keeps spec files, defined specs, specs with an
   executed test, tests, outlines, examples and per-environment observations apart, and walks from the Specs total to
   the Tests total. Two spec paths are one logical spec only when a mapping says so
@@ -453,6 +469,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/tests/health` | read | Why specs, domains and counts disagree. |
 | `GET /api/reports/tests/history` | read | One test and every result recorded for it. |
 | `GET /api/projects/{project}/reports/tests/history` | read | One test and every result recorded for it. |
+| `GET /api/reports/tests/reliability` | read | How reliable one test is in a scope, and how that was counted. |
+| `GET /api/projects/{project}/reports/tests/reliability` | read | How reliable one test is in a scope, and how that was counted. |
 | `GET /api/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
 | `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
 | `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |

@@ -2145,6 +2145,8 @@ export type EvidenceSummary = {
   readonly annotations: number;
   /** How many tries were recorded when the check was retried. */
   readonly attempts: number;
+  /** The status of each recorded try, in the order they were made (its length is `attempts`). Absent when no try was recorded, and in reports written before this was recorded: a first try is then unknown, never assumed to have passed. */
+  readonly attemptStatuses?: readonly EvidenceStatus[];
   readonly links: number;
   readonly tags: readonly string[];
   /** The normalized tags of the attachments themselves (`#demo` is `demo`), sorted and distinct. Absent when no attachment is tagged. Unlike `tags` they are never inherited from a check or run. */
@@ -5992,6 +5994,273 @@ skipped or unresolved; otherwise `unknown` when a contributing layer has no rece
 report with no results at all is unknown too); otherwise `complete` when something was expected and `none-expected` when
 nothing was. Gaps are sorted so the output never depends on read order.
 
+### Reliability of a test
+
+Source: `packages/reports/src/reliability.ts`. Import: `@crvouga/atlas/reports/reliability`
+
+How often a test passed, counted so the number can be trusted or doubted. A pass rate over raw history is easy to
+overinterpret: one execution is published as several snapshots, a retry is not a second trial, desktop and phone are
+different questions, and an earlier version of a behavior says nothing about the current one. This module answers
+from the recorded results of one test and a {@link ReliabilityScope}, and states what it counted:
+
+- **Independent executions.** The snapshots one run recorded for one producer, environment, parameter set and kind
+  (running, finished, enriched) are one execution; its last word counts once, with the tries it recorded. Raw
+  snapshots stay inspectable (`snapshots`) and are never weighted as new trials.
+- **First try and eventual.** Where tries were recorded, `firstAttempt` counts executions whose first try passed and
+  `rate` counts those that passed in the end. An execution that recorded no tries is not assumed to have passed first
+  time: it is left out of `firstAttempt` and counted in `unrecordedAttempts`.
+- **Scope.** Environment, producer, parameters, branch, commit, spec revision and a time window select the executions;
+  the rest are shown as `outsideScope`, never mixed in. By default only the newest recorded revision of the spec
+  counts, and earlier ones are shown as `historical` context.
+- **What is not a trial.** Only `passed` and `failed` executions are in the denominator. `not-run` and unfinished
+  executions are excluded and counted by name; nothing missing becomes a pass.
+- **Limits, in words.** `notes` say when the sample is too small to establish anything, when environments, producers
+  or branches are pooled, when failed cases were published again, and when history is bounded. A rate is never a
+  production failure probability: the checks are a selection.
+
+It only reads results; it never changes a status, a slot or a winner.
+
+See docs/server.md#reading-the-report-as-an-agent
+
+#### `RELIABILITY_VERSION`
+
+```ts
+export const RELIABILITY_VERSION = …
+```
+
+Version of the reliability document.
+
+#### `MIN_EXECUTIONS`
+
+```ts
+export const MIN_EXECUTIONS = …
+```
+
+Completed executions below which a rate is shown but not treated as established.
+
+#### `ReliabilityScope`
+
+```ts
+export type ReliabilityScope = {
+  /** Environments or devices (`phone`, `desktop-web`). Executions in others never count towards these. */
+  readonly environment?: readonly string[];
+  readonly producer?: readonly string[];
+  /** `key=value` parameter choices (`device=small`). */
+  readonly parameter?: readonly string[];
+  readonly branch?: readonly string[];
+  /** Commits: a full id, or a prefix of at least seven characters. */
+  readonly sha?: readonly string[];
+  /** Only executions recorded against these spec fingerprints. Overrides `revision`. */
+  readonly specRevision?: readonly string[];
+  /** `current` (the default): only the newest spec revision recorded in the rest of the scope, the older ones shown as context. `any`: every revision, pooled. */
+  readonly revision?: 'current' | 'any';
+  /** Only executions at or after this time, epoch ms. */
+  readonly since?: number;
+  /** Only executions at or before this time, epoch ms. */
+  readonly until?: number;
+};
+```
+
+What a reliability figure is about. Every field is optional; nothing asked is everything the history holds (of the current spec revision).
+
+#### `ReliabilityExclusion`
+
+```ts
+export type ReliabilityExclusion = 'not-run' | 'unfinished' | 'unknown-status' | 'historical-revision' | 'revision-not-recorded';
+```
+
+Why an execution is not in the denominator.
+
+#### `ReliabilityExecution`
+
+```ts
+export type ReliabilityExecution = {
+  /** The key of the run it belongs to (see `runKey`). */
+  readonly run: string;
+  /** When its last word was recorded, epoch ms. */
+  readonly at: number;
+  /** Its last word. */
+  readonly status: string;
+  /** True when it is in the denominator. */
+  readonly counted: boolean;
+  /** Why it is not, when it is not. */
+  readonly excluded?: ReliabilityExclusion;
+  readonly environment: string | null;
+  readonly producer: string;
+  readonly kind: string;
+  readonly parameters: Readonly<Record<string, string>>;
+  readonly branch: string | null;
+  readonly sha: string | null;
+  readonly runUrl: string | null;
+  /** The layer holding its last word (open it with `/api/reports/evidence/detail/{backend}/{layer}?check=`). */
+  readonly layer: string;
+  readonly backend: string;
+  readonly durationMs: number | null;
+  readonly specRevision?: string;
+  /** How many raw snapshots (layers) recorded it. They are one execution, not that many trials. */
+  readonly snapshots: number;
+  /** The status of each recorded try, in order. Absent when no try was recorded. */
+  readonly attempts?: readonly string[];
+  /** The first try's status, when tries were recorded. */
+  readonly firstAttempt?: string;
+  /** True when a failed snapshot of this execution was followed by a later one: it was published again after a failure. */
+  readonly republished: boolean;
+};
+```
+
+One independent execution: the last word of one run on one producer, environment, parameter set and kind.
+
+#### `ReliabilityRate`
+
+```ts
+export type ReliabilityRate = {
+  /** Independent executions that passed or failed. */
+  readonly executions: number;
+  readonly passed: number;
+  readonly failed: number;
+  /** passed / executions, or null with none. This is the eventual success rate. */
+  readonly rate: number | null;
+};
+```
+
+Counts and rates over a set of executions.
+
+#### `ReliabilityInterval`
+
+```ts
+export type ReliabilityInterval = {
+  readonly method: 'wilson';
+  readonly level: number;
+  readonly lower: number;
+  readonly upper: number;
+  /** What must hold for the interval to mean anything. */
+  readonly assumptions: string;
+};
+```
+
+A confidence interval and what it assumes.
+
+#### `ReliabilityNote`
+
+```ts
+export type ReliabilityNote = {
+  readonly code: string;
+  /** `warning`: the figure should not be read as representative without this in mind. */
+  readonly severity: 'warning' | 'info';
+  readonly message: string;
+};
+```
+
+A reason to doubt or qualify the figure. An open set: treat a code you do not know as informational.
+
+#### `ReliabilityCohort`
+
+```ts
+export type ReliabilityCohort = ReliabilityRate & {
+  readonly environment: string | null;
+  readonly producer: string;
+  readonly parameters: Readonly<Record<string, string>>;
+};
+```
+
+One environment, producer and parameter set among the counted executions, with its own rate.
+
+#### `ReliabilityDocument`
+
+```ts
+export type ReliabilityDocument = {
+  readonly schemaVersion: typeof RELIABILITY_VERSION;
+  readonly key: string;
+  readonly scope: ReliabilityScope;
+  /** Completed executions below which the sample is `insufficient`. */
+  readonly minimumExecutions: number;
+  /** Count only: `none` without an independent execution, `insufficient` below the minimum, `sufficient` otherwise. Says nothing about representativeness; read `notes`. */
+  readonly sample: 'none' | 'insufficient' | 'sufficient';
+  /** Eventual success over the counted executions. */
+  readonly eventual: ReliabilityRate;
+  readonly interval: ReliabilityInterval | null;
+  /** Executions whose first try is known (tries were recorded), and how many of those passed first time. */
+  readonly firstAttempt: ReliabilityRate;
+  /** Counted executions that recorded no tries: unknown first try, left out of `firstAttempt`. */
+  readonly unrecordedAttempts: number;
+  readonly attempts: {
+    /** Tries recorded across the counted executions. */
+    readonly total: number;
+    /** Counted executions that needed more than one try. */
+    readonly retried: number;
+    /** Counted executions that failed first and passed in the end. */
+    readonly recovered: number;
+  };
+  /** The revision `revision: 'current'` counted, or null when none is recorded. */
+  readonly currentRevision: string | null;
+  /** Earlier spec revisions, shown as context and counted nowhere above. */
+  readonly historical: { readonly executions: number; readonly passed: number; readonly failed: number; readonly revisions: readonly { readonly specRevision: string; readonly executions: number }[] };
+  /** What was left out, by name. */
+  readonly excluded: Readonly<Record<ReliabilityExclusion, number>>;
+  /** Executions the scope did not select. */
+  readonly outsideScope: number;
+  /** Raw recorded snapshots behind the counted executions. */
+  readonly snapshots: number;
+  /** Counted executions per environment, producer and parameter set. */
+  readonly cohorts: readonly ReliabilityCohort[];
+  /** What the scope could choose among: the values the history holds, with their independent executions. */
+  readonly available: {
+    readonly environments: readonly { readonly value: string; readonly count: number }[];
+    readonly producers: readonly { readonly value: string; readonly count: number }[];
+    readonly branches: readonly { readonly value: string; readonly count: number }[];
+  …
+```
+
+`GET /api/reports/tests/reliability`: how reliable a test is within a scope, and how that figure was counted.
+
+#### `reliability`
+
+```ts
+export function reliability(key: string, history: readonly TestResultEntry[], scope: ReliabilityScope = {}): ReliabilityDocument
+```
+
+How reliable one test is inside a scope, from the recorded results of that test (`TestHistoryDocument.history`, any
+order). See the module comment for what is counted and what is left out.
+
+- `key`: The test's key, echoed in the document.
+
+- `history`: Every recorded result of the test the caller holds. When it holds as many as `HISTORY_PER_TEST` the
+document says the history is bounded.
+
+- `scope`: What to count; see {@link ReliabilityScope}.
+
+**Example**
+
+```ts
+const document = reliability(test.key, history.history, { environment: ['phone'], since: Date.now() - 30 * 86_400_000 });
+if (document.sample !== 'sufficient') console.log(`only ${document.eventual.executions} executions`);
+```
+
+#### `scopeText`
+
+```ts
+export function scopeText(scope: ReliabilityScope): string
+```
+
+The scope as a short phrase, or `all recorded executions`.
+
+#### `reliabilityMarkdown`
+
+```ts
+export function reliabilityMarkdown(document: ReliabilityDocument): string
+```
+
+The reliability document as Markdown, for an agent or a terminal.
+
+#### `parseReliabilityScope`
+
+```ts
+export function parseReliabilityScope(params: URLSearchParams): ReliabilityScope
+```
+
+The scope an address asks for: `environment`, `producer`, `parameter`, `branch`, `sha` and `specRevision` (comma-separated
+lists), `revision` (`any`, else current) and `since` and `until` (epoch milliseconds, or a date).
+
 ### Remote commit report
 
 Source: `packages/reports/src/remote-report.ts`. Import: `@crvouga/atlas/reports/remote-report`
@@ -8316,6 +8585,8 @@ export type TestResultEntry = {
   readonly backend: string;
   /** Why it has its status: the first 500 characters of the check's detail. */
   readonly detail: string;
+  /** The fingerprint of its spec text the layer recorded, when it recorded one: results with different revisions were recorded against different promises. Absent means not recorded, never "the same". */
+  readonly specRevision?: string;
   /** What it carried beyond its outcome (attachments, steps, retries, tags, labels), when anything. */
   readonly evidence?: EvidenceSummary;
 };
@@ -8832,7 +9103,7 @@ const catalog = testCatalog(catalogModel(layers, { history }));
 - `get specs(): RecordedSpecs { return this.#specs; }` — The specs the added layers recorded.
 - `tests(): readonly { readonly key: string; readonly id: string; readonly specPath: string | null }[]` — Every test the history holds a result for (keyed as `TestSummary.key`), including tests the report no longer has a current result for.
 - `get layers(): number { return this.#seen.size; }` — How many layers were added.
-- `add(layer: LayerHeader, rows: readonly LayerRow[], specs: readonly SpecEntry[] = [], backend = layer.backend): void` — Takes in one layer: its header, its rows, the specs it recorded and the backend it was read from. A layer id already added is ignored.
+- `add(layer: LayerHeader, rows: readonly LayerRow[], specs: readonly SpecEntry[] = [], backend = layer.backend, fingerprints: Readonly<Record<string, string>> = {}): void` — Takes in one layer: its header, its rows, the specs it recorded and the backend it was read from. A layer id already added is ignored. `fingerprints` (spec path to the fingerprint the layer recorded, as `LayerRows.fingerprints`) gives each result its `specRevision`; without it no result has one.
 - `of(key: string): readonly TestResultEntry[]` — The recorded results of one test (by `TestSummary.key`), newest first. Empty when none.
 - `get runCount(): number { return this.#runs.size; }` — How many runs it knows of.
 - `runs(): RunSummary[]` — Every run, newest first.

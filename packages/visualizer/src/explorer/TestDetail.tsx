@@ -20,6 +20,7 @@ import { Origin, StatusMark } from '../evidence/marks';
 import { useTestHistory } from './catalog';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, runName } from './parts';
+import { Reliability } from './Reliability';
 import { usePinnedResult, type PinnedResult } from './pinned';
 const RecordingPage = lazy(() => import('../evidence/recording-page').then((module) => ({ default: module.RecordingPage })));
 /** Results the history table shows before "Show more". */
@@ -389,6 +390,8 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         )}
         {entries.length > 1 && <Trend entries={entries} />}
       </Box>
+
+      {!history.isError && <Reliability testKey={test.key} entries={history.data === null ? [] : history.data?.history} />}
 
       {(test.tags.length > 0 || Object.keys(test.labels).length > 0) && (
         <Box aria-label="Tags and labels" component="section" mb="lg">

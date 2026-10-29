@@ -163,6 +163,10 @@
                 "type": "string",
                 "description": "Why it has its status, at most 500 characters"
               },
+              "specRevision": {
+                "description": "The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match",
+                "type": "string"
+              },
               "evidence": {
                 "type": "object",
                 "properties": {
@@ -185,6 +189,19 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "attemptStatuses": {
+                    "description": "The status of each recorded try, in the order they were made. Absent when no try was recorded, and in reports written before this was recorded: a first try is then unknown, never assumed to have passed",
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
+                    }
                   },
                   "links": {
                     "type": "integer",
@@ -714,6 +731,10 @@
             "type": "string",
             "description": "Why it has its status, at most 500 characters"
           },
+          "specRevision": {
+            "description": "The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match",
+            "type": "string"
+          },
           "evidence": {
             "type": "object",
             "properties": {
@@ -736,6 +757,19 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
+              },
+              "attemptStatuses": {
+                "description": "The status of each recorded try, in the order they were made. Absent when no try was recorded, and in reports written before this was recorded: a first try is then unknown, never assumed to have passed",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                }
               },
               "links": {
                 "type": "integer",
