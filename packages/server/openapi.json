@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Atlas server API",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "summary": "Take in test results from every environment, keep them, and show everyone the combined report, live.",
     "description": "One Atlas node serves multiple projects. Clients select a project using ?project=<slug>, X-Atlas-Project, or /api/projects/<slug>/… . Each project has independent specs, layers, recordings, status, and event streams. Within each project, the newest completed result of every check wins its slot. Unqualified requests address the legacy default project.\n\n**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `critic` < `publish` < `admin`. A `critic` token may read, and publish critiques (layers of automated reviewers) and nothing else. Uploading needs a Bearer token; a browser's HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.\n\n**Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`) with a `detail` that says what to do. `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not valid, `503` still starting (retry after `Retry-After`).\n\n**Compatibility.** Within `/api` the API only grows: optional parameters, optional response fields, new events. Ignore what you do not know.\n\nGuides: `/llms.txt`. Source: https://github.com/crvouga/atlas.",
     "license": {
@@ -4791,6 +4791,394 @@
           },
           "422": {
             "description": "Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/recordings/verification": {
+      "get": {
+        "operationId": "getRecordingVerification",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Which stored recordings the server last read back, and which were gone or damaged",
+        "description": "The newest read-back the server did of stored videos, per layer: how many it checked, how many passed and the `gaps` (a blob that is gone, bytes of another size or hash than were published, or a file that does not begin like its container), each naming the check that holds the video. `run` is the key of the run the layer belongs to (a `RunSummary.key`), so a viewer can mark that run's recordings as stored-then-unavailable beside its test results.\n\nThis route never reads a blob: it returns what a publish token's `POST` found earlier. A layer that was never read back is absent, which means \"not verified\", not \"fine\"; the result is kept in the server's memory only, so a restart empties it. Only layers a store still holds are listed (one removed by garbage collection drops out). No status, slot or winner depends on it. It checks stored bytes, not browser playback. Narrow with `?run=` (a run key) and `?layer=` (an id prefix of at least 7 hex digits, repeatable).\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "run",
+            "in": "query",
+            "description": "Only layers of this run (a key from `GET /api/reports/runs`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "layer",
+            "in": "query",
+            "description": "Only layers whose id starts with this prefix. Repeatable or comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The held read-backs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingVerification"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "verifyRecordings",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Read stored recordings back and check them (publish token)",
+        "description": "Reads the videos of the newest layers (`limit`, default 20, at most 200; or the layers `layers` names) back from storage and checks that each is still stored, still has the size and SHA-256 published, and still begins like its media type's container. This reads blobs, so it needs a publish (or admin) token in a Bearer header; a reader-only token, a browser sign-in box and an anonymous reader are refused. One read-back runs at a time (`409` otherwise). It writes nothing to storage and changes no status. The answer is the same document `GET` returns, with `verified`: how many layers this pass read back.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "Optional `layers` (id prefixes) and `limit`. An empty body reads back the newest layers.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordingVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The read-backs now held.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingVerification"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A read-back is already running.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a verification request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A store could not be read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/recordings/verification": {
+      "get": {
+        "operationId": "getRecordingVerificationForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Which stored recordings the server last read back, and which were gone or damaged",
+        "description": "The newest read-back the server did of stored videos, per layer: how many it checked, how many passed and the `gaps` (a blob that is gone, bytes of another size or hash than were published, or a file that does not begin like its container), each naming the check that holds the video. `run` is the key of the run the layer belongs to (a `RunSummary.key`), so a viewer can mark that run's recordings as stored-then-unavailable beside its test results.\n\nThis route never reads a blob: it returns what a publish token's `POST` found earlier. A layer that was never read back is absent, which means \"not verified\", not \"fine\"; the result is kept in the server's memory only, so a restart empties it. Only layers a store still holds are listed (one removed by garbage collection drops out). No status, slot or winner depends on it. It checks stored bytes, not browser playback. Narrow with `?run=` (a run key) and `?layer=` (an id prefix of at least 7 hex digits, repeatable).\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "run",
+            "in": "query",
+            "description": "Only layers of this run (a key from `GET /api/reports/runs`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "layer",
+            "in": "query",
+            "description": "Only layers whose id starts with this prefix. Repeatable or comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The held read-backs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingVerification"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "verifyRecordingsForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Read stored recordings back and check them (publish token)",
+        "description": "Reads the videos of the newest layers (`limit`, default 20, at most 200; or the layers `layers` names) back from storage and checks that each is still stored, still has the size and SHA-256 published, and still begins like its media type's container. This reads blobs, so it needs a publish (or admin) token in a Bearer header; a reader-only token, a browser sign-in box and an anonymous reader are refused. One read-back runs at a time (`409` otherwise). It writes nothing to storage and changes no status. The answer is the same document `GET` returns, with `verified`: how many layers this pass read back.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "Optional `layers` (id prefixes) and `limit`. An empty body reads back the newest layers.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordingVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The read-backs now held.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingVerification"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A read-back is already running.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a verification request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A store could not be read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20142,6 +20530,144 @@
           "missing",
           "notes"
         ],
+        "additionalProperties": {}
+      },
+      "RecordingVerification": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "layer": {
+                  "type": "string",
+                  "description": "The layer id"
+                },
+                "run": {
+                  "type": "string",
+                  "description": "The key of the run the layer belongs to (a `RunSummary.key`)"
+                },
+                "verifiedAtMs": {
+                  "type": "number",
+                  "description": "When the server read the videos back, epoch milliseconds"
+                },
+                "checked": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Videos read back: those that name a bundle key"
+                },
+                "ok": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Of those, the ones that passed every check"
+                },
+                "referenced": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Videos given only by address, which Atlas cannot read back and so does not vouch for"
+                },
+                "gaps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "check": {
+                        "description": "The id of the check that holds the video, or null for a video attached to the run or a part",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "The attachment's name"
+                      },
+                      "bundleKey": {
+                        "type": "string",
+                        "description": "The key the layer names the file by"
+                      },
+                      "problem": {
+                        "type": "string",
+                        "description": "`not-in-bundle`, `blob-missing`, `unreadable`, `size-mismatch`, `checksum-mismatch` or `undecodable`. An open vocabulary: treat an unknown value as a gap"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "description": "A short explanation without secrets or paths"
+                      }
+                    },
+                    "required": [
+                      "check",
+                      "name",
+                      "bundleKey",
+                      "problem",
+                      "reason"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  "description": "The videos that did not pass. Never a test result: statuses are unchanged"
+                }
+              },
+              "required": [
+                "layer",
+                "run",
+                "verifiedAtMs",
+                "checked",
+                "ok",
+                "referenced",
+                "gaps"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Layers the server has read back and still holds, newest first"
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Layers the last pass could not read at all: their recordings are unknown, not verified"
+          },
+          "verified": {
+            "description": "POST only: how many layers this pass read back",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "layers",
+          "notices"
+        ],
+        "additionalProperties": {}
+      },
+      "RecordingVerifyRequest": {
+        "type": "object",
+        "properties": {
+          "layers": {
+            "description": "Only layers whose id starts with one of these (at least 7 hex digits)",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{7,64}$"
+            }
+          },
+          "limit": {
+            "description": "How many of the newest layers to read back. Default 20, at most 200",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
         "additionalProperties": {}
       },
       "TestCatalog": {

@@ -233,6 +233,47 @@ export const ArtifactTagsSchema = …
 
 `GET /api/reports/artifact-tags`: every recorded edit, oldest first. Fold them with `foldArtifactTags`.
 
+#### `StoredRecordingGapSchema`
+
+```ts
+export const StoredRecordingGapSchema = …
+```
+
+One stored video that failed the server's read-back: which check holds it and what is wrong with it.
+
+#### `LayerRecordingCheckSchema`
+
+```ts
+export const LayerRecordingCheckSchema = …
+```
+
+What reading back the stored videos of one layer found.
+
+#### `RecordingVerificationSchema`
+
+```ts
+export const RecordingVerificationSchema = …
+```
+
+`GET` and `POST /api/reports/recordings/verification`: the newest read-back the server did of stored videos, per layer.
+A layer that was never read back is absent, which means "not verified", never "fine".
+
+#### `RecordingVerification`
+
+```ts
+export type RecordingVerification = z.infer<typeof RecordingVerificationSchema>;
+```
+
+The document of {@link RecordingVerificationSchema}, as a type.
+
+#### `RecordingVerifyRequestSchema`
+
+```ts
+export const RecordingVerifyRequestSchema = …
+```
+
+The body of `POST /api/reports/recordings/verification`. Both fields are optional; an empty body reads back the newest layers.
+
 #### `ReviewSourceSchema`
 
 ```ts

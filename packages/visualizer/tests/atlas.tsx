@@ -215,7 +215,7 @@ export async function openAtlas(args: {
     if (args.down?.value) return new Response('{"error":"reports_unavailable"}', { status: 503 });
     // What a node answers beyond the report itself: one result's evidence, the files it points to, and the test catalog,
     // a test's history and the runs, which only a node keeps, and the layers behind the winners (an earlier run's own record).
-    if (args.node && /^\/(evidence(\/(effective|detail|rows)|\?|$)|layers\/|(tests|runs|artifacts)(\/|\?|$)|artifact-tags$|review-collections(\/|\?|$))/.test(url.slice(REPORTS_URL.length)))
+    if (args.node && /^\/(evidence(\/(effective|detail|rows)|\?|$)|layers\/|(tests|runs|artifacts)(\/|\?|$)|artifact-tags$|recordings\/verification(\?|$)|review-collections(\/|\?|$))/.test(url.slice(REPORTS_URL.length)))
       return args.node.fetch(new Request(url, init));
     return app.request(url.slice(REPORTS_URL.length));
   }) as typeof fetch;

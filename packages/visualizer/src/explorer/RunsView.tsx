@@ -1,4 +1,4 @@
-import { IconAlertTriangle, IconArrowLeft, IconPlayerPlay, IconVideo } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowLeft, IconCheck, IconPlayerPlay, IconVideo } from '@tabler/icons-react';
 import { Alert, Anchor, Badge, Box, Button, Code, Flex, Group, List, NativeSelect, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
 /**
  * @module Runs view
@@ -23,7 +23,8 @@ import { hasFilters, passesFilters, type ParsedSearch, type SearchFilters } from
 import type { FindDoc, Ranked } from '../find/rank';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
-import { useRunDetail, useRunList, useTestCatalog } from './catalog';
+import { useRecordingVerification, useRunDetail, useRunList, useTestCatalog } from './catalog';
+import { allStoredVideosGone, verificationOfRun, type RunVerification } from './recording-verification';
 import { RunArtifacts } from './RunArtifacts';
 import { entriesFromRun } from './playlist-entries';
 import { WatchPlaylist } from './playlist';
@@ -126,9 +127,30 @@ function RunRecordings({ run }: { run: RunSummary }) {
     </Badge>
   );
 }
+/**
+ * What the server's read-back says about a run's stored videos, apart from its test outcomes: some are gone or damaged
+ * (an orange mark that names the problems), or all were read back and are as published. Nothing when they were never
+ * read back: an unverified run is not shown as verified.
+ */
+function StoredVideos({ verification }: { verification: RunVerification | null }) {
+  if (!verification) return null;
+  const at = `Read back from storage ${exactTime(verification.atMs)}. This checks the stored files, not playback in a browser. The test outcomes are unaffected.`;
+  if (verification.gaps === 0)
+    return (
+      <Text component="div" size="xs" c="dimmed" title={at} data-stored-videos="verified">
+        <IconCheck size={16} aria-hidden="true" /> {verification.checked > 0 ? `${plural(verification.ok, 'stored video', 'stored videos')} verified` : 'No stored videos to verify'}
+      </Text>
+    );
+  return (
+    <Text component="div" size="xs" c="orange.9" title={at} data-stored-videos="unavailable">
+      <IconAlertTriangle size={16} aria-hidden="true" /> Recording unavailable: {verification.gaps} of {plural(verification.checked, 'stored video', 'stored videos')} failed the read-back ({verification.problems.join(', ')}).
+    </Text>
+  );
+}
 /** A run's videos in its row: a link to the recordings, how many references they come from, and what cannot be played. */
-function RunVideos({ run }: { run: RunSummary }) {
+function RunVideos({ run, verification }: { run: RunSummary; verification: RunVerification | null }) {
   const videos = run.videos;
+  const gone = videos !== undefined && allStoredVideosGone(verification, videos.recordings);
   const files = run.attachments ? (
     <Anchor
       aria-label={`Open the ${plural(run.attachments, 'file', 'files')} of run ${runName(run.key)}`}
@@ -151,9 +173,9 @@ function RunVideos({ run }: { run: RunSummary }) {
       </Stack>
     );
   return (
-    <Stack gap={0} data-video={videos.recordings > 0 ? 'available' : 'unavailable'}>
+    <Stack gap={0} data-video={videos.recordings > 0 && !gone ? 'available' : 'unavailable'}>
       {files}
-      {videos.recordings > 0 && (
+      {videos.recordings > 0 && !gone && (
         <Anchor
           aria-label={`Watch ${plural(videos.recordings, 'recording', 'recordings')} in run ${runName(run.key)}`}
           renderRoot={(props) => (
@@ -169,6 +191,7 @@ function RunVideos({ run }: { run: RunSummary }) {
         </Text>
       )}
       <Unavailable videos={videos} />
+      <StoredVideos verification={verification} />
     </Stack>
   );
 }
@@ -258,6 +281,7 @@ function RunTable() {
   }, [search]);
   const narrow = filtered(search);
   const runs = useRunList(true, filter, searching);
+  const stored = useRecordingVerification();
   const now = useNow();
   const [shown, setShown] = useState(RUN_ROWS);
   const docs = useMemo(() => (runs.data?.runs ?? []).map((run) => runDoc(run, runLabel(run))), [runs.data]);
@@ -406,7 +430,7 @@ function RunTable() {
                 </Table.Td>
                 <Table.Td>{formatMs(run.spanMs)}</Table.Td>
                 <Table.Td>
-                  <RunVideos run={run} />
+                  <RunVideos run={run} verification={verificationOfRun(stored.data, run.key)} />
                   <RunRecordings run={run} />
                 </Table.Td>
                 <Table.Td data-tags>{run.artifactTags?.map((tag) => `#${tag}`).join(' ') || '—'}</Table.Td>
@@ -461,6 +485,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
   const go = useExplorerNavigate();
   const video = search.video === true;
   const detail = useRunDetail(runKey);
+  const stored = useRecordingVerification();
   const now = useNow();
   const [status, setStatus] = useState('');
   const [shown, setShown] = useState(RESULT_ROWS);
@@ -598,6 +623,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
           <Unavailable videos={run.videos} />
         </Text>
       )}
+      <StoredVideos verification={verificationOfRun(stored.data, run.key)} />
       <RunArtifacts detail={detail.data} />
       <Flex gap="xs" align="center" wrap="wrap">
         <Anchor
