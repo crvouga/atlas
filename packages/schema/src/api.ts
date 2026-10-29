@@ -736,7 +736,11 @@ export const RunDetailSchema = z.looseObject({
   results: z.array(z.looseObject({
     key: z.string(), id: z.string(), title: z.string(), specPath: z.string().nullable(), environment: z.string().nullable(), producer: z.string(),
     status: EvidenceStatusSchema, durationMs: z.number().nullable(), at: z.number(), layer: z.string(), detail: z.string(),
-    videos: z.array(VideoRefSchema).optional().describe('Every video its evidence references, with who holds it')
+    videos: z.array(VideoRefSchema).optional().describe('Every video its evidence references, with who holds it'),
+    kind: z.string().optional().describe('The kind of the part that held it. With the producer, environment and parameters it is the condition the result was recorded under. Absent from an older server'),
+    parameters: z.record(z.string(), z.string()).optional().describe('The other choices that made it its own result (a device size, a locale…). Absent when there are none, and from an older server'),
+    specRevision: z.string().optional().describe('The fingerprint of its spec file the layer recorded. Absent means not recorded, never "the same"'),
+    recordedTitle: z.string().optional().describe('The title this run\'s layer gave the check. `title` is the check\'s newest title in the whole history; this is the wording as recorded. Absent from an older server')
   })),
   layers: z.array(z.looseObject({
     id: z.string().describe('The layer id; read its files with `/api/reports/evidence/detail/{backend}/{id}`'),

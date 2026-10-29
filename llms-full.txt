@@ -4562,6 +4562,35 @@ environment) is unknown unless the producer declared it under the `atlas.failure
 wording. Records of one source whose outcome changed are listed oldest first, and a later pass is never called a fix.
 In the explorer the chosen source is the `source` search parameter (a layer id; unlike `layer` it does not pin a run).
 
+## Compare two runs
+
+The **Compare** tab (`explorer/CompareView.tsx`, `explorer/ComparePair.tsx`, `@crvouga/atlas/reports/run-compare`) sets a
+baseline run against a candidate run. Both are pinned in the address (`base` and `cand`, run keys; `change` is the group
+shown and `pair` the behavior opened), so a link reproduces the comparison and a newer run never replaces either. A run
+that is no longer in the report is said to be missing and is never swapped for another. A run's page offers "Compare with
+this run as the baseline / candidate".
+
+- Results are paired by the check they record (spec path and check id), then by the condition they were recorded under
+  (kind, producer, environment, parameters). A title never pairs two results. The same check under another condition is
+  paired and marked "Conditions differ".
+- Every behavior is in one group: newly failing, recovered, still failing, promise or conditions differ, not run or
+  unfinished, not in the candidate run, not in the baseline run, same outcome. A result the candidate did not run is
+  unknown, never regressed or passed; one only the baseline has is "not in the candidate run" (not run, renamed or
+  dropped: the comparison cannot tell). A reworded behavior, or one recorded under different conditions, is not framed as
+  a regression or recovery: both outcomes are shown beside the changed promise. A different spec-file revision with the
+  same wording is disclosed beside the movement (a fingerprint is of the whole file); a revision that was not recorded is
+  unknown, never the same.
+- Opening a behavior shows Mantine `Tabs`: **Promise** (wording, spec revision, recorded steps with the ones only one side
+  has), **Outcomes** (each side's own provenance, execution time and failure), **Recordings** (one `<video>` per side with
+  `preload="metadata"`, read only while that tab is on screen; each keeps its own attempt, spec revision and time
+  origin, they are not synchronized, and "Go to a step in both recordings" seeks each to its own recorded step time when
+  the steps are shared by name and timed; otherwise the page says why they are not aligned) and **Figures**.
+- Figures are compared like for like. Product latency is compared only for the same measurement on the same devices,
+  environments and instrumentation, and reliability only when both sides count at least the minimum of independent
+  executions against the same recorded spec revision (and a difference inside the uncertainty is "cannot be told apart").
+  Otherwise the page says "Not compared" with the reasons and computes no change. Test execution time is labelled as such
+  and is never product latency.
+
 ## Watch a filtered set as a playlist
 
 The Artifacts tab and an opened run have a **Watch these N results** button. It opens a Mantine `Modal` (`explorer/playlist.tsx`)
@@ -4710,7 +4739,7 @@ The narrowly scoped exceptions are:
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
 | UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
-| Project home | Tests/runs/artifacts tabs, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
+| Project home | Tests/runs/artifacts/compare tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |

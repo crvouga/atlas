@@ -59,7 +59,7 @@ export function entryDetailQuery(entry: PlaylistEntry) {
 }
 
 /** The evidence of one entry's check, read when the entry is on screen. */
-function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
+export function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
   const query = entryDetailQuery(entry);
   return useQuery({
     queryKey: query?.queryKey ?? ['evidence-detail', '', entry.layer, entry.kind ?? '', entry.check],
