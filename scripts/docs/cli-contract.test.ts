@@ -58,6 +58,7 @@ test('every documented JSON result validates against the same registry that publ
     uiCatalogStatus: { args: ['ui-catalog', 'status'], code: 0 },
     uiCatalogDiff: { args: ['ui-catalog', 'diff', '--from', OLD.slice(0, 12), '--to', NEW.slice(0, 12)], code: 0 },
     uiCatalogExport: { args: ['ui-catalog', 'export', '--out', 'catalog.html'], code: 0 },
+    uiCatalogCollect: { args: ['ui-catalog', 'collect', '--catalog', 'atlas.catalog.mjs', '--exec', `"${process.execPath}" collector.mjs`, '--store', serverUrl, '--shard', 'contract'], code: 0 },
     error: { args: ['report', 'publish'], code: 2 }
   };
   try {
@@ -71,6 +72,8 @@ test('every documented JSON result validates against the same registry that publ
     await writeFile(path.join(cwd, 'ui-plan.json'), JSON.stringify({ states: [{ id: 'home', covers: ['home'] }, { id: 'settings', inventory: true }] }));
     await writeFile(path.join(cwd, 'ui-old.json'), JSON.stringify({ states: [{ id: 'home', title: 'Home', route: '/', covers: ['home'], screenshot: 'old.png' }] }));
     await writeFile(path.join(cwd, 'ui-new.json'), JSON.stringify({ states: [{ id: 'home', title: 'Home', route: '/', covers: ['home'], screenshot: 'new.png' }, { id: 'settings', title: 'Settings', screenshot: { path: 'new.png', width: 1, height: 1 } }] }));
+    await writeFile(path.join(cwd, 'atlas.catalog.mjs'), "export default { name: 'contract', matrix: { dimensions: { scheme: { values: ['light', 'dark'] } } }, states: [{ id: 'queued' }] };\n");
+    await writeFile(path.join(cwd, 'collector.mjs'), "import { readFileSync, writeFileSync } from 'node:fs';\nconst batch = JSON.parse(readFileSync(process.env.ATLAS_UI_BATCH, 'utf8'));\nwriteFileSync(process.env.ATLAS_UI_CAPTURES, JSON.stringify({ states: batch.states.map(state => ({ item: state.item, title: 'Queued' })) }));\n");
     await writeFile(path.join(cwd, 'checks.json'), JSON.stringify({ producer: 'smoke', checks: [{ id: 'a', title: 'passed', status: 'passed' }] }));
     for (const [name, contract] of Object.entries(CLI_RESULTS)) {
       const scenario = scenarios[name as keyof typeof scenarios];

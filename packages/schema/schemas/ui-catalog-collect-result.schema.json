@@ -1,0 +1,149 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-catalog-collect-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "True when nothing this shard collected failed and the server kept answering (otherwise the exit code is 1)"
+    },
+    "store": {
+      "type": "string",
+      "description": "The Atlas server"
+    },
+    "definition": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "The SHA-256 of the canonical definition: the same definition is the same version on every shard"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "name"
+      ],
+      "additionalProperties": {}
+    },
+    "shard": {
+      "type": "string"
+    },
+    "stoppedBy": {
+      "type": "string",
+      "enum": [
+        "empty",
+        "max-units",
+        "max-minutes",
+        "signal",
+        "unreachable"
+      ],
+      "description": "`empty`: the queue had nothing left for this shard. `max-units`, `max-minutes`: a bound. `signal`: SIGINT or SIGTERM (the claim was released). `unreachable`: the server stopped answering"
+    },
+    "claims": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "units": {
+      "type": "object",
+      "properties": {
+        "claimed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "collected": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lost": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Units of claims whose lease expired while held; their captures were not published"
+        },
+        "released": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Units given back to the queue unfinished (on a stop or a bound)"
+        }
+      },
+      "required": [
+        "claimed",
+        "collected",
+        "lost",
+        "released"
+      ],
+      "additionalProperties": {}
+    },
+    "items": {
+      "type": "object",
+      "properties": {
+        "captured": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "other": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Published as running or not-run"
+        }
+      },
+      "required": [
+        "captured",
+        "failed",
+        "other"
+      ],
+      "additionalProperties": {}
+    },
+    "lostClaims": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "layers": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Capture layers published"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Pictures that could not be read, and the like. Never fatal"
+    },
+    "error": {
+      "description": "Why the server could not be reached, when `stoppedBy` is `unreachable`",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ok",
+    "store",
+    "definition",
+    "shard",
+    "stoppedBy",
+    "claims",
+    "units",
+    "items",
+    "lostClaims",
+    "layers",
+    "warnings"
+  ],
+  "additionalProperties": {}
+}

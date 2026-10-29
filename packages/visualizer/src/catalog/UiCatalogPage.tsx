@@ -19,6 +19,7 @@ import { ago, exactTime, plural, shortSha, useNow } from '../evidence/format';
 import { EvidenceIncomplete, EvidenceWaiting } from '../evidence/load-state';
 import { StatusMark } from '../evidence/marks';
 import { Picture, imageSource } from './Picture';
+import { CollectionPanel } from './CollectionPanel';
 import { UiCatalogCompare } from './UiCatalogCompare';
 import { useUiCatalog } from './provider';
 import { useCatalogNavigate, useCatalogSearch } from './search';
@@ -344,6 +345,7 @@ export function UiCatalogPage() {
           <>
             <Summary catalog={catalog} narrowed={narrowed} />
             <Surfaces catalog={whole} />
+            <CollectionPanel />
             {whole.states.length === 0 && evidence.ready && (
               <Text c="dimmed" role="status" component="div" data-empty>
                 No UI states have been recorded yet. A collector publishes a layer with a part of kind <Code>ui-state</Code>; states appear here the moment it arrives.

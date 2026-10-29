@@ -182,6 +182,8 @@ export async function openAtlas(args: {
   /** Answers a reports request itself (to stall or fail it); returning nothing leaves it to the reports app. */
   intercept?: (path: string) => Response | Promise<Response> | undefined;
   /** An Atlas node to answer `/evidence/effective`, as a deployed one does. */ node?: { fetch: (request: Request) => Promise<Response> };
+  /** Let the node answer its UI catalog collection queue (`/api/ui-catalog/…`), which needs the API address in the page. */
+  queue?: boolean;
 }) {
   const specs = args.specs ?? SPECS;
   const time = testClock(1_000_000);
@@ -208,6 +210,7 @@ export async function openAtlas(args: {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://atlas.test/api/projects' && args.projects) return args.projects();
     if (url === 'http://atlas.test/api/live' && args.live) return Response.json({ runs: await args.live() });
+    if (args.queue && args.node && url.startsWith('http://atlas.test/api/ui-catalog/')) return args.node.fetch(new Request(url, init));
     if (!url.startsWith(REPORTS_URL)) return new Response('not found', { status: 404 });
     requests.push(url.slice(REPORTS_URL.length));
     const taken = args.intercept?.(url.slice(REPORTS_URL.length));
@@ -237,11 +240,11 @@ export async function openAtlas(args: {
     subscribe: null
   };
   (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ =
-    args.node || args.live || args.projects
+    args.node || args.live || args.projects || args.queue
       ? {
           reportsUrl: REPORTS_URL,
           effective: !!args.node,
-          ...(args.live || args.projects ? { api: 'http://atlas.test/api' } : {}),
+          ...(args.live || args.projects || args.queue ? { api: 'http://atlas.test/api' } : {}),
           ...(args.events ? { eventsUrl: 'http://atlas.test/api/events' } : {}),
           ...(args.projects ? { projectsUrl: 'http://atlas.test/api/projects' } : {})
         }

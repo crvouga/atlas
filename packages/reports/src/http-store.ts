@@ -48,6 +48,12 @@ export type HttpStore = ObjectStore & PagedListing & {
   ping(): Promise<{ readonly ok: boolean; readonly ms: number; readonly role?: string; readonly error?: string }>;
   /** The gate, worked out by the server from the layers it holds: the `atlas report status --format json` document. Needs a token that may read. */
   status(query?: URLSearchParams): Promise<unknown>;
+  /**
+   * Any other operation of this server's API (of the selected project), such as `call('POST', '/ui-catalog/claims', { json })`:
+   * the token is sent, a body given as `json` is sent as JSON, and what a retry can fix is retried. A status listed in
+   * `accept` is returned instead of thrown; any other refusal throws an {@link AtlasHttpError} that says what to do.
+   */
+  call(method: string, path: string, init?: { readonly json?: unknown; readonly headers?: Readonly<Record<string, string>>; readonly accept?: readonly number[] }): Promise<Response>;
 };
 
 const encode = (key: string) => key.split('/').map(encodeURIComponent).join('/');
@@ -80,7 +86,7 @@ export function httpStore(options: HttpStoreOptions): HttpStore {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
   const authorization: Record<string, string> = options.token ? { authorization: `Bearer ${options.token}` } : {};
 
-  async function request(method: string, url: string, init: { body?: Uint8Array; contentType?: string; allow404?: boolean } = {}): Promise<Response | null> {
+  async function request(method: string, url: string, init: { body?: Uint8Array; contentType?: string; allow404?: boolean; accept?: readonly number[]; headers?: Readonly<Record<string, string>> } = {}): Promise<Response | null> {
     for (let attempt = 0; ; attempt++) {
       let failure: AtlasHttpError;
       try {
@@ -89,11 +95,11 @@ export function httpStore(options: HttpStoreOptions): HttpStore {
         const timer = setTimeout(() => controller.abort(), timeoutMs);
         let response: Response;
         try {
-          response = await doFetch(url, { method, headers: init.contentType ? { ...authorization, 'content-type': init.contentType } : authorization, ...(init.body ? { body: init.body as BodyInit } : {}), signal: controller.signal });
+          response = await doFetch(url, { method, headers: { ...init.headers, ...authorization, ...(init.contentType ? { 'content-type': init.contentType } : {}) }, ...(init.body ? { body: init.body as BodyInit } : {}), signal: controller.signal });
         } finally {
           clearTimeout(timer);
         }
-        if (response.ok) return response;
+        if (response.ok || init.accept?.includes(response.status)) return response;
         if (response.status === 404 && init.allow404) { await response.body?.cancel(); return null; }
         const said = await response.json().then((body: unknown) => body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' ? body.error : null, () => null);
         failure = new AtlasHttpError(explain(response.status, base, said), response.status, response.status >= 500 || response.status === 429 || response.status === 408);
@@ -149,6 +155,10 @@ export function httpStore(options: HttpStoreOptions): HttpStore {
     },
     withPrefix(prefix) {
       return new ObjectStoreWithPrefix(store, prefix);
+    },
+    async call(method, path, init = {}) {
+      const body = init.json === undefined ? {} : { body: new TextEncoder().encode(JSON.stringify(init.json)), contentType: 'application/json' };
+      return (await request(method, `${api}${path.startsWith('/') ? path : `/${path}`}`, { ...body, ...(init.accept ? { accept: init.accept } : {}), ...(init.headers ? { headers: init.headers } : {}) }))!;
     },
     async status(query = new URLSearchParams()) {
       const suffix = query.size ? `?${query}` : '';

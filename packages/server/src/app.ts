@@ -55,6 +55,7 @@ import { projectServer } from './projects';
 import { mountReviewCollections } from './review-collections';
 import { mountRecordingVerification } from './recording-verification';
 import { readLimited, storeApi } from './store-api';
+import { CatalogQueue, mountCatalogQueue } from './ui-catalog-queue';
 
 const gzipAsync = promisify(gzip);
 const brotliAsync = promisify(brotliCompress);
@@ -149,7 +150,19 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       events.publish('atlas:change', { scope: 'runs', files: [], runIds: [], liveRunId: run.id });
     },
     onLayer: (key, layer) => index.accept(writeBackend.id, key, layer) });
-  const leaseTimer = setInterval(() => { void live.sweep().catch(error => options.log?.({ level: 'error', error: String(error) })); }, Math.min(5000, options.runTimeoutMs ?? 30_000));
+  // The UI catalog's collection queue: its claims and definitions are kept beside the live leases, in the server's store.
+  const catalogQueue = new CatalogQueue({ store: options.liveStore ?? writeBackend.store, now, snapshot: () => index.snapshot(),
+    publishPlan: async planLayers => {
+      for (const input of planLayers) {
+        const layer = await publishChecks(writeBackend.store, input);
+        await index.accept(writeBackend.id, layerCatalogKey(layer.recordedAtMs, layer.id), layer);
+      }
+    } });
+  const sweepQueue = () => { void catalogQueue.sweep().catch(error => options.log?.({ level: 'error', queue: 'ui-catalog', error: String(error) })); };
+  const leaseTimer = setInterval(() => {
+    void live.sweep().catch(error => options.log?.({ level: 'error', error: String(error) }));
+    if (catalogQueue.active) sweepQueue();
+  }, Math.min(5000, options.runTimeoutMs ?? 30_000));
   leaseTimer.unref?.();
   const compressed = new Map<string, Promise<Uint8Array>>();
   const assets = new Map<string, Promise<Uint8Array>>();
@@ -229,7 +242,11 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     added: change.added.slice(0, 20).map(layer => ({ id: layer.id, producer: layer.producer, environment: layer.environment, branch: layer.branch, sha: layer.sha, recordedAtMs: layer.recordedAtMs, counts: layer.counts, ...(layer.freshness ? { freshness: layer.freshness } : {}) })),
     addedTotal: change.added.length
   });
-  const stopListening = index.onChange(change => events.publish('report', summaryOf(change)));
+  const stopListening = index.onChange(change => {
+    events.publish('report', summaryOf(change));
+    // A capture labelled with its claim closes that part of the claim as soon as it arrives.
+    if (catalogQueue.active) sweepQueue();
+  });
 
   /**
    * A response, compressed when the client accepts it and it is worth it. What is the same for everyone (a page,
@@ -320,7 +337,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true, recordingVerification: true, catalogEntries: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true, recordingVerification: true, catalogEntries: true, catalogQueue: true }
     });
   });
 
@@ -577,6 +594,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
   // Review collections: immutable, curated references to recorded results, with reviewers' notes kept apart.
   mountReviewCollections(app, { store: tagStore, stores, auth, index, now, maxBytes: limits.json, unauthorized });
   mountRecordingVerification(app, { stores, auth, index, now, unauthorized });
+  mountCatalogQueue(app, { queue: catalogQueue, auth, ready: () => index.ready, maxBytes: limits.json, unauthorized });
   app.route('/api/reports', layers);
 
   // Upload: the store protocol, and a simple JSON way in for anything that can make a request.
