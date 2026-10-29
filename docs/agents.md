@@ -163,6 +163,7 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas report merge` | `merge-result` |
 | `atlas report doctor` | `doctor-result` |
 | `atlas report status` | `report-status` |
+| `atlas report verify-recordings` | `verify-recordings-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 

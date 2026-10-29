@@ -13,12 +13,15 @@ import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { formatMs, runKey, type TestResultEntry, type TestSummary } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
 import { lazy, Suspense, useState } from 'react';
+import { assessTest } from '../evidence/applicability';
+import { ApplicabilitySummary } from '../evidence/applicability-view';
 import { CheckDetail } from '../evidence/check-detail';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { useEvidence } from '../evidence/evidence-context';
 import { Origin, StatusMark } from '../evidence/marks';
 import { outcomeHeadline, selectedResult } from '../evidence/outcome';
 import { useTestHistory } from './catalog';
+import { releaseOf } from './applicability';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, runName } from './parts';
 import { Reliability } from './Reliability';
@@ -129,7 +132,10 @@ function Scope({ pinned, slot }: { pinned: PinnedResult; slot: CheckSlot | undef
 export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot | undefined }) {
   const now = useNow();
   const history = useTestHistory(test.key);
-  const { layer, source } = useExplorerSearch();
+  const search = useExplorerSearch();
+  const { layer, source } = search;
+  const release = releaseOf(search);
+  const applicability = assessTest(test, release);
   const go = useExplorerNavigate();
   const pinned = usePinnedResult(layer, test.key);
   const [recording, setRecording] = useState(false);
@@ -237,6 +243,13 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
       </Box>
 
       <Scope pinned={pinned} slot={slot} />
+
+      <Box aria-label="Evidence applicability" component="section" mb="lg">
+        <Title order={3} mb="sm" c="dimmed">
+          Does this evidence apply?
+        </Title>
+        <ApplicabilitySummary assessment={applicability} release={release} />
+      </Box>
 
       <Box aria-label="Current results" component="section" mb="lg">
         <Title order={3} mb="sm" c="dimmed">

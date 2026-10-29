@@ -162,12 +162,76 @@
               "minimum": 0,
               "maximum": 9007199254740991,
               "description": "References that name no bytes, or bytes the layer does not hold"
+            },
+            "missing": {
+              "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
             }
           },
           "required": [
             "references",
             "recordings",
             "unavailable"
+          ],
+          "additionalProperties": {}
+        },
+        "recordings": {
+          "description": "Whether the recordings its layers expected were published, apart from its outcomes. Absent when no layer declared an expectation: its completeness is unknown, never complete. Matched by the `recordings` filter",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "incomplete",
+                "none-expected",
+                "unknown"
+              ],
+              "description": "`incomplete` when an expected recording was skipped or unresolved; else `unknown` when a layer declared no expectations; else `complete` when something was expected and `none-expected` when nothing was"
+            },
+            "expected": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "published": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Of the expected recordings, uploaded or referenced by address"
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unresolved": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "notApplicable": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "layersWithoutReceipt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Layers of the run that declared no recording expectations: nothing is claimed for them"
+            }
+          },
+          "required": [
+            "state",
+            "expected",
+            "published",
+            "skipped",
+            "unresolved",
+            "notApplicable",
+            "layersWithoutReceipt"
           ],
           "additionalProperties": {}
         },
@@ -315,6 +379,10 @@
                 "available": {
                   "type": "boolean",
                   "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                },
+                "reason": {
+                  "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                  "type": "string"
                 },
                 "scope": {
                   "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -517,6 +585,12 @@
                 "minimum": 0,
                 "maximum": 9007199254740991,
                 "description": "References that name no bytes, or bytes the layer does not hold"
+              },
+              "missing": {
+                "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [

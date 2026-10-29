@@ -91,6 +91,14 @@ when Watch is on screen.
   what they know with labels: `build`, `platform`, and `applies-to` with `applies-to-by` (the policy that asserts the
   evidence still holds for those builds; without it the assertion is refused). The "Stale or unverified" filter
   (`evidence=stale`) lists every behavior whose evidence does not apply, including those with none.
+- The test explorer makes the same reading of every test from the catalog (`explorer/applicability.ts`): the catalog
+  carries the spec's fingerprint now (`spec.fingerprint`) and, on each current result, `specRevision`, `freshness` and
+  `provenance` (the labels above), all optional. The same address names (`release`, `releaseSha`, `releasePlatform`,
+  `evidence=stale`) give the "Stale or unverified" button, the "Stale evidence first" sort, a verdict badge on rows
+  (stale always; unknown or none when a release is named or evidence is filtered or sorted), and the summary in test
+  detail. Layers carry no publication time, because a layer's id is the digest of its content and a time of upload in
+  it would make a retried publish a different layer: a producer that knows states `published-at` and `enriched-at`
+  labels, shown apart from "Checks ran", which alone is the age.
 - A recording is always labelled illustrative: it shows one run and does not approve a behavior for production.
   `demo`/`representative` tags only add a "Representative demo" label.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
@@ -126,6 +134,25 @@ same coverage state, revisions and recording in both.
   warnings) and **performance** (`reports/latency`: only measurements named `product-latency`, percentiles withheld with the reason,
   budget and breaches). Absent evidence is stated as unknown, never as good; the test's duration is not product latency, and the
   summary says it describes the checks Atlas holds, not production. The full reliability and latency detail is one link away.
+
+## Catalog health
+
+The **Catalog health** tab (`explorer/HealthView.tsx`, `?tab=health`; `@crvouga/atlas/reports/catalog-health`) explains why the Specs
+and the Tests disagree. The Specs list links to it ("Why do these counts differ from the Tests?"). On a server it reads
+`GET /api/reports/tests/health`; elsewhere the same document is worked out in the page from the specs and results it holds, and an
+older server without the route is told so in words.
+
+- Denominators are never one number: spec files, defined specs, specs with tests, specs executed and defined but not executed
+  (the coverage gaps, which add to no passed count), tests, outlines, examples and observations (an outline, its examples and
+  their per-environment results are told apart). Each figure has its meaning in its `title`.
+- A table walks from the Specs total to the Tests total, step by step, with the sentences below it. Findings are an `Accordion`
+  (warnings open), each with its severity as text, its code, how many it affects and the paths. Paths that might be one promise
+  are shown as "may be the same promise as ...; not merged": a similar title never joins two specs.
+- Root mappings (`from>to`) join spec paths. Those the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`) are
+  labelled "Configured on the server"; others are tried in the form and kept in the address (`root`), labelled "Tried here", and
+  change nothing on the server. A mapping that matched no path is a warning. Joined specs list every original path.
+- Domains are listed as declared; a domain shared by nearly every spec is a finding, never rewritten. Identity states how many
+  checks are known only by title, how many declare `behavior-id` / `example-id`, and the limits of both.
 
 ## UI catalog
 
@@ -351,7 +378,7 @@ The narrowly scoped exceptions are:
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
 | UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
-| Project home | Tests/runs/artifacts/compare tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
+| Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
 | Behaviors | Project-wide behavior index with search, coverage filters and a selected behavior's Read / Watch / Inspect; an expanded read-and-watch workspace with a scoped outcome, reliability and performance summary that restores scope, scroll, selection and focus on return | Container, Grid, SimpleGrid, NavLink, TextInput, Button, Paper, Accordion, Tabs |

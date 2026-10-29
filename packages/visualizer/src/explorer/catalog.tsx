@@ -26,6 +26,7 @@ import {
   type FilterName,
   type QueryFacets
 } from '@crvouga/atlas/reports/artifact-query';
+import { catalogHealth, type CatalogHealth, type RootMapping } from '@crvouga/atlas/reports/catalog-health';
 import {
   artifactList,
   catalogModel,
@@ -367,6 +368,38 @@ export function useRunDetail(key: string | undefined) {
       }
     },
     enabled: !!key && catalog.model !== null,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false
+  });
+}
+
+/** What the Catalog health tab reads: the diagnostics, or that this server is too old to give them. */
+export type HealthAnswer = { readonly unsupported: false; readonly health: CatalogHealth } | { readonly unsupported: true };
+
+/**
+ * Why the Specs, domains and counts of the report disagree. From the server when it has one (it also applies the root
+ * mappings it is configured with, and says so in `roots[].source`); otherwise worked out here from the specs and
+ * results this page holds. A server without the route answers `unsupported`, and the page says so.
+ */
+export function useCatalogHealth(roots: readonly RootMapping[]) {
+  const catalog = useTestCatalog();
+  const asked = roots.map((root) => `${root.from}>${root.to}`);
+  return useQuery({
+    queryKey: ['catalog-health', catalog.version, asked.join('\u0001')],
+    queryFn: async ({ signal }): Promise<HealthAnswer> => {
+      if (catalog.source === 'server') {
+        const params = new URLSearchParams(asked.map((root) => ['root', root]));
+        try {
+          return { unsupported: false, health: await reportJson<CatalogHealth>(`/tests/health${params.size ? `?${params}` : ''}`, signal) };
+        } catch (error) {
+          if (notFound(error)) return { unsupported: true };
+          throw error;
+        }
+      }
+      return { unsupported: false, health: catalogHealth(catalog.model!, roots) };
+    },
+    enabled: catalog.model !== null,
+    placeholderData: keepPreviousData,
     staleTime: Number.POSITIVE_INFINITY,
     retry: false
   });

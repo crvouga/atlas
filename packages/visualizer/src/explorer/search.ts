@@ -2,12 +2,12 @@
  * @module Explorer address
  *
  * Everything the test explorer shows is in the address of the `/` route, so a link reproduces the view: the open test,
- * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the Compare tab with its two pinned runs (`base`, `cand`) and the behavior opened (`pair`), the exact layer a test's detail is pinned to, the recording and position of a shared moment in it (`clip`, `clipAt`), and the one file of a run's layer its Artifacts select. Filters that
+ * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the Compare tab with its two pinned runs (`base`, `cand`) and the behavior opened (`pair`), the Catalog health tab with the root mappings it tries (`root`), the exact layer a test's detail is pinned to, the recording and position of a shared moment in it (`clip`, `clipAt`), and the one file of a run's layer its Artifacts select. Filters that
  * take several values are comma-separated (`status=failed,flaky`); a comma or backslash inside a value is written `\,`
  * or `\\`, and the router encodes `#` and spaces. Anything unreadable is dropped, never an error.
  *
  * The Runs and Artifacts tabs share the tests' `q`, `env`, `producer`, `domain` and `spec` and add `artifactTag`,
- * `type`, `label`, `branch`, `outcome`, `since` and `until`, so a link to one tab's filters opens the same query on another.
+ * `type`, `label`, `branch`, `outcome`, `since` and `until` (and the Runs tab alone `recordings`, the completeness of its recordings), so a link to one tab's filters opens the same query on another.
  */
 import { joinList, splitList, type ArtifactFilter } from '@crvouga/atlas/reports/artifact-query';
 import type { ReliabilityScope } from '@crvouga/atlas/reports/reliability';
@@ -19,8 +19,8 @@ export const TEST_GROUPS = ['spec', 'domain', 'environment', 'status', 'producer
 /** One of {@link TEST_GROUPS}. */
 export type TestGroup = (typeof TEST_GROUPS)[number];
 
-/** The orders the explorer offers: `relevance` (best match first, only with words to match) and those of the catalog. */
-export const EXPLORER_SORTS = ['relevance', ...TEST_SORTS] as const;
+/** The orders the explorer offers: `relevance` (best match first, only with words to match), `evidence` (tests whose evidence is stale or unverified first, worked out in the viewer) and those of the catalog. */
+export const EXPLORER_SORTS = ['relevance', 'evidence', ...TEST_SORTS] as const;
 /** One of {@link EXPLORER_SORTS}. */
 export type ExplorerSort = (typeof EXPLORER_SORTS)[number];
 
@@ -55,15 +55,25 @@ export const ExplorerSearchFields = {
   branch: text,
   /** Outcomes of a run or recorded result (`passed`, `failed`…). */
   outcome: text,
+  /** Recording completeness of a run (`complete`, `incomplete`, `none-expected`, `unknown`): runs only, apart from the outcome. */
+  recordings: text,
   /** Only records from this day (`YYYY-MM-DD`, the viewer's local time). */
   since: text,
   /** Only records until the end of this day (`YYYY-MM-DD`, local time). */
   until: text,
   /** Only the tests a CI run recorded (a `RunSummary.key`). Not `run`, which already names a recorded statechart run. */
   inRun: text,
+  /** `stale`: only tests whose evidence is stale or unverified (not that applies to the current promise and, when one is named, the release). Never a test status. */
+  evidence: z.enum(['stale']).optional().catch(undefined),
+  /** The release evidence is read against: its build, commit and platform (the names a spec page uses). A build such as `90` is read from a typed link as a number: coerced back to its text. */
+  release: text,
+  releaseSha: text,
+  releasePlatform: text,
   group: z.enum(TEST_GROUPS).optional().catch(undefined),
   sort: z.enum(EXPLORER_SORTS).optional().catch(undefined),
-  tab: z.enum(['runs', 'artifacts', 'collections', 'compare']).optional().catch(undefined),
+  tab: z.enum(['runs', 'artifacts', 'collections', 'compare', 'health']).optional().catch(undefined),
+  /** The root mappings (`from>to`, comma-separated) the Catalog health tab tries, beside those the server is configured with. */
+  root: text,
   /** The review collection opened in the Collections tab (its stable id), and the revision of it (default: the newest). */
   collection: text,
   rev: z.coerce.number().int().positive().optional().catch(undefined),
@@ -122,12 +132,18 @@ export type ExplorerSearch = {
   readonly label?: string;
   readonly branch?: string;
   readonly outcome?: string;
+  readonly recordings?: string;
   readonly since?: string;
   readonly until?: string;
   readonly inRun?: string;
+  readonly evidence?: 'stale';
+  readonly release?: string;
+  readonly releaseSha?: string;
+  readonly releasePlatform?: string;
   readonly group?: TestGroup;
   readonly sort?: ExplorerSort;
-  readonly tab?: 'runs' | 'artifacts' | 'collections' | 'compare';
+  readonly tab?: 'runs' | 'artifacts' | 'collections' | 'compare' | 'health';
+  readonly root?: string;
   readonly collection?: string;
   readonly rev?: number;
   readonly base?: string;
@@ -186,7 +202,7 @@ export function queryOf(search: ExplorerSearch): TestQuery {
     ...(values(search.scope).length ? { scope: values(search.scope) } : {}),
     artifactTag: values(search.artifactTag),
     ...(search.inherited ? { inherited: true } : {}),
-    sort: search.sort === 'relevance' || !search.sort ? 'spec' : search.sort
+    sort: search.sort === 'relevance' || search.sort === 'evidence' || !search.sort ? 'spec' : search.sort
   };
 }
 
@@ -197,7 +213,7 @@ export function explorerSearch(search: Record<string, unknown>): ExplorerSearch 
 
 /** True when any filter or search narrows the list. */
 export function narrowed(search: ExplorerSearch): boolean {
-  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.scope || search.artifactTag || search.inRun || search.video);
+  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.scope || search.artifactTag || search.inRun || search.video || search.evidence);
 }
 
 /** The reliability scope an address asks for, in the shape `reliability` reads: days are the viewer's local days. */
@@ -216,7 +232,7 @@ export function reliabilityScopeOf(search: ExplorerSearch): ReliabilityScope {
 }
 
 /** The filters of the Runs and Artifacts tabs, in the address. */
-export const FILTER_FIELDS = ['q', 'artifactTag', 'inherited', 'type', 'label', 'env', 'producer', 'branch', 'outcome', 'domain', 'spec', 'since', 'until', 'video'] as const;
+export const FILTER_FIELDS = ['q', 'artifactTag', 'inherited', 'type', 'label', 'env', 'producer', 'branch', 'outcome', 'recordings', 'domain', 'spec', 'since', 'until', 'video'] as const;
 
 /** A patch that removes every filter of the Runs and Artifacts tabs. */
 export const NO_FILTERS = Object.fromEntries(FILTER_FIELDS.map((field) => [field, undefined])) as { [K in (typeof FILTER_FIELDS)[number]]?: undefined };
@@ -250,6 +266,7 @@ export function filterOf(search: ExplorerSearch): ArtifactFilter {
     producer: list(search.producer),
     branch: list(search.branch),
     outcome: list(search.outcome),
+    recordings: list(search.recordings),
     domain: list(search.domain),
     spec: list(search.spec),
     since,

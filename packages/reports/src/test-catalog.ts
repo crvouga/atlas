@@ -23,9 +23,10 @@
  * @see docs/server.md#reading-the-report-as-an-agent
  */
 import { displayTag, normalizeTag, normalizeTags } from './artifact-tags';
-import { facetsOf, forRuns, labelList, matchesFilter, outcomeOfCounts, splitList, usedFilters, type ArtifactFilter, type FilterFields, type FilterName, type QueryFacets } from './artifact-query';
+import { facetsOf, forArtifacts, forRuns, labelList, matchesFilter, outcomeOfCounts, splitList, usedFilters, type ArtifactFilter, type FilterFields, type FilterName, type QueryFacets } from './artifact-query';
 import type { EvidenceMeasurement, EvidenceStatus, SpecEntry } from './explorer-types';
-import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
+import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, RecordingCounts, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
+import { runRecordings, type RunRecordings } from './recording-receipt';
 import { videoCounts } from './evidence-detail';
 import { productLatency } from './latency';
 import { matchesScope, scopeTokens, UNKNOWN_SCOPE } from './evidence-scope';
@@ -38,6 +39,14 @@ export const TEST_CATALOG_VERSION = 1;
 
 /** Recorded results kept per test, newest first. Older ones are counted in no statistic. */
 export const HISTORY_PER_TEST = 100;
+
+/**
+ * The open `labels` (see docs/extending.md) that say what a result's evidence ran against and who vouches for it: `build`,
+ * `platform`, `applies-to` (builds or commits it is asserted to still hold for), `applies-to-by` (the policy or person that
+ * asserts it), `published-at` and `enriched-at` (when the evidence was published or enriched, epoch milliseconds or an ISO
+ * date: never when the checks ran). A test's current results carry them as `provenance`.
+ */
+export const APPLICABILITY_LABELS = ['build', 'platform', 'applies-to', 'applies-to-by', 'published-at', 'enriched-at'] as const;
 
 const FAILURE_RANK = { passed: 0, 'not-run': 1, running: 2, failed: 3 } as const;
 
@@ -67,6 +76,10 @@ export type TestResultEntry = {
   readonly detail: string;
   /** The fingerprint of its spec text the layer recorded, when it recorded one: results with different revisions were recorded against different promises. Absent means not recorded, never "the same". */
   readonly specRevision?: string;
+  /** `modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, and on results other than a test's current ones. Advisory; never changes a status. */
+  readonly freshness?: 'unknown' | 'modified';
+  /** The labels of its layer and check that say what it ran against and who vouches for it: only those named in {@link APPLICABILITY_LABELS}. Present on a test's current results when it has any. Read by the viewer's evidence applicability; never decides a result. */
+  readonly provenance?: Readonly<Record<string, string>>;
   /** What it carried beyond its outcome (attachments, steps, retries, tags, labels), when anything. */
   readonly evidence?: EvidenceSummary;
   /** Its product-latency measurements (`kind: product-latency`), when it recorded any. Separate from `durationMs`, which is how long the test took (setup, waits and pacing included). */
@@ -121,6 +134,8 @@ export type CatalogSpec = {
   /** The group it belongs to: the spec's own domain, else the folder under `specs/`. */
   readonly domain: string;
   readonly kind: string;
+  /** The fingerprint of the spec text now (the promise), when the spec set or a layer recorded one. A result's `specRevision` is compared with it: different means the promise changed after the result was recorded. Absent: unknown, never "the same". */
+  readonly fingerprint?: string;
 };
 
 /** One test: what it is, its current status per environment, and how it has gone. */
@@ -308,6 +323,11 @@ export type RunSummary = {
    * and references that cannot be played. Absent when it has none, and in a report that carries no video information.
    */
   readonly videos?: VideoCounts;
+  /**
+   * Whether the recordings its layers expected were published, apart from its outcomes (see `runRecordings`). Absent when
+   * none of its layers declared a recording expectation: its completeness is unknown, never complete. Never changes a status.
+   */
+  readonly recordings?: RunRecordings;
   /**
    * Files attached to the run itself, in its layers (and their parts), not to any one check: review movies, archives,
    * summaries. All kinds, videos included. Absent when none, and in a report that carries no such information.
@@ -527,6 +547,8 @@ type RunAcc = {
   runId: string | undefined; title: string | undefined; titledAt: number; titledBy: string; freshness: 'unknown' | 'modified' | undefined;
   /** Videos attached to its layers (not to a check). */
   videos: VideoRef[];
+  /** The recording receipt counts of each of its layers, `undefined` for a layer with none. */
+  receipts: (RecordingCounts | undefined)[];
   /** Files attached to its layers (not to a check). */
   attachments: number;
   /** Its layers, in the order they arrived. */
@@ -602,7 +624,7 @@ export class TestHistory {
     const key = runKey(layer);
     let run = this.#runs.get(key);
     if (!run) {
-      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [], attachments: 0, members: [], evidence: { tags: new Set(), artifactTags: new Set(), roles: new Set(), labels: new Set() } };
+      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [], receipts: [], attachments: 0, members: [], evidence: { tags: new Set(), artifactTags: new Set(), roles: new Set(), labels: new Set() } };
       this.#runs.set(key, run);
     }
     // A run is told by its first layer (by time, then id), whatever order its layers arrive in.
@@ -628,6 +650,7 @@ export class TestHistory {
     if (layer.environment) run.environments.add(layer.environment);
     run.layers += 1;
     if (layer.evidence?.videos) run.videos.push(...layer.evidence.videos);
+    run.receipts.push(layer.recordings);
     const held = layer.evidence?.attachments ?? 0;
     run.attachments += held;
     const layerVideos = videoCounts(layer.evidence?.videos);
@@ -802,6 +825,7 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
   }
   failed.sort((a, b) => compareText(a.i.slot, b.i.slot) || compareText(a.r.o.place, b.r.o.place) || compareText(a.r.k, b.r.k));
   const video = videoCounts(videos);
+  const recordings = runRecordings(run.receipts);
   const failing = failed.slice(0, 20).map(cell => ({ key: cell.i.slot, title: cell.i.title, environment: cell.r.o.environment, detail: (cell.r.t.split('\n')[0] ?? '').slice(0, 500) }));
   return {
     key: run.key, ...(run.runId ? { runId: run.runId } : {}), ...(run.title ? { title: run.title } : {}), ...(run.freshness ? { freshness: run.freshness } : {}),
@@ -810,6 +834,7 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
     producers: [...run.producers].sort(), environments: [...run.environments].sort(),
     layers: run.layers, tests: tests.size, counts, totalDurationMs: measured ? total : null, failing,
     ...(video ? { videos: video } : {}),
+    ...(recordings ? { recordings } : {}),
     ...(run.attachments ? { attachments: run.attachments } : {}),
     ...(carried.artifactTags.size ? { artifactTags: [...carried.artifactTags].sort() } : {}),
     ...(carried.roles.size ? { types: typesOf(carried.roles, (video?.recordings ?? 0) > 0) } : {}),
@@ -843,6 +868,7 @@ export function catalogSpec(path: string | null, known: (path: string) => SpecEn
     title: entry?.title || (base ? base[0]!.toUpperCase() + base.slice(1) : path),
     domain: entry?.domain || folder,
     kind: entry?.kind || (/\.([^./]+)$/.exec(path)?.[1] ?? 'unknown'),
+    ...(entry?.fingerprint ? { fingerprint: entry.fingerprint } : {}),
   };
 }
 
@@ -889,8 +915,15 @@ function statsOf(history: readonly TestResultEntry[], outcomes: readonly TestOut
   };
 }
 
-function outcomeOf(result: EvidenceResult): TestOutcome {
-  return entryOf(result.layer, result.row, result.layer.backend);
+/** A current result with what the layer recorded about its spec and about what it ran against (see {@link APPLICABILITY_LABELS}). */
+function outcomeOf(result: EvidenceResult, fingerprints: Readonly<Record<string, string>> = {}): TestOutcome {
+  const labels = { ...(result.layer.evidence?.labels ?? {}), ...(result.row.evidence?.labels ?? {}) };
+  const provenance = Object.fromEntries(APPLICABILITY_LABELS.filter(name => typeof labels[name] === 'string').map(name => [name, labels[name]!]));
+  return {
+    ...entryOf(result.layer, result.row, result.layer.backend, fingerprints),
+    ...(result.layer.freshness ? { freshness: result.layer.freshness } : {}),
+    ...(Object.keys(provenance).length ? { provenance } : {}),
+  };
 }
 
 /** Where the catalog's statistics and specs come from. */
@@ -918,8 +951,8 @@ export type CatalogModel = {
   readonly specs?: readonly SpecEntry[];
 };
 
-function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: string) => SpecEntry | undefined): TestSummary {
-  const outcomes = slot.outcomes.map(outcomeOf);
+function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: string) => SpecEntry | undefined, fingerprintsOf: (layer: string) => Readonly<Record<string, string>> | undefined): TestSummary {
+  const outcomes = slot.outcomes.map(result => outcomeOf(result, fingerprintsOf(result.layer.id)));
   const tags = new Set<string>();
   const artifactTags = new Set<string>();
   const inheritedTags = new Set<string>();
@@ -1020,7 +1053,8 @@ export function catalogModel(layers: readonly LayerEvidence[], sources: CatalogS
   const known = (path: string) => recorded.get(path);
   const combined = combineEvidence({ specs: [], sha: null, changedFiles: [] }, layers);
   const slots = checkSlots(combined.unassigned);
-  const tests = slots.map(slot => summaryOf(slot, history, known));
+  const fingerprints = new Map(layers.map(entry => [entry.layer.id, entry.fingerprints] as const));
+  const tests = slots.map(slot => summaryOf(slot, history, known, id => fingerprints.get(id)));
   const byKey = new Map(tests.map(test => [test.key, test]));
   const haystacks = new Map(tests.map(test => [test.key, haystackOf(test)]));
   const counts = emptyCounts();
@@ -1140,7 +1174,7 @@ export function fieldsOfRun(run: RunSummary): FilterFields {
     text: [run.title ?? '', run.key, run.branch ?? '', run.sha ?? '', ...run.producers, ...run.environments, ...artifactTags, ...(run.tags ?? []), ...labels].join('\n').toLowerCase(),
     artifactTags, tags: [...new Set([...(run.tags ?? []), ...artifactTags])], types, media: types.map(type => ({ type, tags: artifactTags })), labels,
     environments: run.environments, producers: run.producers, branches: run.branch ? [run.branch] : [], shas: run.sha ? [run.sha.toLowerCase()] : [],
-    outcomes: [outcomeOfCounts(run.counts)], at: run.endedAtMs,
+    outcomes: [outcomeOfCounts(run.counts)], recordings: [run.recordings?.state ?? 'unknown'], at: run.endedAtMs,
   };
 }
 
@@ -1156,7 +1190,9 @@ export function fieldsOfRun(run: RunSummary): FilterFields {
  * list.results.map(r => [r.title, r.run, r.sha, r.status]);
  * ```
  */
-export function artifactList(history: TestHistory, version: string, query: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList {
+export function artifactList(history: TestHistory, version: string, asked: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList {
+  // Recording completeness is a property of a run: a recorded result is not asked about it.
+  const query = forArtifacts(asked);
   const domains = new Map<string, string | null>();
   const domainOf = (path: string | null): string | null => {
     if (path === null) return null;

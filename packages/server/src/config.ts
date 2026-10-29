@@ -97,6 +97,7 @@ export const SERVER_SETTINGS: readonly ServerSetting[] = [
   { summary: 'Whose specs the report is laid over', key: 'outlineBranch', flag: '--outline-branch <branch>', env: ['ATLAS_OUTLINE_BRANCH'], default: '`main`, then `master`, then the newest', example: { value: 'trunk', read: c => c.outlineBranch, expected: 'trunk' } },
   { summary: 'Only layers recorded on these branches take part', key: 'include.branches', flag: '--branch <name>` (repeatable)', env: ['ATLAS_ONLY_BRANCH'], default: 'all', example: { value: 'main', read: c => c.include.branches, expected: ['main'] } },
   { summary: 'Leave out layers from modified checkouts and unknown origins', key: 'include.ignoreModified', flag: '--ignore-modified', env: ['ATLAS_IGNORE_MODIFIED'], default: 'no', example: { value: '1', read: c => c.include.ignoreModified, expected: true } },
+  { summary: 'Root mappings `from>to` that join spec paths a producer publishes to the paths the specs are recorded under, for the catalog health report (comma-separated; an empty `from` matches every path)', key: 'catalog.roots', flag: null, env: ['ATLAS_CATALOG_ROOTS'], default: 'none', example: { value: '>specs/,apps/>specs/web/', read: c => c.catalog.roots, expected: ['>specs/', 'apps/>specs/web/'] } },
   { summary: 'How often (seconds) the backends are looked at for layers written by something else', key: 'refreshSeconds', flag: '--refresh <seconds>', env: ['ATLAS_REFRESH_SECONDS'], default: '`10`', example: { value: '30', read: c => c.refreshSeconds, expected: 30 } },
   { summary: 'Let anyone look, not upload', key: 'auth.anonymousRead', flag: '--anonymous-read', env: ['ATLAS_ANONYMOUS_READ'], default: 'no', example: { value: '1', read: c => c.anonymousRead, expected: true } },
   { summary: 'Listen publicly with no tokens (something in front signs people in)', key: 'auth.insecure', flag: '--insecure', env: ['ATLAS_INSECURE'], default: 'no', example: { value: '1', read: c => c.insecure, expected: true } },
@@ -188,6 +189,8 @@ export function loadServerConfig(argv: readonly string[], env: Env, cwd: string,
     if (env[variable] !== undefined) limits[key] = Number(env[variable]);
   }
   merged.limits = limits;
+  const roots = list(env.ATLAS_CATALOG_ROOTS);
+  if (roots.length) merged.catalog = { ...(raw.catalog as Record<string, unknown> | undefined), roots };
   if (flags.insecure || truthy(env.ATLAS_INSECURE)) auth.insecure = true;
   if (flags['anonymous-read'] || truthy(env.ATLAS_ANONYMOUS_READ)) auth.anonymousRead = true;
   const branches = [...(flags.branch ?? []), ...list(env.ATLAS_ONLY_BRANCH)];

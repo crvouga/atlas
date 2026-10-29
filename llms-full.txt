@@ -172,6 +172,7 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas report merge` | `merge-result` |
 | `atlas report doctor` | `doctor-result` |
 | `atlas report status` | `report-status` |
+| `atlas report verify-recordings` | `verify-recordings-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 
@@ -1196,7 +1197,8 @@ curl "$ATLAS_SERVER_URL/api/reports/artifacts?artifactTag=demo&type=video&domain
 - **Dimensions.** `artifactTag`, `type` (the media type as a role: `video`, `image`, `audio`, `snapshot`, `text`,
   `file`; `video` means a playable recording), `label` (`key=value`, or `key`), `domain` and `spec` (artifacts only),
   `environment` (the device or client), `producer`, `branch`, `sha` (seven or more characters), `outcome` (`passed`,
-  `failed`, `running`, `not-run`), `since` and `until` (epoch milliseconds or an ISO date), and `q` (words).
+  `failed`, `running`, `not-run`), `recordings` (runs only: `complete`, `incomplete`, `none-expected` or `unknown`, see
+  [recording completeness](#recording-completeness)), `since` and `until` (epoch milliseconds or an ISO date), and `q` (words).
 - **Semantics.** Filters combine with AND across dimensions and OR within one (`environment=ios,android`). With both
   `artifactTag` and `type`, one attachment must be both where the report says which video carries which tag: a tagged
   screenshot beside an untagged video is not a tagged video. `inherited=1` also counts the tags an attachment inherits
@@ -1463,10 +1465,36 @@ publish; it never contains a path or a token.
   retry (publishing again reuses the stored files).
 - `atlas report status --format json` has `recordings`: `state` is `complete`, `incomplete`, `none-expected` or
   `unknown`, with counts and each gap. It never changes `ok`. A layer without a receipt is `unknown`, never `complete`.
-- The viewer shows `Recordings 2 of 3: incomplete` beside the run's origin, apart from its green or red outcomes.
+- The viewer shows `Recordings 2 of 3: incomplete` beside the run's origin and in each row of the Runs tab, apart from
+  its green or red outcomes.
+- **Find runs by completeness.** `GET /api/reports/runs?recordings=incomplete` (and the Runs tab's *Recordings* filter,
+  `?tab=runs&recordings=incomplete`) keep the runs whose layers have a skipped or unresolved expected recording. The
+  values are `complete`, `incomplete`, `none-expected` and `unknown`, comma-separated for OR, and they combine with the
+  other filters by AND. A run whose layers declared no expectations is `unknown`, never `complete`, and a run with any
+  layer without a receipt cannot be `complete`. It is answered from the layers' receipts, before the page limit, and
+  never reads a recording; the facet counts say how many runs have each state. It is a property of a run, so the
+  artifacts list does not take it. A server that predates it ignores the parameter and does not name it in `filters`, and
+  the viewer then says the list is not narrowed by it.
 
-This is a statement about publication. Atlas does not check that a stored video plays in a browser, and does not yet
-re-check later that a stored file is still readable.
+### Is the recording still there?
+
+A receipt says a file was published. Whether it is still retrievable later is a separate question, and Atlas answers it
+two ways without touching a check's result:
+
+- **Layer bundle.** A video that names a `bundleKey` the layer's bundle does not list (the file was acknowledged and is
+  gone, or never arrived) is not offered to play. The report marks it `available: false` with `reason: "not-in-bundle"`,
+  the run counts it in `videos.unavailable` and `videos.missing`, and the Runs tab explains that the run stored the file
+  but no longer holds it, which is different from a reference that never named any bytes.
+- **`atlas report verify-recordings`** reads the videos of the stored layers back and checks, for each, that the bundle
+  lists it, that its blob is still in the store, that its size and SHA-256 are the recorded ones, and that it begins like
+  the container its media type names (WebM, MP4, QuickTime, Ogg, AVI). It exits 1 and names the layer and check for
+  every gap (`not-in-bundle`, `blob-missing`, `unreadable`, `size-mismatch`, `checksum-mismatch`, `undecodable`);
+  `--format json` prints the `verify-recordings-result` document. `--layer <id>` and `--limit <n>` narrow the work, since
+  it reads blobs. A store that cannot answer is `unreadable`, never verified. Test results are unchanged either way.
+
+Both are statements about stored bytes. Atlas does not check that a stored video plays in a given browser (a valid header
+can still have an unsupported codec or be truncated), and acknowledging an upload is not playback. Videos given only by
+`uri` are counted as referenced and not checked.
 </doc>
 
 <doc path="docs/ui-catalog.md">
@@ -1850,6 +1878,7 @@ is said in words and the server does not start. The file has a published
 | Whose specs the report is laid over | `outlineBranch` | `--outline-branch <branch>` | `ATLAS_OUTLINE_BRANCH` | `main`, then `master`, then the newest |
 | Only layers recorded on these branches take part | `include.branches` | `--branch <name>` (repeatable) | `ATLAS_ONLY_BRANCH` | all |
 | Leave out layers from modified checkouts and unknown origins | `include.ignoreModified` | `--ignore-modified` | `ATLAS_IGNORE_MODIFIED` | no |
+| Root mappings `from>to` that join spec paths a producer publishes to the paths the specs are recorded under, for the catalog health report (comma-separated; an empty `from` matches every path) | `catalog.roots` |  | `ATLAS_CATALOG_ROOTS` | none |
 | How often (seconds) the backends are looked at for layers written by something else | `refreshSeconds` | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
 | Let anyone look, not upload | `auth.anonymousRead` | `--anonymous-read` | `ATLAS_ANONYMOUS_READ` | no |
 | Listen publicly with no tokens (something in front signs people in) | `auth.insecure` | `--insecure` | `ATLAS_INSECURE` | no |
@@ -2057,7 +2086,7 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
 | How reliable one test is in a scope (environment, producer, parameters, branch, commit, spec revision, time window): independent executions, first-try and eventual success, what was left out and why | `GET /api/reports/tests/reliability?key=<key>&environment=phone` |
 | Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
-| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
+| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `recordings` (completeness of the recordings the run's layers expected), `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
 | Recorded results that carry evidence, across the whole history, found by tag, media type, label, feature, environment, branch, revision, outcome and time | `GET /api/reports/artifacts?artifactTag=demo&type=video` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 
@@ -2090,8 +2119,16 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
   the Tests total. Two spec paths are one logical spec only when a mapping says so
   (`?root=<from>><to>`, for example `?root=%3Especs/` to put `checkout/cart.feature` under `specs/`); similar paths
   are reported as ambiguous and never merged, and a similar title is never an identity. Give a check the label
-  `outline` to say which scenario outline an example belongs to. A domain shared by nearly every spec is flagged, but
-  explicit domain metadata always stays authoritative. The document only reads: it changes no status.
+  `outline` to say which scenario outline an example belongs to, and `behavior-id` / `example-id` to give a behavior
+  or one example a stable id of your own: Atlas counts them and names an id that sits on more than one check (a
+  rename or a move), but a check is still its spec path and id, so nothing is joined by them. A domain shared by nearly
+  every spec is flagged, but explicit domain metadata always stays authoritative. The document only reads: it changes
+  no status.
+- Mappings that should always apply are a setting, not a query parameter: `catalog.roots` in `atlas.server.json` (a list
+  of `from>to`) or `ATLAS_CATALOG_ROOTS` (comma-separated; it replaces the file's list). The health document applies
+  them, then adds the request's `?root=`, and says in `roots[].source` which is which. A mapping with no `>` stops the
+  server starting. The viewer's **Catalog health** tab shows the same document, and its mapping form (the `root`
+  address parameter) tries further mappings without changing the server.
 - The server keeps the newest 100 results of every test (progress reported as `running` is not history) and every run's last result per test, in memory, as layers
   arrive; it is rebuilt from the layers on restart. History never changes a result.
 - Without a published spec set, tests are grouped under the specs their layers recorded (`specs[]`: path, domain,
@@ -3195,7 +3232,7 @@ carry any of these. Every one is optional.
 | `annotations[]` | Notes about the result: a warning, a deprecation, an accessibility finding, a coverage figure. |
 | `attempts[]` | Every try, when the check was retried. |
 | `tags[]` | Free labels to filter by: `smoke`, `payments`. |
-| `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. The viewer reads `build`, `platform`, `applies-to` and `applies-to-by` to tell whether evidence applies to a release (see [the viewer conventions](ui.md#behaviors-read-watch-inspect)). |
+| `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. The viewer reads `build`, `platform`, `applies-to` and `applies-to-by` to tell whether evidence applies to a release, and `published-at` and `enriched-at` (epoch milliseconds or an ISO date) to show when it was published or enriched apart from when the checks ran (see [the viewer conventions](ui.md#behaviors-read-watch-inspect)). `behavior-id` and `example-id` declare a stable id for the behavior and for one example of an outline, and `outline` names the outline; the [catalog health](server.md#reading-the-report-as-an-agent) report counts them and names an id shared by several checks. They never change which check a result belongs to. |
 | `scope{}` | What the evidence does and does not show: surface, device kind, synthetic data, scripted dependencies, audio, pacing, what was asserted and its limits. Unknown when absent. See [Evidence scope](rich-evidence.md#evidence-scope). |
 | `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
@@ -4510,6 +4547,14 @@ when Watch is on screen.
   what they know with labels: `build`, `platform`, and `applies-to` with `applies-to-by` (the policy that asserts the
   evidence still holds for those builds; without it the assertion is refused). The "Stale or unverified" filter
   (`evidence=stale`) lists every behavior whose evidence does not apply, including those with none.
+- The test explorer makes the same reading of every test from the catalog (`explorer/applicability.ts`): the catalog
+  carries the spec's fingerprint now (`spec.fingerprint`) and, on each current result, `specRevision`, `freshness` and
+  `provenance` (the labels above), all optional. The same address names (`release`, `releaseSha`, `releasePlatform`,
+  `evidence=stale`) give the "Stale or unverified" button, the "Stale evidence first" sort, a verdict badge on rows
+  (stale always; unknown or none when a release is named or evidence is filtered or sorted), and the summary in test
+  detail. Layers carry no publication time, because a layer's id is the digest of its content and a time of upload in
+  it would make a retried publish a different layer: a producer that knows states `published-at` and `enriched-at`
+  labels, shown apart from "Checks ran", which alone is the age.
 - A recording is always labelled illustrative: it shows one run and does not approve a behavior for production.
   `demo`/`representative` tags only add a "Representative demo" label.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
@@ -4545,6 +4590,25 @@ same coverage state, revisions and recording in both.
   warnings) and **performance** (`reports/latency`: only measurements named `product-latency`, percentiles withheld with the reason,
   budget and breaches). Absent evidence is stated as unknown, never as good; the test's duration is not product latency, and the
   summary says it describes the checks Atlas holds, not production. The full reliability and latency detail is one link away.
+
+## Catalog health
+
+The **Catalog health** tab (`explorer/HealthView.tsx`, `?tab=health`; `@crvouga/atlas/reports/catalog-health`) explains why the Specs
+and the Tests disagree. The Specs list links to it ("Why do these counts differ from the Tests?"). On a server it reads
+`GET /api/reports/tests/health`; elsewhere the same document is worked out in the page from the specs and results it holds, and an
+older server without the route is told so in words.
+
+- Denominators are never one number: spec files, defined specs, specs with tests, specs executed and defined but not executed
+  (the coverage gaps, which add to no passed count), tests, outlines, examples and observations (an outline, its examples and
+  their per-environment results are told apart). Each figure has its meaning in its `title`.
+- A table walks from the Specs total to the Tests total, step by step, with the sentences below it. Findings are an `Accordion`
+  (warnings open), each with its severity as text, its code, how many it affects and the paths. Paths that might be one promise
+  are shown as "may be the same promise as ...; not merged": a similar title never joins two specs.
+- Root mappings (`from>to`) join spec paths. Those the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`) are
+  labelled "Configured on the server"; others are tried in the form and kept in the address (`root`), labelled "Tried here", and
+  change nothing on the server. A mapping that matched no path is a warning. Joined specs list every original path.
+- Domains are listed as declared; a domain shared by nearly every spec is a finding, never rewritten. Identity states how many
+  checks are known only by title, how many declare `behavior-id` / `example-id`, and the limits of both.
 
 ## UI catalog
 
@@ -4770,7 +4834,7 @@ The narrowly scoped exceptions are:
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
 | UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
-| Project home | Tests/runs/artifacts/compare tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
+| Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
 | Behaviors | Project-wide behavior index with search, coverage filters and a selected behavior's Read / Watch / Inspect; an expanded read-and-watch workspace with a scoped outcome, reliability and performance summary that restores scope, scroll, selection and focus on return | Container, Grid, SimpleGrid, NavLink, TextInput, Button, Paper, Accordion, Tabs |
@@ -5248,6 +5312,8 @@ atlas report — layered evidence for any kind of spec
                        [--specs <dir>] [--format text|json|markdown]
                        [--require-environments a,b] [--require-all-specs]
                        [--branch <name>]... [--ignore-modified]
+  atlas report verify-recordings [--store <dir|s3://…|id=url>]... [--backends <module>] [--layer <id>]...
+                       [--limit <n>] [--branch <name>]... [--ignore-modified] [--format text|json]
   atlas report merge   [--store …]... [--backends <module>] --into <dir|s3://…>
   atlas report doctor  [--store …]... [--role publisher|reader|both]
   atlas report policy  --store s3://bucket/prefix [--role publisher|reader|both]
@@ -5291,6 +5357,13 @@ atlas report — layered evidence for any kind of spec
             --require-all-specs    fail while any spec has no results
             --branch <name>        only layers recorded on this branch (repeatable)
             --ignore-modified      leave out layers from modified checkouts and unknown origins
+  verify-recordings   Read back the videos the layers published and check they are still there as published: the
+            layer still lists the file, its blob is still stored, its size and SHA-256 are the recorded ones, and it
+            begins like the container its media type names. Exit 1 when any video is missing, unreadable, corrupt or
+            not that container, naming the layer and check; test results are never changed. This checks stored bytes,
+            not playback in a browser. Videos given only by address are counted, not checked.
+            --layer <id>   only the layer whose id starts with this (repeatable; at least 7 digits)
+            --limit <n>    only the newest n layers
   merge     Copy the layers of several stores into one.
   doctor    Check that a store works: credentials, listing, writing, and what it holds.
   policy    Print the least-privilege IAM policy for publishers, readers, or both.
@@ -5299,8 +5372,8 @@ atlas report — layered evidence for any kind of spec
                        { id, label?, store } (or a function returning it): a device lab, anything
                        that implements ObjectStore.
 
-  --format json (alias --json)   publish, stream, merge, doctor and status print one JSON document instead of prose
-                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status). A command
+  --format json (alias --json)   publish, stream, merge, doctor, status and verify-recordings print one JSON document instead of prose
+                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status, verify-recordings-result). A command
                        that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   A store may be an Atlas server (https://…): ATLAS_STORE=https://atlas.example.com, with ATLAS_TOKEN.
 
@@ -5861,9 +5934,9 @@ Diagnoses the report's metadata, so a domain filter or a coverage percentage can
 
 `counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.
 
-Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.
+Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.
 
-- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.
+- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.
 - `format` (query): `markdown` for a Markdown report instead of JSON.
 - `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
@@ -5877,12 +5950,12 @@ Diagnoses the report's metadata, so a domain filter or a coverage percentage can
 
 `counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.
 
-Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.
+Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
 - `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
-- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.
+- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.
 - `format` (query): `markdown` for a Markdown report instead of JSON.
 
 Responses: `200` The diagnostics.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
@@ -6144,6 +6217,7 @@ Every run, newest first: layers grouped by their CI run URL (else branch and com
 - `branch` (query): Branches.
 - `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
 - `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `recordings` (query): Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.
 - `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
 - `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
 - `until` (query): Only records at or before this time (same forms as `since`).
@@ -6172,6 +6246,7 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `branch` (query): Branches.
 - `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
 - `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `recordings` (query): Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.
 - `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
 - `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
 - `until` (query): Only records at or before this time (same forms as `since`).

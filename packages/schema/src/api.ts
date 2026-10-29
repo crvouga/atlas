@@ -79,6 +79,7 @@ export const VideoRefSchema = z.looseObject({
   tags: z.array(z.string()).optional().describe('The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)'),
   recording: z.string().optional().describe('What identifies the bytes; references with the same value are one recording. Absent when it cannot be played'),
   available: z.boolean().describe('False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer\'s own bundle does not hold'),
+  reason: z.string().optional().describe('Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable'),
   scope: EvidenceScopeSchema.optional().describe('What this recording shows as its producer declared it: its own `scope`, else its attempt\'s, check\'s, part\'s or layer\'s. Absent: the scope is unknown, never live, physical or audible')
 });
 
@@ -86,7 +87,8 @@ export const VideoRefSchema = z.looseObject({
 export const VideoCountsSchema = z.looseObject({
   references: z.number().int().nonnegative().describe('Every reference to a video; identical bytes referenced twice count twice'),
   recordings: z.number().int().nonnegative().describe('Distinct playable recordings'),
-  unavailable: z.number().int().nonnegative().describe('References that name no bytes, or bytes the layer does not hold')
+  unavailable: z.number().int().nonnegative().describe('References that name no bytes, or bytes the layer does not hold'),
+  missing: z.number().int().positive().optional().describe('Of `unavailable`, those that name a file the layer\'s bundle does not hold (stored, then gone). Absent when there are none')
 });
 
 /** What a result carries beyond its outcome, as counts and short facts. Present only when there is something. */
@@ -480,6 +482,8 @@ export const TestResultEntrySchema = z.looseObject({
   backend: z.string(),
   detail: z.string().describe('Why it has its status, at most 500 characters'),
   specRevision: z.string().optional().describe('The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match'),
+  freshness: z.enum(['modified', 'unknown']).optional().describe('`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, on results other than a test\'s current ones, and from an older server. Advisory; never changes a status'),
+  provenance: z.record(z.string(), z.string()).optional().describe('The labels of its layer and check that say what it ran against and who vouches for it: `build`, `platform`, `applies-to`, `applies-to-by`, `published-at`, `enriched-at`. Present on a test\'s current results when it has any, and absent from an older server. Never decides a result'),
   evidence: EvidenceSummarySchema.optional(),
   latency: z.array(MeasurementSchema).optional().describe('Its product-latency measurements (`kind: product-latency`), when it recorded any. Separate from `durationMs`, which is how long the test took')
 });
@@ -488,7 +492,10 @@ const DurationStatsSchema = z.looseObject({
   count: z.number().int().nonnegative(), totalMs: z.number(), avgMs: z.number(), p50Ms: z.number(), p95Ms: z.number(), minMs: z.number(), maxMs: z.number(), lastMs: z.number()
 });
 
-const CatalogSpecSchema = z.looseObject({ path: z.string(), title: z.string(), domain: z.string(), kind: z.string() });
+const CatalogSpecSchema = z.looseObject({
+  path: z.string(), title: z.string(), domain: z.string(), kind: z.string(),
+  fingerprint: z.string().optional().describe('The fingerprint of the spec text now (the promise). Compare it with a result\'s `specRevision`: different means the promise changed after the result was recorded. Absent: unknown, never "the same". Absent from an older server')
+});
 
 /** One test of the catalog: what it is, its current result per environment, and how it has gone over its recorded history. */
 export const TestSummarySchema = z.looseObject({
@@ -588,9 +595,15 @@ export const CatalogHealthSchema = z.looseObject({
     testsWithoutSpec: nonneg,
     explanation: z.array(z.string())
   }),
-  identity: z.looseObject({ checks: nonneg, fallbackIdentity: nonneg.describe('Checks whose id equals their title'), basis: z.string() }),
+  identity: z.looseObject({
+    checks: nonneg,
+    fallbackIdentity: nonneg.describe('Checks whose id equals their title'),
+    declaredBehaviorIds: nonneg.optional().describe('Checks that declare a `behavior-id` label'),
+    declaredExampleIds: nonneg.optional().describe('Checks that declare an `example-id` label'),
+    basis: z.string()
+  }),
   domains: z.array(z.looseObject({ name: z.string(), specs: nonneg })).describe('Specs per domain, most first'),
-  roots: z.array(z.looseObject({ from: z.string(), to: z.string(), matched: nonneg.describe('Distinct paths the mapping changed') })),
+  roots: z.array(z.looseObject({ from: z.string(), to: z.string(), matched: nonneg.describe('Distinct paths the mapping changed'), source: z.enum(['configuration', 'request']).optional().describe('Where it was declared: the server\'s `catalog.roots` setting or this request\'s `root` parameter') })),
   aliases: z.array(z.looseObject({ path: z.string(), sources: z.array(z.string()) })).describe('Logical specs seen under more than one original path, joined by a root mapping'),
   findings: z.array(z.looseObject({
     code: z.string().describe('An open set: treat a code you do not know as informational'),
@@ -673,6 +686,12 @@ export const ReportRunSchema = z.looseObject({
   totalDurationMs: z.number().nullable(),
   failing: z.array(z.looseObject({ key: z.string(), title: z.string(), environment: z.string().nullable(), detail: z.string() })),
   videos: VideoCountsSchema.optional().describe('Its videos, from its layers and the last result of each test. Absent when it has none or the report carries no video information'),
+  recordings: z.looseObject({
+    state: z.enum(['complete', 'incomplete', 'none-expected', 'unknown']).describe('`incomplete` when an expected recording was skipped or unresolved; else `unknown` when a layer declared no expectations; else `complete` when something was expected and `none-expected` when nothing was'),
+    expected: z.number().int().nonnegative(), published: z.number().int().nonnegative().describe('Of the expected recordings, uploaded or referenced by address'),
+    skipped: z.number().int().nonnegative(), unresolved: z.number().int().nonnegative(), notApplicable: z.number().int().nonnegative(),
+    layersWithoutReceipt: z.number().int().nonnegative().describe('Layers of the run that declared no recording expectations: nothing is claimed for them')
+  }).optional().describe('Whether the recordings its layers expected were published, apart from its outcomes. Absent when no layer declared an expectation: its completeness is unknown, never complete. Matched by the `recordings` filter'),
   attachments: z.number().int().positive().optional().describe('Files attached to the run itself, in its layers, not to a check. Absent when there are none'),
   artifactTags: z.array(z.string()).optional().describe('The normalized tags of the attachments of its results, sorted and distinct. Absent when none is tagged, and in reports of older servers'),
   tags: z.array(z.string()).optional().describe('The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches). Absent when none'),
@@ -687,7 +706,8 @@ export const QueryFacetValueSchema = z.looseObject({ value: z.string(), count: z
 export const QueryFacetsSchema = z.looseObject({
   artifactTags: z.array(QueryFacetValueSchema), types: z.array(QueryFacetValueSchema), labels: z.array(QueryFacetValueSchema).describe('Values are `key=value`'),
   environments: z.array(QueryFacetValueSchema), producers: z.array(QueryFacetValueSchema), branches: z.array(QueryFacetValueSchema), outcomes: z.array(QueryFacetValueSchema),
-  domains: z.array(QueryFacetValueSchema).optional().describe('Only for artifacts: runs have no domain')
+  domains: z.array(QueryFacetValueSchema).optional().describe('Only for artifacts: runs have no domain'),
+  recordings: z.array(QueryFacetValueSchema).optional().describe('Only for runs: `complete`, `incomplete`, `none-expected` and `unknown` with how many runs have each. Absent on servers that predate the filter')
 });
 
 /** `GET /api/reports/runs`: runs, newest first. */

@@ -11,6 +11,7 @@
  * @see docs/rich-evidence.md#recording-completeness
  */
 import type { RecordingCompleteness, RecordingReceipt } from '../../schema/src/layer';
+import type { RecordingCounts } from './evidence-types';
 import { contentTypeOf } from './media-types';
 
 type Loose = Record<string, unknown>;
@@ -115,4 +116,36 @@ export function recordingCompleteness(results: readonly RecordingResult[]): Reco
   gaps.sort((a, b) => (text(a.spec) + a.check + text(a.environment) + a.layer < text(b.spec) + b.check + text(b.environment) + b.layer ? -1 : 1));
   const state = gaps.length ? 'incomplete' : without.size || !results.length ? 'unknown' : count.expected ? 'complete' : 'none-expected';
   return { state, ...count, layersWithoutReceipt: without.size, gaps };
+}
+
+/** A run's recording completeness, from the receipts of its layers (see {@link runRecordings}). */
+export type RunRecordings = {
+  /** `incomplete`: a recording is skipped or unresolved. `unknown`: no gap is known, but a layer declared no expectations. `complete`: everything expected was published. `none-expected`: every layer declared expectations and none required a recording. */
+  readonly state: 'complete' | 'incomplete' | 'none-expected' | 'unknown';
+  /** Recordings the layers expected. */
+  readonly expected: number;
+  /** Of those, uploaded or referenced by address. */
+  readonly published: number;
+  readonly skipped: number;
+  readonly unresolved: number;
+  /** Intentionally unrecorded checks: neither expected nor missing. */
+  readonly notApplicable: number;
+  /** Layers of the run that declared no expectations: nothing is claimed for them. */
+  readonly layersWithoutReceipt: number;
+};
+
+/**
+ * The recording completeness of a run, from the `recordings` counts of each of its layers (`undefined` for a layer that
+ * has no receipt). `undefined` when no layer has a receipt: the run claims nothing, which a reader treats as `unknown`.
+ * A gap always wins (`incomplete`); otherwise a layer without a receipt keeps the run `unknown`, never `complete`. Reads
+ * only the counts, never a recording, and never changes a status.
+ */
+export function runRecordings(layers: readonly (RecordingCounts | undefined)[]): RunRecordings | undefined {
+  const receipts = layers.filter((layer): layer is RecordingCounts => layer !== undefined);
+  if (!receipts.length) return undefined;
+  const sum = (pick: (counts: RecordingCounts) => number) => receipts.reduce((total, counts) => total + pick(counts), 0);
+  const skipped = sum(counts => counts.skipped), unresolved = sum(counts => counts.unresolved), expected = sum(counts => counts.expected);
+  const layersWithoutReceipt = layers.length - receipts.length;
+  const state = skipped + unresolved > 0 ? 'incomplete' : layersWithoutReceipt > 0 ? 'unknown' : expected > 0 ? 'complete' : 'none-expected';
+  return { state, expected, published: sum(counts => counts.uploaded + counts.referenced), skipped, unresolved, notApplicable: sum(counts => counts.notApplicable), layersWithoutReceipt };
 }

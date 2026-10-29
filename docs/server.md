@@ -202,6 +202,7 @@ is said in words and the server does not start. The file has a published
 | Whose specs the report is laid over | `outlineBranch` | `--outline-branch <branch>` | `ATLAS_OUTLINE_BRANCH` | `main`, then `master`, then the newest |
 | Only layers recorded on these branches take part | `include.branches` | `--branch <name>` (repeatable) | `ATLAS_ONLY_BRANCH` | all |
 | Leave out layers from modified checkouts and unknown origins | `include.ignoreModified` | `--ignore-modified` | `ATLAS_IGNORE_MODIFIED` | no |
+| Root mappings `from>to` that join spec paths a producer publishes to the paths the specs are recorded under, for the catalog health report (comma-separated; an empty `from` matches every path) | `catalog.roots` |  | `ATLAS_CATALOG_ROOTS` | none |
 | How often (seconds) the backends are looked at for layers written by something else | `refreshSeconds` | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
 | Let anyone look, not upload | `auth.anonymousRead` | `--anonymous-read` | `ATLAS_ANONYMOUS_READ` | no |
 | Listen publicly with no tokens (something in front signs people in) | `auth.insecure` | `--insecure` | `ATLAS_INSECURE` | no |
@@ -409,7 +410,7 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
 | How reliable one test is in a scope (environment, producer, parameters, branch, commit, spec revision, time window): independent executions, first-try and eventual success, what was left out and why | `GET /api/reports/tests/reliability?key=<key>&environment=phone` |
 | Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
-| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
+| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `recordings` (completeness of the recordings the run's layers expected), `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
 | Recorded results that carry evidence, across the whole history, found by tag, media type, label, feature, environment, branch, revision, outcome and time | `GET /api/reports/artifacts?artifactTag=demo&type=video` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 
@@ -442,8 +443,16 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
   the Tests total. Two spec paths are one logical spec only when a mapping says so
   (`?root=<from>><to>`, for example `?root=%3Especs/` to put `checkout/cart.feature` under `specs/`); similar paths
   are reported as ambiguous and never merged, and a similar title is never an identity. Give a check the label
-  `outline` to say which scenario outline an example belongs to. A domain shared by nearly every spec is flagged, but
-  explicit domain metadata always stays authoritative. The document only reads: it changes no status.
+  `outline` to say which scenario outline an example belongs to, and `behavior-id` / `example-id` to give a behavior
+  or one example a stable id of your own: Atlas counts them and names an id that sits on more than one check (a
+  rename or a move), but a check is still its spec path and id, so nothing is joined by them. A domain shared by nearly
+  every spec is flagged, but explicit domain metadata always stays authoritative. The document only reads: it changes
+  no status.
+- Mappings that should always apply are a setting, not a query parameter: `catalog.roots` in `atlas.server.json` (a list
+  of `from>to`) or `ATLAS_CATALOG_ROOTS` (comma-separated; it replaces the file's list). The health document applies
+  them, then adds the request's `?root=`, and says in `roots[].source` which is which. A mapping with no `>` stops the
+  server starting. The viewer's **Catalog health** tab shows the same document, and its mapping form (the `root`
+  address parameter) tries further mappings without changing the server.
 - The server keeps the newest 100 results of every test (progress reported as `running` is not history) and every run's last result per test, in memory, as layers
   arrive; it is rebuilt from the layers on restart. History never changes a result.
 - Without a published spec set, tests are grouped under the specs their layers recorded (`specs[]`: path, domain,

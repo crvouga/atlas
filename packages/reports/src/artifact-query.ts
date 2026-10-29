@@ -3,7 +3,7 @@
  *
  * One shareable query for the runs of a project and for the recorded results that carry evidence (recordings,
  * screenshots, traces): by artifact tag, label, media type, feature (domain, spec), environment or device, producer,
- * branch, revision, outcome and time. The same rules answer `GET /api/reports/runs`, `GET /api/reports/artifacts`
+ * branch, revision, outcome, time and (runs only) recording completeness. The same rules answer `GET /api/reports/runs`, `GET /api/reports/artifacts`
  * and the viewer's Runs and Artifacts views, so a link means the same thing everywhere.
  *
  * The semantics are fixed, not inferred:
@@ -30,7 +30,7 @@ import { normalizeTag } from './artifact-tags';
 export type QueryFacetValue = { readonly value: string; readonly count: number };
 
 /** The dimensions a query narrows by, with their address parameters. */
-export const QUERY_DIMENSIONS = ['artifactTag', 'type', 'label', 'environment', 'producer', 'branch', 'sha', 'outcome', 'domain', 'spec'] as const;
+export const QUERY_DIMENSIONS = ['artifactTag', 'type', 'label', 'environment', 'producer', 'branch', 'sha', 'outcome', 'domain', 'spec', 'recordings'] as const;
 /** One of {@link QUERY_DIMENSIONS}. */
 export type QueryDimension = (typeof QUERY_DIMENSIONS)[number];
 
@@ -58,6 +58,12 @@ export type ArtifactFilter = {
   readonly domain?: readonly string[];
   /** Spec paths. Not applicable to runs. */
   readonly spec?: readonly string[];
+  /**
+   * Recording completeness of a run: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no
+   * recording expectations is `unknown`, never `complete`). Answered from the layers' receipts alone, without reading any
+   * recording. Applies to runs only; it is independent of `outcome`.
+   */
+  readonly recordings?: readonly string[];
   /** Only records at or after this time (epoch ms): a result's recording time, a run's end. */
   readonly since?: number;
   /** Only records at or before this time (epoch ms). */
@@ -91,6 +97,8 @@ export type FilterFields = {
   /** Absent when the dimension does not apply (runs have no domain). */
   readonly domains?: readonly string[];
   readonly specs?: readonly string[];
+  /** The recording completeness of a run (one value). Absent when the dimension does not apply (results). */
+  readonly recordings?: readonly string[];
   readonly at: number;
 };
 
@@ -105,6 +113,8 @@ export type QueryFacets = {
   readonly branches: readonly QueryFacetValue[];
   readonly outcomes: readonly QueryFacetValue[];
   readonly domains?: readonly QueryFacetValue[];
+  /** Runs only: `complete`, `incomplete`, `none-expected` and `unknown`, with how many runs have each. */
+  readonly recordings?: readonly QueryFacetValue[];
 };
 
 /**
@@ -186,12 +196,18 @@ export function usedFilters(filter: ArtifactFilter): FilterName[] {
   return used;
 }
 
+/** Every filter in `filter` that may be applied to a recorded result, as the artifacts query applies them (no recording completeness, which is a property of a run). */
+export function forArtifacts(filter: ArtifactFilter): ArtifactFilter {
+  const { recordings: _recordings, ...rest } = filter;
+  return rest;
+}
+
 /** Whether a query narrows anything. */
 export function isFiltered(filter: ArtifactFilter): boolean {
   return usedFilters(filter).some(name => name !== 'inherited');
 }
 
-/** Every filter in `filter` that may be applied to a record with these fields, as the runs query applies them (no domain or spec). */
+/** Every filter in `filter` that may be applied to a run, as the runs query applies them (no domain or spec). */
 export function forRuns(filter: ArtifactFilter): ArtifactFilter {
   const { domain: _domain, spec: _spec, ...rest } = filter;
   return rest;
@@ -229,6 +245,7 @@ export function matchesFilter(fields: FilterFields, filter: ArtifactFilter, skip
   if (skip !== 'outcome' && filter.outcome?.length && !filter.outcome.some(value => fields.outcomes.includes(value))) return false;
   if (skip !== 'domain' && filter.domain?.length && fields.domains && !filter.domain.some(value => fields.domains!.includes(value))) return false;
   if (skip !== 'spec' && filter.spec?.length && fields.specs && !filter.spec.some(value => fields.specs!.includes(value))) return false;
+  if (skip !== 'recordings' && filter.recordings?.length && fields.recordings && !filter.recordings.some(value => fields.recordings!.includes(value))) return false;
   if (filter.since !== undefined && fields.at < filter.since) return false;
   if (filter.until !== undefined && fields.at > filter.until) return false;
   return true;
@@ -254,6 +271,7 @@ export function facetsOf(records: readonly FilterFields[], filter: ArtifactFilte
   const dimension = (skip: QueryDimension, pick: (fields: FilterFields) => readonly string[], chosen?: readonly string[]) => withChosen(tally(scope(skip).map(pick)), chosen);
   const normalTags = (filter.artifactTag ?? []).map(tag => normalizeTag(tag)).filter((tag): tag is string => tag !== null);
   const domains = records.some(record => record.domains);
+  const recordings = records.some(record => record.recordings);
   return {
     artifactTags: dimension('artifactTag', fields => fields.artifactTags, normalTags),
     types: dimension('type', fields => fields.types, filter.type),
@@ -262,7 +280,8 @@ export function facetsOf(records: readonly FilterFields[], filter: ArtifactFilte
     producers: dimension('producer', fields => fields.producers, filter.producer),
     branches: dimension('branch', fields => fields.branches, filter.branch),
     outcomes: dimension('outcome', fields => fields.outcomes, filter.outcome),
-    ...(domains ? { domains: dimension('domain', fields => fields.domains ?? [], filter.domain) } : {})
+    ...(domains ? { domains: dimension('domain', fields => fields.domains ?? [], filter.domain) } : {}),
+    ...(recordings ? { recordings: dimension('recordings', fields => fields.recordings ?? [], filter.recordings) } : {})
   };
 }
 

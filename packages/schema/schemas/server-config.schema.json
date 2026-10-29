@@ -102,6 +102,23 @@
       },
       "additionalProperties": false
     },
+    "catalog": {
+      "default": {
+        "roots": []
+      },
+      "type": "object",
+      "properties": {
+        "roots": {
+          "default": [],
+          "description": "Root mappings `from>to` that relate spec paths a producer publishes to the paths the specs are recorded under (an empty `from` matches every path). The catalog health report applies them to every request, beside any `root` the request adds",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "refreshSeconds": {
       "default": 10,
       "description": "How often the backends are looked at for layers written by something other than this server",

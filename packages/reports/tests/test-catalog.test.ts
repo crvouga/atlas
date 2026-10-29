@@ -142,3 +142,60 @@ describe('formatting', () => {
     expect(runKey({ runUrl: null, branch: null, sha: null })).toBe('local');
   });
 });
+
+describe('evidence applicability in the catalog', () => {
+  const SPEC = 'specs/lists/add.feature';
+  const read = async (store: ReturnType<typeof memoryStore>, layerIds: readonly string[]) => {
+    const layers: LayerEvidence[] = [];
+    for (const id of layerIds) layers.push(layerEvidence(layerSummary((await readLayer(store, id))!), 'one'));
+    return layers;
+  };
+
+  test('carries the spec fingerprint now, what each current result recorded, and what it ran against, all optional', async () => {
+    const store = memoryStore();
+    const specs = (fingerprint: string) => [{ path: SPEC, domain: 'lists', kind: 'gherkin', title: 'Lists', fingerprint }];
+    const old = await publishChecks(store, {
+      producer: 'e2e', environment: 'ios', recordedAtMs: 1_000, branch: 'main', sha: 'a'.repeat(40), freshness: 'modified', specs: specs('old'),
+      checks: [{ id: 'a', title: 'A', status: 'passed', specPath: SPEC, labels: { build: '90', 'applies-to-by': 'policy-7', unrelated: 'x' } }]
+    });
+    const current = await publishChecks(store, {
+      producer: 'web', environment: 'desktop-web', recordedAtMs: 2_000, branch: 'main', sha: null, specs: specs('now'),
+      checks: [{ id: 'b', title: 'B', status: 'passed', specPath: SPEC }]
+    });
+    const layers: LayerEvidence[] = [];
+    const history = new TestHistory();
+    for (const id of [old.id, current.id]) {
+      const summary = layerSummary((await readLayer(store, id))!);
+      const evidence = layerEvidence(summary, 'one');
+      layers.push(evidence);
+      history.add(evidence.layer, evidence.rows, summary.specs, 'one', evidence.fingerprints);
+    }
+    const model = catalogModel(layers, { history });
+    const a = model.tests.find(test => test.id === 'a')!;
+    const b = model.tests.find(test => test.id === 'b')!;
+    // The promise now is the newest fingerprint recorded for the spec; a result keeps the one its own layer recorded.
+    expect(a.spec?.fingerprint).toBe('now');
+    expect(a.outcomes[0]!.specRevision).toBe('old');
+    expect(b.outcomes[0]!.specRevision).toBe('now');
+    expect(model.facets.specs[0]!.fingerprint).toBe('now');
+    // What it ran against: only the labels that name it, and a checkout that was not clean.
+    expect(a.outcomes[0]!.provenance).toEqual({ build: '90', 'applies-to-by': 'policy-7' });
+    expect(a.outcomes[0]!.freshness).toBe('modified');
+    // Absent, not empty, when the layer said nothing.
+    expect('provenance' in b.outcomes[0]!).toBe(false);
+    expect('freshness' in b.outcomes[0]!).toBe(false);
+    // Statuses are untouched by any of it.
+    expect([a.status, b.status]).toEqual(['passed', 'passed']);
+  });
+
+  test('a result with no recorded fingerprint carries none, never the current one', async () => {
+    const store = memoryStore();
+    const layer = await publishChecks(store, {
+      producer: 'e2e', recordedAtMs: 1_000, branch: 'main', sha: null,
+      checks: [{ id: 'a', title: 'A', status: 'passed', specPath: SPEC }]
+    });
+    const model = catalogModel(await read(store, [layer.id]), { specs: [{ path: SPEC, domain: 'lists', kind: 'gherkin', title: 'Lists' }] });
+    expect(model.tests[0]!.outcomes[0]!.specRevision).toBeUndefined();
+    expect(model.tests[0]!.spec?.fingerprint).toBeUndefined();
+  });
+});

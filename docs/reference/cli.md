@@ -105,6 +105,8 @@ atlas report — layered evidence for any kind of spec
                        [--specs <dir>] [--format text|json|markdown]
                        [--require-environments a,b] [--require-all-specs]
                        [--branch <name>]... [--ignore-modified]
+  atlas report verify-recordings [--store <dir|s3://…|id=url>]... [--backends <module>] [--layer <id>]...
+                       [--limit <n>] [--branch <name>]... [--ignore-modified] [--format text|json]
   atlas report merge   [--store …]... [--backends <module>] --into <dir|s3://…>
   atlas report doctor  [--store …]... [--role publisher|reader|both]
   atlas report policy  --store s3://bucket/prefix [--role publisher|reader|both]
@@ -148,6 +150,13 @@ atlas report — layered evidence for any kind of spec
             --require-all-specs    fail while any spec has no results
             --branch <name>        only layers recorded on this branch (repeatable)
             --ignore-modified      leave out layers from modified checkouts and unknown origins
+  verify-recordings   Read back the videos the layers published and check they are still there as published: the
+            layer still lists the file, its blob is still stored, its size and SHA-256 are the recorded ones, and it
+            begins like the container its media type names. Exit 1 when any video is missing, unreadable, corrupt or
+            not that container, naming the layer and check; test results are never changed. This checks stored bytes,
+            not playback in a browser. Videos given only by address are counted, not checked.
+            --layer <id>   only the layer whose id starts with this (repeatable; at least 7 digits)
+            --limit <n>    only the newest n layers
   merge     Copy the layers of several stores into one.
   doctor    Check that a store works: credentials, listing, writing, and what it holds.
   policy    Print the least-privilege IAM policy for publishers, readers, or both.
@@ -156,8 +165,8 @@ atlas report — layered evidence for any kind of spec
                        { id, label?, store } (or a function returning it): a device lab, anything
                        that implements ObjectStore.
 
-  --format json (alias --json)   publish, stream, merge, doctor and status print one JSON document instead of prose
-                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status). A command
+  --format json (alias --json)   publish, stream, merge, doctor, status and verify-recordings print one JSON document instead of prose
+                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status, verify-recordings-result). A command
                        that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   A store may be an Atlas server (https://…): ATLAS_STORE=https://atlas.example.com, with ATLAS_TOKEN.
 
