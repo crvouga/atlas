@@ -24,9 +24,10 @@
  */
 import { displayTag, normalizeTag, normalizeTags } from './artifact-tags';
 import { facetsOf, forRuns, labelList, matchesFilter, outcomeOfCounts, splitList, usedFilters, type ArtifactFilter, type FilterFields, type FilterName, type QueryFacets } from './artifact-query';
-import type { EvidenceStatus, SpecEntry } from './explorer-types';
+import type { EvidenceMeasurement, EvidenceStatus, SpecEntry } from './explorer-types';
 import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
 import { videoCounts } from './evidence-detail';
+import { productLatency } from './latency';
 import { matchesScope, scopeTokens, UNKNOWN_SCOPE } from './evidence-scope';
 import { checkSlots, type CheckSlot } from './evidence-view';
 import { combineEvidence, emptyCounts, slotKey, specPath as normalSpecPath, type EvidenceResult } from './layer-merge';
@@ -66,6 +67,8 @@ export type TestResultEntry = {
   readonly detail: string;
   /** What it carried beyond its outcome (attachments, steps, retries, tags, labels), when anything. */
   readonly evidence?: EvidenceSummary;
+  /** Its product-latency measurements (`kind: product-latency`), when it recorded any. Separate from `durationMs`, which is how long the test took (setup, waits and pacing included). */
+  readonly latency?: readonly EvidenceMeasurement[];
 };
 
 /** The current result of a test in one producer, environment and parameter set: the report's winner for that slot. */
@@ -462,7 +465,7 @@ function completed(status: EvidenceStatus): boolean {
 }
 
 function entryOf(layer: LayerHeader, row: LayerRow, backend: string): TestResultEntry {
-  return materialize({ o: originOf(layer, backend), s: row.status, d: row.durationMs, k: row.kind, t: row.detail, e: row.evidence });
+  return materialize({ o: originOf(layer, backend), s: row.status, d: row.durationMs, k: row.kind, t: row.detail, e: row.evidence, m: productLatency(row.measurements) });
 }
 
 /**
@@ -475,7 +478,7 @@ type Origin = {
   /** Producer, environment and parameters: with a test and a kind, the slot a result fills. */
   readonly place: string;
 };
-type Held = { readonly o: Origin; readonly s: EvidenceStatus; readonly d: number | null; readonly k: string; readonly t: string; readonly e: EvidenceSummary | undefined };
+type Held = { readonly o: Origin; readonly s: EvidenceStatus; readonly d: number | null; readonly k: string; readonly t: string; readonly e: EvidenceSummary | undefined; readonly m: readonly EvidenceMeasurement[] | undefined };
 
 function originOf(layer: LayerHeader, backend: string): Origin {
   const parameters = Object.keys(layer.parameters).sort().map(key => `${key}=${layer.parameters[key]}`).join('\u0002');
@@ -492,6 +495,7 @@ function materialize(held: Held): TestResultEntry {
     at: o.at, status: held.s, durationMs: held.d, environment: o.environment, producer: o.producer, kind: held.k, parameters: o.parameters,
     branch: o.branch, sha: o.sha, runUrl: o.runUrl, run: o.run, layer: o.layer, backend: o.backend, detail: shortDetail(held.t),
     ...(held.e ? { evidence: held.e } : {}),
+    ...(held.m ? { latency: held.m } : {}),
   };
 }
 
@@ -618,7 +622,7 @@ export class TestHistory {
       let ident = this.#idents.get(slot);
       if (!ident) this.#idents.set(slot, ident = { slot, id: row.id, title: row.title, titledAt: layer.recordedAtMs, specPath: row.specPath });
       else if (layer.recordedAtMs > ident.titledAt || (layer.recordedAtMs === ident.titledAt && row.title > ident.title)) { ident.title = row.title; ident.titledAt = layer.recordedAtMs; }
-      this.#remember(slot, { o: origin, s: row.status, d: row.durationMs, k: row.kind, t: row.detail, e: row.evidence });
+      this.#remember(slot, { o: origin, s: row.status, d: row.durationMs, k: row.kind, t: row.detail, e: row.evidence, m: productLatency(row.measurements) });
     }
   }
 

@@ -224,8 +224,63 @@
                         "type": "string"
                       },
                       "limit": {
-                        "description": "The allowance. A measurement over it is reported, and never fails the check by itself",
+                        "description": "The allowance, or budget. A measurement over it is reported, and never fails the check by itself",
                         "type": "number"
+                      },
+                      "kind": {
+                        "description": "What the number is, in an open vocabulary. `product-latency`: a user-visible response time between `from` and `to`. Absent: just a number, never read as product latency",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "from": {
+                        "description": "The event the interval starts at. Without both `from` and `to` a latency is shown but no product claim is made from it",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "to": {
+                        "description": "The event the interval ends at",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "intended": {
+                        "description": "The interval the name of the measurement claims, when what was measured is only part of it. If `intended.to` differs from `to` (or `intended.from` from `from`) the measurement is shown as partial, never as the complete interval",
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "description": "The event the interval starts at: `end of speech`, `submit pressed`",
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "to": {
+                            "description": "The event the interval ends at: `audible response`, `confirmation visible`",
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "additionalProperties": {}
+                      },
+                      "source": {
+                        "description": "How it was measured: `app-instrumentation`, `trace`, `recording-analysis`",
+                        "type": "string"
+                      },
+                      "outcome": {
+                        "description": "`observed` (the default), `timeout` or `failed`. For anything but `observed` the value is how long the observation waited: at least that much, so it counts against a budget and is never dropped",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "instrumentation": {
+                        "description": "The version or method of the measurement. A change of it between two sets of observations is disclosed when they are compared",
+                        "type": "string"
+                      },
+                      "labels": {
+                        "description": "What the observation is comparable with: `device`, `build`, `network`. `device` and `build` group the observations and, when two groups differ in the others, the comparison says so",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -2355,8 +2410,63 @@
                                 "type": "string"
                               },
                               "limit": {
-                                "description": "The allowance. A measurement over it is reported, and never fails the check by itself",
+                                "description": "The allowance, or budget. A measurement over it is reported, and never fails the check by itself",
                                 "type": "number"
+                              },
+                              "kind": {
+                                "description": "What the number is, in an open vocabulary. `product-latency`: a user-visible response time between `from` and `to`. Absent: just a number, never read as product latency",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "from": {
+                                "description": "The event the interval starts at. Without both `from` and `to` a latency is shown but no product claim is made from it",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "description": "The event the interval ends at",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "intended": {
+                                "description": "The interval the name of the measurement claims, when what was measured is only part of it. If `intended.to` differs from `to` (or `intended.from` from `from`) the measurement is shown as partial, never as the complete interval",
+                                "type": "object",
+                                "properties": {
+                                  "from": {
+                                    "description": "The event the interval starts at: `end of speech`, `submit pressed`",
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "to": {
+                                    "description": "The event the interval ends at: `audible response`, `confirmation visible`",
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              "source": {
+                                "description": "How it was measured: `app-instrumentation`, `trace`, `recording-analysis`",
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "description": "`observed` (the default), `timeout` or `failed`. For anything but `observed` the value is how long the observation waited: at least that much, so it counts against a budget and is never dropped",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "instrumentation": {
+                                "description": "The version or method of the measurement. A change of it between two sets of observations is disclosed when they are compared",
+                                "type": "string"
+                              },
+                              "labels": {
+                                "description": "What the observation is comparable with: `device`, `build`, `network`. `device` and `build` group the observations and, when two groups differ in the others, the comparison says so",
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               }
                             },
                             "required": [

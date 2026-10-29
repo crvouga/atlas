@@ -742,6 +742,22 @@ export type LayerRun = z.output<typeof LayerRunSchema>;
 
 The execution of a layer, parsed from `LayerRunSchema`.
 
+#### `PRODUCT_LATENCY_KIND`
+
+```ts
+export const PRODUCT_LATENCY_KIND = …
+```
+
+The `kind` of a measurement that is a named, user-visible product latency (see docs/rich-evidence.md#product-latency).
+
+#### `MeasurementBoundarySchema`
+
+```ts
+export const MeasurementBoundarySchema = …
+```
+
+The two ends of a measured interval, named in the producer's words: `{ from: 'submit pressed', to: 'confirmation visible' }`.
+
 #### `MeasurementSchema`
 
 ```ts
@@ -750,6 +766,18 @@ export const MeasurementSchema = …
 
 A number a check measured, such as a latency or a size, with its unit and an optional allowance. A measurement over
 its `limit` is reported and never changes the check's status.
+
+A measurement of `kind` `product-latency` is how quickly the product responded to a user, between two named events.
+It is not the check's duration (which includes setup, waits and pacing) and a number with no `kind` is never read as
+product latency. All the fields after `limit` are optional and describe the measurement; none decides a status.
+
+#### `Measurement`
+
+```ts
+export type Measurement = z.output<typeof MeasurementSchema>;
+```
+
+A measurement as stored in a layer, parsed from `MeasurementSchema`.
 
 #### `ExtensionsSchema`
 

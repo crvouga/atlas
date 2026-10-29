@@ -20,6 +20,7 @@ import { Origin, StatusMark } from '../evidence/marks';
 import { useTestHistory } from './catalog';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, runName } from './parts';
+import { ProductLatency } from './ProductLatency';
 import { usePinnedResult, type PinnedResult } from './pinned';
 const RecordingPage = lazy(() => import('../evidence/recording-page').then((module) => ({ default: module.RecordingPage })));
 /** Results the history table shows before "Show more". */
@@ -300,6 +301,10 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         <Title order={3} mb="sm" c="dimmed">
           How it has gone
         </Title>
+        <Text component="div" c="dimmed" mb="sm">
+          Durations here are test execution time: setup, waits, retries and any demo pacing included. They do not say how quickly the product
+          responded; see Product latency.
+        </Text>
         <SimpleGrid component="dl" cols={{ base: 2, sm: 3 }}>
           <Stack gap="sm">
             <Box component="dt">Pass rate</Box>
@@ -384,11 +389,13 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         )}
         {!d && (
           <Text component="div" c="dimmed">
-            No duration recorded. Producers can send <Code>durationMs</Code> with each check.
+            No test duration recorded. Producers can send <Code>durationMs</Code> with each check.
           </Text>
         )}
         {entries.length > 1 && <Trend entries={entries} />}
       </Box>
+
+      <ProductLatency entries={entries} />
 
       {(test.tags.length > 0 || Object.keys(test.labels).length > 0) && (
         <Box aria-label="Tags and labels" component="section" mb="lg">
@@ -555,7 +562,7 @@ function Trend({ entries }: { entries: readonly TestResultEntry[] }) {
       {timed.length > 1 && (
         <Box component="figure" m={0}>
           <Box component="figcaption">
-            Duration over the last {plural(timed.length, 'result', 'results')} · max {formatMs(max)}
+            Test duration over the last {plural(timed.length, 'result', 'results')} · max {formatMs(max)}
           </Box>
           <svg
             viewBox={`0 0 ${width} ${height}`}

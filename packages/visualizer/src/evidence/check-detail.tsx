@@ -2,6 +2,7 @@ import { recordingPaths } from '@crvouga/atlas/reports/evidence-types';
 import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
 import { flattenFrames } from '@crvouga/atlas/reports/frames';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
+import { boundaryOf, isProductLatency } from '@crvouga/atlas/reports/latency';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
 import { Accordion, Alert, Anchor, Box, Button, Code, Flex, Group, List, Stack, Table, Text, Title } from '@mantine/core';
@@ -398,6 +399,14 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
                 <Text span inherit>
                   {' '}
                   against an allowance of {measurement.limit} {measurement.unit}
+                </Text>
+              )}
+              {isProductLatency(measurement) && (
+                <Text span inherit c="dimmed">
+                  {' '}
+                  · product latency, {boundaryOf(measurement).label}
+                  {boundaryOf(measurement).state === 'partial' && ` (partial: not ${boundaryOf(measurement).intended})`}
+                  {measurement.outcome !== undefined && measurement.outcome !== 'observed' && ` · ${measurement.outcome}: waited at least this long`}
                 </Text>
               )}
             </Text>
