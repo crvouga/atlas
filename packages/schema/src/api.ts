@@ -15,7 +15,7 @@
  */
 import { z } from 'zod/v4';
 
-import { CheckSchema, EvidenceScopeSchema, LayerRunSchema } from './layer';
+import { CheckSchema, EvidenceScopeSchema, LayerRunSchema, MeasurementSchema } from './layer';
 
 /** One of the statuses a check has in a report: `passed`, `failed`, `running` (not finished) or `not-run`. Closed. */
 export const EvidenceStatusSchema = z.enum(['passed', 'failed', 'running', 'not-run']);
@@ -137,7 +137,7 @@ export const LayerRowSchema = z.looseObject({
   status: EvidenceStatusSchema,
   specPath: z.string().nullable().describe('The spec the check belongs to, `specs/<path>`, or null'),
   detail: z.string().describe('Why it has this status; empty when there is nothing to add'),
-  measurements: z.array(z.looseObject({ name: z.string(), value: z.number(), unit: z.string(), limit: z.number().optional() })),
+  measurements: z.array(MeasurementSchema),
   testId: z.string().nullable(),
   variant: z.record(z.string(), z.string()),
   durationMs: z.number().nullable(),
@@ -304,7 +304,8 @@ export const TestResultEntrySchema = z.looseObject({
   backend: z.string(),
   detail: z.string().describe('Why it has its status, at most 500 characters'),
   specRevision: z.string().optional().describe('The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match'),
-  evidence: EvidenceSummarySchema.optional()
+  evidence: EvidenceSummarySchema.optional(),
+  latency: z.array(MeasurementSchema).optional().describe('Its product-latency measurements (`kind: product-latency`), when it recorded any. Separate from `durationMs`, which is how long the test took')
 });
 
 const DurationStatsSchema = z.looseObject({

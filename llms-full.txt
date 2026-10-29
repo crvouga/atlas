@@ -1096,6 +1096,49 @@ Every field is optional, and every value except the booleans is an open string.
 - **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
   dropped, and the attachment, check and layer stay.
 
+## Product latency
+
+A test's `durationMs` includes fixture setup, deliberate waits, demo pacing, retries and cleanup, so it says how long the
+test ran and nothing about how quickly the product responded. Name the numbers that do, as measurements of `kind`
+`product-latency` between two events:
+
+```ts
+measurements: [
+  { name: 'Fixture setup', value: 20_000, unit: 'ms' },              // just a number: never read as latency
+  {
+    name: 'Confirmation', value: 500, unit: 'ms', kind: 'product-latency',
+    from: 'submit pressed', to: 'confirmation visible',             // the boundaries are part of the claim
+    limit: 800,                                                     // the budget
+    source: 'app-instrumentation', instrumentation: 'spans-v2',
+    labels: { device: 'pixel-8', build: '4821' }                    // what it is comparable with
+  }
+]
+```
+
+The test page shows **Product latency** apart from the test statistics, whose durations are labelled as test execution
+time. Every field after `unit` is optional and none of them decides a status, a slot or a winner.
+
+- **Only named measurements are latency.** A check's duration, a video's length, a step and a number with no `kind` are
+  never product latency. A test that recorded none shows that its latency is unknown, not fast.
+- **Boundaries are part of the claim.** Without both `from` and `to` the numbers are shown but no percentile or product
+  claim is made, and the page says so. When the interval you measured is only part of what the name claims, say what it
+  claims in `intended` (`{ "to": "audible response" }` on a measurement that ends at `tts dispatch`) and the viewer labels
+  it a partial interval, never the complete one.
+- **Percentiles need samples.** p50 needs 5 observations and p95 needs 20; fewer shows `Withheld` with the count it has.
+  One observation shows no spread or confidence.
+- **A timeout is a sample.** `outcome: "timeout"` or `"failed"` (anything but `observed`) means `value` is how long the
+  observation waited. It stays in the sample count and the percentiles, counts as over budget whenever a `limit` is set,
+  and marks the figures as lower bounds, so a stuck product never looks healthy.
+- **Groups.** The viewer groups observations by `device`, `build` or the UTC day they were recorded, taking `device` and
+  `build` from the measurement's `labels`, else the result's labels, parameters, environment and commit. Each group has
+  its own sample count, p50/p95, budget and breaches. A group that names nothing is `unknown device` or `unknown build`.
+- **Baselines.** A group is compared with a chosen baseline by absolute and relative change of p50 (and p95), or of the
+  newest observation when percentiles are not supported on both sides. Measurements with different names, units or
+  boundaries are not compared. A change of `instrumentation`, environment, other labels or parameters, or budget between
+  the two sides is listed beside the change.
+- **Reading it from the API.** `GET /api/reports/tests/history` entries carry `latency` (their product-latency
+  measurements) next to `durationMs`. The pure functions are in `@crvouga/atlas/reports/latency`.
+
 ## Finding runs and artifacts
 
 The viewer's **Runs** and **Artifacts** tabs and the API answer one query, so a link means the same thing everywhere.
@@ -2848,7 +2891,7 @@ carry any of these. Every one is optional.
 | `scope{}` | What the evidence does and does not show: surface, device kind, synthetic data, scripted dependencies, audio, pacing, what was asserted and its limits. Unknown when absent. See [Evidence scope](rich-evidence.md#evidence-scope). |
 | `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
-| `measurements[]` | Numbers, with units and an allowance (already part of the contract). |
+| `measurements[]` | Numbers, with units and an allowance (already part of the contract). A measurement of `kind` `product-latency` names a user-visible response time between two events; see [Product latency](rich-evidence.md#product-latency). |
 
 An attachment may carry its own `tags[]` (`demo`): shown as `#demo` and searchable; see
 [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos).
@@ -2917,6 +2960,23 @@ Two checks guard this in the repository: `packages/reports/tests/fixtures/layer-
 every kind of evidence and values from the future) and `layer-extensibility.test.ts`, which proves unknown
 fields survive at every level, malformed evidence is dropped without losing the result, and a reader of the
 first version of the format still reads it all.
+
+### Saying what failed
+
+A failed check or step may declare the expectation it broke under the `atlas.failure` extension, so a reviewer sees
+it before the raw log. Every field is optional, and the declaration never changes the result.
+
+```json
+{
+  "name": "The list includes tea", "kind": "then", "status": "failed",
+  "extensions": { "atlas.failure": { "expected": "tea in the list", "actual": "the list is empty", "attribution": "product" } }
+}
+```
+
+`expected` and `actual` are shown as written. `attribution` is `product`, `test-harness` or `environment`; leave it out
+when you do not know, and the viewer says the cause is unknown. It is never inferred from the message. Whether setup
+failed before the behavior started comes from the failed step's `kind`: `hook`, `setup`, `fixture`, `before`,
+`beforeAll`, `beforeEach` or `given` mean preparation; `when`, `then`, `assertion` or `expect` mean the behavior.
 
 ## Attach evidence
 
@@ -3947,6 +4007,29 @@ published again, bounded history). First-try success is over executions that rec
 did not run or did not finish is excluded by name and never counted as a pass. The scope and the open executions table
 are in the address (`rel*`), so a link reproduces the figure and the executions behind it.
 
+## Product latency
+
+A test's duration and its product latency are different things and the viewer never mixes them (`explorer/ProductLatency.tsx`,
+`@crvouga/atlas/reports/latency`). Statistics and the trend are labelled test execution time. Product latency is read only from
+measurements named `product-latency`; it shows boundaries, group (device, build, day), samples, budget and breaches, and a
+baseline comparison that lists changes of instrumentation or conditions. Percentiles and product claims that the evidence
+cannot support are shown as `Withheld` with the reason, a partial interval is badged, timeouts count as samples and breaches,
+and a test with no latency says it is unknown, not fast.
+
+## Outcome summary
+
+A test or behavior detail states what the **selected** result says apart from what the other current sources say
+(`evidence/outcome.ts`, `outcome-summary.tsx`). The heading is the selected source's outcome first ("Selected result
+passed; another scoped source failed"), never the combined status; the combined status is labelled as the worst current
+result. Each other current source is one click away, and sources that share an environment are told apart by status,
+time, revision and their place among them. A failure leads with whether the behavior was reached (decided only by the
+recorded step `kind`: a `hook`, `setup`, `fixture`, `before*` or `given` step failing is "Behavior not verified: setup
+failed", `when`, `then`, `assertion` or `expect` is "Expectation not met", anything else is unknown), then the expected
+and observed values and the closest step and video, then the original output. The cause (product, test harness,
+environment) is unknown unless the producer declared it under the `atlas.failure` extension; it is never read from error
+wording. Records of one source whose outcome changed are listed oldest first, and a later pass is never called a fix.
+In the explorer the chosen source is the `source` search parameter (a layer id; unlike `layer` it does not pin a run).
+
 ## Icons and notation marks
 
 Use named imports from `@tabler/icons-react` for all UI glyphs. The icon package supplies SVG paths;
@@ -4016,7 +4099,7 @@ The narrowly scoped exceptions are:
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
 | Project home | Tests/runs/artifacts tabs, a run's Artifacts (files of its layers, shared recordings, direct links), metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion |
-| Test detail | Current outcomes, statistics, duration graph, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
+| Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |
 | Evidence | Steps, retries, annotations, facts, unknown extensions, safe downloads and previews | List, Badge, Accordion, Code, Image, native media |

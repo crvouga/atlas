@@ -17,10 +17,12 @@ import { CheckDetail } from '../evidence/check-detail';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { useEvidence } from '../evidence/evidence-context';
 import { Origin, StatusMark } from '../evidence/marks';
+import { outcomeHeadline, selectedResult } from '../evidence/outcome';
 import { useTestHistory } from './catalog';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, runName } from './parts';
 import { Reliability } from './Reliability';
+import { ProductLatency } from './ProductLatency';
 import { usePinnedResult, type PinnedResult } from './pinned';
 const RecordingPage = lazy(() => import('../evidence/recording-page').then((module) => ({ default: module.RecordingPage })));
 /** Results the history table shows before "Show more". */
@@ -127,7 +129,7 @@ function Scope({ pinned, slot }: { pinned: PinnedResult; slot: CheckSlot | undef
 export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot | undefined }) {
   const now = useNow();
   const history = useTestHistory(test.key);
-  const { layer } = useExplorerSearch();
+  const { layer, source } = useExplorerSearch();
   const go = useExplorerNavigate();
   const pinned = usePinnedResult(layer, test.key);
   const [recording, setRecording] = useState(false);
@@ -135,6 +137,7 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
   const [moment, setMoment] = useState<number | null>(null);
   const [rows, setRows] = useState(HISTORY_ROWS);
   const entries = history.data?.history ?? [];
+  const selected = slot && (!layer || pinned.state === 'ready') ? selectedResult(slot, pinned.state === 'ready' ? pinned.entry : undefined, source) : undefined;
   const stats = test.stats;
   const d = stats.durations;
   if (recording && slot) {
@@ -212,6 +215,9 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           <Text data-status={test.status} span inherit fw={600}>
             {statusWord(test.status)}
           </Text>
+          <Text span inherit c="dimmed">
+            worst current result of {plural(test.outcomes.length, 'source', 'sources')}
+          </Text>
           {stats.flaky && (
             <Text title={stats.flakyReason} span inherit>
               Flaky: {stats.flakyReason}
@@ -219,6 +225,11 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           )}
           <Badges test={test} />
         </Flex>
+        {selected && slot && (
+          <Text component="p" role="status" fw={600} data-outcome-headline>
+            {outcomeHeadline(selected, slot).text}
+          </Text>
+        )}
         {test.spec && <Code c="dimmed">{test.spec!.path}</Code>}
         <Code title="Check id" c="dimmed">
           {test.id}
@@ -301,6 +312,10 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         <Title order={3} mb="sm" c="dimmed">
           How it has gone
         </Title>
+        <Text component="div" c="dimmed" mb="sm">
+          Durations here are test execution time: setup, waits, retries and any demo pacing included. They do not say how quickly the product
+          responded; see Product latency.
+        </Text>
         <SimpleGrid component="dl" cols={{ base: 2, sm: 3 }}>
           <Stack gap="sm">
             <Box component="dt">Pass rate</Box>
@@ -385,13 +400,15 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         )}
         {!d && (
           <Text component="div" c="dimmed">
-            No duration recorded. Producers can send <Code>durationMs</Code> with each check.
+            No test duration recorded. Producers can send <Code>durationMs</Code> with each check.
           </Text>
         )}
         {entries.length > 1 && <Trend entries={entries} />}
       </Box>
 
       {!history.isError && <Reliability testKey={test.key} entries={history.data === null ? [] : history.data?.history} />}
+
+      <ProductLatency entries={entries} />
 
       {(test.tags.length > 0 || Object.keys(test.labels).length > 0) && (
         <Box aria-label="Tags and labels" component="section" mb="lg">
@@ -428,6 +445,18 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
             layerId={layer}
             {...(pinned.state === 'ready' ? { pinned: pinned.entry, pin: true } : {})}
             reads="steps"
+            headline={false}
+            records={entries.map((entry) => ({
+              layer: entry.layer,
+              kind: entry.kind,
+              status: entry.status,
+              at: entry.at,
+              sha: entry.sha,
+              producer: entry.producer,
+              environment: entry.environment,
+              parameters: entry.parameters
+            }))}
+            {...(layer ? {} : { source, onSource: (next: string | null) => go({ source: next ?? undefined }) })}
             select={(patch) => {
               if (patch.view === 'recording') {
                 setRecordingLayer(patch.layer ?? undefined);
@@ -558,7 +587,7 @@ function Trend({ entries }: { entries: readonly TestResultEntry[] }) {
       {timed.length > 1 && (
         <Box component="figure" m={0}>
           <Box component="figcaption">
-            Duration over the last {plural(timed.length, 'result', 'results')} · max {formatMs(max)}
+            Test duration over the last {plural(timed.length, 'result', 'results')} · max {formatMs(max)}
           </Box>
           <svg
             viewBox={`0 0 ${width} ${height}`}
