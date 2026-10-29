@@ -337,6 +337,37 @@ edit, and the server's time. Nothing about the layer, its results or the report'
 See [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos) for the tag rules. Reviewer tags are
 shown in the viewer's evidence; the tests API (`artifactTag`) searches the producers' tags.
 
+## Review collections
+
+A team can publish a named, curated review of a few behaviors: recordings from several explicit executions, notes on
+what each is for, and the gaps nobody recorded yet. A **review collection** is kept beside the report under
+`curation/review-collections/` (never as a layer, a check or a run), so it cannot pass or fail anything, decides no
+slot or winner, and never claims its entries are one execution: every entry keeps the layer, run, commit, environment and
+status it was recorded with.
+
+- **Freeze.** `POST /api/reports/review-collections` (publish) takes a title, optional `purpose`, `audience` and `tags`
+  (such as `demo`), the ordered `entries` (`layer` and `check` from `GET /api/reports/artifacts`, optionally `kind`
+  and one `recording`, and a `caption`) and optional `gaps`. The viewer's **Freeze as review collection** button on the
+  Artifacts tab sends the filtered set as it is listed. The server resolves each entry to the result it holds and
+  records what the report says about it; an entry it cannot resolve refuses the whole request (`422`, naming the entry).
+  The order is the curator's: a failed, retried or incomplete result stays beside a later passing replay, each with its
+  own status, time and tries.
+- **Immutable.** A revision is never changed or deleted by the server. Later runs and changed tags do not alter it. To
+  change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest (`409` otherwise); older
+  revisions stay readable (`?revision=`).
+- **Notes and marks** (`POST .../review-collections/reviews`, publish) are separate immutable records with the token's name
+  and the time: a `note`, a `gap` note (optionally at a `timecodeMs` of the entry's recording), `reviewed` and `unreviewed`.
+  They are curation: they change no outcome, layer or winner, and a reviewed mark is not an acceptance sign-off.
+- **When a source goes away** (`GET .../review-collections/detail`) the entry stays where it was with its frozen snapshot
+  and an `availability` of `unavailable` (its layer is gone, for example collected) or `unverified` (held, but the report
+  no longer lists it), with the reason. Nothing is removed or replaced.
+- **Sharing** adds no access. The share URL is the viewer's `?tab=collections&collection=<id>`; reading needs the same
+  read access as the report, and a visitor can Read, Watch and Inspect only what the attachment routes already allow them.
+  Nothing is public by default.
+- **Export.** `GET .../review-collections/export` is a portable manifest: the exact sources, each file with its recorded
+  name, a safe name and path, its `sha256` when the report holds one (`null` is unknown, not verified), and every missing
+  source or file. It holds no bytes. `capabilities.reviewCollections` on `/api/server` says a server has all this.
+
 ## Streaming
 
 `GET /api/events` is a server-sent-events stream:
@@ -477,6 +508,16 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
 | `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
+| `GET /api/reports/review-collections` | read | Review collections: curated sets of recordings, newest first. |
+| `GET /api/projects/{project}/reports/review-collections` | read | Review collections: curated sets of recordings, newest first. |
+| `POST /api/reports/review-collections` | publish | Publish an immutable review collection (or a new revision of one). |
+| `POST /api/projects/{project}/reports/review-collections` | publish | Publish an immutable review collection (or a new revision of one). |
+| `GET /api/reports/review-collections/detail` | read | One review collection revision with how its sources stand now. |
+| `GET /api/projects/{project}/reports/review-collections/detail` | read | One review collection revision with how its sources stand now. |
+| `POST /api/reports/review-collections/reviews` | publish | Add a note, a time-coded gap note or a reviewed mark to a collection entry. |
+| `POST /api/projects/{project}/reports/review-collections/reviews` | publish | Add a note, a time-coded gap note or a reviewed mark to a collection entry. |
+| `GET /api/reports/review-collections/export` | read | Portable index (manifest) of one review collection revision. |
+| `GET /api/projects/{project}/reports/review-collections/export` | read | Portable index (manifest) of one review collection revision. |
 | `GET /api/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |

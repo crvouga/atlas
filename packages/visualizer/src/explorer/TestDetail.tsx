@@ -35,7 +35,7 @@ function LatestLink({ children }: { children: string }) {
   return (
     <Anchor
       renderRoot={(props) => (
-        <Link {...props} to="/" search={patched({ layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+        <Link {...props} to="/" search={patched({ layer: undefined, clip: undefined, clipAt: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
       )}
     >
       {children}
@@ -168,7 +168,7 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         <Anchor
           aria-label="Close the test"
           renderRoot={(props) => (
-            <Link {...props} to="/" search={patched({ test: undefined, layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+            <Link {...props} to="/" search={patched({ test: undefined, layer: undefined, clip: undefined, clipAt: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
           )}
         >
           <IconX size={20} aria-hidden="true" />

@@ -7797,6 +7797,298 @@ export async function pruneReports(store: ObjectStore): Promise<ReportRetentionP
 
 Same as `planReportRetention`. Despite the name it deletes nothing, and `deleteKeys` is always empty.
 
+### Review collections in a store
+
+Source: `packages/reports/src/review-collection-store.ts`. Import: `@crvouga/atlas/reports/review-collection-store`
+
+Where review collections are kept: one immutable object per revision under `curation/review-collections/<id>/`, and
+one small immutable object per reviewer's note under `curation/review-notes/<id>/`, named by time and a random id so
+editors never overwrite one another. Nothing here is ever changed or deleted by the server, and nothing here touches
+the layers the entries point at: a collection is curation beside the report, not a layer and not a test run.
+
+Publishing refuses; it never alters. A request the server cannot resolve to exact, held results is refused with
+the entry that failed, and what is recorded is what was asked for, plus what the report said about each source.
+
+See docs/server.md#review-collections
+
+#### `ReviewCollectionError`
+
+```ts
+export class ReviewCollectionError extends Error
+```
+
+The request was not acceptable. `status` is the HTTP status to answer: 404 (no such collection), 409 (not the newest revision) or 422.
+
+#### `ResultFinder`
+
+```ts
+export type ResultFinder = (layer: string, check: string, kind: string | undefined) => readonly ArtifactResult[];
+```
+
+Finds the recorded results of a layer's check (all kinds when `kind` is undefined).
+
+#### `reviewRevisions`
+
+```ts
+export async function reviewRevisions(store: ObjectStore, id: string): Promise<number[]>
+```
+
+The revisions that exist for a collection id, oldest first. Empty when there is none. Transport errors throw.
+
+#### `readReviewCollection`
+
+```ts
+export async function readReviewCollection(store: ObjectStore, id: string, revision?: number): Promise<{ readonly collection: ReviewCollection; readonly revisions: number[] } | null>
+```
+
+One revision of a collection (the newest when `revision` is absent), or `null` when there is none or it cannot be read
+as a collection (unknown, never guessed at). Transport errors throw.
+
+#### `recordReviewCollection`
+
+```ts
+export async function recordReviewCollection(store: ObjectStore, input: unknown, by: string, atMs: number, find: ResultFinder): Promise<ReviewCollection>
+```
+
+Validates a request (`ReviewCollectionRequestSchema`) and records it as a new immutable revision, by `by` at `atMs`.
+Without `basedOn` it is a new collection with a new id; with it, revision `basedOn.revision + 1` of that collection,
+and `basedOn.revision` must be the newest (409 otherwise) so two curators never silently overwrite each other.
+
+Every entry is resolved with `find`: it must name a result the report holds (and, when it names a recording, one of
+that result's recordings) or the whole request is refused with 422 naming the entry. The snapshot recorded for an entry
+is what the report says about that result, not what the request claims. Entries are kept in the order given and a
+source may appear once. Throws {@link ReviewCollectionError}; a revision that already exists is never overwritten.
+
+#### `listReviewCollections`
+
+```ts
+export async function listReviewCollections(store: ObjectStore): Promise<{ readonly collection: ReviewCollection; readonly revisions: number }[]>
+```
+
+The newest revision of every collection in `store`, newest first. One that cannot be read as a collection is skipped. Transport errors throw.
+
+#### `recordReviewNote`
+
+```ts
+export async function recordReviewNote(store: ObjectStore, input: unknown, by: string, atMs: number): Promise<ReviewNote>
+```
+
+Validates a note (`ReviewNoteInputSchema`) against the revision it is about and records it as a new object, by `by` at
+`atMs`. `note` and `gap` need text; `reviewed` and `unreviewed` need an entry; an entry must be one of the revision's;
+a timecode needs an entry. Throws {@link ReviewCollectionError} (404 for no such collection or revision). It records
+curation only: no layer, result or collection revision changes.
+
+#### `readReviewNotes`
+
+```ts
+export async function readReviewNotes(store: ObjectStore, id: string): Promise<ReviewNote[]>
+```
+
+Every recorded note of a collection (all revisions), oldest first. One that cannot be read as a note is skipped. Transport errors throw.
+
+### Review collections
+
+Source: `packages/reports/src/review-collection.ts`. Import: `@crvouga/atlas/reports/review-collection`
+
+A review collection is a named, curated, ordered set of references to results that other runs recorded: a few
+recordings from several executions, a note on what each is for, the gaps nobody recorded yet. It is curation, not a
+test run. It has no status of its own, carries no check, never decides a result or a winner, and never claims its
+entries are one execution: each entry keeps the layer, run, revision and status it was recorded with. A revision is
+immutable; changing a collection is publishing a new revision, explicitly. Reviewers' notes and "reviewed" marks live
+apart, as an append-only list with who and when, and are not outcomes.
+
+This module is pure and safe in a browser: how an entry is frozen from the result it points at, how an entry stands
+now (available, unverified, unavailable), how marks fold, and the portable manifest. The store is
+`review-collection-store.ts`.
+
+See docs/server.md#review-collections
+
+#### `ReviewSource`
+
+```ts
+export type ReviewSource = z.infer<typeof ReviewSourceSchema>;
+```
+
+The exact result (and optionally one recording of it) an entry points at.
+
+#### `ReviewSnapshot`
+
+```ts
+export type ReviewSnapshot = z.infer<typeof ReviewSnapshotSchema>;
+```
+
+What was recorded about a source when it was frozen.
+
+#### `ReviewEntry`
+
+```ts
+export type ReviewEntry = z.infer<typeof ReviewEntrySchema>;
+```
+
+One entry of a collection revision.
+
+#### `ReviewCollection`
+
+```ts
+export type ReviewCollection = z.infer<typeof ReviewCollectionSchema>;
+```
+
+One immutable revision of a collection.
+
+#### `ReviewNote`
+
+```ts
+export type ReviewNote = z.infer<typeof ReviewNoteSchema>;
+```
+
+A recorded note, time-coded gap note or reviewed mark.
+
+#### `ReviewAvailability`
+
+```ts
+export type ReviewAvailability = z.infer<typeof ReviewAvailabilitySchema>;
+```
+
+How an entry's source stands now.
+
+#### `ReviewCollectionDetail`
+
+```ts
+export type ReviewCollectionDetail = z.infer<typeof ReviewCollectionDetailSchema>;
+```
+
+`GET /api/reports/review-collections/detail`: one revision, how its sources stand now, and its notes.
+
+#### `ReviewCollectionList`
+
+```ts
+export type ReviewCollectionList = z.infer<typeof ReviewCollectionListSchema>;
+```
+
+`GET /api/reports/review-collections`: the newest revision of every collection.
+
+#### `ReviewManifest`
+
+```ts
+export type ReviewManifest = z.infer<typeof ReviewManifestSchema>;
+```
+
+The portable index of one revision.
+
+#### `REVIEW_COLLECTIONS_PREFIX`
+
+```ts
+export const REVIEW_COLLECTIONS_PREFIX = …
+```
+
+Where the revisions of collections are kept in a store: `<prefix><id>/r<revision, six digits>.json`.
+
+#### `REVIEW_NOTES_PREFIX`
+
+```ts
+export const REVIEW_NOTES_PREFIX = …
+```
+
+Where reviewers' notes are kept: `<prefix><collection id>/<time>-<random>.json`, one object each.
+
+#### `REVIEW_ID`
+
+```ts
+export const REVIEW_ID = …
+```
+
+A collection id as the server mints it and the address carries it. Anything else is not an id (and never reaches a store key).
+
+#### `reviewCollectionKey`
+
+```ts
+export function reviewCollectionKey(id: string, revision: number): string
+```
+
+The store key of one revision of a collection.
+
+#### `sameSource`
+
+```ts
+export function sameSource(a: ReviewSource, b: ReviewSource): boolean
+```
+
+Whether two sources name the same result and recording. `kind` counts only when both have one.
+
+#### `snapshotOf`
+
+```ts
+export function snapshotOf(result: ArtifactResult): ReviewSnapshot
+```
+
+What is recorded about a result when an entry is frozen: its own status, time, run, commit and videos, as the layer
+recorded them. Nothing here is the collection's opinion, and none of it is ever updated: a later run does not change it.
+
+#### `availabilityOf`
+
+```ts
+export function availabilityOf(
+  collection: Pick<ReviewCollection, 'entries'>,
+  layerHeld: (layer: string) => boolean,
+  results: (layer: string, check: string, kind: string | undefined) => readonly ArtifactResult[]
+): ReviewAvailability[]
+```
+
+How the sources of a collection stand now. `layerHeld` says whether a layer is still in a backend; `results` finds the
+results the report holds. A layer that is gone makes its entries `unavailable`; a layer that is held while the report
+no longer lists the result (or the recording) is `unverified`, not available and not gone. Every entry keeps its place
+and its explanation: nothing is removed or replaced.
+
+#### `foldReviewed`
+
+```ts
+export function foldReviewed(notes: readonly ReviewNote[]): Record<string, { readonly by: string; readonly atMs: number }>
+```
+
+Folds the notes into the reviewed marks that stand now: for each entry the newest `reviewed` or `unreviewed` decides
+(ties in time go to the later id). Only entries currently `reviewed` are returned, with who and when. A mark is
+curation: it is not a check outcome and does not mean anyone accepted the behavior.
+
+#### `safeFileName`
+
+```ts
+export function safeFileName(name: string): string
+```
+
+A name that is safe to write to any file system: the last path segment only, letters, digits, dot, dash and
+underscore (everything else becomes `_`), no leading dot, at most 100 characters, never empty.
+
+**Example**
+
+```ts
+safeFileName('../../etc/pass wd.webm'); // 'pass_wd.webm'
+```
+
+#### `digestOf`
+
+```ts
+export function digestOf(recording: string | undefined): string | null
+```
+
+The digest in a recording identity (`sha256:<64 hex>`), or null when the identity is a bundle key or address: the bytes' hash is then not known.
+
+#### `manifestOf`
+
+```ts
+export function manifestOf(
+  collection: ReviewCollection,
+  availability: readonly ReviewAvailability[],
+  reviewed: Readonly<Record<string, unknown>>,
+  generatedAtMs: number
+): ReviewManifest
+```
+
+The portable index of one revision: every entry with where its result came from, how it stands now, whether it was
+marked reviewed, and the files (recordings) it references, each with its recorded digest when there is one and a name
+that is safe to write. A file whose source cannot be read now is listed as `missing`, with the reason under `missing`
+of the manifest, never left out. The manifest has no bytes; it is what a packer needs to build an archive that says
+what it lacks.
+
 ### Run bundles
 
 Source: `packages/reports/src/run-bundle.ts`. Import: `@crvouga/atlas/reports/run-bundle`
@@ -9404,6 +9696,8 @@ export type ArtifactResult = {
   readonly types: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   readonly videos?: readonly VideoRef[];
+  /** The status of each recorded try in order, when the check was retried. Absent when no try was recorded: a first try is then unknown, never assumed to have passed. */
+  readonly attemptStatuses?: readonly EvidenceStatus[];
 };
 ```
 

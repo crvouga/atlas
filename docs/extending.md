@@ -121,6 +121,13 @@ when you do not know, and the viewer says the cause is unknown. It is never infe
 failed before the behavior started comes from the failed step's `kind`: `hook`, `setup`, `fixture`, `before`,
 `beforeAll`, `beforeEach` or `given` mean preparation; `when`, `then`, `assertion` or `expect` mean the behavior.
 
+### Placing steps in a recording
+
+A video may declare how its clock relates to the check's under the `atlas.media` extension (`checkStartMs`, `pauses`,
+`marks`), so the viewer can seek it from a step and mark the step playing. Without it the video plays as ever and no step
+is placed. The fields, the rules and the link to a moment are in
+[Place steps in a recording](rich-evidence.md#place-steps-in-a-recording).
+
 ## Attach evidence
 
 ### From the command line

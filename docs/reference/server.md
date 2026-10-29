@@ -625,6 +625,50 @@ export function projectServer(options: AtlasServerOptions, create: (options: Atl
 
 Wrap the single-project protocol in project selection. Auth, upload validation and composition stay identical.
 
+### Review collection routes
+
+Source: `packages/server/src/review-collections.ts`
+
+`/api/reports/review-collections`: publish an immutable, named, ordered collection of references to recorded results
+(with notes and gaps), read it back with how every source stands now, add reviewers' notes and "reviewed" marks, and
+export a portable manifest. A collection is curation kept beside the report under `curation/`: it is never a layer, a
+check or a run, changes no status, slot or winner, and never alters what is uploaded. Reading needs a reader (the
+same as the rest of the report, so nothing becomes public by sharing a link); publishing and noting need a Bearer
+token with the `publish` role, recorded under that token's name. Recordings are still served only by the attachment
+routes, under their own access control.
+
+See docs/server.md#review-collections
+
+#### `ReviewCollectionDeps`
+
+```ts
+export type ReviewCollectionDeps = {
+  /** Where collections and notes are kept: the write backend's store. */
+  readonly store: ObjectStore;
+  /** Every backend's store, to tell whether a layer is still held anywhere. */
+  readonly stores: readonly ObjectStore[];
+  readonly auth: Auth;
+  readonly index: ReportIndex;
+  readonly now: () => number;
+  /** The largest request body, in bytes. */
+  readonly maxBytes: number;
+  readonly unauthorized: (verdict: Extract<ReturnType<Auth['check']>, { ok: false }>) => Response;
+};
+```
+
+What the review collection routes need from the server around them.
+
+#### `mountReviewCollections`
+
+```ts
+export function mountReviewCollections(app: Hono, deps: ReviewCollectionDeps): void
+```
+
+Registers the review collection routes on `app`:
+`GET /api/reports/review-collections`, `POST /api/reports/review-collections`,
+`GET /api/reports/review-collections/detail`, `POST /api/reports/review-collections/reviews` and
+`GET /api/reports/review-collections/export`.
+
 ### settings-page.ts
 
 Source: `packages/server/src/settings-page.ts`

@@ -268,6 +268,172 @@ export const ArtifactTagsSchema = z.looseObject({
   entries: z.array(ArtifactTagEntrySchema)
 });
 
+/** A source a review collection points at: one recorded result of one archived layer, and optionally one of its recordings. Exact and immutable: a layer never changes. */
+export const ReviewSourceSchema = z.looseObject({
+  layer: z.string().regex(/^[0-9a-f]{64}$/).describe('The id of the archived layer that recorded the result'),
+  check: z.string().min(1).max(1024).describe('The check\'s id in that layer'),
+  kind: z.string().min(1).max(256).optional().describe('The kind of the part holding the check, when the same id exists in several parts'),
+  recording: z.string().min(1).max(2048).optional().describe('One recording of the result (`VideoRef.recording`: `sha256:…`, a bundle key or an address). Absent: the result as a whole')
+});
+
+/** One entry of a request to publish a collection: a source and the curator\'s caption for it. */
+export const ReviewEntryInputSchema = z.looseObject({
+  ...ReviewSourceSchema.shape,
+  caption: z.string().max(500).optional().describe('What the curator wants the reviewer to look at in this entry')
+});
+
+/** A gap the curator names: something the review should show and no recording does. It sits after the first `after` entries (0 or absent: before the first). */
+export const ReviewGapInputSchema = z.looseObject({
+  note: z.string().min(1).max(2000).describe('What is missing or unclear'),
+  after: z.number().int().min(0).optional().describe('Place the gap after this many entries (0 or absent: before the first)')
+});
+
+/**
+ * The body of `POST /api/reports/review-collections`: a new collection, or, with `basedOn`, an explicit new revision of
+ * one. At least one entry or gap. The server records which sources the entries are now; it never alters the request.
+ */
+export const ReviewCollectionRequestSchema = z.looseObject({
+  title: z.string().min(1).max(200),
+  purpose: z.string().max(2000).optional().describe('Why this review exists'),
+  audience: z.string().max(500).optional().describe('Who should review it'),
+  tags: z.array(z.string()).max(20).optional().describe('Tags of the collection, such as `demo` (normalized like artifact tags)'),
+  entries: z.array(ReviewEntryInputSchema).max(500).optional().describe('Ordered. The order is the order of the review; it is never re-sorted by time or status'),
+  gaps: z.array(ReviewGapInputSchema).max(100).optional(),
+  frozenFrom: z.string().max(4000).optional().describe('The live filtered view the entries were frozen from, as its address query (informational; the entries are what count)'),
+  basedOn: z.looseObject({ id: z.string(), revision: z.number().int().min(1) }).optional().describe('Publish a new revision of this collection. `revision` must be its newest, else 409')
+});
+
+/** What the server recorded about the source of an entry at the moment it was frozen. */
+export const ReviewSnapshotSchema = z.looseObject({
+  title: z.string(),
+  specPath: z.string().nullable(),
+  status: EvidenceStatusSchema.describe('The result\'s recorded status, as that layer recorded it'),
+  recordedAtMs: z.number(),
+  environment: z.string().nullable(),
+  producer: z.string(),
+  branch: z.string().nullable(),
+  sha: z.string().nullable(),
+  run: z.string().describe('The key of the run it belongs to'),
+  runUrl: z.string().nullable(),
+  backend: z.string().nullable().describe('The backend the layer was read from'),
+  testKey: z.string().describe('The test\'s key, as `GET /api/reports/tests` lists it'),
+  attemptStatuses: z.array(EvidenceStatusSchema).optional().describe('The status of each recorded try, in order, when the check was retried. Never collapsed to the last'),
+  videos: z.array(VideoRefSchema).optional().describe('Its references to videos when it was frozen')
+});
+
+/** One entry of a frozen collection. */
+export const ReviewEntrySchema = z.looseObject({
+  id: z.string().describe('Stable within the collection; notes and reviewed marks refer to it'),
+  source: ReviewSourceSchema,
+  caption: z.string().optional(),
+  snapshot: ReviewSnapshotSchema
+});
+
+/** A gap item of a collection. */
+export const ReviewGapSchema = z.looseObject({
+  id: z.string(),
+  note: z.string(),
+  after: z.number().int().nonnegative().describe('It sits after this many entries')
+});
+
+/**
+ * One revision of a review collection, as stored: immutable. It is curation, not a test run: it has no status of its own,
+ * carries no check, and its entries are references to results that other runs recorded. Entries from different
+ * runs are never one execution.
+ */
+export const ReviewCollectionSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  id: z.string().describe('The collection\'s stable id, in its share URL'),
+  revision: z.number().int().min(1).describe('1 for the first; every change is a new revision'),
+  title: z.string(),
+  purpose: z.string().optional(),
+  audience: z.string().optional(),
+  tags: z.array(z.string()),
+  entries: z.array(ReviewEntrySchema),
+  gaps: z.array(ReviewGapSchema),
+  frozenFrom: z.string().optional(),
+  basedOn: z.looseObject({ id: z.string(), revision: z.number().int().min(1) }).optional(),
+  createdBy: z.string().describe('The name of the token that published it (never the token)'),
+  createdAtMs: z.number().describe('When the server recorded it, epoch milliseconds')
+});
+
+/** One collection in the list: its newest revision in brief. */
+export const ReviewCollectionSummarySchema = z.looseObject({
+  id: z.string(), revision: z.number().int().min(1), revisions: z.number().int().min(1).describe('How many revisions exist'),
+  title: z.string(), purpose: z.string().optional(), audience: z.string().optional(), tags: z.array(z.string()),
+  entries: z.number().int().nonnegative(), gaps: z.number().int().nonnegative(), createdBy: z.string(), createdAtMs: z.number()
+});
+
+/** `GET /api/reports/review-collections`: the newest revision of every collection, newest first. */
+export const ReviewCollectionListSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  collections: z.array(ReviewCollectionSummarySchema)
+});
+
+/** The body of `POST /api/reports/review-collections/reviews`: a note, a time-coded gap note, or a reviewed marker on one entry. Curation only: it changes no outcome. */
+export const ReviewNoteInputSchema = z.looseObject({
+  collection: z.string().describe('The collection id'),
+  revision: z.number().int().min(1),
+  entry: z.string().optional().describe('The entry\'s id; required for `reviewed`, `unreviewed` and a timecode'),
+  kind: z.enum(['note', 'gap', 'reviewed', 'unreviewed']),
+  text: z.string().max(4000).optional().describe('Required for `note` and `gap`'),
+  timecodeMs: z.number().int().min(0).optional().describe('A moment in the entry\'s recording, in milliseconds')
+});
+
+/** One recorded review note. Entries are never changed or removed: they are the audit trail. */
+export const ReviewNoteSchema = z.looseObject({
+  id: z.string().describe('Unique and time-ordered'),
+  collection: z.string(), revision: z.number().int().min(1),
+  entry: z.string().optional(),
+  kind: z.enum(['note', 'gap', 'reviewed', 'unreviewed']),
+  text: z.string().optional(),
+  timecodeMs: z.number().optional(),
+  by: z.string().describe('The name of the token that made it (never the token)'),
+  atMs: z.number()
+});
+
+/** How an entry\'s source stands now: `available` (the layer and the result are in the report), `unverified` (the layer is held but the result is outside the report\'s history window) or `unavailable` (the layer is gone). */
+export const ReviewAvailabilitySchema = z.looseObject({
+  entry: z.string(),
+  state: z.enum(['available', 'unverified', 'unavailable']),
+  reason: z.string().optional().describe('Why it is not `available`, in words')
+});
+
+/** `GET /api/reports/review-collections/detail`: one revision, how each source stands now, and the review notes. */
+export const ReviewCollectionDetailSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  collection: ReviewCollectionSchema,
+  revisions: z.array(z.number().int().min(1)).describe('Every revision that exists, oldest first'),
+  availability: z.array(ReviewAvailabilitySchema),
+  reviews: z.array(ReviewNoteSchema).describe('Notes and marks of this revision, oldest first'),
+  reviewed: z.record(z.string(), z.looseObject({ by: z.string(), atMs: z.number() })).describe('Entries whose latest mark is `reviewed`, with who and when')
+});
+
+/** One file in an export manifest. */
+export const ReviewManifestFileSchema = z.looseObject({
+  name: z.string().describe('The attachment\'s name as recorded'),
+  safeName: z.string().describe('A name safe to write to a file system: letters, digits, dot, dash and underscore'),
+  path: z.string().describe('Where a packer should put it: `files/<entry position>-<safeName>`'),
+  recording: z.string().optional(),
+  sha256: z.string().nullable().describe('The digest of the bytes when the report recorded one, else null: unknown, not verified'),
+  missing: z.boolean().describe('True when the source cannot be read now')
+});
+
+/** `GET /api/reports/review-collections/export`: a portable index of one revision. It lists sources and files; it contains no bytes. */
+export const ReviewManifestSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  generatedAtMs: z.number(),
+  collection: z.looseObject({ id: z.string(), revision: z.number().int().min(1), title: z.string(), purpose: z.string().optional(), audience: z.string().optional(), tags: z.array(z.string()), createdBy: z.string(), createdAtMs: z.number() }),
+  entries: z.array(z.looseObject({
+    id: z.string(), position: z.number().int().min(1), caption: z.string().optional(), source: ReviewSourceSchema, snapshot: ReviewSnapshotSchema,
+    state: z.enum(['available', 'unverified', 'unavailable']), reason: z.string().optional(), reviewed: z.boolean(),
+    files: z.array(ReviewManifestFileSchema)
+  })),
+  gaps: z.array(ReviewGapSchema),
+  missing: z.array(z.looseObject({ entry: z.string(), reason: z.string() })).describe('Entries whose sources cannot be read now, and every file that is missing'),
+  notes: z.string()
+});
+
 /** The data of the `hello` event: sent first on `/api/events`. */
 export const HelloEventSchema = z.looseObject({ version: z.string(), ready: z.boolean(), time: z.number(), heartbeatMs: z.number().positive().optional() });
 
@@ -537,7 +703,8 @@ export const ArtifactResultSchema = z.looseObject({
   tags: z.array(z.string()).describe('Tags of its check and run, which its attachments inherit'),
   types: z.array(z.string()).describe('Media types (roles) of its attachments; `video` only for a playable recording'),
   labels: z.record(z.string(), z.string()),
-  videos: z.array(VideoRefSchema).optional()
+  videos: z.array(VideoRefSchema).optional(),
+  attemptStatuses: z.array(EvidenceStatusSchema).optional().describe('The status of each recorded try in order, when the check was retried. Absent when no try was recorded: a first try is then unknown, never assumed to have passed')
 });
 
 /** `GET /api/reports/artifacts`: recorded results that carry evidence, newest first, with the facets of the query. */
