@@ -1,8 +1,10 @@
 import type { CheckSlot, SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
-import { Alert, Box, Container, List, Stack, Text, Title } from '@mantine/core';
+import { Alert, Box, Container, Group, List, Stack, Text, Title } from '@mantine/core';
 import { useMemo } from 'react';
 import { outlinePath, type SpecKind } from '../spec-kind';
 import { CheckDetail, PlainSteps, ResultRow, type CheckSelection, type SelectCheck } from './check-detail';
+import { assessBehavior, hasRelease, needsAttention, type Assessment } from './applicability';
+import { ApplicabilityControls, useApplicabilityState, VerdictBadge } from './applicability-view';
 import { behaviorOf, coverageCounts, scenarioBehaviors, type Behavior, type RevisionSource } from './behavior';
 import { BehaviorPanel, CoverageBadge, CoverageSummary } from './behavior-panel';
 import { useEvidence } from './evidence-context';
@@ -69,12 +71,23 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
     return { byScenario, all: [...[...byScenario.values()].flat(), ...other] };
   }, [feature, filed, revisions]);
   const counts = useMemo(() => coverageCounts(behaviors.all), [behaviors]);
+  const applicability = useApplicabilityState();
+  const { release, onlyStale } = applicability;
+  const assessments = useMemo(
+    () => new Map<string, Assessment>(behaviors.all.map((behavior) => [behavior.key, assessBehavior(behavior, revisions, release)] as const)),
+    [behaviors, revisions, release]
+  );
+  const staleCount = useMemo(() => [...assessments.values()].filter(needsAttention).length, [assessments]);
+  const hidden = (key: string) => onlyStale && assessments.get(key) !== undefined && !needsAttention(assessments.get(key)!);
   const planned = behaviors.all.length;
+  const leftOver = filed.leftOver.filter((slot) => (!runningOnly || slot.status === 'running') && !hidden(slot.key));
   const toggle = (id: string) => select({ check: selection.check === id ? null : id, layer: null });
   const rows = (scenario: FeatureScenario) =>
     (behaviors.byScenario.get(scenario) ?? []).map((behavior) => {
       if (runningOnly && behavior.slot?.status !== 'running') return null;
+      if (hidden(behavior.key)) return null;
       const { slot } = behavior;
+      const assessed = assessments.get(behavior.key);
       const written = <PlainSteps steps={scenario.steps} examples={scenario.examples} />;
       const id = slot ? slot.id : `scenario:${scenario.name}${behavior.example ? `:${behavior.example}` : ''}`;
       const label = slot
@@ -87,12 +100,19 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
           key={id}
           label={label}
           slot={slot}
-          badge={<CoverageBadge state={behavior.state} />}
+          badge={
+            <Group gap="xs" wrap="wrap">
+              <CoverageBadge state={behavior.state} />
+              {assessed && (assessed.verdict === 'stale' || (assessed.verdict === 'unknown' && hasRelease(release))) && <VerdictBadge verdict={assessed.verdict} />}
+            </Group>
+          }
           open={selection.check === id}
           onToggle={() => toggle(id)}
         >
           <BehaviorPanel
             behavior={behavior}
+            applicability={assessed}
+            release={release}
             start={selection.check === id && selection.layer ? 'inspect' : undefined}
             inspect={
               slot ? (
@@ -132,6 +152,7 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
         )}
       </SpecHeader>
       <CoverageSummary counts={counts} total={behaviors.all.length} />
+      {behaviors.all.length > 0 && <ApplicabilityControls state={applicability} stale={staleCount} total={behaviors.all.length} />}
       <SourceText text={text} file={file} withResults />
       <Box component="section" id="spec-results" aria-label="Recorded results" tabIndex={-1}>
         <TestFilter slots={slots} />
@@ -168,7 +189,7 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
             </List>
           </Box>
         ))}
-        {filed.leftOver.some((slot) => !runningOnly || slot.status === 'running') && (
+        {leftOver.length > 0 && (
           <Box component="section" mb="lg">
             <Title order={2} mb="sm">
               {feature ? 'Other recorded results' : 'Recorded results'}
@@ -179,7 +200,7 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
               </Text>
             )}
             <List spacing="xs" listStyleType="none">
-              <Bounded items={filed.leftOver.filter((slot) => !runningOnly || slot.status === 'running')} size={40} more="More results">
+              <Bounded items={leftOver} size={40} more="More results">
                 {(slot) => (
                   <ResultRow
                     key={slot.key}
