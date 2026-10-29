@@ -221,3 +221,12 @@ test('the spec index searches meaningful titles and groups by the domain the spe
     'the declared domain as the group'
   );
 });
+
+test('the recording on Watch says what it does and does not show, as its producer declared it', async () => {
+  const view = await open([check('Add an item', { attachments: [{ ...video, scope: { surface: 'browser', dependencies: 'scripted' } }] })]);
+  await view.sees('1 behavior');
+  await view.click('button', 'Add an item');
+  await view.until(() => document.querySelector('video') !== null, 'the player');
+  const notice = document.querySelector('[aria-label="Evidence scope of tour.webm"]')!;
+  expect(notice.textContent).toContain('Scripted dependencies');
+});
