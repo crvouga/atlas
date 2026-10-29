@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "subject": { "entryKey": "checkout/payment-sheet@ios", "imageSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" },
+  "critic": { "name": "vision-llm", "version": "1.0.0" },
+  "finding": "f1",
+  "decision": "accept",
+  "reviewer": "pat",
+  "note": "The label really does touch both edges.",
+  "layer": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+  "com.example.future": "kept"
+}

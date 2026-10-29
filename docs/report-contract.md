@@ -232,7 +232,8 @@ anything else is recorded. A measurement over its allowance is reported and neve
 
 Opinions (parts of kind `critique`, the verdicts of [automated UI reviewers](critics.md)) are never counted as checks,
 even when they are all that was recorded, and are never part of the gate: a low score, or a critic that crashed, leaves
-`atlas report status` as it was. The `status` of a critique check says only whether the critic ran.
+`atlas report status` as it was. The `status` of a critique check says only whether the critic ran. A person's accept or dismiss of an
+opinion (`atlas.critique-mark`) is evidence in the same kind of part and has the same properties.
 
 **Freshness never changes a status.** A layer whose spec fingerprint no longer matches, whose
 checkout was modified, or whose related code changed still shows its recorded outcome, with a

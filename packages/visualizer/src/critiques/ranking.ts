@@ -8,11 +8,11 @@
  * loading overlay is not compared with a full screen. An entry whose picture changed since it was judged, or whose critic
  * could not judge it, is listed apart and is never ranked, and an entry the critic never saw is only counted.
  */
-import { catalogEntries, type CatalogEntry, type EntryCritique } from '@crvouga/atlas/reports/ui-catalog-entries';
+import { critiqueAgreement, rankCritiques, type CritiqueAgreement, type RankedEntry } from '@crvouga/atlas/reports/critique-review';
+import { catalogEntries, type CatalogEntry } from '@crvouga/atlas/reports/ui-catalog-entries';
 import type { LayerEvidence } from '@crvouga/atlas/reports/evidence-types';
 
-/** One entry and the critic's newest critique of it. */
-export type RankedEntry = { readonly entry: CatalogEntry; readonly found: EntryCritique };
+export type { RankedEntry } from '@crvouga/atlas/reports/critique-review';
 
 /** What the page shows for one critic and (optionally) one kind of UI state. */
 export type PolishList = {
@@ -32,6 +32,10 @@ export type PolishList = {
   readonly unjudged: number;
   /** Captured states that are not entries because no stored picture backs them. */
   readonly unjudgeable: number;
+  /** Every captured state with a stored picture, for the readings that look across critics. */
+  readonly entries: readonly CatalogEntry[];
+  /** Whether the critics agree on the pictures two or more of them judged (state kind applied). */
+  readonly agreement: CritiqueAgreement;
 };
 
 /**
@@ -44,22 +48,7 @@ export function polishList(layers: readonly LayerEvidence[], choice: { readonly 
   const critics = [...tally].map(([name, critiques]) => ({ name, critiques })).sort((a, b) => b.critiques - a.critiques || (a.name < b.name ? -1 : 1));
   const critic = choice.critic && tally.has(choice.critic) ? choice.critic : critics[0]?.name ?? null;
   const kinds = [...new Set(entries.map((entry) => entry.state))].sort();
-  const inScope = entries.filter((entry) => !choice.kind || entry.state === choice.kind);
-  const ranked: RankedEntry[] = [], unranked: RankedEntry[] = [];
-  let unjudged = 0;
-  for (const entry of inScope) {
-    const found = critic ? entry.critiques.filter((item) => item.critique.critic.name === critic) : [];
-    // The newest critique that judged the current picture decides; failing that, the newest of any.
-    const current = found.find((item) => item.currency === 'current');
-    const pick = current ?? found[0];
-    if (!pick) { unjudged += 1; continue; }
-    if (current && current.critique.verdict?.score !== undefined && !current.critique.failure) ranked.push({ entry, found: current });
-    else unranked.push({ entry, found: pick });
-  }
-  const standing = (item: RankedEntry) => item.found.critique.verdict?.relative?.percentile;
-  const byStanding = ranked.length > 0 && ranked.every((item) => standing(item) !== undefined);
-  const key = (item: RankedEntry) => (byStanding ? standing(item)! : item.found.critique.verdict!.score!);
-  ranked.sort((a, b) => key(a) - key(b) || (a.entry.key < b.entry.key ? -1 : a.entry.key > b.entry.key ? 1 : 0));
-  unranked.sort((a, b) => (a.entry.key < b.entry.key ? -1 : a.entry.key > b.entry.key ? 1 : 0));
-  return { critics, critic, kinds, ranked, rankedBy: byStanding ? 'standing-within-kind' : 'score', unranked, unjudged, unjudgeable };
+  const { ranked, rankedBy, unranked, unjudged } = rankCritiques(entries, critic, choice.kind);
+  const agreement = critiqueAgreement(entries, choice.kind);
+  return { critics, critic, kinds, ranked, rankedBy, unranked, unjudged, unjudgeable, entries, agreement };
 }

@@ -8,7 +8,8 @@ import { AtlasHttpError } from '../../reports/src/http-store';
 import { memoryStore } from '../../reports/tests/memory-store';
 import { RateLimitedError, InvalidOutputError } from '../src/contract';
 import { critiquesOfLayer } from '../src/critique';
-import { createLlmCritic, imageMediaType, openAiCompatibleProvider, parseLlmAnswer, retryAfterMs, type LlmProvider } from '../src/llm';
+import { anthropicProvider, createLlmCritic, geminiProvider, imageMediaType, openAiCompatibleProvider, parseLlmAnswer, retryAfterMs, type LlmProvider } from '../src/llm';
+import { buildCritic, loadCriticsConfig } from '../src/registry';
 import { runCritic } from '../src/runner';
 import { flushSpool, pendingInSpool, spoolingStore } from '../src/spool';
 import { MissingDependencyError, createUiclipCritic, loadOnnxRuntime, setupUiclip, verifyCheckpoint } from '../src/uiclip';
@@ -167,6 +168,87 @@ describe('the LLM critic', () => {
     const critic = createLlmCritic({ model: 'm', provider: provider(async () => ({ text: JSON.stringify(answer) })) });
     const run = await runCritic({ critic, entries: [entry], loadImage: async () => PNG });
     expect(critiquesOfLayer({ id: 'x', producer: 'critic.vision-llm', parts: [{ kind: 'critique', recordedAtMs: 1, checks: [{ id: 'critique/home', status: 'passed', extensions: { 'atlas.critique': run.outcomes[0]!.critique } }] }] })).toHaveLength(1);
+  });
+});
+
+describe('the Anthropic and Gemini providers', () => {
+  const answer = { score: 0.4, label: 'needs-polish', findings: [{ category: 'spacing', severity: 'minor', rationale: 'Cramped.' }] };
+  type Seen = { url: string; headers: Headers; body: Record<string, unknown> };
+  const recorder = (reply: () => Response) => {
+    const seen: Seen[] = [];
+    const fake = asFetch(async (url: string, init: RequestInit) => { seen.push({ url: String(url), headers: new Headers(init.headers), body: JSON.parse(String(init.body)) as Record<string, unknown> }); return reply(); });
+    return { seen, fake };
+  };
+  const judge = async (critic: ReturnType<typeof createLlmCritic>) => (await runCritic({ critic, entries: [entry], loadImage: async () => PNG, maxAttempts: 1, secrets: [KEY] })).outcomes[0]!.critique;
+
+  test('Anthropic: the Messages API over plain fetch, the key only in x-api-key, the image as base64, usage read, and a verdict with findings out', async () => {
+    const { seen, fake } = recorder(() => Response.json({ content: [{ type: 'text', text: JSON.stringify(answer) }], usage: { input_tokens: 11, output_tokens: 7 } }));
+    const provider = anthropicProvider({ apiKey: KEY, fetch: fake });
+    expect(provider).toMatchObject({ name: 'anthropic', sendsImagesTo: 'api.anthropic.com' });
+    const critique = await judge(createLlmCritic({ model: 'some-model', provider }));
+    expect(critique).toMatchObject({ verdict: { score: 0.4, label: 'needs-polish' }, model: { id: 'some-model', provider: 'anthropic' }, usage: { inputTokens: 11, outputTokens: 7 } });
+    expect(critique.findings![0]).toMatchObject({ id: 'f1', category: 'spacing' });
+    expect(seen[0]!.url).toBe('https://api.anthropic.com/v1/messages');
+    expect(seen[0]!.headers.get('x-api-key')).toBe(KEY);
+    expect(seen[0]!.headers.get('anthropic-version')).toBe('2023-06-01');
+    expect(seen[0]!.headers.get('authorization')).toBeNull();
+    const body = seen[0]!.body as { model: string; system: string; temperature: number; messages: { content: { type: string; source?: { media_type: string; data: string } }[] }[] };
+    expect(body).toMatchObject({ model: 'some-model', temperature: 0 });
+    expect(body.messages[0]!.content[0]).toMatchObject({ type: 'image', source: { media_type: 'image/png', data: Buffer.from(PNG).toString('base64') } });
+    expect(JSON.stringify(seen[0]!.body)).not.toContain(KEY);
+    expect(JSON.stringify(critique)).not.toContain(KEY);
+  });
+
+  test('Gemini: generateContent over plain fetch, the key only in x-goog-api-key and never in the address, the image inline, usage read', async () => {
+    const { seen, fake } = recorder(() => Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(answer) }] } }], usageMetadata: { promptTokenCount: 9, candidatesTokenCount: 5 } }));
+    const provider = geminiProvider({ apiKey: KEY, fetch: fake });
+    expect(provider).toMatchObject({ name: 'gemini', sendsImagesTo: 'generativelanguage.googleapis.com' });
+    const critique = await judge(createLlmCritic({ model: 'some/model', provider }));
+    expect(critique).toMatchObject({ verdict: { score: 0.4 }, model: { id: 'some/model', provider: 'gemini' }, usage: { inputTokens: 9, outputTokens: 5 } });
+    expect(seen[0]!.url).toBe('https://generativelanguage.googleapis.com/v1beta/models/some%2Fmodel:generateContent');
+    expect(seen[0]!.url).not.toContain(KEY);
+    expect(seen[0]!.headers.get('x-goog-api-key')).toBe(KEY);
+    const body = seen[0]!.body as { contents: { parts: { inline_data?: { mime_type: string; data: string } }[] }[]; generationConfig: { temperature: number } };
+    expect(body.contents[0]!.parts[1]!.inline_data).toEqual({ mime_type: 'image/png', data: Buffer.from(PNG).toString('base64') });
+    expect(body.generationConfig.temperature).toBe(0);
+    expect(JSON.stringify(seen[0]!.body)).not.toContain(KEY);
+  });
+
+  test.each([['anthropic', anthropicProvider, { content: [] }], ['gemini', geminiProvider, { candidates: [] }]] as const)('%s: a rate limit carries Retry-After, other failures never show the response body, a missing message is invalid output', async (_, make, empty) => {
+    const run = async (response: () => Response) => judge(createLlmCritic({ model: 'm', provider: make({ apiKey: KEY, fetch: asFetch(async () => response()) }) })).then(critique => critique.failure);
+    expect(await run(() => new Response('slow', { status: 429, headers: { 'retry-after': '2' } }))).toMatchObject({ reason: 'rate-limited' });
+    expect(await run(() => new Response(`secret ${KEY}`, { status: 401 }))).toMatchObject({ reason: 'unauthorized' });
+    expect((await run(() => new Response(`secret ${KEY}`, { status: 401 })))!.message).not.toContain('secret');
+    expect(await run(() => new Response('oops', { status: 500 }))).toMatchObject({ reason: 'error' });
+    expect(await run(() => Response.json(empty))).toMatchObject({ reason: 'invalid-output' });
+    expect(await run(() => new Response('<html>', { status: 200 }))).toMatchObject({ reason: 'invalid-output' });
+    expect(await run(() => { throw new TypeError(`connect failed ${KEY}`); })).toMatchObject({ reason: 'error', message: expect.stringContaining('could not be reached') });
+  });
+
+  test('Anthropic treats 529 (overloaded) as a rate limit to wait out; both are reached over https, plain http only for this machine', async () => {
+    const critique = await judge(createLlmCritic({ model: 'm', provider: anthropicProvider({ apiKey: KEY, fetch: asFetch(async () => new Response('busy', { status: 529 })) }) }));
+    expect(critique.failure).toMatchObject({ reason: 'rate-limited' });
+    expect(() => anthropicProvider({ apiKey: KEY, baseUrl: 'http://api.example.com' })).toThrow(/https/);
+    expect(() => geminiProvider({ apiKey: KEY, baseUrl: 'http://api.example.com' })).toThrow(/https/);
+    expect(anthropicProvider({ apiKey: KEY, baseUrl: 'http://localhost:8080' }).sendsImagesTo).toBe('localhost:8080');
+  });
+
+  test('configured by name: provider anthropic or gemini needs an apiKey reference and no baseUrl; openai-compatible needs a baseUrl; the key never reaches a result', async () => {
+    const config = async (critics: Record<string, unknown>) => { await writeFile(path.join(dir, 'atlas.critics.json'), JSON.stringify({ critics })); return loadCriticsConfig(dir); };
+    const { seen, fake } = recorder(() => Response.json({ content: [{ type: 'text', text: JSON.stringify(answer) }] }));
+    const loaded = await config({ claude: { type: 'llm', provider: 'anthropic', model: 'some-model', apiKey: 'env:FAKE_ANTHROPIC_KEY' }, gem: { type: 'llm', provider: 'gemini', model: 'm', apiKey: 'env:FAKE_GEMINI_KEY' }, nokey: { type: 'llm', provider: 'gemini', model: 'm' }, nourl: { type: 'llm', model: 'm' } });
+    const built = await buildCritic(loaded, 'claude', { env: { FAKE_ANTHROPIC_KEY: KEY }, fetch: fake });
+    expect(built.critic.describe()).toMatchObject({ sendsImagesTo: 'api.anthropic.com', model: { id: 'some-model', provider: 'anthropic' } });
+    expect(built.secrets).toEqual([KEY]);
+    const done = await runCritic({ critic: built.critic, entries: [entry], loadImage: async () => PNG, secrets: built.secrets });
+    expect(done.judged).toBe(1);
+    expect(seen[0]!.headers.get('x-api-key')).toBe(KEY);
+    expect(JSON.stringify(done)).not.toContain(KEY);
+    expect((await buildCritic(loaded, 'gem', { env: { FAKE_GEMINI_KEY: KEY } })).critic.describe().sendsImagesTo).toBe('generativelanguage.googleapis.com');
+    await expect(buildCritic(loaded, 'nokey')).rejects.toThrow(/gemini provider, which needs an apiKey/);
+    await expect(buildCritic(loaded, 'nourl')).rejects.toThrow(/openai-compatible provider, which needs a baseUrl/);
+    await expect(config({ bad: { type: 'llm', provider: 'gemini', model: 'm', apiKey: 'fake-literal-key-for-tests-0123456789' } })).rejects.toThrow(/credential/i);
+    await expect(config({ bad: { type: 'llm', provider: 'carrier-pigeon', model: 'm' } })).rejects.toThrow();
   });
 });
 

@@ -222,6 +222,17 @@ holds (`critiques/ranking.ts`), so a critique appears as its layer arrives.
 - The critic and the state kind are `NativeSelect`s whose values are the address (`critic`, `kind`, `entry`); the open entry is a
   `Drawer` with the findings in a `Table` and the provenance in an `Accordion`.
 - Pictures are `loading="lazy"`. Waiting, an unavailable backend and incomplete layers are named as on the UI catalog.
+- **Finding overlays** (`critiques/FindingOverlay.tsx`): in the open entry each finding with a region is a numbered box over the picture,
+  positioned with Mantine style props (`pos`, `left`, `top`, `w`, `h` as percentages of the picture, `bd`) and a numbered `Badge`; no
+  `style`, `className` or stylesheet. The number is the finding's row in the table (where a `Button` locates it, `aria-pressed`), so color
+  is never the only signal; the boxes are `aria-hidden` because the table says the same in words, and a `Switch` hides them. A region in
+  an unknown unit, or of a critique that judged an earlier picture, is not drawn.
+- **Agreement** is a `Tabs` view of the same page (`?view=agreement`, `keepMounted={false}`): a `Table` with one column per critic, each
+  cell a `Badge` in words (*Flags it*, *Does not flag it*, *No view*) with a link to that critic's critique, and the outcome as text.
+  The rule for a stance is stated on the page (`reports/critique-review`); a score without standing or a failure gives no view.
+- **Marks** are read, never written, by the viewer (a browser sign-in only looks): each finding and the whole opinion show a `Badge` in
+  words (*Accepted by*, *Dismissed by*, *Reviewers disagree*, *Not reviewed*) with the reviewers' notes, and the page names
+  `atlas critic review`. No mark uses a passed or failed word or a status color.
 
 ## Reliability
 

@@ -106,3 +106,34 @@ export const CritiqueSchema = z.looseObject({
 export type Critique = z.output<typeof CritiqueSchema>;
 /** One finding of a critique. */
 export type CritiqueFinding = z.output<typeof CritiqueFindingSchema>;
+
+/** The key under which a reviewer's mark of a critique is stored in a check's `extensions`. */
+export const CRITIQUE_MARK_EXTENSION = 'atlas.critique-mark';
+/** The version of the `atlas.critique-mark` extension a reader of this release understands. A mark of another version is unknown, not wrong. */
+export const CRITIQUE_MARK_SCHEMA_VERSION = 1;
+/** The prefix of the `producer` of a layer of marks: `critic.review.<reviewer>`. It is within what a critic-role token may publish. */
+export const CRITIQUE_MARK_PRODUCER_PREFIX = 'critic.review.';
+
+/**
+ * The `atlas.critique-mark` extension, version 1: a person's verdict on a critic's opinion. `accept` says the opinion was right
+ * (the finding is valid, the UI needs polish); `dismiss` says it was not. A mark names the entry and the exact picture it was made
+ * about, the critic whose opinion it marks, and optionally one finding of it; without `finding` it marks the critique as a whole.
+ * Like the critique it is evidence in a part of kind `critique`: it is never counted and never changes a status, a slot or the gate.
+ * A newer mark of the same reviewer for the same subject replaces an older one. Emitted as `critique-mark.schema.json`.
+ */
+export const CritiqueMarkSchema = z.looseObject({
+  schema: z.number().int().positive().describe('The version of this extension. 1'),
+  subject: z.looseObject({
+    entryKey: z.string().min(1).describe('The catalog entry the marked critique is about'),
+    imageSha256: z.string().min(1).describe('The hash of the picture the marked critique judged, so a mark about an earlier picture is shown as that')
+  }),
+  critic: z.looseObject({ name: z.string().min(1), version: z.string().min(1).optional() }).describe('The critic whose opinion is marked'),
+  finding: z.string().min(1).optional().describe('The `id` of the marked finding. Absent: the critique as a whole'),
+  decision: z.string().min(1).describe('Open vocabulary; this release understands `accept` (the opinion is right) and `dismiss` (it is not). Anything else is shown as written and counts as neither'),
+  reviewer: z.string().min(1).optional().describe('Who marked it: a name the reviewer chose, never an account'),
+  note: z.string().optional().describe('Why, in the reviewer\'s words'),
+  layer: z.string().optional().describe('The layer of the critique that was marked, for tracing')
+});
+
+/** A mark as stored in a check's `extensions["atlas.critique-mark"]`. */
+export type CritiqueMark = z.output<typeof CritiqueMarkSchema>;

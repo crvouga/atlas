@@ -250,6 +250,104 @@ export const CriticRunResultSchema = z.looseObject({
   warnings: z.array(z.string())
 });
 
+/** What `atlas critic watch` did for one critic. */
+export const CriticWatchCriticSchema = z.looseObject({
+  critic: z.string(),
+  version: z.string(),
+  sendsImagesTo: z.string().nullable(),
+  entries: z.number().int().nonnegative().describe('Entries handed over by the catalog, counting a changed picture again'),
+  judged: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative().describe('Entries that already had a current critique of the same identity: no call was made'),
+  failed: z.number().int().nonnegative().describe('Entries recorded as failed with a reason code; the next batch that brings them, or the next run, retries them'),
+  failures: z.array(z.looseObject({ entry: z.string(), reason: z.string() })),
+  spent: z.looseObject({ images: z.number(), tokens: z.number(), costUsd: z.number() }),
+  published: z.looseObject({ layers: z.number().int().nonnegative(), critiques: z.number().int().nonnegative() })
+});
+
+/** What `atlas critic watch --format json` prints, once, when the watch ends. */
+export const CriticWatchResultSchema = z.looseObject({
+  ok: z.boolean().describe('False when a critic failed on any entry (the exit code is then 1)'),
+  dryRun: z.boolean(),
+  server: z.string(),
+  scope: z.record(z.string(), z.string()).describe('The choices that narrowed the catalog, as given'),
+  stoppedBy: z.enum(['interrupted', 'max-batches', 'budget', 'dry-run']).describe('Why the watch ended: Ctrl-C or a signal, `--max-batches`, a budget for the whole watch, or a dry run (one read)'),
+  batches: z.number().int().nonnegative().describe('How many times the catalog handed over something new, the catch-up on connecting included'),
+  version: z.string().nullable().describe('The report version the watch had reached: resume with `--since` this. Null when nothing was read'),
+  critics: z.array(CriticWatchCriticSchema),
+  spool: z.looseObject({ flushed: z.number().int().nonnegative(), spooled: z.number().int().nonnegative(), pending: z.number().int().nonnegative() }).describe('As for `critic-run-result`'),
+  warnings: z.array(z.string())
+});
+
+/** What reviewers decided about one opinion, as `atlas critic review` reports it. */
+export const CriticMarkStandingSchema = z.looseObject({
+  state: z.enum(['accepted', 'dismissed', 'disputed', 'unmarked']).describe('`disputed`: reviewers disagree. `unmarked`: nobody has marked it at the current picture'),
+  accepted: z.array(z.string()).describe('Reviewers who accepted it'),
+  dismissed: z.array(z.string()).describe('Reviewers who dismissed it'),
+  earlier: z.number().int().nonnegative().describe('Marks made about an earlier picture, which count for nothing now'),
+  notes: z.array(z.string())
+});
+
+/** What `atlas critic review --format json` prints. */
+export const CriticReviewResultSchema = z.looseObject({
+  ok: z.literal(true),
+  server: z.string(),
+  critic: z.string().nullable().describe('The critic whose opinions are listed; null when none has judged anything'),
+  critics: z.array(z.string()).describe('Every critic with an opinion, most opinions first'),
+  reviewer: z.string().describe('The name marks are recorded under'),
+  rankedBy: z.enum(['standing-within-kind', 'score']),
+  summary: z.looseObject({ ranked: z.number().int().nonnegative(), unranked: z.number().int().nonnegative().describe('Judged at an earlier picture, or the critic could not judge'), unjudged: z.number().int().nonnegative() }),
+  entries: z.array(z.looseObject({
+    rank: z.number().int().positive().nullable().describe('Null for an entry that is not ranked'),
+    key: z.string(), title: z.string(), state: z.string(), imageSha256: z.string(),
+    score: z.number().nullable(), percentile: z.number().nullable().describe('Standing among the scores of the same state kind, 0..100, higher is better'), label: z.string().nullable(),
+    currency: z.enum(['current', 'earlier-image']),
+    failure: z.string().optional().describe('The reason code, when the critic could not judge it'),
+    marks: CriticMarkStandingSchema.describe('The marks of the whole opinion'),
+    findings: z.array(z.looseObject({
+      id: z.string().nullable().describe('A finding without an id cannot be marked on its own'),
+      category: z.string().nullable(), severity: z.string().nullable(),
+      region: z.looseObject({ unit: z.string(), x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
+      rationale: z.string().nullable(), suggestion: z.string().nullable(),
+      marks: CriticMarkStandingSchema.nullable()
+    }))
+  })),
+  marked: z.looseObject({
+    dryRun: z.boolean(), reviewer: z.string(),
+    layer: z.string().nullable().describe('The layer the marks were published as; null on a dry run or when nothing was marked'),
+    marks: z.array(z.looseObject({ entry: z.string(), critic: z.string(), finding: z.string().nullable().describe('Null: the whole opinion'), decision: z.enum(['accept', 'dismiss']) }))
+  }).optional().describe('Present when this call recorded (or, with --dry-run, would record) marks')
+});
+
+/** What `atlas critic calibrate --format json` prints. A dry run measures nothing and writes nothing. */
+export const CriticCalibrateResultSchema = z.looseObject({
+  ok: z.literal(true),
+  dryRun: z.boolean(),
+  critic: z.looseObject({ name: z.string(), version: z.string().nullable() }),
+  sendsImagesTo: z.string().nullable().describe('Where the labelled pictures were (or, on a dry run, would be) sent; null when they stay on this machine or only marks were used'),
+  examples: z.looseObject({
+    files: z.number().int().nonnegative().describe('Examples from labelled pictures (on a dry run, the pictures found)'),
+    marks: z.number().int().nonnegative().describe('Examples from reviewers\' whole-opinion marks'),
+    used: z.number().int().nonnegative(),
+    skipped: z.array(z.looseObject({ source: z.string(), reason: z.string() })).describe('Examples left out, and why: no score, a critic failure, disputed marks, a budget')
+  }),
+  calibration: z.looseObject({
+    schema: z.literal(1),
+    critic: z.looseObject({ name: z.string(), version: z.string(), model: z.looseObject({ id: z.string(), provider: z.string().optional() }).optional(), parameters: z.record(z.string(), z.unknown()).optional() }),
+    createdAtMs: z.number().optional(),
+    kinds: z.array(z.looseObject({
+      stateKind: z.string(),
+      threshold: z.number().nullable().describe('Scores below this are flagged as needing polish; null when the examples cannot tell (one class is missing)'),
+      samples: z.number().int().nonnegative(), positives: z.number().int().nonnegative(), negatives: z.number().int().nonnegative(),
+      precision: z.number().nullable(), recall: z.number().nullable(),
+      inSample: z.boolean().describe('True when precision and recall are measured on the examples the threshold was chosen on, which flatters them'),
+      evaluatedOn: z.enum(['fit', 'held-out'])
+    }))
+  }).nullable().describe('The calibration `atlas critic run --calibration` reads; null on a dry run'),
+  written: z.string().nullable().describe('The file it was written to (`--out`), or null'),
+  gate: z.looseObject({ eligible: z.boolean().describe('Whether `--mode gate` would accept this calibration'), reasons: z.array(z.string()).describe('What is missing, per state kind, when it would not') }).nullable(),
+  warnings: z.array(z.string())
+});
+
 /** The coverage of one state in one profile, as the UI catalog words it. */
 const UiCoverageSchema = z.enum(['captured', 'failed', 'capturing', 'skipped', 'missing']);
 
@@ -356,6 +454,9 @@ export const CLI_RESULTS = {
   criticSetup: { command: 'atlas critic setup', schemaName: 'critic-setup-result', schema: CriticSetupResultSchema },
   criticDoctor: { command: 'atlas critic doctor', schemaName: 'critic-doctor-result', schema: CriticDoctorResultSchema },
   criticRun: { command: 'atlas critic run', schemaName: 'critic-run-result', schema: CriticRunResultSchema },
+  criticWatch: { command: 'atlas critic watch', schemaName: 'critic-watch-result', schema: CriticWatchResultSchema },
+  criticReview: { command: 'atlas critic review', schemaName: 'critic-review-result', schema: CriticReviewResultSchema },
+  criticCalibrate: { command: 'atlas critic calibrate', schemaName: 'critic-calibrate-result', schema: CriticCalibrateResultSchema },
   uiCatalogPlan: { command: 'atlas ui-catalog plan', schemaName: 'ui-catalog-publish-result', schema: UiCatalogPublishResultSchema },
   uiCatalogPublish: { command: 'atlas ui-catalog publish', schemaName: 'ui-catalog-publish-result', schema: UiCatalogPublishResultSchema },
   uiCatalogStatus: { command: 'atlas ui-catalog status', schemaName: 'ui-catalog-status', schema: UiCatalogStatusSchema },

@@ -1,0 +1,274 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/critic-calibrate-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "critic": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": {}
+    },
+    "sendsImagesTo": {
+      "description": "Where the labelled pictures were (or, on a dry run, would be) sent; null when they stay on this machine or only marks were used",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "examples": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Examples from labelled pictures (on a dry run, the pictures found)"
+        },
+        "marks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Examples from reviewers' whole-opinion marks"
+        },
+        "used": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "reason"
+            ],
+            "additionalProperties": {}
+          },
+          "description": "Examples left out, and why: no score, a critic failure, disputed marks, a budget"
+        }
+      },
+      "required": [
+        "files",
+        "marks",
+        "used",
+        "skipped"
+      ],
+      "additionalProperties": {}
+    },
+    "calibration": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schema": {
+              "type": "number",
+              "const": 1
+            },
+            "critic": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
+                },
+                "parameters": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "name",
+                "version"
+              ],
+              "additionalProperties": {}
+            },
+            "createdAtMs": {
+              "type": "number"
+            },
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "stateKind": {
+                    "type": "string"
+                  },
+                  "threshold": {
+                    "description": "Scores below this are flagged as needing polish; null when the examples cannot tell (one class is missing)",
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "samples": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "positives": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "negatives": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "precision": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "recall": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "inSample": {
+                    "type": "boolean",
+                    "description": "True when precision and recall are measured on the examples the threshold was chosen on, which flatters them"
+                  },
+                  "evaluatedOn": {
+                    "type": "string",
+                    "enum": [
+                      "fit",
+                      "held-out"
+                    ]
+                  }
+                },
+                "required": [
+                  "stateKind",
+                  "threshold",
+                  "samples",
+                  "positives",
+                  "negatives",
+                  "precision",
+                  "recall",
+                  "inSample",
+                  "evaluatedOn"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          },
+          "required": [
+            "schema",
+            "critic",
+            "kinds"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The calibration `atlas critic run --calibration` reads; null on a dry run"
+    },
+    "written": {
+      "description": "The file it was written to (`--out`), or null",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "gate": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "eligible": {
+              "type": "boolean",
+              "description": "Whether `--mode gate` would accept this calibration"
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "What is missing, per state kind, when it would not"
+            }
+          },
+          "required": [
+            "eligible",
+            "reasons"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "dryRun",
+    "critic",
+    "sendsImagesTo",
+    "examples",
+    "calibration",
+    "written",
+    "gate",
+    "warnings"
+  ],
+  "additionalProperties": {}
+}

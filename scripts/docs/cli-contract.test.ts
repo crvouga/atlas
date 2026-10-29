@@ -1,6 +1,6 @@
 /** @module Execute the documented help and JSON command inventory against the actual CLI. */
 import { expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -49,6 +49,9 @@ test('every documented JSON result validates against the same registry that publ
     criticSetup: { args: ['critic', 'setup', 'contrast'], code: 0 },
     criticDoctor: { args: ['critic', 'doctor', '--server', serverUrl], code: 0 },
     criticRun: { args: ['critic', 'run', '--critic', 'contrast', '--all', '--server', serverUrl], code: 0 },
+    criticWatch: { args: ['critic', 'watch', '--critic', 'contrast', '--server', serverUrl, '--max-batches', '1'], code: 0 },
+    criticReview: { args: ['critic', 'review', '--server', serverUrl], code: 0 },
+    criticCalibrate: { args: ['critic', 'calibrate', 'contrast', '--good', 'examples/good', '--bad', 'examples/bad'], code: 0 },
     // The UI catalog: an earlier commit is captured first, then the plan and the later commit, so status is complete and diff has two sides.
     uiCatalogPlan: { args: ['ui-catalog', 'plan', '--states', 'ui-plan.json', '--producer', 'planner', ...profile, '--sha', NEW, '--recorded-at', '1500'], code: 0, before: [['ui-catalog', 'publish', '--captures', 'ui-old.json', '--producer', 'capture', ...profile, '--sha', OLD, '--recorded-at', '1000']] },
     uiCatalogPublish: { args: ['ui-catalog', 'publish', '--captures', 'ui-new.json', '--producer', 'capture', ...profile, '--sha', NEW, '--recorded-at', '2000', '--shard', '1/1'], code: 0 },
@@ -61,6 +64,10 @@ test('every documented JSON result validates against the same registry that publ
     const png = (tail: number) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, tail]);
     await writeFile(path.join(cwd, 'old.png'), png(1));
     await writeFile(path.join(cwd, 'new.png'), png(2));
+    await mkdir(path.join(cwd, 'examples/good'), { recursive: true });
+    await mkdir(path.join(cwd, 'examples/bad'), { recursive: true });
+    await writeFile(path.join(cwd, 'examples/good/a.png'), png(3));
+    await writeFile(path.join(cwd, 'examples/bad/b.png'), png(4));
     await writeFile(path.join(cwd, 'ui-plan.json'), JSON.stringify({ states: [{ id: 'home', covers: ['home'] }, { id: 'settings', inventory: true }] }));
     await writeFile(path.join(cwd, 'ui-old.json'), JSON.stringify({ states: [{ id: 'home', title: 'Home', route: '/', covers: ['home'], screenshot: 'old.png' }] }));
     await writeFile(path.join(cwd, 'ui-new.json'), JSON.stringify({ states: [{ id: 'home', title: 'Home', route: '/', covers: ['home'], screenshot: 'new.png' }, { id: 'settings', title: 'Settings', screenshot: { path: 'new.png', width: 1, height: 1 } }] }));

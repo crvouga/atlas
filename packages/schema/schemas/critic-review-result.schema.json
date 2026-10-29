@@ -1,0 +1,397 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/critic-review-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true
+    },
+    "server": {
+      "type": "string"
+    },
+    "critic": {
+      "description": "The critic whose opinions are listed; null when none has judged anything",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "critics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Every critic with an opinion, most opinions first"
+    },
+    "reviewer": {
+      "type": "string",
+      "description": "The name marks are recorded under"
+    },
+    "rankedBy": {
+      "type": "string",
+      "enum": [
+        "standing-within-kind",
+        "score"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "ranked": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unranked": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Judged at an earlier picture, or the critic could not judge"
+        },
+        "unjudged": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "ranked",
+        "unranked",
+        "unjudged"
+      ],
+      "additionalProperties": {}
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for an entry that is not ranked"
+          },
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "imageSha256": {
+            "type": "string"
+          },
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "percentile": {
+            "description": "Standing among the scores of the same state kind, 0..100, higher is better",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "current",
+              "earlier-image"
+            ]
+          },
+          "failure": {
+            "description": "The reason code, when the critic could not judge it",
+            "type": "string"
+          },
+          "marks": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "dismissed",
+                  "disputed",
+                  "unmarked"
+                ],
+                "description": "`disputed`: reviewers disagree. `unmarked`: nobody has marked it at the current picture"
+              },
+              "accepted": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Reviewers who accepted it"
+              },
+              "dismissed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Reviewers who dismissed it"
+              },
+              "earlier": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Marks made about an earlier picture, which count for nothing now"
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "state",
+              "accepted",
+              "dismissed",
+              "earlier",
+              "notes"
+            ],
+            "additionalProperties": {},
+            "description": "The marks of the whole opinion"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "description": "A finding without an id cannot be marked on its own",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "severity": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "region": {
+                  "type": "object",
+                  "properties": {
+                    "unit": {
+                      "type": "string"
+                    },
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "w": {
+                      "type": "number"
+                    },
+                    "h": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "unit",
+                    "x",
+                    "y",
+                    "w",
+                    "h"
+                  ],
+                  "additionalProperties": {}
+                },
+                "rationale": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "suggestion": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "marks": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "accepted",
+                            "dismissed",
+                            "disputed",
+                            "unmarked"
+                          ],
+                          "description": "`disputed`: reviewers disagree. `unmarked`: nobody has marked it at the current picture"
+                        },
+                        "accepted": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Reviewers who accepted it"
+                        },
+                        "dismissed": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Reviewers who dismissed it"
+                        },
+                        "earlier": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991,
+                          "description": "Marks made about an earlier picture, which count for nothing now"
+                        },
+                        "notes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "accepted",
+                        "dismissed",
+                        "earlier",
+                        "notes"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "category",
+                "severity",
+                "rationale",
+                "suggestion",
+                "marks"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "rank",
+          "key",
+          "title",
+          "state",
+          "imageSha256",
+          "score",
+          "percentile",
+          "label",
+          "currency",
+          "marks",
+          "findings"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "marked": {
+      "description": "Present when this call recorded (or, with --dry-run, would record) marks",
+      "type": "object",
+      "properties": {
+        "dryRun": {
+          "type": "boolean"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "layer": {
+          "description": "The layer the marks were published as; null on a dry run or when nothing was marked",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "entry": {
+                "type": "string"
+              },
+              "critic": {
+                "type": "string"
+              },
+              "finding": {
+                "description": "Null: the whole opinion",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "accept",
+                  "dismiss"
+                ]
+              }
+            },
+            "required": [
+              "entry",
+              "critic",
+              "finding",
+              "decision"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "dryRun",
+        "reviewer",
+        "layer",
+        "marks"
+      ],
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "ok",
+    "server",
+    "critic",
+    "critics",
+    "reviewer",
+    "rankedBy",
+    "summary",
+    "entries"
+  ],
+  "additionalProperties": {}
+}

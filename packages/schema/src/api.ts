@@ -15,7 +15,7 @@
  */
 import { z } from 'zod/v4';
 
-import { CritiqueSchema } from './critique';
+import { CritiqueMarkSchema, CritiqueSchema } from './critique';
 import { CheckSchema, EvidenceScopeSchema, LayerRunSchema, MeasurementSchema } from './layer';
 
 /** One of the statuses a check has in a report: `passed`, `failed`, `running` (not finished) or `not-run`. Closed. */
@@ -159,6 +159,7 @@ export const LayerRowSchema = z.looseObject({
     }).optional().describe('The check\'s picture: its `screenshot` attachment, else its first image')
   }).optional().describe('Only for a check of a `ui-state` or `ui-plan` part: its picture and the facts its producer declared under the `atlas.ui-state` extension. See the UI catalog guide. Never decides a result'),
   critique: CritiqueSchema.optional().describe('Only for a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer. An opinion, never a result: it does not decide `status`, a slot or the gate. See the critics guide'),
+  critiqueMark: CritiqueMarkSchema.optional().describe('Only for a check of a `critique` part whose `atlas.critique-mark` extension can be read: a person\'s accept or dismiss of a critic\'s opinion. Evidence, never a result: it does not decide `status`, a slot or the gate. See the critics guide'),
   recording: z.looseObject({ state: z.string(), reason: z.string().optional() }).optional().describe('What became of the check\'s expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`')
 });
 
@@ -902,7 +903,12 @@ export const CatalogEntrySchema = z.looseObject({
     layer: z.string(), producer: z.string(), recordedAtMs: z.number(), status: EvidenceStatusSchema.describe('Whether the critic ran, never what it thought'),
     currency: z.enum(['current', 'earlier-image']).describe('`earlier-image`: the picture changed since, so the entry counts as not yet judged by that critic'),
     critique: CritiqueSchema
-  })).describe('The critiques of this entry that win their slot, newest first. Opinions: they never decide a result')
+  })).describe('The critiques of this entry that win their slot, newest first. Opinions: they never decide a result'),
+  marks: z.array(z.looseObject({
+    layer: z.string(), producer: z.string().describe('`critic.review.<reviewer>`'), recordedAtMs: z.number(),
+    currency: z.enum(['current', 'earlier-image']).describe('`earlier-image`: the mark was made about a picture the entry no longer has, so it counts for nothing now'),
+    mark: CritiqueMarkSchema
+  })).optional().describe('People\'s accept or dismiss marks of those critiques that win their slot, newest first. Evidence: they never decide a result. Absent from a server that predates marks, which means none')
 });
 
 /**

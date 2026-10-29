@@ -15,6 +15,9 @@ is not human review: it never changes whether a report passes.
 - [Reading the catalog](#reading-the-catalog)
 - [Running critics](#running-critics)
 - [The `atlas critic` command](#the-atlas-critic-command)
+- [Watching the catalog](#watching-the-catalog)
+- [Reviewing and marking](#reviewing-and-marking)
+- [Calibrating](#calibrating)
 - [Configuring critics](#configuring-critics)
 - [The built-in UIClip critic](#the-built-in-uiclip-critic)
 - [The LLM critic and bringing your own AI](#the-llm-critic-and-bringing-your-own-ai)
@@ -40,7 +43,9 @@ Import `@crvouga/atlas/critics`. It needs no model, no provider SDK and no netwo
 | Keep keys out of configuration and logs | `parseCredentialRef`, `resolveCredential`, `assertNoLiteralCredentials`, `createRedactor` |
 | Keep critiques that could not be sent and send them later | `spoolingStore`, `flushSpool` |
 | A UIClip critic, an LLM critic over any provider | `@crvouga/atlas/critics/uiclip`, `@crvouga/atlas/critics/llm` |
-| Run all of it from a terminal or CI | `atlas critic list \| setup \| doctor \| run` ([below](#the-atlas-critic-command)) |
+| Run all of it from a terminal or CI | `atlas critic list \| setup \| doctor \| run \| watch \| review \| calibrate` ([below](#the-atlas-critic-command)) |
+| Record that a person agrees or disagrees with an opinion | `markLayer`, `publishMarks`, `markStanding` ([below](#reviewing-and-marking)) |
+| Rank states, compare critics | `rankCritiques`, `critiqueAgreement` (`@crvouga/atlas/reports/critique-review`) |
 | Let a token publish critiques and nothing else | the `critic` role (below) |
 
 The JSON Schema of the evidence is [`critique.schema.json`](../packages/schema/schemas/critique.schema.json). The
@@ -152,9 +157,10 @@ list is a function of the report, so the same layers in any order give the same 
 
 ## The `atlas critic` command
 
-`atlas critic list | setup | doctor | run` runs critics on this machine (a laptop, CI, a worker). Every command takes
-`--format json`; the documents validate against `critic-list-result`, `critic-setup-result`, `critic-doctor-result` and
-`critic-run-result`. The full usage is in the [command reference](reference/cli.md).
+`atlas critic list | setup | doctor | run | watch | review | calibrate` runs critics on this machine (a laptop, CI, a worker). Every
+command takes `--format json`; the documents validate against `critic-list-result`, `critic-setup-result`, `critic-doctor-result`,
+`critic-run-result`, `critic-watch-result`, `critic-review-result` and `critic-calibrate-result`. The full usage is in the
+[command reference](reference/cli.md).
 
 ```sh
 atlas critic list                                   # what is configured, ready, and where images go
@@ -162,6 +168,9 @@ atlas critic setup uiclip                           # fetch and verify the model
 atlas critic doctor                                 # server, token scope, catalog, model files, credentials, providers
 atlas critic run --critic uiclip --unjudged         # judge what uiclip has not judged yet
 atlas critic run --critic vision --all --dry-run    # how many, and where images would go; sends and publishes nothing
+atlas critic watch --critic uiclip                  # a worker: judge new and changed entries as they arrive
+atlas critic review                                 # the ranked needs-polish list; accept or dismiss what critics found
+atlas critic calibrate uiclip --good ok/ --bad broken/ --out calibration/uiclip.json
 ```
 
 - **Interactive when there is a terminal.** Missing choices (the critic, the server, the scope) are asked for, and a run that
@@ -186,6 +195,80 @@ atlas critic run --critic vision --all --dry-run    # how many, and where images
   [modes](#state-aware-judging-calibration-and-modes). `gate` is refused (exit `2`, before anything is spent) without a calibration of
   this critic and version with held-out evidence for every state kind in scope.
 
+## Watching the catalog
+
+`atlas critic watch --critic <name>… --server <url>` is `run` as a worker. It follows the catalog (`createCatalogClient(…).follow`): it
+catches up on connecting, then judges what arrives, and after every announcement and every reconnection it reads again from the version
+it holds, so it misses no entry and judges none twice. A picture a critic has already judged is skipped by the cache without a call, so
+starting a watch on a judged catalog costs nothing.
+
+```sh
+atlas critic watch --critic uiclip --critic vision --yes --max-cost 5     # until Ctrl-C, or the money is spent
+atlas critic watch --critic uiclip --since <version> --state overlay,loading   # resume from the version the last watch printed
+```
+
+- **Ends cleanly.** On Ctrl-C (or a termination signal), after `--max-batches n` batches, or when a budget is spent. What it finished
+  is published as it goes; at the end it prints what it did and the report version to resume from (`--since`). A budget
+  (`--max-images`, `--max-tokens`, `--max-cost`) is for the whole watch, not for each batch.
+- **Same promises as `run`.** Images that leave the machine need `--yes` (or a yes at the terminal, asked once before it starts);
+  critiques the server cannot take are spooled and sent by the next invocation, in order, byte for byte; a score is read against its
+  state kind; a failed entry is recorded with its reason and exits `1` at the end. It reports and never gates: there is no `--mode`.
+- `--dry-run` reads the catalog once and says what would be judged; nothing is sent or published. The one JSON document
+  (`critic-watch-result`) is printed when the watch ends.
+- The server never runs a model and never holds a key: the critic runs where `watch` runs, such as a small worker beside CI.
+
+## Reviewing and marking
+
+`atlas critic review` is where people meet the opinions. It lists one critic's entries lowest first (by standing within the state kind
+when every score has one, as the viewer does), with every finding and the marks already made.
+
+```sh
+atlas critic review --critic vision --limit 10                       # the list; with a terminal it then asks about each entry
+atlas critic review --entry 'home@ios' --accept --finding f1 --note 'Really cramped'
+atlas critic review --entry 'home@ios' --dismiss                      # the whole opinion is wrong
+```
+
+- **A mark says whether the UI needs polish.** *Accept*: the opinion is right (the finding is valid). *Dismiss*: it is not. A mark is
+  about a whole opinion, or about one finding (`--finding <id>`, repeatable; a finding without an `id` can only be marked with the
+  whole opinion). With a terminal and no `--entry`, `review` walks the list and asks `[a]ccept, [d]ismiss, [s]kip, [q]uit` for each
+  finding; without one, every choice is a flag.
+- **A mark is a layer.** It is a check in a part of kind `critique` with the decision in `extensions["atlas.critique-mark"]`
+  ([schema](../packages/schema/schemas/critique-mark.schema.json)), published under the producer `critic.review.<reviewer>`
+  (`--reviewer`, `ATLAS_REVIEWER`, else `reviewer`; a name the reviewer chooses, never an account). That is within what a `critic`-role
+  token may publish, so marking needs no more power than critiquing (a `publish` or `admin` token may too, a `read` token may not, and
+  the server answers `403` and stores nothing). The server may refuse a mark; it never alters one.
+- **Evidence, never a result.** A mark is in a part of kind `critique`, so it is never counted, never in `atlas report status`, and
+  never changes a status, a slot or a winner. A reviewer holds one mark per critic and finding of an entry: a newer mark of theirs
+  replaces the older, and reviewers who disagree are shown as disagreeing (`disputed`). A mark names the picture it was made about; when
+  the picture changes, the mark is shown as about an earlier picture and counts for nothing now, like the critique it was about.
+- **Read back** on each entry of `GET /api/reports/ui-catalog/entries` as `marks`, in `atlas critic review --format json`
+  (`critic-review-result`), by `markStanding`, and in the viewer. A server that predates marks sends none, which means none.
+- **It feeds calibration.** See [calibrating](#calibrating).
+
+## Calibrating
+
+`atlas critic calibrate <name>` measures a critic against labelled examples, per state kind (`calibrate` as a command), so a threshold is
+chosen from evidence and `gate` mode can be allowed.
+
+```sh
+# Pictures in directories. A subdirectory's name is the state kind of the pictures in it; pictures directly in a directory get --state.
+atlas critic calibrate uiclip --good examples/ok --bad examples/broken --heldout-good holdout/ok --heldout-bad holdout/broken --out calibration/uiclip.json
+# Or what reviewers decided: an accepted whole opinion is a bad example, a dismissed one a good example.
+atlas critic calibrate uiclip --from-marks --server https://atlas.example.com --out calibration/uiclip.json
+atlas critic run --critic uiclip --all --mode gate --calibration calibration/uiclip.json
+```
+
+- The critic judges the pictures here, with the same consent (`--yes` for a critic that sends images away), timeouts and budgets as `run`;
+  `--dry-run` counts them and says where they would go. Nothing is published: the calibration is a document, with the critic's name,
+  version, model and parameters, that you commit beside the configuration.
+- It records, per state kind, the sample sizes, how many are bad and good, the threshold chosen, precision and recall, and **whether the
+  figures are in-sample**. A threshold is chosen only on examples that are not held out; `--heldout-*` pictures measure it. Marks are
+  never held out, so figures from marks alone are in-sample.
+- Examples left out are named with the reason: the critic could not score the picture, reviewers disagree, the marks were about an
+  earlier picture, or the critic judged it as another version. Finding-level marks are not examples.
+- The result says whether `gate` would accept it (`gate.eligible`) and, if not, what is missing per state kind (at least 10 bad and 10
+  good examples, measured on held-out examples).
+
 ## Configuring critics
 
 `atlas critic` reads `atlas.critics.json` (or `--config`). It may be committed: it names a credential by **reference**
@@ -198,6 +281,8 @@ Paths are relative to the file.
   "critics": {
     "uiclip": { "type": "uiclip", "checkpoint": { "path": ".atlas/models/uiclip.onnx", "sha256": "<64 hex digits you pinned>", "url": "https://models.example.com/uiclip.onnx" } },
     "vision": { "type": "llm", "baseUrl": "https://llm.example.com/v1", "apiKey": "env:LLM_API_KEY", "model": "<model id>", "rubricFile": "rubric.md" },
+    "claude": { "type": "llm", "provider": "anthropic", "apiKey": "env:ANTHROPIC_API_KEY", "model": "<model id>" },
+    "gemini": { "type": "llm", "provider": "gemini", "apiKey": "env:GEMINI_API_KEY", "model": "<model id>" },
     "contrast": { "type": "module", "module": "./critics/contrast.ts" }
   }
 }
@@ -230,13 +315,15 @@ runtime passes its own `UiclipRuntime` (`score(image)`), so no model is needed t
 
 `@crvouga/atlas/critics/llm` asks a vision-capable model to review an image against a **rubric** and answer with structured
 findings. It is provider-agnostic: an `LlmProvider` is `complete(request)` plus declared capabilities, so a developer brings their own
-model and account. `openAiCompatibleProvider` speaks the widely implemented chat-completions protocol with plain `fetch` (hosted
-services and local servers alike), so there is no SDK to install; a provider for anything else is a few lines.
+model and account. Three adapters ship, all over plain `fetch` so there is no SDK to install: `openAiCompatibleProvider` speaks the
+widely implemented chat-completions protocol (hosted services and local servers alike), `anthropicProvider` the Messages API and
+`geminiProvider` the Gemini API. In the configuration `provider` is `openai-compatible` (the default, needs `baseUrl`), `anthropic` or
+`gemini` (their own hosts by default; `apiKey` is required). A provider for anything else is a few lines.
 
 - The rubric is recorded as a hash. The answer must be one JSON object with a `score` and optional `findings`; anything else is
-  `invalid-output` and no score is invented. A provider's `429` becomes a rate limit with its `Retry-After`; a timeout, a refused
+  `invalid-output` and no score is invented. A provider's `429` (and Anthropic's `529`, overloaded) becomes a rate limit with its `Retry-After`; a timeout, a refused
   credential and an unreachable provider are failed critiques with a reason code.
-- The key is read from its reference when the critic is built, sent only as the `Authorization` header, and kept out of every result,
+- The key is read from its reference when the critic is built, sent only in a request header (`Authorization`, `x-api-key` or `x-goog-api-key`, never in an address), and kept out of every result,
   progress line, error and JSON document (the runner redacts what it records). Plain `http` is allowed only for a provider on this
   machine.
 - **Images may leave the machine.** `describe().sendsImagesTo` is the provider's host, shown by `list`, `doctor` and `run --dry-run`
@@ -340,15 +427,28 @@ higher-is-better. The address holds the critic, the state kind and the open entr
 - **Detail.** An open entry shows the verdict and its standing, every finding (category, severity, where, why, suggestion; unknown
   categories and severities are shown as they are) and where the opinion came from: critic, version, model, parameters, the hash of
   the picture it judged, the layer and the cost.
+- **Findings on the picture.** An open entry draws each finding that has a region as a numbered box on the picture, in its severity's
+  color and never by color alone: the number matches the findings table, where *Locate* highlights one. Regions in `normalized`
+  (0..1) or `px` (pixels of the stored picture, using the picture's size) units are drawn; a region in another unit, or none, is
+  listed and not drawn. A critique that judged an earlier picture is not drawn on the new one.
+- **Agreement across critics.** The *Agreement across critics* tab compares each critic's opinion of the picture an entry has now. A
+  critic *flags* a UI when its label says `needs-polish`, when it has findings, or, with neither, when its score is in the lowest quarter
+  of its state kind; a bare score with no standing, or a critic that failed, gives *no view* and never makes critics agree. Entries that
+  every critic flags come first, then those they disagree about; an entry only one critic judged is counted, not compared. It is a
+  reading for people, not a verdict, a status or a gate.
+- **Marks.** The list and the open entry show what reviewers decided (accepted, dismissed, disputed, not reviewed), per finding and for
+  the whole opinion, with their notes. The viewer only reads: a browser's sign-in box may look but not write, so it names the
+  `atlas critic review` command that marks.
 
 ## What is not here yet
 
-Still to come, tracked in [issue 50](https://github.com/crvouga/atlas/issues/50):
+Out of scope until the open questions of [issue 50](https://github.com/crvouga/atlas/issues/50) are settled, because they need the
+weights, a license or a network that this repository does not have:
 
 - the **UIClip critic's parity** with the in-house package it is meant to absorb: its exact preprocessing and score head, checked
-  against a real checkpoint (no checkpoint address ships until the weights' license is settled), and the per-provider adapters beyond
-  the OpenAI-compatible one;
-- **`atlas critic watch`** (a worker that follows the catalog; `createCatalogClient(…).follow` is the building block),
-  **`review`** (marking a finding valid or not) and **`calibrate`** (the library function `calibrate` exists; the command and the
-  labelled-example format do not);
-- the viewer's **finding overlays drawn on the image**, an **agreement view** across critics, and **human accept and dismiss marks**.
+  against a real checkpoint. No checkpoint address ships until the weights' license is settled, so the pin is yours; measure it
+  on your own examples with `atlas critic calibrate` before trusting a score;
+- adapters for providers beyond OpenAI-compatible, Anthropic and Gemini, and access by a local command-line agent or a provider's
+  OAuth sign-in (whether a consumer subscription may be used that way is per provider's terms);
+- heuristic and classic ML critics shipped in the package, a flow-level or before-and-after critic, and server-hosted execution (never
+  planned: the server does not run models).

@@ -758,6 +758,46 @@ export const CriticRunResultSchema = …
 
 What `atlas critic run --format json` prints. A dry run publishes and sends nothing.
 
+#### `CriticWatchCriticSchema`
+
+```ts
+export const CriticWatchCriticSchema = …
+```
+
+What `atlas critic watch` did for one critic.
+
+#### `CriticWatchResultSchema`
+
+```ts
+export const CriticWatchResultSchema = …
+```
+
+What `atlas critic watch --format json` prints, once, when the watch ends.
+
+#### `CriticMarkStandingSchema`
+
+```ts
+export const CriticMarkStandingSchema = …
+```
+
+What reviewers decided about one opinion, as `atlas critic review` reports it.
+
+#### `CriticReviewResultSchema`
+
+```ts
+export const CriticReviewResultSchema = …
+```
+
+What `atlas critic review --format json` prints.
+
+#### `CriticCalibrateResultSchema`
+
+```ts
+export const CriticCalibrateResultSchema = …
+```
+
+What `atlas critic calibrate --format json` prints. A dry run measures nothing and writes nothing.
+
 #### `UiCatalogPublishResultSchema`
 
 ```ts
@@ -1094,6 +1134,50 @@ export type CritiqueFinding = z.output<typeof CritiqueFindingSchema>;
 ```
 
 One finding of a critique.
+
+#### `CRITIQUE_MARK_EXTENSION`
+
+```ts
+export const CRITIQUE_MARK_EXTENSION = …
+```
+
+The key under which a reviewer's mark of a critique is stored in a check's `extensions`.
+
+#### `CRITIQUE_MARK_SCHEMA_VERSION`
+
+```ts
+export const CRITIQUE_MARK_SCHEMA_VERSION = …
+```
+
+The version of the `atlas.critique-mark` extension a reader of this release understands. A mark of another version is unknown, not wrong.
+
+#### `CRITIQUE_MARK_PRODUCER_PREFIX`
+
+```ts
+export const CRITIQUE_MARK_PRODUCER_PREFIX = …
+```
+
+The prefix of the `producer` of a layer of marks: `critic.review.<reviewer>`. It is within what a critic-role token may publish.
+
+#### `CritiqueMarkSchema`
+
+```ts
+export const CritiqueMarkSchema = …
+```
+
+The `atlas.critique-mark` extension, version 1: a person's verdict on a critic's opinion. `accept` says the opinion was right
+(the finding is valid, the UI needs polish); `dismiss` says it was not. A mark names the entry and the exact picture it was made
+about, the critic whose opinion it marks, and optionally one finding of it; without `finding` it marks the critique as a whole.
+Like the critique it is evidence in a part of kind `critique`: it is never counted and never changes a status, a slot or the gate.
+A newer mark of the same reviewer for the same subject replaces an older one. Emitted as `critique-mark.schema.json`.
+
+#### `CritiqueMark`
+
+```ts
+export type CritiqueMark = z.output<typeof CritiqueMarkSchema>;
+```
+
+A mark as stored in a check's `extensions["atlas.critique-mark"]`.
 
 ### Schema package entry point (`@crvouga/atlas/schema`)
 

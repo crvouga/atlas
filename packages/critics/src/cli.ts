@@ -1,7 +1,7 @@
 /**
  * @module The `atlas critic` command
  *
- * `atlas critic list | setup | doctor | run`: run automated reviewers of the UI catalog on this machine and publish what they
+ * `atlas critic list | setup | doctor | run | watch | review | calibrate`: run automated reviewers of the UI catalog on this machine and publish what they
  * think as critiques. The server stores and shows; it never runs a model and never holds a provider key. `criticMain` takes its
  * arguments, environment, working directory, clock and a prompt as parameters and returns the exit code, so it is driven the same
  * from a terminal, CI and tests; `runCriticCommand` is the terminal wrapper.
@@ -19,18 +19,22 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { httpStore } from '../../reports/src/http-store';
-import type { CatalogEntry, CatalogEntriesQuery } from '../../reports/src/ui-catalog-entries';
+import type { CatalogEntriesQuery } from '../../reports/src/ui-catalog-entries';
 import { ServerInfoSchema } from '../../schema/src/api';
-import type { Critique } from '../../schema/src/critique';
 import { createCatalogClient, CatalogClientError } from './catalog-client';
-import type { JudgeableEntry } from './contract';
-import { resolveCredential } from './credentials';
-import type { CritiqueOutcome } from './critique';
-import { gateDecision, relativeVerdict, type Calibration, type GateDecision, type GateMode } from './judging';
-import { publishCritiques } from './publish';
+import { calibrateCommand } from './cli-calibrate';
+import {
+  connection, defaultAsk, judgeEntries, list, numberFlag, populationOf, positionals, print, redactIn, scopeOf, value, values, wantsJson,
+  type CriticIo, type Judged
+} from './cli-common';
+import { reviewCommand } from './cli-review';
+import { watchCommand } from './cli-watch';
+import { gateDecision, type Calibration, type GateDecision, type GateMode } from './judging';
 import { buildCritic, loadCriticsConfig, type BuiltCritic, type Inspection, type LoadedConfig } from './registry';
-import { runCritic, type ProgressEvent, type RunResult } from './runner';
+import { type ProgressEvent, type RunResult } from './runner';
 import { flushSpool, pendingInSpool, spoolingStore } from './spool';
+
+export type { CriticIo } from './cli-common';
 
 /** The text `atlas critic --help` prints. Also the source of the command reference in `docs/reference/cli.md`. */
 export const CRITIC_USAGE = `atlas critic — automated reviewers of the UI catalog
@@ -44,6 +48,15 @@ export const CRITIC_USAGE = `atlas critic — automated reviewers of the UI cata
                        [--max-images n] [--max-tokens n] [--max-cost usd] [--concurrency n] [--timeout-ms n]
                        [--mode report|warn|gate] [--threshold state=score]... [--calibration file.json]
                        [--spool dir] [--project slug] [--config atlas.critics.json] [--format text|json]
+  atlas critic watch   --critic <name>... [--server <url>] [--since <version>] [filters] [--yes] [--dry-run]
+                       [--max-batches n] [--max-images n] [--max-tokens n] [--max-cost usd] [--concurrency n] [--timeout-ms n]
+                       [--spool dir] [--project slug] [--config atlas.critics.json] [--format text|json]
+  atlas critic review  [--server <url>] [--critic <name>] [--state kind] [--limit n] [--list] [--non-interactive]
+                       [--entry <key> ( --accept | --dismiss ) [--finding <id>]... [--note text] [--reviewer name] [--dry-run]]
+                       [--project slug] [--config atlas.critics.json] [--format text|json]
+  atlas critic calibrate <name> ( --good <dir>... --bad <dir>... [--heldout-good <dir>...] [--heldout-bad <dir>...] [--state kind]
+                       | --from-marks [--server <url>] [--critic-version v] ) [--out file.json] [--dry-run] [--yes]
+                       [--max-images n] [--concurrency n] [--timeout-ms n] [--config atlas.critics.json] [--format text|json]
 
   A critic is a producer: it runs here (on a laptop, in CI or in a worker), reads the catalog from an Atlas server, and publishes
   what it thinks as layers of critiques. The server never runs a model and never holds a provider key. A critique is an opinion,
@@ -70,93 +83,25 @@ export const CRITIC_USAGE = `atlas critic — automated reviewers of the UI cata
                              gate: exit 1 when a score is below its state kind's threshold, refused (exit 2) unless a calibration
                              with held-out evidence of this critic and version is given with --calibration
 
-  --format json   prints one document (schemas: critic-list-result, critic-setup-result, critic-doctor-result, critic-run-result).
+  watch     A worker: run in a loop over the catalog. It catches up on connecting, judges new or changed entries as they arrive (a picture
+            already judged is skipped without a call), publishes as it goes, keeps what the server cannot take and sends it next time.
+            It stops on Ctrl-C, after --max-batches batches, or when a budget (for the whole watch) is spent, and prints the version to
+            resume from (--since). It reports; it never gates. --dry-run reads the catalog once and sends and publishes nothing.
+  review    The ranked "needs polish" list of one critic (lowest first) with its findings and the marks already made. With a terminal it
+            walks through the list and asks: accept (the opinion is right: the UI needs polish), dismiss (it is not), skip. With
+            --entry and --accept or --dismiss it records one decision, for the whole opinion or for --finding ids. A mark is a layer
+            under critic.review.<reviewer> (--reviewer, ATLAS_REVIEWER); it needs no more power than a critic token and never changes
+            a result, a count or the gate.
+  calibrate Judge labelled pictures (--good and --bad directories; a subdirectory's name is the state kind of the pictures in it) and/or
+            read the whole-opinion marks reviewers made (--from-marks), and measure the critic per state kind: sample sizes, precision,
+            recall, the threshold, and whether the figures are in-sample. --heldout-* pictures are never used to choose the threshold.
+            --out writes the calibration that run --calibration reads. Nothing is published.
+
+  --format json   prints one document (schemas: critic-list-result, critic-setup-result, critic-doctor-result, critic-run-result,
+                  critic-watch-result, critic-review-result, critic-calibrate-result).
                   A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   Exit codes: 0 ok, 1 the answer is no (a critic failed, a gate crossed, a problem found), 2 the command was wrong.
 `;
-
-type Env = Readonly<Record<string, string | undefined>>;
-
-/** What `criticMain` is given besides arguments: where output goes, and, for tests and embedding, the environment, working directory, clock, `fetch`, module loading and a prompt. */
-export type CriticIo = {
-  readonly out: (text: string) => void;
-  readonly env?: Env;
-  readonly cwd?: string;
-  readonly clock?: () => number;
-  readonly fetch?: typeof fetch;
-  readonly importModule?: (name: string) => Promise<unknown>;
-  /** Waits between retries of a request to the server. Default `setTimeout`. Tests pass a fake. */
-  readonly sleep?: (ms: number) => Promise<void>;
-  /** Whether a person is at a terminal. Default: standard input and output are terminals. Nothing is asked when this is false. */
-  readonly interactive?: boolean;
-  /** Asks a question and returns the answer. Default: a line from standard input. */
-  readonly ask?: (question: string) => Promise<string>;
-};
-
-const VALUE_FLAGS = ['config', 'server', 'project', 'critic', 'area', 'profile', 'state', 'route', 'q', 'since', 'format', 'max-images', 'max-tokens', 'max-cost', 'concurrency', 'timeout-ms', 'mode', 'threshold', 'calibration', 'spool'];
-
-const values = (argv: readonly string[], name: string) => argv.flatMap((token, i) => (token === `--${name}` && argv[i + 1] !== undefined ? [argv[i + 1]!] : []));
-const value = (argv: readonly string[], name: string) => values(argv, name)[0];
-const list = (argv: readonly string[], name: string) => values(argv, name).flatMap(item => item.split(',')).map(item => item.trim()).filter(Boolean);
-const wantsJson = (argv: readonly string[]) => value(argv, 'format') === 'json' || argv.includes('--json');
-
-function positionals(argv: readonly string[]): string[] {
-  const out: string[] = [];
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i]!;
-    if (token.startsWith('--')) { if (VALUE_FLAGS.includes(token.slice(2))) i++; continue; }
-    out.push(token);
-  }
-  return out;
-}
-
-function numberFlag(argv: readonly string[], name: string, whole = false): number | undefined {
-  const text = value(argv, name);
-  if (text === undefined) return undefined;
-  const n = Number(text);
-  if (!Number.isFinite(n) || n <= 0 || (whole && !Number.isInteger(n))) throw new Error(`--${name} takes a positive ${whole ? 'whole ' : ''}number (got "${text}")`);
-  return n;
-}
-
-const isLoopback = (url: URL) => ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname);
-
-/** Where the server is and how to reach it, from flags, configuration and the environment. */
-async function connection(argv: readonly string[], loaded: LoadedConfig, env: Env): Promise<{ url: string; token?: string; project?: string } | null> {
-  const store = env.ATLAS_STORE && /^https?:\/\//.test(env.ATLAS_STORE) ? env.ATLAS_STORE : undefined;
-  const url = value(argv, 'server') ?? loaded.config.server?.url ?? env.ATLAS_SERVER_URL ?? store;
-  if (!url) return null;
-  let parsed: URL;
-  try { parsed = new URL(url); } catch { throw new Error(`The server address "${url}" is not a URL`); }
-  const reference = loaded.config.server?.token;
-  const token = reference ? await resolveCredential(reference, { env }) : env.ATLAS_CRITIC_TOKEN || env.ATLAS_TOKEN || undefined;
-  // A token is a credential: it goes over https, or to this machine.
-  if (token && parsed.protocol !== 'https:' && !isLoopback(parsed)) throw new Error(`Refusing to send a token to ${parsed.host} over plain ${parsed.protocol.replace(':', '')}: use an https address (plain http is allowed only for this machine)`);
-  const project = value(argv, 'project') ?? loaded.config.server?.project ?? env.ATLAS_PROJECT;
-  return { url: url.replace(/\/+$/, ''), ...(token ? { token } : {}), ...(project ? { project } : {}) };
-}
-
-const redactIn = (text: string, secrets: readonly string[]) => secrets.reduce((acc, secret) => (secret.length >= 6 ? acc.split(secret).join('[redacted]') : acc), text);
-
-async function defaultAsk(question: string): Promise<string> {
-  const readline = await import('node:readline/promises');
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  try { return await rl.question(question); } finally { rl.close(); }
-}
-
-const print = (io: CriticIo, document: unknown) => io.out(`${JSON.stringify(document, null, 2)}\n`);
-
-function scopeOf(argv: readonly string[]): { query: CatalogEntriesQuery; chosen: Record<string, string> } {
-  const chosen: Record<string, string> = {};
-  const query: Record<string, unknown> = {};
-  for (const name of ['area', 'profile', 'state', 'route'] as const) { const found = list(argv, name); if (found.length) { query[name] = found; chosen[name] = found.join(','); } }
-  const q = value(argv, 'q');
-  if (q) { query.q = q; chosen.q = q; }
-  const since = value(argv, 'since');
-  if (since) { query.since = since; chosen.since = since; }
-  if (argv.includes('--all')) chosen.all = 'true';
-  if (argv.includes('--unjudged')) chosen.unjudged = 'true';
-  return { query: query as CatalogEntriesQuery, chosen };
-}
 
 function parseThresholds(argv: readonly string[]): Record<string, number> {
   const out: Record<string, number> = {};
@@ -168,11 +113,6 @@ function parseThresholds(argv: readonly string[]): Record<string, number> {
   }
   return out;
 }
-
-const toJudgeable = (entry: CatalogEntry): JudgeableEntry => ({
-  key: entry.key, title: entry.title, state: entry.state, imageSha256: entry.image.sha256,
-  ...(entry.route ? { route: entry.route } : {}), profile: { key: entry.profile.key, environment: entry.profile.environment, parameters: entry.profile.parameters }
-});
 
 /** `atlas critic list`. */
 async function list_(argv: readonly string[], io: CriticIo, loaded: LoadedConfig): Promise<number> {
@@ -365,7 +305,7 @@ async function run_(argv: readonly string[], io: CriticIo, loaded: LoadedConfig)
 
   const scopeQuery: CatalogEntriesQuery = { ...query };
   const results: { built: BuiltCritic; result: RunResult; entries: number; decision: GateDecision | undefined; layer: string | null; critiques: number; failures: { entry: string; reason: string }[] }[] = [];
-    for (const built of builts) {
+  for (const built of builts) {
     const name = built.critic.name;
     const wholeQuery: CatalogEntriesQuery = chosen.unjudged ? { ...scopeQuery, unjudgedBy: { name, version: built.critic.version } } : scopeQuery;
     const read = await client.read(wholeQuery);
@@ -391,30 +331,14 @@ async function run_(argv: readonly string[], io: CriticIo, loaded: LoadedConfig)
       }
     }
 
-    const existing: Critique[] = read.entries.flatMap(entry => entry.critiques.map(found => found.critique));
-    const result = await runCritic({
-      critic: built.critic, entries: read.entries.map(toJudgeable), existing, dryRun, ...(argv.includes('--force') ? { force: true } : {}),
-      loadImage: judgeable => client.image(read.entries.find(entry => entry.key === judgeable.key)!),
-      budget, secrets, ...(concurrency ? { concurrency } : {}), ...(timeoutMs ? { timeoutMs } : {}),
+    // A raw score is read against the project's scores of the same state kind, and against the entry's previous image.
+    const whole = Object.keys(query).length === 0 && !chosen.unjudged ? read : await client.read({});
+    const population = populationOf(whole.entries, name);
+    const { result, outcomes, layer }: Judged = await judgeEntries({
+      built, entries: read.entries, client, store, population, dryRun, ...(argv.includes('--force') ? { force: true } : {}),
+      budget, secrets, clock, ...(concurrency ? { concurrency } : {}), ...(timeoutMs ? { timeoutMs } : {}),
       ...(json || dryRun ? {} : { onProgress: (event: ProgressEvent) => io.out(`  ${event.result === 'judged' ? '✓' : event.result === 'skipped' ? '·' : '✗'} ${event.entryKey} (${event.judged} judged, ${event.skipped} skipped, ${event.failed} failed, ${event.waiting} waiting)\n`) })
     });
-
-    // A raw score is read against the project's scores of the same state kind, and against the entry's previous image.
-    const population = new Map<string, { stateKind: string; score: number }>();
-    const whole = Object.keys(query).length === 0 && !chosen.unjudged ? read : await client.read({});
-    for (const entry of whole.entries) for (const found of entry.critiques) if (found.currency === 'current' && found.critique.critic.name === name && found.critique.verdict?.score !== undefined) population.set(entry.key, { stateKind: entry.state, score: found.critique.verdict.score });
-    for (const outcome of result.outcomes) if (outcome.critique.verdict?.score !== undefined) population.set(outcome.entry.key, { stateKind: outcome.entry.state, score: outcome.critique.verdict.score });
-    const outcomes: CritiqueOutcome[] = result.outcomes.map(outcome => {
-      const score = outcome.critique.verdict?.score;
-      if (score === undefined || outcome.critique.verdict?.relative) return outcome;
-      const entry = read.entries.find(candidate => candidate.key === outcome.entry.key);
-      const previous = entry?.critiques.find(found => found.currency === 'earlier-image' && found.critique.critic.name === name && found.critique.verdict?.score !== undefined)?.critique.verdict?.score;
-      const relative = relativeVerdict({ score, stateKind: outcome.entry.state, population: [...population.values()], ...(previous === undefined ? {} : { previousScore: previous }) });
-      return { ...outcome, critique: { ...outcome.critique, verdict: { ...outcome.critique.verdict, relative } } };
-    });
-
-    let layer: string | null = null;
-    if (!dryRun && outcomes.length) layer = (await publishCritiques(store, { critic: built.critic, outcomes, recordedAtMs: clock() }))?.id ?? null;
 
     const current = new Map<string, number | null>();
     for (const entry of read.entries) { const found = entry.critiques.find(c => c.currency === 'current' && c.critique.critic.name === name && c.critique.verdict?.score !== undefined); current.set(entry.key, found?.critique.verdict?.score ?? null); }
@@ -463,23 +387,33 @@ async function run_(argv: readonly string[], io: CriticIo, loaded: LoadedConfig)
 export async function criticMain(argv: readonly string[], io: CriticIo): Promise<number> {
   const [command, ...rest] = argv;
   if (!command || command === '--help' || command === '-h' || rest.includes('--help')) { io.out(CRITIC_USAGE); return 0; }
-  if (!['list', 'setup', 'doctor', 'run'].includes(command)) { io.out(CRITIC_USAGE); return 2; }
+  if (!['list', 'setup', 'doctor', 'run', 'watch', 'review', 'calibrate'].includes(command)) { io.out(CRITIC_USAGE); return 2; }
   const format = value(rest, 'format');
   if (format !== undefined && !['text', 'json'].includes(format)) throw new Error(`--format takes text|json (got "${format}")`);
   const loaded = await loadCriticsConfig(io.cwd ?? process.cwd(), value(rest, 'config'));
   if (command === 'list') return list_(rest, io, loaded);
   if (command === 'setup') return setup_(rest, io, loaded);
   if (command === 'doctor') return doctor_(rest, io, loaded);
+  if (command === 'watch') return watchCommand(rest, io, loaded);
+  if (command === 'review') return reviewCommand(rest, io, loaded);
+  if (command === 'calibrate') return calibrateCommand(rest, io, loaded);
   return run_(rest, io, loaded);
 }
 
 /** `atlas critic …` for a terminal: a mistake in the command is a message on stderr (a JSON document with `--format json`) and exit code 2. */
 export async function runCriticCommand(argv: readonly string[], io: Partial<CriticIo> = {}): Promise<number> {
+  // An interrupt ends a long-running `watch` cleanly: what it finished is published and its summary printed. Other commands keep the default.
+  const controller = new AbortController();
+  const interrupt = () => controller.abort();
+  const watching = argv[0] === 'watch' && !io.signal;
+  if (watching) { process.once('SIGINT', interrupt); process.once('SIGTERM', interrupt); }
   try {
-    return await criticMain(argv, { out: text => process.stdout.write(text), ...io });
+    return await criticMain(argv, { out: text => process.stdout.write(text), ...(watching ? { signal: controller.signal } : {}), ...io });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(wantsJson(argv) ? `${JSON.stringify({ ok: false, error: { message, code: 'usage' } })}\n` : `atlas critic: ${message}\n`);
     return 2;
+  } finally {
+    if (watching) { process.off('SIGINT', interrupt); process.off('SIGTERM', interrupt); }
   }
 }

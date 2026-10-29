@@ -1,6 +1,6 @@
 # Reference: critics
 
-Automated reviewers of the UI catalog: the critic contract, the runner (caching, retries, rate limits, budgets), credential references and redaction, the `atlas.critique` evidence as layers, the catalog client, spooling, calibration and report, warn and gate modes, the `atlas critic` command, and the UIClip and LLM critic adapters. Import paths `@crvouga/atlas/critics`, `@crvouga/atlas/critics/uiclip`, `@crvouga/atlas/critics/llm`.
+Automated reviewers of the UI catalog: the critic contract, the runner (caching, retries, rate limits, budgets), credential references and redaction, the `atlas.critique` evidence as layers, the catalog client, spooling, calibration and report, warn and gate modes, accept and dismiss marks by reviewers, the `atlas critic` command (list, setup, doctor, run, watch, review, calibrate), and the UIClip and LLM critic adapters (OpenAI-compatible, Anthropic, Gemini). Import paths `@crvouga/atlas/critics`, `@crvouga/atlas/critics/uiclip`, `@crvouga/atlas/critics/llm`.
 
 > Generated from the doc comments of `packages/critics/src` by `bun run docs`. Do not edit: change the comment next to the code.
 
@@ -140,11 +140,275 @@ const { version, entries } = await catalog.read({ unjudgedBy: { name: 'uiclip', 
 for (const entry of entries) judge(entry, await catalog.image(entry));
 ```
 
+### `atlas critic calibrate`
+
+Source: `packages/critics/src/cli-calibrate.ts`
+
+Measures a critic against labelled examples, per state kind, and proposes a threshold for each: the library function
+`calibrate` behind a command. The examples are pictures in directories (`--good`, `--bad`, and `--heldout-good`, `--heldout-bad` for
+pictures the threshold must not be chosen on; a subdirectory's name is the state kind of the pictures in it, else `--state`, else
+`unknown`), and/or the whole-critique marks reviewers made (`--from-marks`: accepted means the UI needs polish, dismissed means it
+does not). The critic judges the pictures here, with the same consent, timeouts and budgets as `run`. Nothing is published: the
+calibration is a document (`--out`) that `atlas critic run --calibration` reads. Figures measured on the examples the threshold was
+chosen on are labelled in-sample; only held-out figures can open `--mode gate`.
+
+See docs/critics.md#state-aware-judging-calibration-and-modes
+
+#### `calibrateCommand`
+
+```ts
+export async function calibrateCommand(argv: readonly string[], io: CriticIo, loaded: LoadedConfig): Promise<number>
+```
+
+`atlas critic calibrate <name>`.
+
+### Shared parts of the `atlas critic` commands
+
+Source: `packages/critics/src/cli-common.ts`
+
+What every `atlas critic` subcommand reads the same way: flags, the server and token (a token is never sent over plain http beyond
+this machine), the scope that narrows the catalog, the way output is printed, and `judgeEntries`, the one place where entries are
+judged, read against their state kind and published, so `run` and `watch` cannot disagree about it.
+
+See docs/critics.md#the-atlas-critic-command
+
+#### `Env`
+
+```ts
+export type Env = Readonly<Record<string, string | undefined>>;
+```
+
+The environment a command reads: a map of names to values.
+
+#### `CriticIo`
+
+```ts
+export type CriticIo = {
+  readonly out: (text: string) => void;
+  readonly env?: Env;
+  readonly cwd?: string;
+  readonly clock?: () => number;
+  readonly fetch?: typeof fetch;
+  readonly importModule?: (name: string) => Promise<unknown>;
+  /** Waits between retries of a request to the server. Default `setTimeout`. Tests pass a fake. */
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** Whether a person is at a terminal. Default: standard input and output are terminals. Nothing is asked when this is false. */
+  readonly interactive?: boolean;
+  /** Asks a question and returns the answer. Default: a line from standard input. */
+  readonly ask?: (question: string) => Promise<string>;
+  /** Ends `atlas critic watch` cleanly (what it finished is kept and published). The terminal wrapper aborts it on interrupt. */
+  readonly signal?: AbortSignal;
+};
+```
+
+What a command is given besides arguments: where output goes, and, for tests and embedding, the environment, working directory, clock, `fetch`, module loading, a prompt and a signal that ends a long-running command.
+
+#### `VALUE_FLAGS`
+
+```ts
+export const VALUE_FLAGS = …
+```
+
+The flags that take a value, so a value is not mistaken for a positional argument.
+
+#### `values`
+
+```ts
+export const values = …
+```
+
+Every value given for `--name`, in order.
+
+#### `value`
+
+```ts
+export const value = …
+```
+
+The first value given for `--name`.
+
+#### `list`
+
+```ts
+export const list = …
+```
+
+Every value of `--name`, comma-separated values split and trimmed.
+
+#### `wantsJson`
+
+```ts
+export const wantsJson = …
+```
+
+Whether `--format json` (or `--json`) was given.
+
+#### `positionals`
+
+```ts
+export function positionals(argv: readonly string[]): string[]
+```
+
+The arguments that are not flags or their values.
+
+#### `numberFlag`
+
+```ts
+export function numberFlag(argv: readonly string[], name: string, whole = false): number | undefined
+```
+
+A positive number from `--name` (a whole number when `whole`), or undefined when it was not given. Throws for anything else.
+
+#### `Connection`
+
+```ts
+export type Connection = { url: string; token?: string; project?: string };
+```
+
+Where the server is and how to reach it.
+
+#### `connection`
+
+```ts
+export async function connection(argv: readonly string[], loaded: LoadedConfig, env: Env): Promise<Connection | null>
+```
+
+Where the server is and how to reach it, from flags, configuration and the environment; `null` when no server is named. Throws for a token that would travel over plain http beyond this machine.
+
+#### `redactIn`
+
+```ts
+export const redactIn = …
+```
+
+`text` with every secret of six characters or more replaced by `[redacted]`.
+
+#### `defaultAsk`
+
+```ts
+export async function defaultAsk(question: string): Promise<string>
+```
+
+Asks a question on the terminal and returns the line typed.
+
+#### `print`
+
+```ts
+export const print = …
+```
+
+Prints one JSON document, indented, with a final newline.
+
+#### `scopeOf`
+
+```ts
+export function scopeOf(argv: readonly string[]): { query: CatalogEntriesQuery; chosen: Record<string, string> }
+```
+
+The catalog query and the readable summary of the choices that narrowed it (`--area`, `--profile`, `--state`, `--route`, `--q`, `--since`, `--all`, `--unjudged`).
+
+#### `toJudgeable`
+
+```ts
+export const toJudgeable = …
+```
+
+A catalog entry as a critic is told about it.
+
+#### `populationOf`
+
+```ts
+export function populationOf(entries: readonly CatalogEntry[], critic: string): Map<string, { stateKind: string; score: number }>
+```
+
+The scores a critic's current critiques already give, by entry key with the entry's state kind: the population a new score is read against.
+
+#### `Judged`
+
+```ts
+export type Judged = { readonly result: RunResult; readonly outcomes: readonly CritiqueOutcome[]; readonly layer: string | null };
+```
+
+What judging a set of entries did: the run, the outcomes read against their state kind, and the layer they were published as.
+
+#### `judgeEntries`
+
+```ts
+export async function judgeEntries(args: {
+  readonly built: BuiltCritic;
+  readonly entries: readonly CatalogEntry[];
+  readonly client: Pick<CatalogClient, 'image'>;
+  readonly store: ObjectStore;
+  readonly population: Map<string, { stateKind: string; score: number }>;
+  readonly dryRun: boolean;
+  readonly force?: boolean;
+  readonly budget?: Budget;
+  readonly secrets: readonly string[];
+  readonly concurrency?: number;
+  readonly timeoutMs?: number;
+  readonly signal?: AbortSignal;
+  readonly clock: () => number;
+  readonly onProgress?: (event: ProgressEvent) => void;
+}): Promise<Judged>
+```
+
+Judges `entries` with one critic and publishes the outcomes as one layer. A raw score is read against the project's scores of the
+same state kind (`population`, which is updated with the new scores) and against the entry's previous image. Nothing is published
+on a dry run or when there is nothing to publish.
+
+- `args.population`: the critic's known scores by entry key (see {@link populationOf}); updated.
+
+- `args.store`: where critiques are published (usually a spooling store).
+
+### `atlas critic review`
+
+Source: `packages/critics/src/cli-review.ts`
+
+Reads the ranked "needs polish" list from the server and lets a person mark what critics found: accept an opinion (it is right) or
+dismiss it (it is not), as a whole or finding by finding. Without `--entry` it lists the entries one critic judged, lowest first, with
+their findings and the marks already made; at a terminal it then walks through them and asks. With `--entry` and `--accept` or
+`--dismiss` it records one decision, with no terminal needed. A mark is published as a layer under `critic.review.<reviewer>` (see
+{@link ./marks}); it needs no more power than a critic's token has, is never counted, and never changes a status, a slot or the gate.
+Nothing is marked when a flag names something that is not there: the command says what is.
+
+See docs/critics.md#reviewing-and-marking
+
+#### `reviewCommand`
+
+```ts
+export async function reviewCommand(argv: readonly string[], io: CriticIo, loaded: LoadedConfig): Promise<number>
+```
+
+`atlas critic review`.
+
+### `atlas critic watch`
+
+Source: `packages/critics/src/cli-watch.ts`
+
+A worker: follows the catalog of an Atlas server and judges new or changed entries as they arrive, until it is stopped. It is
+`atlas critic run` in a loop over `createCatalogClient(…).follow`, so it catches up on connecting, reads again after every
+announcement and every reconnection, misses no entry and judges none twice (a picture a critic has judged is skipped by the cache
+without a call). What it finished is published as it goes, kept in the spool when the server goes away, and sent by the next
+invocation. Budgets are for the whole watch. It reports; it never gates.
+
+It ends when interrupted, when `--max-batches` batches have been handled, or when a budget is spent, and then prints what it did
+and the report version to resume from (`--since`). The server never runs a model: the critic runs here.
+
+See docs/critics.md#watching-the-catalog
+
+#### `watchCommand`
+
+```ts
+export async function watchCommand(argv: readonly string[], io: CriticIo, loaded: LoadedConfig): Promise<number>
+```
+
+`atlas critic watch`.
+
 ### The `atlas critic` command
 
 Source: `packages/critics/src/cli.ts`
 
-`atlas critic list | setup | doctor | run`: run automated reviewers of the UI catalog on this machine and publish what they
+`atlas critic list | setup | doctor | run | watch | review | calibrate`: run automated reviewers of the UI catalog on this machine and publish what they
 think as critiques. The server stores and shows; it never runs a model and never holds a provider key. `criticMain` takes its
 arguments, environment, working directory, clock and a prompt as parameters and returns the exit code, so it is driven the same
 from a terminal, CI and tests; `runCriticCommand` is the terminal wrapper.
@@ -165,27 +429,6 @@ export const CRITIC_USAGE = …
 ```
 
 The text `atlas critic --help` prints. Also the source of the command reference in `docs/reference/cli.md`.
-
-#### `CriticIo`
-
-```ts
-export type CriticIo = {
-  readonly out: (text: string) => void;
-  readonly env?: Env;
-  readonly cwd?: string;
-  readonly clock?: () => number;
-  readonly fetch?: typeof fetch;
-  readonly importModule?: (name: string) => Promise<unknown>;
-  /** Waits between retries of a request to the server. Default `setTimeout`. Tests pass a fake. */
-  readonly sleep?: (ms: number) => Promise<void>;
-  /** Whether a person is at a terminal. Default: standard input and output are terminals. Nothing is asked when this is false. */
-  readonly interactive?: boolean;
-  /** Asks a question and returns the answer. Default: a line from standard input. */
-  readonly ask?: (question: string) => Promise<string>;
-};
-```
-
-What `criticMain` is given besides arguments: where output goes, and, for tests and embedding, the environment, working directory, clock, `fetch`, module loading and a prompt.
 
 #### `criticMain`
 
@@ -742,8 +985,11 @@ The calibration of one state kind. `threshold` flags a score below it; `null` wh
 ```ts
 export type Calibration = {
   readonly schema: 1;
-  readonly critic: { readonly name: string; readonly version: string };
+  /** The critic and its version, and (when `atlas critic calibrate` wrote it) the model and fixed parameters the scores came from. */
+  readonly critic: { readonly name: string; readonly version: string; readonly model?: { readonly id: string; readonly provider?: string }; readonly parameters?: Readonly<Record<string, unknown>> };
   readonly kinds: readonly KindCalibration[];
+  /** When it was measured, epoch milliseconds, when `atlas critic calibrate` wrote it. */
+  readonly createdAtMs?: number;
 };
 ```
 
@@ -858,11 +1104,11 @@ Source: `packages/critics/src/llm.ts`. Import: `@crvouga/atlas/critics/llm`
 A critic that asks a vision-capable language model to review a screenshot against a rubric and answer with structured
 findings. It is provider-agnostic: a provider is a small adapter (`LlmProvider.complete`) with declared capabilities, so
 a developer brings their own model and account. `openAiCompatibleProvider` speaks the widely implemented chat-completions
-protocol with plain `fetch` (hosted services and local servers alike), so there is no SDK to install; any other provider is a
-few lines.
+protocol with plain `fetch` (hosted services and local servers alike), and `anthropicProvider` and `geminiProvider` speak those two
+APIs the same way, so there is no SDK to install; any other provider is a few lines.
 
 The rubric is recorded only as a hash. The credential is passed in by the caller (resolved from a reference at run time),
-sent only in the `Authorization` header, and never written to a result, a log or an error: the runner redacts what it records.
+sent only in a request header, and never written to a result, a log or an error: the runner redacts what it records.
 A provider's rate limit becomes a `RateLimitedError` carrying its `Retry-After`, an answer that is not the asked-for structure
 becomes `invalid-output` and no score is invented, and the images' destination is declared before a run.
 
@@ -1007,6 +1253,149 @@ failures become `CriticError('error')` with the status and never the response bo
 - `options.apiKey`: the credential, resolved by the caller from a reference. Optional for a local server.
 
 - `options.fetch`: for tests.
+
+#### `ANTHROPIC_API_VERSION`
+
+```ts
+export const ANTHROPIC_API_VERSION = …
+```
+
+The version of Anthropic's Messages API that {@link anthropicProvider} speaks.
+
+#### `anthropicProvider`
+
+```ts
+export function anthropicProvider(options: { readonly apiKey: string; readonly baseUrl?: string; readonly fetch?: typeof fetch; readonly maxImageBytes?: number }): LlmProvider
+```
+
+A provider for Anthropic's Messages API (`POST {baseUrl}/v1/messages`), with plain `fetch` and no SDK. The key is sent in the `x-api-key`
+header and nowhere else. A 429 or 529 (overloaded) becomes `RateLimitedError` with its `Retry-After`; other failures become `CriticError`
+with the status and never the response body. Images go to `baseUrl`'s host, which is what `sendsImagesTo` says.
+
+- `options.apiKey`: the credential, resolved by the caller from a reference.
+
+- `options.baseUrl`: default `https://api.anthropic.com`. Plain `http` only for a loopback address.
+
+- `options.fetch`: for tests.
+
+#### `geminiProvider`
+
+```ts
+export function geminiProvider(options: { readonly apiKey: string; readonly baseUrl?: string; readonly fetch?: typeof fetch; readonly maxImageBytes?: number }): LlmProvider
+```
+
+A provider for Google's Gemini API (`POST {baseUrl}/v1beta/models/{model}:generateContent`), with plain `fetch` and no SDK. The key is sent
+in the `x-goog-api-key` header, never in the address, so it cannot end up in a URL, a log or an error. A 429 becomes `RateLimitedError`
+with its `Retry-After`; other failures become `CriticError` with the status and never the response body. Images go to `baseUrl`'s host.
+
+- `options.apiKey`: the credential, resolved by the caller from a reference.
+
+- `options.baseUrl`: default `https://generativelanguage.googleapis.com`. Plain `http` only for a loopback address.
+
+- `options.fetch`: for tests.
+
+### Reviewers' marks of critiques
+
+Source: `packages/critics/src/marks.ts`
+
+A person who reads a critic's opinion can accept it (it is right: the finding is valid, the UI needs polish) or dismiss it (it is not).
+A mark is stored like the critique it is about: a check in a layer of parts of kind `critique`, with the decision in
+`extensions["atlas.critique-mark"]`, published under the producer `critic.review.<reviewer>`. That is within what a `critic`-role
+token may publish, so marking needs no more power than critiquing, and any `publish` token may do it too. Because a mark is evidence in
+an opinion part it is never counted, and it never changes a status, a slot or the gate: the server may refuse an upload, and it
+never alters one.
+
+Each reviewer holds one mark per critic and finding of an entry: a newer mark replaces their older one (the slot rule), and a mark made
+about a picture the entry no longer has is shown as that. Marks feed `atlas critic calibrate --from-marks`.
+
+See docs/critics.md#reviewing-and-marking
+
+#### `MARK_CHECK_PREFIX`
+
+```ts
+export const MARK_CHECK_PREFIX = …
+```
+
+The prefix of the id of every mark check: `critique-mark/…`. It keeps a mark from ever sharing a slot with a critique or a test.
+
+#### `MarkRequest`
+
+```ts
+export type MarkRequest = {
+  /** The entry and the exact picture the marked critique judged. */
+  readonly entry: { readonly key: string; readonly title: string; readonly imageSha256: string };
+  /** The critic whose opinion is marked. */
+  readonly critic: { readonly name: string; readonly version?: string };
+  /** The `id` of one finding; absent marks the critique as a whole. */
+  readonly finding?: string;
+  readonly decision: 'accept' | 'dismiss';
+  /** Why, in the reviewer's words. */
+  readonly note?: string;
+  /** The layer of the critique that was marked. */
+  readonly layer?: string;
+};
+```
+
+One decision about a critic's opinion, ready to be recorded.
+
+#### `reviewerName`
+
+```ts
+export function reviewerName(name: string): string
+```
+
+The name a reviewer is recorded under, as a producer suffix: lowercase letters, digits, `-` and `.`. Anything else becomes `-`.
+Throws for a name with nothing left. It is a name the reviewer chooses, never an account, an address or a login.
+
+#### `reviewerProducer`
+
+```ts
+export function reviewerProducer(reviewer: string): string
+```
+
+`critic.review.<reviewer>`: the producer of a reviewer's marks. A critic-scoped token may publish it.
+
+#### `markCheckId`
+
+```ts
+export function markCheckId(request: Pick<MarkRequest, 'entry' | 'critic' | 'finding'>): string
+```
+
+The id of the check a mark is stored under; it names the entry, the critic and the finding (`*` for the whole critique), so a reviewer's newer mark of the same subject replaces the older.
+
+#### `markExtension`
+
+```ts
+export function markExtension(request: MarkRequest, reviewer: string): CritiqueMark
+```
+
+The extension a mark is stored as.
+
+#### `markLayer`
+
+```ts
+export function markLayer(args: { readonly reviewer: string; readonly marks: readonly MarkRequest[]; readonly recordedAtMs: number }): PublishChecksInput
+```
+
+The input of `publishChecks` for a reviewer's marks: producer `critic.review.<reviewer>`, part kind `critique`. Each mark is a `passed`
+check (it was recorded) with an `info` annotation in words, so a viewer that has never heard of marks still shows it.
+
+- `args.recordedAtMs`: when, epoch milliseconds. Nothing here reads a clock, so the same input is the same layer.
+
+#### `publishMarks`
+
+```ts
+export async function publishMarks(store: ObjectStore, args: Parameters<typeof markLayer>[0], options: PublishChecksOptions = {}): Promise<ReportLayer | null>
+```
+
+Publishes a reviewer's marks as one layer through any store, after checking the layer is within what a critic-scoped credential may
+publish. Returns the stored layer, or `null` when there is nothing to publish. The layer is content-addressed: the same marks at the same time are the same layer.
+
+- `store`: where to publish.
+
+- `args`: see {@link markLayer}.
+
+- `options`: attachment limits, as for `publishChecks`.
 
 ### Publishing critiques
 

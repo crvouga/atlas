@@ -78,8 +78,11 @@ export type KindCalibration = {
 /** The result of `calibrate`: per state kind, with the critic's provenance. */
 export type Calibration = {
   readonly schema: 1;
-  readonly critic: { readonly name: string; readonly version: string };
+  /** The critic and its version, and (when `atlas critic calibrate` wrote it) the model and fixed parameters the scores came from. */
+  readonly critic: { readonly name: string; readonly version: string; readonly model?: { readonly id: string; readonly provider?: string }; readonly parameters?: Readonly<Record<string, unknown>> };
   readonly kinds: readonly KindCalibration[];
+  /** When it was measured, epoch milliseconds, when `atlas critic calibrate` wrote it. */
+  readonly createdAtMs?: number;
 };
 
 function measure(examples: readonly LabelledExample[], threshold: number): { precision: number | null; recall: number | null; f1: number } {
