@@ -15,7 +15,7 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
@@ -66,6 +66,7 @@ const COMPONENTS = {
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
+  ReviewCollectionRequest: [ReviewCollectionRequestSchema, 'input'], ReviewCollection: [ReviewCollectionSchema, 'output'], ReviewCollectionList: [ReviewCollectionListSchema, 'output'], ReviewCollectionDetail: [ReviewCollectionDetailSchema, 'output'], ReviewNoteInput: [ReviewNoteInputSchema, 'input'], ReviewNote: [ReviewNoteSchema, 'output'], ReviewManifest: [ReviewManifestSchema, 'output'],
   TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
@@ -395,6 +396,50 @@ const BASE_OPERATIONS: readonly Operation[] = [
     description: 'Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer\'s tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).',
     body: { description: 'The attachment and the tags to add and remove. At most 20 of each, 64 KiB.', contentType: 'application/json', required: true, schema: ref('ArtifactTagEdit') },
     responses: { '201': json('The recorded entry.', 'ArtifactTagEntry'), '401': UNAUTHORIZED, '403': FORBIDDEN, '413': problem('Request too large.'), '422': problem('Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.') }
+  },
+  {
+    route: 'GET /api/reports/review-collections', path: '/api/reports/review-collections', operationId: 'listReviewCollections', tag: 'Report', role: 'read',
+    summary: 'Review collections: curated sets of recordings, newest first',
+    description: 'The newest revision of every review collection, in brief: id, revision and how many exist, title, purpose, audience, tags, how many entries and gaps it has, who published it and when. A collection is curation kept beside the report; it is not a layer, a check or a run, and it has no status. Open one with `/api/reports/review-collections/detail?id=`. Its share URL is the viewer\'s `?tab=collections&collection=<id>` and needs the same read access as the rest of the report.',
+    responses: { '200': json('The collections.', 'ReviewCollectionList'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'POST /api/reports/review-collections', path: '/api/reports/review-collections', operationId: 'publishReviewCollection', tag: 'Report', role: 'publish',
+    summary: 'Publish an immutable review collection (or a new revision of one)',
+    description: [
+      'Freezes an ordered set of references to recorded results as one named collection, recorded under the name of the publish (or admin) token that sends it. Take each entry\'s `layer` and `check` (and `kind`) from `GET /api/reports/artifacts`, and optionally one of its recordings (`videos[].recording`). The server resolves every entry to the result the report holds and records what the report says about it (status, time, run, commit, environment, tries, videos): the request does not claim them. An entry it cannot resolve refuses the whole request (`422`, naming the entry). The order is yours and is never re-sorted; failed, rejected and incomplete results stay in it beside a later passing replay.',
+      '',
+      'Entries from different runs are never one execution: each keeps its own layer, run and status. A collection has no status of its own, adds no check and cannot change any result or winner. A revision is immutable. To change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest revision (`409` otherwise); the earlier ones stay readable. Notes and reviewed marks are separate (`/reviews`). A reader-only token, a browser sign-in box and an anonymous reader are refused; nothing is shared publicly by default.'
+    ].join('\n'),
+    body: { description: 'The title, optional purpose, audience and tags, the ordered entries, optional gaps, and `basedOn` for a new revision. At most 500 entries and 100 gaps.', contentType: 'application/json', required: true, schema: ref('ReviewCollectionRequest') },
+    responses: { '201': json('The recorded revision.', 'ReviewCollection'), '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('`basedOn` names no collection.'), '409': problem('`basedOn.revision` is not the newest.'), '413': problem('Request too large.'), '422': problem('Not a collection, or an entry the report does not hold.'), '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/review-collections/detail', path: '/api/reports/review-collections/detail', operationId: 'getReviewCollection', tag: 'Report', role: 'read',
+    summary: 'One review collection revision with how its sources stand now',
+    description: 'The revision (the newest without `revision`), every revision number, the review notes and reviewed marks of that revision, and for each entry `availability`: `available` (its layer is held and the report lists the result), `unverified` (the layer is held but the report no longer lists the result or recording) or `unavailable` (the layer is gone, for example deleted by garbage collection), with the reason. An entry whose source is not available stays in its place with its frozen snapshot; it is never removed or replaced. Entries keep the status each layer recorded, with their own times, in the order the curator chose. A reviewed mark is curation: it changes no outcome and is not an approval.',
+    parameters: [
+      { name: 'id', in: 'query', required: true, description: 'A collection id from the list.', schema: str, example: 'rc-0123456789abcdef' },
+      { name: 'revision', in: 'query', description: 'A revision number. Default: the newest.', schema: { type: 'integer', minimum: 1 } }
+    ],
+    responses: { '200': json('The revision.', 'ReviewCollectionDetail'), '400': problem('No `id`, or a bad `revision`.'), '401': UNAUTHORIZED, '404': problem('No such collection or revision.') }
+  },
+  {
+    route: 'POST /api/reports/review-collections/reviews', path: '/api/reports/review-collections/reviews', operationId: 'addReviewNote', tag: 'Report', role: 'publish',
+    summary: 'Add a note, a time-coded gap note or a reviewed mark to a collection entry',
+    description: 'Records one immutable entry, by the name of the publish (or admin) token and the server\'s time: a `note` or a `gap` (text required; with `entry` and optionally `timecodeMs`, a moment in that entry\'s recording), or a `reviewed` / `unreviewed` mark for one entry. It changes no check outcome, no layer, no collection revision and no report winner; a mark is not an acceptance sign-off. The notes of a revision are in its `detail`.',
+    body: { description: 'The collection and revision, optionally the entry, the kind and its text.', contentType: 'application/json', required: true, schema: ref('ReviewNoteInput') },
+    responses: { '201': json('The recorded note.', 'ReviewNote'), '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('No such collection or revision.'), '413': problem('Request too large.'), '422': problem('Not a note: missing text, an unknown entry, or a mark without an entry.') }
+  },
+  {
+    route: 'GET /api/reports/review-collections/export', path: '/api/reports/review-collections/export', operationId: 'exportReviewCollection', tag: 'Report', role: 'read',
+    summary: 'Portable index (manifest) of one review collection revision',
+    description: 'A manifest an archive can be built from: the collection, each entry with its exact source (layer, check, kind, recording), the status and run it was recorded with, how it stands now, whether it is marked reviewed, and the files it references with their name as recorded, a safe name and path (`files/<position>-<safeName>`), and the recorded `sha256` when the report holds one (`null` is unknown, not verified). A source that cannot be read now is listed under `missing` and its files are marked `missing`; nothing is left out silently. The manifest contains no bytes; recordings are fetched from the attachment routes, which keep their own access control. Sent as an attachment.',
+    parameters: [
+      { name: 'id', in: 'query', required: true, description: 'A collection id.', schema: str },
+      { name: 'revision', in: 'query', description: 'A revision number. Default: the newest.', schema: { type: 'integer', minimum: 1 } }
+    ],
+    responses: { '200': json('The manifest.', 'ReviewManifest'), '400': problem('No `id`, or a bad `revision`.'), '401': UNAUTHORIZED, '404': problem('No such collection or revision.') }
   },
   {
     route: 'GET /api/reports/runs', path: '/api/reports/runs', operationId: 'getReportRuns', tag: 'Report', role: 'read',

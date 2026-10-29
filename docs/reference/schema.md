@@ -233,6 +233,137 @@ export const ArtifactTagsSchema = …
 
 `GET /api/reports/artifact-tags`: every recorded edit, oldest first. Fold them with `foldArtifactTags`.
 
+#### `ReviewSourceSchema`
+
+```ts
+export const ReviewSourceSchema = …
+```
+
+A source a review collection points at: one recorded result of one archived layer, and optionally one of its recordings. Exact and immutable: a layer never changes.
+
+#### `ReviewEntryInputSchema`
+
+```ts
+export const ReviewEntryInputSchema = …
+```
+
+One entry of a request to publish a collection: a source and the curator\'s caption for it.
+
+#### `ReviewGapInputSchema`
+
+```ts
+export const ReviewGapInputSchema = …
+```
+
+A gap the curator names: something the review should show and no recording does. It sits after the first `after` entries (0 or absent: before the first).
+
+#### `ReviewCollectionRequestSchema`
+
+```ts
+export const ReviewCollectionRequestSchema = …
+```
+
+The body of `POST /api/reports/review-collections`: a new collection, or, with `basedOn`, an explicit new revision of
+one. At least one entry or gap. The server records which sources the entries are now; it never alters the request.
+
+#### `ReviewSnapshotSchema`
+
+```ts
+export const ReviewSnapshotSchema = …
+```
+
+What the server recorded about the source of an entry at the moment it was frozen.
+
+#### `ReviewEntrySchema`
+
+```ts
+export const ReviewEntrySchema = …
+```
+
+One entry of a frozen collection.
+
+#### `ReviewGapSchema`
+
+```ts
+export const ReviewGapSchema = …
+```
+
+A gap item of a collection.
+
+#### `ReviewCollectionSchema`
+
+```ts
+export const ReviewCollectionSchema = …
+```
+
+One revision of a review collection, as stored: immutable. It is curation, not a test run: it has no status of its own,
+carries no check, and its entries are references to results that other runs recorded. Entries from different
+runs are never one execution.
+
+#### `ReviewCollectionSummarySchema`
+
+```ts
+export const ReviewCollectionSummarySchema = …
+```
+
+One collection in the list: its newest revision in brief.
+
+#### `ReviewCollectionListSchema`
+
+```ts
+export const ReviewCollectionListSchema = …
+```
+
+`GET /api/reports/review-collections`: the newest revision of every collection, newest first.
+
+#### `ReviewNoteInputSchema`
+
+```ts
+export const ReviewNoteInputSchema = …
+```
+
+The body of `POST /api/reports/review-collections/reviews`: a note, a time-coded gap note, or a reviewed marker on one entry. Curation only: it changes no outcome.
+
+#### `ReviewNoteSchema`
+
+```ts
+export const ReviewNoteSchema = …
+```
+
+One recorded review note. Entries are never changed or removed: they are the audit trail.
+
+#### `ReviewAvailabilitySchema`
+
+```ts
+export const ReviewAvailabilitySchema = …
+```
+
+How an entry\'s source stands now: `available` (the layer and the result are in the report), `unverified` (the layer is held but the result is outside the report\'s history window) or `unavailable` (the layer is gone).
+
+#### `ReviewCollectionDetailSchema`
+
+```ts
+export const ReviewCollectionDetailSchema = …
+```
+
+`GET /api/reports/review-collections/detail`: one revision, how each source stands now, and the review notes.
+
+#### `ReviewManifestFileSchema`
+
+```ts
+export const ReviewManifestFileSchema = …
+```
+
+One file in an export manifest.
+
+#### `ReviewManifestSchema`
+
+```ts
+export const ReviewManifestSchema = …
+```
+
+`GET /api/reports/review-collections/export`: a portable index of one revision. It lists sources and files; it contains no bytes.
+
 #### `HelloEventSchema`
 
 ```ts

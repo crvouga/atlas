@@ -164,6 +164,42 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
   (paced, scripted, silent, synthetic) and the sentence that the length is the recording's, not production latency. Developer
   details opens the test pinned to that run's record and closes the playlist.
 
+## Review collections
+
+The **Collections** tab (`explorer/collections.tsx`, `?tab=collections&collection=<id>&rev=<n>`) lists and opens review
+collections, and the Artifacts tab's **Freeze as review collection** button (a Mantine `Modal`) freezes the filtered set as it is
+listed. A collection is curation, not a test run (`@crvouga/atlas/reports/review-collection`, `docs/server.md#review-collections`).
+
+- The page never shows one status for the whole collection. Every entry shows the status it was **recorded** with ("Failed as
+  recorded"), its time, run, commit, layer and tries in order, so entries from several runs are never read as one execution; the
+  note at the top says how many runs they come from. The order is the curator's: a failed or incomplete take stays beside a
+  later passing replay and is never collapsed to the newest pass.
+- A revision is frozen. Opening an older revision says a newer one exists; a change is a new revision, never an edit.
+- An entry whose source is gone (`unavailable`) or cannot be checked (`unverified`) stays in its place with the reason and
+  what it was when frozen, and its recording says it is not available. Nothing is removed or replaced.
+- Notes, time-coded gap notes (`m:ss`, or seconds; a mistake is said, not guessed) and the **Reviewed** switch are separate
+  records with who and when. They change no outcome and the page says a mark is not an approval. Writing needs a token that
+  may publish, held only in this tab; a read-only visitor is refused with the server's reason and can still Read, Watch and
+  Inspect. **Download manifest** is the portable index; the share link adds no access.
+
+## Search inside recordings
+
+The Artifacts tab has a **Search inside recordings** section (`explorer/RecordingTextSearch.tsx`; words in `inside`). It
+applies the shared matcher (`find/`) to the transcript, caption and screen-text segments producers attached
+(`explorer/recording-text.ts`; format in [rich evidence](rich-evidence.md#words-in-recordings)), so phrases, close
+spellings, meaning and typed filters (`status:failed`) behave as in every search box.
+
+- Nothing is read until words are typed; then each listed result's evidence and text files are read a few at a time
+  through the report API (the same access rules as playing the recording). The video is never read. A file the viewer
+  may not read is not indexed and is reported as not searched, never counted or quoted. There is no stored index.
+- A result shows the indexed words exactly as indexed, why it matched (exact, close spelling, meaning), the source (spoken,
+  on screen, caption), generated text with its generator, confidence and a warning, the time range, the owning result and
+  retry attempt, and the result's own outcome. A match is never described as the behavior passing.
+- "No match" is only said about searched recordings. Recordings with no text (`Not indexed`), silent or unsupported ones
+  and unreadable text (`Failed`) are counted separately and listed under **Recordings that were not searched**.
+- A result opens the playlist on that result, that attempt's video and, when its time is usable and reachable, that time.
+  With no usable time the recording opens at its start and a note says seeking is unavailable.
+
 ## Icons and notation marks
 
 Use named imports from `@tabler/icons-react` for all UI glyphs. The icon package supplies SVG paths;

@@ -188,6 +188,44 @@ curl "$ATLAS_SERVER_URL/api/reports/artifacts?artifactTag=demo&type=video&domain
   **live query**: opening it asks again and shows what matches the newest report. It is not a snapshot; an immutable
   review collection is a separate feature. *Copy link* gives the address, which holds the whole query.
 
+## Words in recordings
+
+A reviewer who remembers a phrase that was spoken or shown in a video can search for it on the **Artifacts** tab
+(**Search inside recordings**, the `inside` address parameter). Atlas never transcribes video or reads a screen: it
+searches text you attach, and nothing is read from a recording until words are typed. Attach it beside the video, at the
+same level (the check, or the retry attempt that recorded the video):
+
+```ts
+attachments: [
+  { id: 'video', name: 'checkout.webm', contentType: 'video/webm', data: video },
+  // Spoken words: WebVTT, SubRip, JSON segments or plain text.
+  { name: 'checkout.vtt', role: 'transcript', contentType: 'text/vtt', data: transcript,
+    extensions: { 'atlas.text': { recording: 'video', generated: true, generator: 'my-speech-tool' } } },
+  // Text shown on screen, with its own timing.
+  { name: 'screen.json', role: 'ocr', contentType: 'application/json', data: JSON.stringify({ segments: [{ start: 2, end: 4, text: 'Order total', confidence: 0.9 }] }) }
+]
+```
+
+- **Which attachment is text.** One with `extensions["atlas.text"]`, a `role` of `transcript`, `ocr`, `screen-text`,
+  `captions` or `subtitles`, or a WebVTT or SubRip type. `extensions["atlas.text"].kind` (`speech`, `screen`, `caption`)
+  says what it is; otherwise the role does. It belongs to the video that lists its `id` in `captions`, or that
+  `extensions["atlas.text"].recording` names by `id`, else to the only video at the same level.
+- **Segments.** WebVTT and SubRip cues; JSON as `{ "segments": [...] }` (or `cues`, `results`, `lines`, or a bare list) of
+  `{ text, start, end }` in seconds or `{ text, startMs, endMs }`, with an optional `confidence` between 0 and 1. A
+  segment whose time is missing or invalid is still searched and is shown with no time; the viewer offers the recording
+  and says seeking is unavailable, and never guesses a moment.
+- **Honesty about the text.** `generated: true` (with `generator`) marks text a tool produced; results show it with its
+  confidence and say it may contain errors. A result always shows the indexed words, never a reworded quotation. A
+  match finds a moment; it is not a new assertion, and the result's own outcome and the retry attempt stay beside it.
+- **States are different things.** Searched with no match; not indexed (no text was supplied); unsupported (the video is
+  silent by its `scope.audioCaptured: false`, or the text is in a form that is not read, or sits at a `uri`); failed
+  (`extensions["atlas.text"].state: "failed"` with a `reason`, a file left out with `omitted`, or text that did not
+  parse). The ones not searched are listed apart and never counted as "no match".
+- **Access.** The text is read through the same report API, and so the same access rules, that play the recording. A file
+  the viewer may not read is not indexed and appears in no snippet or count. The index exists only in the open page: there
+  is no stored or cross-project index. Sending evidence to a transcription or OCR service is the producer's explicit
+  decision and happens outside Atlas.
+
 ## Labels describe, parameters split
 
 A result's **slot** is its producer, check id, part kind, spec, environment and **parameters**. The newest completed

@@ -430,6 +430,8 @@ export type ArtifactResult = {
   readonly types: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   readonly videos?: readonly VideoRef[];
+  /** The status of each recorded try in order, when the check was retried. Absent when no try was recorded: a first try is then unknown, never assumed to have passed. */
+  readonly attemptStatuses?: readonly EvidenceStatus[];
 };
 
 /** `GET /api/reports/artifacts`: the recorded results that carry evidence and match a query, newest first. */
@@ -718,7 +720,7 @@ export class TestHistory {
         const result: ArtifactResult = {
           key: i.slot, id: i.id, title: i.title, specPath: i.specPath, domain: null, at: o.at, status: held.s, environment: o.environment, producer: o.producer, kind: held.k,
           parameters: o.parameters, branch: o.branch, sha: o.sha, run: o.run, runUrl: o.runUrl, layer: o.layer, backend: o.backend, attachments: e.attachments,
-          artifactTags, tags: [...e.tags], types, labels: e.labels, ...(e.videos ? { videos: e.videos } : {}),
+          artifactTags, tags: [...e.tags], types, labels: e.labels, ...(e.videos ? { videos: e.videos } : {}), ...(e.attemptStatuses ? { attemptStatuses: e.attemptStatuses } : {}),
         };
         const media = [
           ...types.filter(type => type !== 'video').map(type => ({ type, tags: artifactTags })),
