@@ -273,7 +273,7 @@
                         },
                         "available": {
                           "type": "boolean",
-                          "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                         },
                         "scope": {
                           "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -926,7 +926,7 @@
                     },
                     "available": {
                       "type": "boolean",
-                      "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                      "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                     },
                     "scope": {
                       "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",

@@ -59,6 +59,15 @@ export function summarizeEvidenceIn(inherited: EvidenceScope | undefined, ...hol
 }
 
 /**
+ * Like {@link summarizeEvidenceIn}, knowing which bundle keys the layer names but does not hold (`unstored`, see
+ * `unstoredKeys`): a video whose only bytes are such a key is `available: false`, never a recording. Without
+ * `unstored` it is the same as `summarizeEvidenceIn`.
+ */
+export function summarizeStoredEvidence(inherited: EvidenceScope | undefined, unstored: ReadonlySet<string> | undefined, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined {
+  return summarize(holders, 'check', inherited, false, unstored);
+}
+
+/**
  * Like {@link summarizeEvidence} for a layer and its parts: the same summary, but a video attached to the layer or a
  * part is owned by the `layer`, not by a check.
  */
@@ -67,7 +76,12 @@ export function summarizeLayerEvidence(...holders: readonly EvidenceHolder[]): E
   return summarize(holders, 'layer', undefined, true);
 }
 
-function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inherited?: EvidenceScope, firstIsParent = false): EvidenceSummary | undefined {
+/** Like {@link summarizeLayerEvidence}, knowing which bundle keys the layer names but does not hold (see {@link summarizeStoredEvidence}). */
+export function summarizeStoredLayerEvidence(unstored: ReadonlySet<string> | undefined, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined {
+  return summarize(holders, 'layer', undefined, true, unstored);
+}
+
+function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inherited?: EvidenceScope, firstIsParent = false, unstored?: ReadonlySet<string>): EvidenceSummary | undefined {
   if (!holders.some(holder => count(holder) > 0)) return undefined;
   const roles = new Set<string>();
   const tags = new Set<string>();
@@ -81,7 +95,7 @@ function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inheri
       attachments += 1;
       for (const tag of normalizeTags(item.tags)) artifactTags.add(tag);
       roles.add(item.role ?? roleOfType(item.contentType ?? contentTypeOf(item.name)));
-      const video = videoOf(item, by, where, effectiveScope(item.scope, ...scopes));
+      const video = videoOf(item, by, where, effectiveScope(item.scope, ...scopes), unstored);
       if (video) videos.push(video);
     }
   };
@@ -124,9 +138,11 @@ export function attachmentIdentity(item: Pick<Attachment, 'name' | 'sha256' | 'b
   return item.sha256 ? `sha256:${item.sha256}` : item.bundleKey ?? item.uri ?? (item.text === undefined ? undefined : `inline:${item.name}`);
 }
 
-function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }, scope: EvidenceScope | undefined): VideoRef | undefined {
+function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }, scope: EvidenceScope | undefined, unstored?: ReadonlySet<string>): VideoRef | undefined {
   if (!isVideoAttachment(item)) return undefined;
-  const recording = attachmentIdentity(item);
+  // A bundle key the layer's bundle does not hold names bytes that are not there: only an address or inline text can still carry them, and the digest of lost bytes identifies nothing playable.
+  const lost = item.bundleKey !== undefined && unstored?.has(item.bundleKey) === true;
+  const recording = lost ? attachmentIdentity({ name: item.name, uri: item.uri, text: item.text }) : attachmentIdentity(item);
   const tags = normalizeTags(item.tags);
   return { name: item.name, owner, ...where, ...(tags.length ? { tags } : {}), ...(recording === undefined ? {} : { recording }), available: recording !== undefined, ...(scope ? { scope } : {}) };
 }
@@ -216,4 +232,16 @@ export function bundleKeysOf(holder: EvidenceHolder): string[] {
   for (const step of holder.steps ?? []) take(step.attachments);
   for (const attempt of holder.attempts ?? []) { take(attempt.attachments); for (const step of attempt.steps ?? []) take(step.attachments); }
   return [...keys];
+}
+
+/**
+ * The bundle keys that attachments of a layer, its parts and their checks name, but that the layer's `bundle` index does
+ * not hold: files the producer referenced and never stored. Empty for a layer whose every file is there. This reads only
+ * the index, never a blob, so it is cheap enough to ask of every layer as it is read.
+ */
+export function unstoredKeys(layer: EvidenceHolder & { readonly parts: readonly (EvidenceHolder & { readonly checks: readonly EvidenceHolder[] })[]; readonly bundle: Readonly<Record<string, unknown>> }): string[] {
+  const missing = new Set<string>();
+  for (const holder of [layer, ...layer.parts, ...layer.parts.flatMap(part => part.checks)])
+    for (const key of bundleKeysOf(holder)) if (!Object.hasOwn(layer.bundle, key)) missing.add(key);
+  return [...missing];
 }
