@@ -21,6 +21,7 @@ import { outcomeHeadline, selectedResult } from '../evidence/outcome';
 import { useTestHistory } from './catalog';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, runName } from './parts';
+import { Reliability } from './Reliability';
 import { ProductLatency } from './ProductLatency';
 import { usePinnedResult, type PinnedResult } from './pinned';
 const RecordingPage = lazy(() => import('../evidence/recording-page').then((module) => ({ default: module.RecordingPage })));
@@ -404,6 +405,8 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         )}
         {entries.length > 1 && <Trend entries={entries} />}
       </Box>
+
+      {!history.isError && <Reliability testKey={test.key} entries={history.data === null ? [] : history.data?.history} />}
 
       <ProductLatency entries={entries} />
 

@@ -87,6 +87,16 @@ when Watch is on screen.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
 
+## Reliability
+
+An open test shows its reliability (`explorer/Reliability.tsx`, worked out by `reports/reliability` from the history the page
+already holds). Never show a bare percentage: it always comes with the number of independent executions it rests on, the
+"Insufficient evidence" badge below the minimum (one pass is not established reliability), the scope (environment,
+producer, branch, parameters, time window, spec revision) and the warning notes (pooled environments, failed cases
+published again, bounded history). First-try success is over executions that recorded their tries only; a result that
+did not run or did not finish is excluded by name and never counted as a pass. The scope and the open executions table
+are in the address (`rel*`), so a link reproduces the figure and the executions behind it.
+
 ## Product latency
 
 A test's duration and its product latency are different things and the viewer never mixes them (`explorer/ProductLatency.tsx`,
