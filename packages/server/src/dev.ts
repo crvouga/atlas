@@ -8,21 +8,24 @@
 
 import path from 'node:path';
 
-import { openConfiguredBackends, serverOptionsOf, type ServeIo } from './main';
+import { connectStorage, serverOptionsOf, type ServeIo } from './main';
 import { createAtlasServer } from './app';
 import { ConfigError, loadServerConfig, SERVER_USAGE } from './config';
+import { describeS3, S3ConfigError } from './storage';
+import { userStateStore } from './user-state';
 import { listen } from './host';
-import { fileServerSettings } from './settings';
+import { storedSettings } from './settings';
 import { visualizerRoot } from './site';
 
 /** The text `atlas dev --help` prints. Also the source of the `atlas dev` section of `docs/reference/cli.md`. */
 export const DEV_USAGE = `atlas dev: the Atlas server and the client, for working on either
 
-  atlas dev [--port 5180] [--host 127.0.0.1] [--data <dir>] [--store <url|id=url>]... [--config atlas.server.json]
+  atlas dev [--port 5180] [--host 127.0.0.1] [--config atlas.server.json]
 
   Starts the server (API only, on a port of its own) and the client's dev server, which proxies /api to it, so the
   browser talks to one host and a change to the client shows at once. In production \`atlas serve\` does both from
-  one process.
+  one process. Storage is the same as for \`atlas serve\`: the required ATLAS_S3_* environment variables name the S3
+  bucket that holds all reports and user state; without them it exits with status 2 and lists every variable.
 `;
 
 /** `atlas dev`. */
@@ -41,11 +44,15 @@ export async function devMain(argv: readonly string[], io: ServeIo): Promise<num
     // The API itself listens on a port of its own on this machine; what the user said about --host is for the client, the one door.
     config = loadServerConfig([...forServer, '--port', '0'], { ...env, PORT: undefined, ATLAS_PORT: undefined }, cwd);
   } catch (error) {
+    if (error instanceof S3ConfigError) { io.out(`${error.message}\n`); return 2; }
     if (error instanceof ConfigError) { io.out(`atlas dev: ${error.message}\n${SERVER_USAGE.split('\n')[0]}\n`); return 2; }
     throw error;
   }
-  const backends = openConfiguredBackends(config, env, cwd);
-  const api = createAtlasServer({ ...serverOptionsOf(config, backends, line => io.out(`${JSON.stringify(line)}\n`)), settings: fileServerSettings(config, forServer, env, cwd) });
+  const connected = await connectStorage(config, env, io);
+  if ('failure' in connected) { io.out(`${connected.failure}\n`); return 2; }
+  const { backends } = connected;
+  const { settings, gc } = storedSettings(config, forServer, env, cwd, userStateStore(backends[0]!.store));
+  const api = createAtlasServer({ ...serverOptionsOf(config, backends, line => io.out(`${JSON.stringify(line)}\n`)), settings, gc });
   const running = await listen(api.fetch, { port: 0, host: '127.0.0.1', maxBodyBytes: Math.max(config.limits.maxObjectMiB, config.limits.maxJsonMiB) * 1024 * 1024 });
   await api.ready;
 
@@ -66,7 +73,7 @@ export async function devMain(argv: readonly string[], io: ServeIo): Promise<num
     throw error;
   }
   vite.printUrls();
-  io.out(`Data in ${path.relative(cwd, config.data) || config.data}. Publish with: ATLAS_STORE=${vite.resolvedUrls?.local[0] ?? `http://localhost:${publicPort}`} atlas report publish …\n`);
+  io.out(`Reports are stored in ${describeS3(config.s3)}. Publish with: ATLAS_STORE=${vite.resolvedUrls?.local[0] ?? `http://localhost:${publicPort}`} atlas report publish …\n`);
 
   await new Promise<void>(resolve => {
     io.signal?.addEventListener('abort', () => resolve(), { once: true });

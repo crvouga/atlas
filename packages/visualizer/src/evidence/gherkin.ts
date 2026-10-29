@@ -13,6 +13,8 @@ export type FeatureScenario = {
   readonly name: string;
   readonly description: string;
   readonly background: boolean;
+  /** The scenario's own tags, without the `@` (a parked or skipped scenario says so here). */
+  readonly tags: readonly string[];
   readonly steps: readonly FeatureStep[];
   readonly examples: readonly FeatureExamples[];
 };
@@ -50,13 +52,14 @@ export function featureModel(text: string): FeatureModel | null {
     for (const entry of child.rule ? child.rule.children : [child]) {
       const background = entry.background;
       const scenario = entry.scenario;
-      if (background) group.scenarios.push({ keyword: background.keyword, name: background.name, description: prose(background.description), background: true, steps: steps(background.steps), examples: [] });
+      if (background) group.scenarios.push({ keyword: background.keyword, name: background.name, description: prose(background.description), background: true, tags: [], steps: steps(background.steps), examples: [] });
       if (scenario) {
         group.scenarios.push({
           keyword: scenario.keyword,
           name: scenario.name,
           description: prose(scenario.description),
           background: false,
+          tags: [...new Set([...feature.tags, ...(child.rule?.tags ?? []), ...scenario.tags].map((tag) => tag.name.replace(/^@/, '')))],
           steps: steps(scenario.steps),
           examples: scenario.examples.map((example) => ({ name: example.name, header: cells(example.tableHeader), rows: example.tableBody.map(cells) }))
         });
@@ -95,4 +98,31 @@ export function slotsByScenario(feature: FeatureModel, slots: readonly CheckSlot
     else byScenario.set(owner, [...(byScenario.get(owner) ?? []), slot]);
   }
   return { byScenario, leftOver };
+}
+
+/** The rows of an outline's examples, each with the names of its columns. */
+export function exampleRows(scenario: Pick<FeatureScenario, 'examples'>): { readonly header: readonly string[]; readonly row: readonly string[] }[] {
+  return scenario.examples.flatMap((example) => example.rows.map((row) => ({ header: example.header, row })));
+}
+
+/** Whether a recorded example label (what follows `Scenario — `) names one row: by its cells, joined, or by `column=value` pairs. */
+function namesRow(label: string, entry: { readonly header: readonly string[]; readonly row: readonly string[] }) {
+  const joined = [entry.row.join(', '), entry.row.join(' '), entry.row.join(' | '), entry.header.map((name, at) => `${name}=${entry.row[at] ?? ''}`).join(', ')];
+  return joined.includes(label) || entry.row.includes(label);
+}
+
+/** The index (in {@link exampleRows}) of the row a recorded label stands for, or -1 when the label names no single row (the producer worded it its own way, or two rows read alike). */
+export function exampleIndexFor(scenario: Pick<FeatureScenario, 'examples'>, label: string): number {
+  const rows = exampleRows(scenario);
+  const found = rows.flatMap((entry, at) => (namesRow(label, entry) ? [at] : []));
+  return found.length === 1 ? found[0]! : -1;
+}
+
+/** The steps of a scenario with one example's values put in for its `<column>` placeholders, so the concrete inputs read as written. */
+export function fillExample(steps: readonly FeatureStep[], entry: { readonly header: readonly string[]; readonly row: readonly string[] }): FeatureStep[] {
+  const fill = (text: string) => text.replace(/<([^<>]+)>/g, (whole, name: string) => {
+    const at = entry.header.indexOf(name);
+    return at < 0 ? whole : (entry.row[at] ?? whole);
+  });
+  return steps.map((step) => ({ ...step, text: fill(step.text), docString: step.docString === null ? null : fill(step.docString), table: step.table.map((row) => row.map(fill)) }));
 }

@@ -3,13 +3,16 @@ import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parse } from 'yaml';
+import { fakeS3, listenFakeS3, S3_TEST_ENV } from '../packages/server/tests/fake-s3';
 import { requireBun, setupWorkspace, stopWorkspace, workspacePort, workspaceStatus } from './workspace';
 
 const repo = path.resolve(import.meta.dir, '..');
 const cli = path.join(import.meta.dir, 'workspace.ts');
 const roots: string[] = [];
 const children: ReturnType<typeof Bun.spawn>[] = [];
+const buckets: ReturnType<typeof listenFakeS3>[] = [];
 afterEach(async () => {
+  for (const bucket of buckets.splice(0)) await bucket.stop();
   for (const root of roots) await stopWorkspace(root);
   for (const child of children) {
     if (child.exitCode === null) child.kill('SIGTERM');
@@ -34,11 +37,14 @@ async function fixture() {
 }
 
 async function start(root: string, mode = 'run') {
+  // The server keeps everything in S3 only: each workspace gets a bucket of its own to run against.
+  const bucket = listenFakeS3(fakeS3());
+  buckets.push(bucket);
   const child = Bun.spawn([process.execPath, cli, mode, '--port', '0'], {
     cwd: root,
     stdout: 'ignore',
     stderr: 'pipe',
-    env: { ...process.env, ATLAS_CONFIG: undefined, ATLAS_PORT: undefined, PORT: undefined }
+    env: { ...process.env, ...S3_TEST_ENV, ATLAS_S3_ENDPOINT: bucket.url, ATLAS_CONFIG: undefined, ATLAS_PORT: undefined, PORT: undefined }
   });
   const errors = new Response(child.stderr).text();
   children.push(child);
@@ -106,8 +112,10 @@ test('a busy default falls back, while simultaneous Run commands acquire only on
     occupied?.stop(true);
   }
   const root = await fixture();
+  const bucket = listenFakeS3(fakeS3());
+  buckets.push(bucket);
   const racers = [0, 1].map(() => {
-    const child = Bun.spawn([process.execPath, cli, 'run', '--port', '0'], { cwd: root, stdout: 'ignore', stderr: 'ignore' });
+    const child = Bun.spawn([process.execPath, cli, 'run', '--port', '0'], { cwd: root, stdout: 'ignore', stderr: 'ignore', env: { ...process.env, ...S3_TEST_ENV, ATLAS_S3_ENDPOINT: bucket.url } });
     children.push(child);
     return child;
   });
@@ -127,12 +135,11 @@ test('two fresh workspaces serve separate API/settings/data; stop cannot affect 
   const first = await start(one),
     second = await start(two);
   expect(first.runtime.url).not.toBe(second.runtime.url);
-  expect(((await (await fetch(`${first.runtime.url}/api/settings`)).json()) as { active: { data: string } }).active.data).toBe(
-    path.join(one, '.atlas-data')
-  );
-  expect(((await (await fetch(`${second.runtime.url}/api/settings`)).json()) as { active: { data: string } }).active.data).toBe(
-    path.join(two, '.atlas-data')
-  );
+  for (const [runtime, root] of [[first.runtime, one], [second.runtime, two]] as const) {
+    expect(((await (await fetch(`${runtime.url}/api/settings`)).json()) as { active: { refreshSeconds: number } }).active.refreshSeconds).toBe(10);
+    // Nothing is kept on the workspace's disk: reports and user state are in the bucket.
+    expect(await Bun.file(path.join(root, '.atlas-data')).exists()).toBe(false);
+  }
   expect(await (await fetch(`${first.runtime.url}/admin`)).text()).toContain('Atlas server settings');
   expect(await (await fetch(first.runtime.url)).text()).toContain('__ATLAS_CONFIG__');
   const privateState = JSON.parse(await readFile(path.join(one, '.atlas-workspace/server.json'), 'utf8'));

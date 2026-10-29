@@ -83,6 +83,8 @@ export class ReportIndex {
   /** Layers that stopped holding any winner, and when. Older removals are forgotten; `#forgotten` says how far. */
   #removed: { id: string; rev: number }[] = [];
   #forgotten = 0;
+  /** Layers that were read, took part in the report, and no longer decide any result: all their checks were replaced by newer layers. */
+  readonly #superseded = new Set<string>();
   #refreshing: Promise<boolean> | null = null;
   #timer: ReturnType<typeof setInterval> | null = null;
   #refreshedAt = 0;
@@ -250,7 +252,7 @@ export class ReportIndex {
     this.#attribution.set(id, backend);
     if (!this.#include(evidence.layer)) return;
     this.#added.push({ ...evidence.layer, backend });
-    this.#history.add(evidence.layer, evidence.rows, specs, backend);
+    this.#history.add(evidence.layer, evidence.rows, specs, backend, evidence.fingerprints);
     const wins = new Set<string>();
     const keyOf = layerResultKeys(evidence.layer);
     for (const row of evidence.rows) {
@@ -264,6 +266,8 @@ export class ReportIndex {
     }
     if (wins.size) {
       this.#held.set(id, { evidence, wins, rev: ++this.#rev, entry: null, json: null, digest: null });
+    } else {
+      this.#superseded.add(id);
     }
   }
 
@@ -279,6 +283,7 @@ export class ReportIndex {
     held.wins.delete(key);
     if (held.wins.size) { this.#touch(held); return; }
     this.#held.delete(layerId);
+    this.#superseded.add(layerId);
     this.#removed.push({ id: layerId, rev: ++this.#rev });
     if (this.#removed.length > REMEMBERED_REMOVALS) this.#forgotten = this.#removed.splice(0, this.#removed.length - REMEMBERED_REMOVALS).at(-1)!.rev;
   }
@@ -358,6 +363,15 @@ export class ReportIndex {
    */
   get history(): TestHistory {
     return this.#history;
+  }
+
+  /**
+   * The ids of layers this index has read and that no longer decide any result. Removing one from its store cannot
+   * change the report (every slot it filled is held by a newer layer), which is what makes it safe for garbage
+   * collection to delete. A layer that failed to load, is hidden by `include`, or still holds a result is not here.
+   */
+  superseded(): ReadonlySet<string> {
+    return this.#superseded;
   }
 
   /** For `/readyz` and logs. */

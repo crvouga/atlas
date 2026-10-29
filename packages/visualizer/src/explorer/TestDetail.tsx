@@ -1,5 +1,5 @@
 import { IconX, IconCircleFilled } from '@tabler/icons-react';
-import { Alert, Anchor, Box, Button, Code, Flex, SimpleGrid, Stack, Table, Text, Title, VisuallyHidden } from '@mantine/core';
+import { Alert, Anchor, Badge, Box, Button, Code, Flex, SimpleGrid, Stack, Table, Text, Title, VisuallyHidden } from '@mantine/core';
 /**
  * @module Test detail
  *
@@ -10,30 +10,134 @@ import { Alert, Anchor, Box, Button, Code, Flex, SimpleGrid, Stack, Table, Text,
  */
 import type { CheckSlot } from '@crvouga/atlas/reports/evidence-view';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
-import { formatMs, type TestResultEntry, type TestSummary } from '@crvouga/atlas/reports/test-catalog';
+import { formatMs, runKey, type TestResultEntry, type TestSummary } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
 import { lazy, Suspense, useState } from 'react';
-import { CheckDetail, type CheckSelection } from '../evidence/check-detail';
+import { CheckDetail } from '../evidence/check-detail';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
-import { StatusMark } from '../evidence/marks';
+import { useEvidence } from '../evidence/evidence-context';
+import { Origin, StatusMark } from '../evidence/marks';
+import { outcomeHeadline, selectedResult } from '../evidence/outcome';
 import { useTestHistory } from './catalog';
-import { patched } from './navigate';
-import { Badges } from './parts';
+import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
+import { Badges, runName } from './parts';
+import { Reliability } from './Reliability';
+import { ProductLatency } from './ProductLatency';
+import { usePinnedResult, type PinnedResult } from './pinned';
 const RecordingPage = lazy(() => import('../evidence/recording-page').then((module) => ({ default: module.RecordingPage })));
 /** Results the history table shows before "Show more". */
 const HISTORY_ROWS = 20;
 function percent(rate: number | null): string {
   return rate === null ? '—' : `${Math.round(rate * 100)}%`;
 }
+/** Switches the detail from one pinned result back to the latest combined evidence. */
+function LatestLink({ children }: { children: string }) {
+  return (
+    <Anchor
+      renderRoot={(props) => (
+        <Link {...props} to="/" search={patched({ layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+      )}
+    >
+      {children}
+    </Anchor>
+  );
+}
+
+/**
+ * Says which evidence the detail shows: this one run's result (pinned by the address), or the latest combined evidence.
+ * The change from one to the other is always an explicit link, so a result never turns into another silently.
+ */
+function Scope({ pinned, slot }: { pinned: PinnedResult; slot: CheckSlot | undefined }) {
+  const { backends } = useEvidence();
+  const now = useNow();
+  if (pinned.state === 'none')
+    return (
+      <Flex aria-label="Evidence scope" role="group" gap="xs" align="center" wrap="wrap" mb="lg">
+        <Badge variant="light">Latest combined evidence</Badge>
+        <Text span inherit c="dimmed">
+          The newest result of each environment, which can come from different runs. Open a run to see exactly what it recorded.
+        </Text>
+      </Flex>
+    );
+  if (pinned.state === 'loading')
+    return (
+      <Text role="status" component="div" c="dimmed" mb="lg">
+        Reading the result of the run you opened…
+      </Text>
+    );
+  if (pinned.state === 'missing')
+    return (
+      <Alert color="blue" title="That result is not available" mb="lg">
+        <Stack gap="xs">
+          <Text span inherit>
+            {pinned.reason} No other result is shown in its place.
+          </Text>
+          <LatestLink>Show latest combined evidence</LatestLink>
+        </Stack>
+      </Alert>
+    );
+  const { layer } = pinned.entry;
+  const newer = slot?.outcomes.find(
+    (outcome) =>
+      outcome.layer.id !== layer.id &&
+      outcome.layer.recordedAtMs > layer.recordedAtMs &&
+      outcome.layer.producer === layer.producer &&
+      outcome.layer.environment === layer.environment &&
+      JSON.stringify(outcome.parameters) === JSON.stringify(pinned.entry.row.variant)
+  );
+  const key = runKey(layer);
+  return (
+    <Alert color="blue" title={`This run: ${runName(key)}`} mb="lg">
+      <Stack gap="xs">
+        <Flex gap="xs" align="center" wrap="wrap">
+          <Text span inherit fw={600}>
+            {layer.producer}
+          </Text>
+          <Origin layer={layer} backends={backends} now={now} />
+        </Flex>
+        <Text span inherit>
+          The evidence below is what this run recorded. The current results, statistics and history are about the latest combined evidence
+          across runs.
+        </Text>
+        {newer && (
+          <Text span inherit role="status">
+            A newer result exists: {statusWord(newer.row.status)} {ago(newer.layer.recordedAtMs, now)}.
+          </Text>
+        )}
+        <Flex gap="md" align="center" wrap="wrap">
+          <LatestLink>Show latest combined evidence</LatestLink>
+          <Anchor
+            renderRoot={(props) => (
+              <Link
+                {...props}
+                to="/"
+                search={patched({ tab: 'runs', openRun: key, test: undefined, layer: undefined })}
+                resetScroll={false}
+                activeOptions={{ exact: true }}
+              />
+            )}
+          >
+            Back to run {runName(key)}
+          </Anchor>
+        </Flex>
+      </Stack>
+    </Alert>
+  );
+}
+
 /** The open test. `slot` is the report's check for it, when the page holds one, for its evidence. */
 export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot | undefined }) {
   const now = useNow();
   const history = useTestHistory(test.key);
-  const [selection, setSelection] = useState<CheckSelection>({});
+  const { layer, source } = useExplorerSearch();
+  const go = useExplorerNavigate();
+  const pinned = usePinnedResult(layer, test.key);
   const [recording, setRecording] = useState(false);
+  const [recordingLayer, setRecordingLayer] = useState<string | undefined>(undefined);
   const [moment, setMoment] = useState<number | null>(null);
   const [rows, setRows] = useState(HISTORY_ROWS);
   const entries = history.data?.history ?? [];
+  const selected = slot && (!layer || pinned.state === 'ready') ? selectedResult(slot, pinned.state === 'ready' ? pinned.entry : undefined, source) : undefined;
   const stats = test.stats;
   const d = stats.durations;
   if (recording && slot) {
@@ -47,7 +151,8 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
       >
         <RecordingPage
           slot={slot}
-          layerId={selection.layer}
+          layerId={recordingLayer ?? layer}
+          entry={pinned.state === 'ready' && (recordingLayer ?? layer) === pinned.entry.layer.id ? pinned.entry : undefined}
           label={test.title}
           back="Test detail"
           moment={moment}
@@ -63,7 +168,7 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         <Anchor
           aria-label="Close the test"
           renderRoot={(props) => (
-            <Link {...props} to="/" search={patched({ test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+            <Link {...props} to="/" search={patched({ test: undefined, layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
           )}
         >
           <IconX size={20} aria-hidden="true" />
@@ -110,6 +215,9 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           <Text data-status={test.status} span inherit fw={600}>
             {statusWord(test.status)}
           </Text>
+          <Text span inherit c="dimmed">
+            worst current result of {plural(test.outcomes.length, 'source', 'sources')}
+          </Text>
           {stats.flaky && (
             <Text title={stats.flakyReason} span inherit>
               Flaky: {stats.flakyReason}
@@ -117,11 +225,18 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           )}
           <Badges test={test} />
         </Flex>
+        {selected && slot && (
+          <Text component="p" role="status" fw={600} data-outcome-headline>
+            {outcomeHeadline(selected, slot).text}
+          </Text>
+        )}
         {test.spec && <Code c="dimmed">{test.spec!.path}</Code>}
         <Code title="Check id" c="dimmed">
           {test.id}
         </Code>
       </Box>
+
+      <Scope pinned={pinned} slot={slot} />
 
       <Box aria-label="Current results" component="section" mb="lg">
         <Title order={3} mb="sm" c="dimmed">
@@ -197,6 +312,10 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         <Title order={3} mb="sm" c="dimmed">
           How it has gone
         </Title>
+        <Text component="div" c="dimmed" mb="sm">
+          Durations here are test execution time: setup, waits, retries and any demo pacing included. They do not say how quickly the product
+          responded; see Product latency.
+        </Text>
         <SimpleGrid component="dl" cols={{ base: 2, sm: 3 }}>
           <Stack gap="sm">
             <Box component="dt">Pass rate</Box>
@@ -281,11 +400,15 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         )}
         {!d && (
           <Text component="div" c="dimmed">
-            No duration recorded. Producers can send <Code>durationMs</Code> with each check.
+            No test duration recorded. Producers can send <Code>durationMs</Code> with each check.
           </Text>
         )}
         {entries.length > 1 && <Trend entries={entries} />}
       </Box>
+
+      {!history.isError && <Reliability testKey={test.key} entries={history.data === null ? [] : history.data?.history} />}
+
+      <ProductLatency entries={entries} />
 
       {(test.tags.length > 0 || Object.keys(test.labels).length > 0) && (
         <Box aria-label="Tags and labels" component="section" mb="lg">
@@ -314,21 +437,38 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
 
       <Box aria-label="Evidence" component="section" mb="lg">
         <Title order={3} mb="sm" c="dimmed">
-          What the current result carries
+          {layer ? 'What this run recorded' : 'What the current result carries'}
         </Title>
-        {slot ? (
+        {slot && (!layer || pinned.state === 'ready') ? (
           <CheckDetail
             slot={slot}
-            layerId={selection.layer}
+            layerId={layer}
+            {...(pinned.state === 'ready' ? { pinned: pinned.entry, pin: true } : {})}
             reads="steps"
+            headline={false}
+            records={entries.map((entry) => ({
+              layer: entry.layer,
+              kind: entry.kind,
+              status: entry.status,
+              at: entry.at,
+              sha: entry.sha,
+              producer: entry.producer,
+              environment: entry.environment,
+              parameters: entry.parameters
+            }))}
+            {...(layer ? {} : { source, onSource: (next: string | null) => go({ source: next ?? undefined }) })}
             select={(patch) => {
-              setSelection({ check: patch.check ?? slot.id, layer: patch.layer ?? undefined });
               if (patch.view === 'recording') {
+                setRecordingLayer(patch.layer ?? undefined);
                 setRecording(true);
                 setMoment(null);
-              }
+              } else go({ layer: patch.layer ?? undefined });
             }}
           />
+        ) : layer ? (
+          <Text component="div" c="dimmed">
+            {pinned.state === 'missing' ? 'There is no evidence to show for that run.' : 'Reading the evidence of that run…'}
+          </Text>
         ) : (
           <Text component="div" c="dimmed">
             The evidence of this result is not loaded in this page.
@@ -362,6 +502,9 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
                   <Table.Th scope="col">Branch</Table.Th>
                   <Table.Th scope="col">Commit</Table.Th>
                   <Table.Th scope="col">Detail</Table.Th>
+                  <Table.Th scope="col">
+                    <VisuallyHidden>Evidence</VisuallyHidden>
+                  </Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -396,6 +539,23 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
                     <Table.Td title={entry.detail} c="dimmed">
                       {entry.detail.split('\n')[0]}
                     </Table.Td>
+                    <Table.Td>
+                      <Anchor
+                        aria-label={`Open the ${statusWord(entry.status)} result recorded ${ago(entry.at, now)} in ${environmentLabel(entry.environment)}`}
+                        aria-current={entry.layer === layer ? 'true' : undefined}
+                        renderRoot={(props) => (
+                          <Link
+                            {...props}
+                            to="/"
+                            search={patched({ layer: entry.layer })}
+                            resetScroll={false}
+                            activeOptions={{ exact: true }}
+                          />
+                        )}
+                      >
+                        Open this result
+                      </Anchor>
+                    </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
@@ -427,7 +587,7 @@ function Trend({ entries }: { entries: readonly TestResultEntry[] }) {
       {timed.length > 1 && (
         <Box component="figure" m={0}>
           <Box component="figcaption">
-            Duration over the last {plural(timed.length, 'result', 'results')} · max {formatMs(max)}
+            Test duration over the last {plural(timed.length, 'result', 'results')} · max {formatMs(max)}
           </Box>
           <svg
             viewBox={`0 0 ${width} ${height}`}

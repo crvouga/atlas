@@ -54,3 +54,14 @@ export function useNow(everyMs = 30_000) {
   }, [everyMs]);
   return now;
 }
+
+/** Only addresses a browser may follow: never `javascript:` or `data:` from a producer. */
+export function safeUri(uri: string | undefined): string | null {
+  if (!uri) return null;
+  try {
+    const url = new URL(uri, 'https://atlas.invalid/');
+    return url.protocol === 'http:' || url.protocol === 'https:' ? uri : null;
+  } catch {
+    return null;
+  }
+}

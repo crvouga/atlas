@@ -142,10 +142,28 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
-      - name: Start the Atlas report server
+      - name: Start an S3 server for the Atlas report server
         if: matrix.script == 'run'
         run: |
-          bun atlas --data "$RUNNER_TEMP/atlas-data" --no-log > "$RUNNER_TEMP/atlas-server.log" 2>&1 &
+          cat > "$RUNNER_TEMP/s3.json" <<'JSON'
+          {"identities":[{"name":"admin","credentials":[{"accessKey":"atlaskey","secretKey":"atlassecret"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+          JSON
+          docker run -d --name s3 -p 18333:8333 -v "$RUNNER_TEMP/s3.json:/etc/s3.json" chrislusf/seaweedfs:latest server -s3 -s3.config=/etc/s3.json -dir=/data
+          export AWS_ACCESS_KEY_ID=atlaskey AWS_SECRET_ACCESS_KEY=atlassecret AWS_DEFAULT_REGION=us-east-1
+          for _ in $(seq 1 60); do aws --endpoint-url http://localhost:18333 s3 mb s3://atlas-example 2>/dev/null && break; sleep 2; done
+          printf 'ready\n' > "$RUNNER_TEMP/s3-ready"
+          aws --endpoint-url http://localhost:18333 s3 cp "$RUNNER_TEMP/s3-ready" s3://atlas-example/.ci-ready
+          aws --endpoint-url http://localhost:18333 s3 rm s3://atlas-example/.ci-ready
+      - name: Start the Atlas report server
+        if: matrix.script == 'run'
+        env:
+          ATLAS_S3_ENDPOINT: http://localhost:18333
+          ATLAS_S3_BUCKET: atlas-example
+          ATLAS_S3_REGION: us-east-1
+          ATLAS_S3_ACCESS_KEY_ID: atlaskey
+          ATLAS_S3_SECRET_ACCESS_KEY: atlassecret
+        run: |
+          bun atlas --no-log > "$RUNNER_TEMP/atlas-server.log" 2>&1 &
           for _ in $(seq 1 60); do
             if curl --fail --silent http://localhost:5180/readyz; then exit 0; fi
             sleep 1
