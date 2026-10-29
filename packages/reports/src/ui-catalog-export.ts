@@ -103,6 +103,8 @@ export async function gatherUiPictures(wanted: readonly UiPictureWant[], read: (
 }
 
 const WORDS: Readonly<Record<UiCoverage, string>> = { captured: 'Captured', failed: 'Capture failed', capturing: 'Capturing', skipped: 'Skipped', missing: 'Not captured yet' };
+/** The words for a coverage value; a value a later version adds is shown as it is, and is never taken for a capture. */
+const word = (coverage: string): string => (WORDS as Readonly<Record<string, string>>)[coverage] ?? coverage;
 
 const escapes: Readonly<Record<string, string>> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (text: string | number) => String(text).replace(/[&<>"']/g, character => escapes[character]!);
@@ -175,7 +177,7 @@ function cellHtml(state: UiCatalogState, cell: UiCell, options: UiExportOptions)
   } else if (shows && capture?.image?.omitted) figure = `<div class="nopic">Picture left out by its producer (${esc(capture.image.omitted)})</div>`;
   else if (shows && key && options.left?.get(key)) figure = `<div class="nopic">The picture ${esc(options.left.get(key)!)}</div>`;
   else if (shows && address) figure = `<div class="nopic"><a href="${esc(address)}" rel="noopener noreferrer">Open the picture at its address</a></div>`;
-  else figure = `<div class="nopic">${cell.coverage === 'captured' ? 'Captured without a picture' : esc(WORDS[cell.coverage])}</div>`;
+  else figure = `<div class="nopic">${cell.coverage === 'captured' ? 'Captured without a picture' : esc(word(cell.coverage))}</div>`;
   const origin = capture?.origin;
   const where = origin ? [
     `layer <code>${esc(origin.layer.slice(0, 12))}</code> in backend <code>${esc(origin.backend)}</code>`, `producer ${esc(origin.producer)}`,
@@ -183,13 +185,13 @@ function cellHtml(state: UiCatalogState, cell: UiCell, options: UiExportOptions)
     `<time datetime="${esc(new Date(origin.recordedAtMs).toISOString())}">${esc(new Date(origin.recordedAtMs).toISOString().slice(0, 19).replace('T', ' '))} UTC</time>`,
     origin.freshness === 'modified' ? 'recorded with local changes' : origin.freshness === 'unknown' ? 'origin not captured' : ''
   ].filter(Boolean).join(', ') : cell.planned ? `expected by plan layer <code>${esc(cell.planned.layer.slice(0, 12))}</code>; nothing has been captured` : '';
-  return `<figure data-coverage="${esc(cell.coverage)}" data-profile="${esc(cell.profile.key)}">${figure}<figcaption><strong>${esc(cell.profile.label)}</strong> <span class="tag">${esc(WORDS[cell.coverage])}</span>${cell.expected === 'undeclared' ? ' <span class="small muted">not in the expected set</span>' : ''}${capture?.detail ? `<div class="small">${esc(capture.detail)}</div>` : ''}${where ? `<div class="small muted">${where}</div>` : ''}</figcaption></figure>`;
+  return `<figure data-coverage="${esc(cell.coverage)}" data-profile="${esc(cell.profile.key)}">${figure}<figcaption><strong>${esc(cell.profile.label)}</strong> <span class="tag">${esc(word(cell.coverage))}</span>${cell.expected === 'undeclared' ? ' <span class="small muted">not in the expected set</span>' : ''}${capture?.detail ? `<div class="small">${esc(capture.detail)}</div>` : ''}${where ? `<div class="small muted">${where}</div>` : ''}</figcaption></figure>`;
 }
 
 function stateHtml(state: UiCatalogState, index: number, options: UiExportOptions): string {
-  const facts = [['Route', state.route], ['Fixture', state.fixture], ['Cohort', state.cohort], ['Area', state.area], ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')]]
+  const facts = [['Route', state.route], ['Fixture', state.fixture], ['Cohort', state.cohort], ['Area', state.area], ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')], ...Object.entries(state.attributes ?? {})]
     .filter(([, value]) => value).map(([name, value]) => `${esc(name!)}: ${esc(value!)}`).join(' · ');
-  const text = [state.id, state.title, state.route, state.fixture, state.cohort, state.area, ...state.flags, ...state.covers, ...state.producers].filter(Boolean).join(' ').toLowerCase();
+  const text = [state.id, state.title, state.route, state.fixture, state.cohort, state.area, ...state.flags, ...state.covers, ...state.producers, ...Object.values(state.attributes ?? {})].filter(Boolean).join(' ').toLowerCase();
   return `<li class="state" id="state-${index}" data-text="${esc(text)}"><h2>${esc(state.title)}</h2><div class="small muted"><code>${esc(state.id)}</code>${facts ? ` · ${facts}` : ''}</div><div class="cells">${state.cells.map(cell => cellHtml(state, cell, options)).join('')}</div></li>`;
 }
 

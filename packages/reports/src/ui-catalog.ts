@@ -106,6 +106,8 @@ export type UiCatalogState = {
   readonly flags: readonly string[];
   /** The surfaces it covers. */
   readonly covers: readonly string[];
+  /** Facts of the producers' own (`locale`, `brand`…), by name. Where two producers disagree the newest result's value is kept. Empty when none declared any. */
+  readonly attributes: Readonly<Record<string, string>>;
   /** The producers that captured or planned it. */
   readonly producers: readonly string[];
   /** One cell per profile, ordered by the profile's label. */
@@ -138,6 +140,8 @@ export type UiCatalogFacets = {
   readonly flags: readonly UiFacetValue[];
   readonly surfaces: readonly UiFacetValue[];
   readonly producers: readonly UiFacetValue[];
+  /** Every `name=value` pair of the states' attributes: the values the `attribute` filter takes. */
+  readonly attributes: readonly UiFacetValue[];
 };
 
 /** The catalog in numbers. Cells count a state once per profile. */
@@ -191,8 +195,19 @@ export function uiProfile(layer: Pick<LayerHeader, 'environment' | 'parameters'>
   };
 }
 
+// Keys of stored files are `attachments/<hex>`: nothing to escape, which is worth not asking `encodeURIComponent` about thousands of times.
+const PLAIN = /^[\w.-]+(?:\/[\w.-]+)*$/;
+
 function encodeKey(key: string): string {
-  return key.split('/').map(encodeURIComponent).join('/');
+  return PLAIN.test(key) ? key : key.split('/').map(encodeURIComponent).join('/');
+}
+
+const layerPaths = new WeakMap<LayerHeader, string>();
+
+function layerPath(layer: LayerHeader): string {
+  let found = layerPaths.get(layer);
+  if (found === undefined) layerPaths.set(layer, found = `/layers/${encodeURIComponent(layer.id)}/blobs/`);
+  return found;
 }
 
 function imageOf(result: EvidenceResult): UiImage | null {
@@ -201,11 +216,27 @@ function imageOf(result: EvidenceResult): UiImage | null {
   const webAddress = shot.uri && /^https?:\/\//i.test(shot.uri) ? shot.uri : undefined;
   const { uri: _uri, ...rest } = shot;
   // A live layer has no stored files; an archived one serves them by their key.
-  const path = shot.bundleKey && !result.layer.live ? `/layers/${encodeURIComponent(result.layer.id)}/blobs/${encodeKey(shot.bundleKey)}` : undefined;
+  const path = shot.bundleKey && !result.layer.live ? `${layerPath(result.layer)}${encodeKey(shot.bundleKey)}` : undefined;
   return { ...rest, ...(webAddress ? { uri: webAddress } : {}), ...(path ? { path } : {}) };
 }
 
+// A layer holds thousands of captures that share one profile and one origin, so each is made once per layer, not once per cell.
+const layerProfiles = new WeakMap<LayerHeader, UiProfile>();
+const layerOrigins = new WeakMap<LayerHeader, UiOrigin>();
+
+function profileOf(layer: LayerHeader): UiProfile {
+  let found = layerProfiles.get(layer);
+  if (!found) layerProfiles.set(layer, found = uiProfile(layer));
+  return found;
+}
+
 function originOf(layer: LayerHeader): UiOrigin {
+  let found = layerOrigins.get(layer);
+  if (!found) layerOrigins.set(layer, found = makeOrigin(layer));
+  return found;
+}
+
+function makeOrigin(layer: LayerHeader): UiOrigin {
   return {
     layer: layer.id, backend: layer.backend, producer: layer.producer, recordedAtMs: layer.recordedAtMs, sha: layer.sha, branch: layer.branch, runUrl: layer.runUrl,
     ...(layer.freshness ? { freshness: layer.freshness } : {})
@@ -216,9 +247,26 @@ function coverageOf(status: EvidenceStatus): UiCoverage {
   return status === 'passed' ? 'captured' : status === 'failed' ? 'failed' : status === 'running' ? 'capturing' : 'skipped';
 }
 
+/** The attributes of a state's results: a name's value is the newest result's that declared it. */
+function attributesOf(newestFirstResults: readonly EvidenceResult[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const result of newestFirstResults) {
+    const given = result.row.state?.attributes;
+    if (given) for (const name of Object.keys(given)) if (!(name in out)) out[name] = given[name]!;
+  }
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => compare(a, b)));
+}
+
 /** The newest result first, ties broken by the report contract's own order so no input order shows. */
 function newestFirst(a: EvidenceResult, b: EvidenceResult): number {
   return replaces(a, b) ? -1 : replaces(b, a) ? 1 : 0;
+}
+
+/** The result `newestFirst` puts first, without ordering the rest. */
+function newest(results: readonly EvidenceResult[]): EvidenceResult | undefined {
+  let best = results[0];
+  for (let i = 1; i < results.length; i++) if (replaces(results[i]!, best!)) best = results[i];
+  return best;
 }
 
 type Cell = { profile: UiProfile; captures: EvidenceResult[]; plans: EvidenceResult[] };
@@ -227,6 +275,11 @@ function facetOf(values: Iterable<readonly string[]>, labels?: ReadonlyMap<strin
   const counts = new Map<string, number>();
   for (const list of values) for (const value of new Set(list)) counts.set(value, (counts.get(value) ?? 0) + 1);
   return [...counts].map(([value, count]) => ({ value, count, ...(labels?.get(value) ? { label: labels.get(value)! } : {}) })).sort((a, b) => b.count - a.count || compare(a.value, b.value));
+}
+
+/** A state's attributes as the `name=value` texts the `attribute` filter takes. */
+function attributePairs(state: Pick<UiCatalogState, 'attributes'>): string[] {
+  return Object.entries(state.attributes).map(([name, value]) => `${name}=${value}`);
 }
 
 function emptyCoverage(): Record<UiCoverage, number> {
@@ -264,7 +317,7 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
     let state = states.get(result.row.id);
     if (!state) states.set(result.row.id, state = { results: [], cells: new Map() });
     state.results.push(result);
-    const profile = uiProfile(result.layer);
+    const profile = profileOf(result.layer);
     let cell = state.cells.get(profile.key);
     if (!cell) state.cells.set(profile.key, cell = { profile, captures: [], plans: [] });
     (result.row.kind === UI_PLAN_KIND ? cell.plans : cell.captures).push(result);
@@ -273,13 +326,13 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
   const profiles = new Map<string, UiProfile>();
   const catalogStates: UiCatalogState[] = [];
   for (const [id, state] of [...states].sort(([a], [b]) => compare(a, b))) {
-    const ordered = state.results.slice().sort(newestFirst);
+    const ordered = state.results.length > 1 ? state.results.slice().sort(newestFirst) : state.results;
     const scalar = (pick: (result: EvidenceResult) => string | undefined) => ordered.map(pick).find((value): value is string => value !== undefined) ?? null;
     const union = (pick: (result: EvidenceResult) => readonly string[] | undefined) => [...new Set(ordered.flatMap(result => pick(result) ?? []))].sort(compare);
     const cells: UiCell[] = [...state.cells.values()].sort((a, b) => compare(a.profile.label, b.profile.label) || compare(a.profile.key, b.profile.key)).map(cell => {
       profiles.set(cell.profile.key, cell.profile);
-      const best = cell.captures.slice().sort(newestFirst)[0];
-      const plan = cell.plans.slice().sort(newestFirst)[0];
+      const best = newest(cell.captures);
+      const plan = newest(cell.plans);
       const capture: UiCapture | null = best ? {
         status: best.row.status, detail: best.row.detail, durationMs: best.row.durationMs, image: imageOf(best),
         labels: best.row.evidence?.labels ?? {}, origin: originOf(best.layer), alternatives: cell.captures.length - 1
@@ -295,7 +348,7 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
     catalogStates.push({
       id, title: ordered[0]?.row.title ?? id,
       route: scalar(result => result.row.state?.route), fixture: scalar(result => result.row.state?.fixture), cohort: scalar(result => result.row.state?.cohort), area: scalar(result => result.row.state?.area), kind: scalar(result => result.row.state?.kind),
-      flags: union(result => result.row.state?.flags), covers: union(result => result.row.state?.covers),
+      flags: union(result => result.row.state?.flags), covers: union(result => result.row.state?.covers), attributes: attributesOf(ordered),
       producers: [...new Set(ordered.map(result => result.layer.producer))].sort(compare), cells
     });
   }
@@ -340,7 +393,8 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
       cohorts: facetOf(catalogStates.map(state => (state.cohort ? [state.cohort] : []))),
       flags: facetOf(catalogStates.map(state => state.flags)),
       surfaces: facetOf(catalogStates.map(state => state.covers)),
-      producers: facetOf(catalogStates.map(state => state.producers))
+      producers: facetOf(catalogStates.map(state => state.producers)),
+      attributes: facetOf(catalogStates.map(state => attributePairs(state)))
     },
     sources: { layers: taking.length, backends: options.backends ?? [], notices: options.notices ?? [] }
   };
@@ -348,7 +402,7 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
 
 /** What a person narrows the catalog by. Every field is optional; nothing asked is everything. Values within a field are alternatives, fields combine with AND. */
 export type UiCatalogQuery = {
-  /** Words (all of them) found in the id, title, route, fixture, cohort, area, flags, surfaces or producers. */
+  /** Words (all of them) found in the id, title, route, fixture, cohort, area, flags, surfaces, producers or attribute values. */
   readonly q?: string;
   readonly coverage?: readonly UiCoverage[];
   /** Profile keys, as {@link UiProfile.key}. */
@@ -360,9 +414,11 @@ export type UiCatalogQuery = {
   /** Surfaces a state covers. */
   readonly surface?: readonly string[];
   readonly producer?: readonly string[];
+  /** `name=value` pairs of the states' `attributes`. Several values of one name are alternatives; different names combine with AND. */
+  readonly attribute?: readonly string[];
 };
 
-const LIST_FIELDS = ['coverage', 'profile', 'area', 'route', 'cohort', 'flag', 'surface', 'producer'] as const;
+const LIST_FIELDS = ['coverage', 'profile', 'area', 'route', 'cohort', 'flag', 'surface', 'producer', 'attribute'] as const;
 
 /** Reads a query from URL search parameters (`q`, and the comma-separated {@link UiCatalogQuery} lists). Unknown coverage values are left out, never an error. */
 export function parseUiCatalogQuery(params: URLSearchParams): UiCatalogQuery {
@@ -390,8 +446,28 @@ export function isUiCatalogFiltered(query: UiCatalogQuery): boolean {
   return Boolean(query.q) || LIST_FIELDS.some(name => (query[name]?.length ?? 0) > 0);
 }
 
+// A state is searched for words on every keystroke and every request, so its text is made once.
+const haystacks = new WeakMap<UiCatalogState, string>();
+
 function haystack(state: UiCatalogState): string {
-  return [state.id, state.title, state.route, state.fixture, state.cohort, state.area, ...state.flags, ...state.covers, ...state.producers].filter(Boolean).join(' ').toLowerCase();
+  let text = haystacks.get(state);
+  if (text === undefined) haystacks.set(state, text = [state.id, state.title, state.route, state.fixture, state.cohort, state.area, ...state.flags, ...state.covers, ...state.producers, ...Object.values(state.attributes ?? {})].filter(Boolean).join(' ').toLowerCase());
+  return text;
+}
+
+/** Whether a state has one of the wanted `name=value` pairs for every name that was asked about. */
+function hasAttributes(state: UiCatalogState, wanted: readonly string[] | undefined): boolean {
+  if (!wanted?.length) return true;
+  const byName = new Map<string, string[]>();
+  for (const pair of wanted) {
+    const at = pair.indexOf('=');
+    if (at <= 0) return false;
+    const name = pair.slice(0, at);
+    byName.set(name, [...(byName.get(name) ?? []), pair.slice(at + 1)]);
+  }
+  const have = state.attributes ?? {};
+  for (const [name, values] of byName) if (!values.some(value => have[name] === value)) return false;
+  return true;
 }
 
 /**
@@ -409,6 +485,7 @@ export function filterUiCatalog(catalog: UiCatalog, query: UiCatalogQuery): UiCa
     if (terms.length) { const text = haystack(state); if (!terms.every(term => text.includes(term))) continue; }
     if (!any(query.area, value => state.area === value) || !any(query.route, value => state.route === value) || !any(query.cohort, value => state.cohort === value)) continue;
     if (!any(query.flag, value => state.flags.includes(value)) || !any(query.surface, value => state.covers.includes(value)) || !any(query.producer, value => state.producers.includes(value))) continue;
+    if (!hasAttributes(state, query.attribute)) continue;
     const cells = state.cells.filter(cell => any(query.profile, value => cell.profile.key === value) && any(query.coverage, value => cell.coverage === value));
     if (cells.length) states.push(cells.length === state.cells.length ? state : { ...state, cells });
   }

@@ -1,0 +1,435 @@
+{
+  "schemaVersion": 1,
+  "summary": {
+    "states": 3,
+    "profiles": 2,
+    "cells": 6,
+    "coverage": {
+      "captured": 3,
+      "failed": 1,
+      "capturing": 0,
+      "skipped": 0,
+      "missing": 2
+    },
+    "undeclared": 2,
+    "planned": true,
+    "surfaces": 2,
+    "uncoveredSurfaces": 1
+  },
+  "profiles": [
+    {
+      "key": "desktop-web|[[\"scheme\",\"light\"],[\"viewport\",\"1280x800\"]]",
+      "environment": "desktop-web",
+      "parameters": {
+        "scheme": "light",
+        "viewport": "1280x800"
+      },
+      "label": "Desktop web · light · 1280x800"
+    },
+    {
+      "key": "mobile-web|[[\"scheme\",\"dark\"],[\"viewport\",\"390x844\"]]",
+      "environment": "mobile-web",
+      "parameters": {
+        "scheme": "dark",
+        "viewport": "390x844"
+      },
+      "label": "Mobile web · dark · 390x844"
+    }
+  ],
+  "states": [
+    {
+      "id": "account",
+      "title": "Account",
+      "route": "/account",
+      "fixture": null,
+      "cohort": null,
+      "area": "account",
+      "kind": null,
+      "flags": [],
+      "covers": [],
+      "attributes": {},
+      "producers": [
+        "device-farm",
+        "web-capture"
+      ],
+      "cells": [
+        {
+          "profile": {
+            "key": "desktop-web|[[\"scheme\",\"light\"],[\"viewport\",\"1280x800\"]]",
+            "environment": "desktop-web",
+            "parameters": {
+              "scheme": "light",
+              "viewport": "1280x800"
+            },
+            "label": "Desktop web · light · 1280x800"
+          },
+          "coverage": "captured",
+          "expected": "undeclared",
+          "capture": {
+            "status": "passed",
+            "detail": "",
+            "durationMs": null,
+            "image": {
+              "name": "account.png",
+              "bundleKey": "attachments/6dff76f5ce873a881b4562bd95a78efa28cf06dfcc8d0a654734f96131f138cf",
+              "contentType": "image/png",
+              "width": 1280,
+              "height": 800,
+              "bytes": 19,
+              "sha256": "6dff76f5ce873a881b4562bd95a78efa28cf06dfcc8d0a654734f96131f138cf",
+              "path": "/layers/d75f9965a8c483c5472b6fdfbab80988f2b1e3ed88a1854ddae42618d05bf938/blobs/attachments/6dff76f5ce873a881b4562bd95a78efa28cf06dfcc8d0a654734f96131f138cf"
+            },
+            "labels": {
+              "shard": "1/2"
+            },
+            "origin": {
+              "layer": "d75f9965a8c483c5472b6fdfbab80988f2b1e3ed88a1854ddae42618d05bf938",
+              "backend": "ci",
+              "producer": "web-capture",
+              "recordedAtMs": 2000,
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "branch": "main",
+              "runUrl": "https://ci.example.com/runs/1"
+            },
+            "alternatives": 0
+          },
+          "planned": null
+        },
+        {
+          "profile": {
+            "key": "mobile-web|[[\"scheme\",\"dark\"],[\"viewport\",\"390x844\"]]",
+            "environment": "mobile-web",
+            "parameters": {
+              "scheme": "dark",
+              "viewport": "390x844"
+            },
+            "label": "Mobile web · dark · 390x844"
+          },
+          "coverage": "captured",
+          "expected": "undeclared",
+          "capture": {
+            "status": "passed",
+            "detail": "",
+            "durationMs": null,
+            "image": {
+              "name": "account.png",
+              "contentType": "image/png",
+              "width": 390,
+              "height": 844,
+              "uri": "https://pictures.example.com/account-mobile.png"
+            },
+            "labels": {
+              "shard": "2/2"
+            },
+            "origin": {
+              "layer": "08d377746381279cb03a13af0a7ee83e042637a542a8a1d64aabeab093ca4bd6",
+              "backend": "ci",
+              "producer": "device-farm",
+              "recordedAtMs": 3000,
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "branch": "main",
+              "runUrl": "https://ci.example.com/runs/1"
+            },
+            "alternatives": 0
+          },
+          "planned": null
+        }
+      ]
+    },
+    {
+      "id": "checkout/payment",
+      "title": "Payment",
+      "route": "/checkout",
+      "fixture": null,
+      "cohort": "new-customer",
+      "area": "checkout",
+      "kind": "screen",
+      "flags": [
+        "new-nav"
+      ],
+      "covers": [
+        "payment-form"
+      ],
+      "attributes": {
+        "brand": "acme",
+        "locale": "de-DE"
+      },
+      "producers": [
+        "device-farm",
+        "planner",
+        "web-capture"
+      ],
+      "cells": [
+        {
+          "profile": {
+            "key": "desktop-web|[[\"scheme\",\"light\"],[\"viewport\",\"1280x800\"]]",
+            "environment": "desktop-web",
+            "parameters": {
+              "scheme": "light",
+              "viewport": "1280x800"
+            },
+            "label": "Desktop web · light · 1280x800"
+          },
+          "coverage": "captured",
+          "expected": "declared",
+          "capture": {
+            "status": "passed",
+            "detail": "",
+            "durationMs": null,
+            "image": {
+              "name": "checkout-payment.png",
+              "bundleKey": "attachments/0a56c07104facc0cf2da10484c35a5848a8e4e79192e36f57db69f7def58d8c9",
+              "contentType": "image/png",
+              "width": 1280,
+              "height": 800,
+              "bytes": 19,
+              "sha256": "0a56c07104facc0cf2da10484c35a5848a8e4e79192e36f57db69f7def58d8c9",
+              "path": "/layers/d75f9965a8c483c5472b6fdfbab80988f2b1e3ed88a1854ddae42618d05bf938/blobs/attachments/0a56c07104facc0cf2da10484c35a5848a8e4e79192e36f57db69f7def58d8c9"
+            },
+            "labels": {
+              "shard": "1/2"
+            },
+            "origin": {
+              "layer": "d75f9965a8c483c5472b6fdfbab80988f2b1e3ed88a1854ddae42618d05bf938",
+              "backend": "ci",
+              "producer": "web-capture",
+              "recordedAtMs": 2000,
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "branch": "main",
+              "runUrl": "https://ci.example.com/runs/1"
+            },
+            "alternatives": 0
+          },
+          "planned": {
+            "layer": "b7f52f18513ff841fcd28609a512f2c3d41c08684ccdbe020fff8ee399ae00e1",
+            "backend": "ci"
+          }
+        },
+        {
+          "profile": {
+            "key": "mobile-web|[[\"scheme\",\"dark\"],[\"viewport\",\"390x844\"]]",
+            "environment": "mobile-web",
+            "parameters": {
+              "scheme": "dark",
+              "viewport": "390x844"
+            },
+            "label": "Mobile web · dark · 390x844"
+          },
+          "coverage": "failed",
+          "expected": "declared",
+          "capture": {
+            "status": "failed",
+            "detail": "The total never became visible",
+            "durationMs": null,
+            "image": {
+              "name": "checkout-payment.png",
+              "bundleKey": "attachments/5e4e024593087fc944ae27598f7be57fddae84330ee01d1b0d8b310aea8f0310",
+              "contentType": "image/png",
+              "width": 390,
+              "height": 844,
+              "bytes": 25,
+              "sha256": "5e4e024593087fc944ae27598f7be57fddae84330ee01d1b0d8b310aea8f0310",
+              "path": "/layers/08d377746381279cb03a13af0a7ee83e042637a542a8a1d64aabeab093ca4bd6/blobs/attachments/5e4e024593087fc944ae27598f7be57fddae84330ee01d1b0d8b310aea8f0310"
+            },
+            "labels": {
+              "shard": "2/2"
+            },
+            "origin": {
+              "layer": "08d377746381279cb03a13af0a7ee83e042637a542a8a1d64aabeab093ca4bd6",
+              "backend": "ci",
+              "producer": "device-farm",
+              "recordedAtMs": 3000,
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "branch": "main",
+              "runUrl": "https://ci.example.com/runs/1"
+            },
+            "alternatives": 0
+          },
+          "planned": {
+            "layer": "d67fa24e08b54aeddc528b25cd939e73b091f26e6ddc083f6f0a7d9c5aa98f31",
+            "backend": "ci"
+          }
+        }
+      ]
+    },
+    {
+      "id": "checkout/receipt",
+      "title": "checkout/receipt",
+      "route": null,
+      "fixture": null,
+      "cohort": null,
+      "area": null,
+      "kind": null,
+      "flags": [],
+      "covers": [],
+      "attributes": {},
+      "producers": [
+        "planner"
+      ],
+      "cells": [
+        {
+          "profile": {
+            "key": "desktop-web|[[\"scheme\",\"light\"],[\"viewport\",\"1280x800\"]]",
+            "environment": "desktop-web",
+            "parameters": {
+              "scheme": "light",
+              "viewport": "1280x800"
+            },
+            "label": "Desktop web · light · 1280x800"
+          },
+          "coverage": "missing",
+          "expected": "declared",
+          "capture": null,
+          "planned": {
+            "layer": "b7f52f18513ff841fcd28609a512f2c3d41c08684ccdbe020fff8ee399ae00e1",
+            "backend": "ci"
+          }
+        },
+        {
+          "profile": {
+            "key": "mobile-web|[[\"scheme\",\"dark\"],[\"viewport\",\"390x844\"]]",
+            "environment": "mobile-web",
+            "parameters": {
+              "scheme": "dark",
+              "viewport": "390x844"
+            },
+            "label": "Mobile web · dark · 390x844"
+          },
+          "coverage": "missing",
+          "expected": "declared",
+          "capture": null,
+          "planned": {
+            "layer": "d67fa24e08b54aeddc528b25cd939e73b091f26e6ddc083f6f0a7d9c5aa98f31",
+            "backend": "ci"
+          }
+        }
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "payment-form",
+      "inventoried": true,
+      "states": 1,
+      "captured": 1,
+      "status": "covered"
+    },
+    {
+      "id": "settings",
+      "inventoried": true,
+      "states": 0,
+      "captured": 0,
+      "status": "uncovered"
+    }
+  ],
+  "facets": {
+    "profiles": [
+      {
+        "value": "desktop-web|[[\"scheme\",\"light\"],[\"viewport\",\"1280x800\"]]",
+        "count": 3,
+        "label": "Desktop web · light · 1280x800"
+      },
+      {
+        "value": "mobile-web|[[\"scheme\",\"dark\"],[\"viewport\",\"390x844\"]]",
+        "count": 3,
+        "label": "Mobile web · dark · 390x844"
+      }
+    ],
+    "coverage": [
+      {
+        "value": "captured",
+        "count": 2
+      },
+      {
+        "value": "failed",
+        "count": 1
+      },
+      {
+        "value": "capturing",
+        "count": 0
+      },
+      {
+        "value": "skipped",
+        "count": 0
+      },
+      {
+        "value": "missing",
+        "count": 1
+      }
+    ],
+    "areas": [
+      {
+        "value": "account",
+        "count": 1
+      },
+      {
+        "value": "checkout",
+        "count": 1
+      }
+    ],
+    "routes": [
+      {
+        "value": "/account",
+        "count": 1
+      },
+      {
+        "value": "/checkout",
+        "count": 1
+      }
+    ],
+    "cohorts": [
+      {
+        "value": "new-customer",
+        "count": 1
+      }
+    ],
+    "flags": [
+      {
+        "value": "new-nav",
+        "count": 1
+      }
+    ],
+    "surfaces": [
+      {
+        "value": "payment-form",
+        "count": 1
+      }
+    ],
+    "producers": [
+      {
+        "value": "device-farm",
+        "count": 2
+      },
+      {
+        "value": "planner",
+        "count": 2
+      },
+      {
+        "value": "web-capture",
+        "count": 2
+      }
+    ],
+    "attributes": [
+      {
+        "value": "brand=acme",
+        "count": 1
+      },
+      {
+        "value": "locale=de-DE",
+        "count": 1
+      }
+    ]
+  },
+  "sources": {
+    "layers": 4,
+    "backends": [
+      {
+        "id": "ci",
+        "label": "ci",
+        "live": false,
+        "available": true
+      }
+    ],
+    "notices": []
+  }
+}

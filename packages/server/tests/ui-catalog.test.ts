@@ -126,3 +126,19 @@ describe('the catalog route', () => {
     expect(await response.text()).toBe('png:home');
   });
 });
+
+describe('a contract that grows', () => {
+  test('attributes a producer declared are filterable through the API, and a parameter or word the server does not know is ignored, not an error', async () => {
+    const { url, store } = await start();
+    await publishChecks(store, uiStateLayer({
+      producer: 'capture', recordedAtMs: 5, environment: 'desktop-web', profile: { viewport: '1280x800' },
+      states: [{ ...shot('home'), attributes: { locale: 'de-DE' } }, { ...shot('cart'), attributes: { locale: 'en-US' } }]
+    }));
+    expect((await catalogAt(url, '?attribute=locale%3Dde-DE')).states.map(state => state.id)).toEqual(['home']);
+    const whole = await catalogAt(url);
+    expect(whole.facets.attributes).toEqual([{ value: 'locale=de-DE', count: 1 }, { value: 'locale=en-US', count: 1 }]);
+    expect(whole.states.map(state => state.attributes)).toEqual([{ locale: 'en-US' }, { locale: 'de-DE' }]);
+    // What a later client may ask: unknown parameters and an unknown coverage word answer the whole catalog.
+    expect((await catalogAt(url, '?sort=newest&coverage=quarantined&view=grid')).states).toHaveLength(2);
+  });
+});

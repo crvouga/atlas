@@ -58,6 +58,13 @@ export type UiStateFacts = {
   readonly area?: string;
   /** The kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`, or any other word. Open vocabulary. Critics judge a state against others of its kind, so declare it; when it is absent the kind is unknown. */
   readonly kind?: string;
+  /**
+   * Facts of your own that the fields above do not name (`locale`, `brand`, `theme`, `build-channel`): a name and a text value each.
+   * This is where the convention grows without a new version: the catalog carries them, offers them as a filter
+   * (`attribute=name=value`) and shows them with the state, and none of them ever splits a slot or decides a result. A fact that
+   * must split a result (another viewport, another locale rendered as another picture) is a profile `parameter` of the layer instead.
+   */
+  readonly attributes?: Readonly<Record<string, string>>;
   /** On a `ui-plan` check only: this entry is a surface of the product's inventory, not a state. Nothing is captured for it. */
   readonly inventory?: boolean;
 };
@@ -70,6 +77,9 @@ export type UiStateFact = UiStateFacts & {
 
 const MAX_TEXT = 512;
 const MAX_LIST = 64;
+/** How many attributes a state keeps, and how long a name may be. The rest are dropped, in name order, never an error. */
+export const MAX_ATTRIBUTES = 32;
+const MAX_NAME = 64;
 
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim().slice(0, MAX_TEXT) : undefined;
@@ -79,6 +89,19 @@ function list(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const out = [...new Set(value.map(text).filter((item): item is string => item !== undefined))].slice(0, MAX_LIST);
   return out.length ? out : undefined;
+}
+
+function map(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [name, raw] of Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const key = name.trim().slice(0, MAX_NAME);
+    // A number or a boolean is the text it prints as; anything structured is not a fact about a screen and is left out.
+    const given = typeof raw === 'number' || typeof raw === 'boolean' ? String(raw) : raw;
+    const item = text(given);
+    if (key && item !== undefined && !(key in out) && Object.keys(out).length < MAX_ATTRIBUTES) out[key] = item;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function screenshotOf(check: Pick<Check, 'attachments'>): UiScreenshot | undefined {
@@ -100,17 +123,18 @@ function screenshotOf(check: Pick<Check, 'attachments'>): UiScreenshot | undefin
 
 /**
  * The declared facts of a check, read from its `atlas.ui-state` extension. Strings are trimmed and bounded, lists are
- * distinct and bounded, and anything of another shape is dropped; a check without the extension has no facts.
+ * distinct and bounded, `attributes` keep at most {@link MAX_ATTRIBUTES} text values, and anything of another shape (or a key
+ * this version does not know) is dropped from the reading and left in the layer; a check without the extension has no facts.
  */
 export function uiStateFacts(check: Pick<Check, 'extensions'>): UiStateFacts {
   const raw = check.extensions?.[UI_STATE_EXTENSION];
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
   const given = raw as Record<string, unknown>;
   const route = text(given.route), fixture = text(given.fixture), cohort = text(given.cohort), area = text(given.area), kind = text(given.kind);
-  const flags = list(given.flags), covers = list(given.covers);
+  const flags = list(given.flags), covers = list(given.covers), attributes = map(given.attributes);
   return {
     ...(route ? { route } : {}), ...(fixture ? { fixture } : {}), ...(cohort ? { cohort } : {}), ...(area ? { area } : {}), ...(kind ? { kind } : {}),
-    ...(flags ? { flags } : {}), ...(covers ? { covers } : {}),
+    ...(flags ? { flags } : {}), ...(covers ? { covers } : {}), ...(attributes ? { attributes } : {}),
     ...(given.inventory === true ? { inventory: true } : {})
   };
 }

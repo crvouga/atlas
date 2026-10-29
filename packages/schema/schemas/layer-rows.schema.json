@@ -418,6 +418,16 @@
                   "type": "string"
                 }
               },
+              "attributes": {
+                "description": "Facts of the producer's own, by name. Carried and offered as a filter; they never split a slot or decide a result",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
               "inventory": {
                 "description": "A `ui-plan` entry that names a surface of the product's inventory, not a state",
                 "type": "boolean"
