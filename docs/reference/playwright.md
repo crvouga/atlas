@@ -104,7 +104,10 @@ recognise screens and tap or type (`screen`, `recognize`, `locate`, the signal c
 the media tools (`captureScreen`, `ScreencastRecorder`, `ffmpeg`, `PHONE` and the pacing presets). Needs the
 `playwright` package; clips and thumbnails need FFmpeg on the PATH.
 
+Also `captureUiState`, the optional Playwright adapter of the UI catalog (it needs no Playwright import itself).
+
 See docs/statecharts.md
+See docs/ui-catalog.md
 
 ### Playwright screenshots, clips and paced actions
 
@@ -300,4 +303,64 @@ import { role, screen, text } from '@crvouga/atlas/playwright';
 const states = {
   'No todos': screen({ all: [text('Nothing to do yet')], none: [role('listitem')] })
 };
+```
+
+### Playwright adapter for the UI catalog
+
+Source: `packages/playwright/src/ui-catalog.ts`
+
+The optional Playwright side of the UI catalog: take a page to a state, wait until it is ready, photograph it, and hand the
+result to `uiStateLayer` (`@crvouga/atlas/reports/ui-catalog-publish`) as a capture. This is the only Playwright-specific code
+of the feature; reading, composing and exploring the catalog know nothing about it, and any other program that writes the
+same layer produces the same catalog. The page is typed by the three methods used, so no `playwright` import is needed here
+and a Playwright Test `page`, a `Page` of the driver, or a stub all fit.
+
+See docs/ui-catalog.md
+
+#### `CapturePage`
+
+```ts
+export type CapturePage = {
+  screenshot(options?: { readonly fullPage?: boolean; readonly animations?: 'disabled' | 'allow'; readonly type?: 'png' }): Promise<Uint8Array>;
+  viewportSize(): { readonly width: number; readonly height: number } | null;
+};
+```
+
+The part of a Playwright `Page` that capturing uses.
+
+#### `CaptureUiStateOptions`
+
+```ts
+export type CaptureUiStateOptions = UiStateFacts & {
+  /** The state's stable id: how a later capture replaces this one. */
+  readonly id: string;
+  readonly title?: string;
+  /** Resolves when the page shows the state (a locator is visible, the network is idle). A rejection or a timeout makes the capture `failed`, with the reason as its detail. */
+  readonly ready?: (page: CapturePage) => Promise<void>;
+  /** How long to wait for `ready`; default 15 seconds. */
+  readonly readyTimeoutMs?: number;
+  /** Photograph the whole scrollable page rather than the viewport. */
+  readonly fullPage?: boolean;
+  /** Extra labels for the capture (`browser`, `os`), which never split it. */
+  readonly labels?: Readonly<Record<string, string>>;
+};
+```
+
+What to capture and how to know the page is ready.
+
+#### `captureUiState`
+
+```ts
+export async function captureUiState(page: CapturePage, options: CaptureUiStateOptions): Promise<UiStateCapture>
+```
+
+Wait for the page to be ready, photograph it, and return the capture to publish. Never throws for the page's sake: a page
+that never became ready, or could not be photographed, is a `failed` capture that says why, so a broken state shows in the
+catalog instead of ending the run. A readiness failure still attaches a picture of what the page showed, for diagnosis.
+
+**Example**
+
+```ts
+const shot = await captureUiState(page, { id: 'checkout/payment', route: '/checkout', ready: p => expectVisible(p, '#total') });
+await publishChecks(store, uiStateLayer({ producer: 'playwright', recordedAtMs: Date.now(), environment: 'desktop-web', profile: { viewport: '1280x800' }, states: [shot] }));
 ```

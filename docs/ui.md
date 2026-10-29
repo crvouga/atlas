@@ -96,6 +96,20 @@ when Watch is on screen.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
 
+## UI catalog
+
+`/catalog` (`catalog/`) is the viewer's inventory of captured UI states ([the guide](ui-catalog.md)). It is computed in the page from
+the layers the viewer already holds (`catalog/provider.tsx`, only while the page is open), so states appear as results stream in and
+it works without a server. Cards are Mantine `Card`s in a responsive `SimpleGrid`; the filters live in the shell's navigation column
+(`UiCatalogFilters`) and the open state in a `Drawer`, and both are the address (`catalog/search.ts`).
+
+- Only `captured` is called captured. Every other coverage (`Capture failed`, `Capturing`, `Skipped`, `Not captured yet`) has its own
+  words and mark, and a cell without a picture says so in words instead of showing an empty frame. Never show a plan as a result.
+- A backend that is not available, a notice, and layers that could not be read are shown above the grid; the catalog says it may be
+  incomplete. Waiting follows the loading policy below, and layers still arriving are counted.
+- Pictures are `loading="lazy"` and only the cards on screen are fetched. The grid is bounded with *Show more*.
+- The open state shows every profile side by side with the layer, backend, producer, shard, commit and time of each picture.
+
 ## Reliability
 
 An open test shows its reliability (`explorer/Reliability.tsx`, worked out by `reports/reliability` from the history the page
@@ -276,6 +290,7 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
+| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts tabs, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |

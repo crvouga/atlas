@@ -183,6 +183,7 @@
     "docs/server.md",
     "docs/extending.md",
     "docs/rich-evidence.md",
+    "docs/ui-catalog.md",
     "docs/statecharts.md",
     "docs/report-contract.md",
     "docs/report-backends.md",

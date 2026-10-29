@@ -6,8 +6,12 @@
  * the media tools (`captureScreen`, `ScreencastRecorder`, `ffmpeg`, `PHONE` and the pacing presets). Needs the
  * `playwright` package; clips and thumbnails need FFmpeg on the PATH.
  *
+ * Also `captureUiState`, the optional Playwright adapter of the UI catalog (it needs no Playwright import itself).
+ *
  * @see docs/statecharts.md
+ * @see docs/ui-catalog.md
  */
 export { playwrightDriver, type PlaywrightContext, type PlaywrightDriverOptions } from './driver';
 export { captureScreen, ScreencastRecorder, UserActions, PHONE, SHOWCASE_PACING, FAST_PACING, ffmpeg, type Pacing } from './media';
 export { recognize, checkSignals, screen, locate, describeSignal, testId, text, role, label, css, type Signal, type SignatureSpec } from './signals';
+export { captureUiState, type CapturePage, type CaptureUiStateOptions } from './ui-catalog';

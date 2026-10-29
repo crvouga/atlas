@@ -84,7 +84,7 @@ Zod schema as `LayerDocumentSchema` from `@crvouga/atlas/schema`.
 | `freshness` | `modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Advisory only; see [Statuses](#statuses-and-the-gate). |
 | `run` | Optional `{ id, title?, startedAtMs?, endedAtMs? }`: the execution a local or manual producer names. Layers with the same `id` in one project are one run in the run list, however many shards or batches uploaded them; a later invocation at the same branch and commit gets another `id`. Without it a run is its `runUrl`, else `branch@sha`, as before. `title` is for people. Grouping and display only: it is **never part of the slot**, never decides a winner or a status, and never hides `sha`, `branch` or `freshness`. A `run` a reader cannot read is treated as absent. |
 | `specs` | The specs the layer was recorded against, with a `fingerprint` of their text, so a reader can warn when a spec changed since. Optional. |
-| `parts[].kind` | An open category (`behavior`, `performance`, `accessibility`, …). A new kind needs no change to any reader. Part of the slot. |
+| `parts[].kind` | An open category (`behavior`, `performance`, `accessibility`, …). A new kind needs no change to any reader. Part of the slot. `ui-state` and `ui-plan` are the [UI catalog](ui-catalog.md)'s: a captured UI state, and the states that are expected. |
 | `parts[].checks[]` | `id` (required, stable), `title`, `status`, `detail`, `specPath`, `measurements`, `durationMs`. |
 | `tags`, `labels`, `links`, `attachments`, `annotations`, `extensions` | Evidence, on the layer, a part or a check: what a result carries beyond its outcome. All optional and open. See [evidence](#evidence) and [the guide](extending.md). |
 | `checks[].steps`, `checks[].attempts` | A check's timeline, and every try when it was retried. Optional. |
@@ -227,7 +227,7 @@ are part of the contract:
 Tools map to these four. CTRF `skipped`, `pending` and `other`, and JUnit `<skipped>`, are `not-run`.
 An Atlas path that passed on retry (`flaky`) is `passed`, with the detail "Passed on retry (flaky)".
 
-Timings that only qualify a check (parts of kind `performance`) are not counted as checks when
+Timings that only qualify a check (parts of kind `performance`), and what a UI catalog expects (`ui-plan`), are not counted as checks when
 anything else is recorded. A measurement over its allowance is reported and never fails a check.
 
 Opinions (parts of kind `critique`, the verdicts of [automated UI reviewers](critics.md)) are never counted as checks,

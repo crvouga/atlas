@@ -178,12 +178,14 @@ export class ReportIndex {
 
   async #refresh(): Promise<boolean> {
     const before = this.#rev;
-    const fresh: { backend: BackendInput; key: string }[] = [];
     // The whole catalog on the first pass and now and then; otherwise only its newest end, where new layers sort.
     const full = this.#passes++ % this.#fullListEvery === 0;
+    // Each backend is listed and read on its own, so a slow or unreachable one never holds back the layers of the others: the
+    // report fills in as each answers. Oldest first or newest first gives the same report; newest first shows recent work soonest.
     await Promise.all(this.#backends.map(async backend => {
+      const fresh: string[] = [];
       try {
-        const consider = (key: string) => { if (!this.#folded.has(`${backend.id}|${key}`) && !this.#recentlyFailed(`${backend.id}|${key}`)) fresh.push({ backend, key }); };
+        const consider = (key: string) => { if (!this.#folded.has(`${backend.id}|${key}`) && !this.#recentlyFailed(`${backend.id}|${key}`)) fresh.push(key); };
         if (!full && isPaged(backend.store)) {
           // Newest first: pages of keys we already know mean nothing newer is behind them.
           for (let after: string | undefined; ;) {
@@ -202,10 +204,12 @@ export class ReportIndex {
         this.#available.set(backend.id, false);
         this.#failed.set(`${backend.id}|`, { at: this.#now(), message: `${backend.label ?? backend.id} is unavailable: ${error instanceof Error ? error.message : String(error)}` });
       }
+      fresh.sort();
+      await eachLimited(fresh, this.#concurrency, key => this.#load(backend, key));
+      // This backend has answered (or been named unavailable): the report is a report, if a partial one, and viewers are told now, not when the slowest backend has answered.
+      this.#refreshedAt ||= this.#now();
+      this.#emit();
     }));
-    // Oldest first or newest first gives the same report; newest first shows recent work soonest.
-    fresh.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.backend.id < b.backend.id ? -1 : 1));
-    await eachLimited(fresh, this.#concurrency, ({ backend, key }) => this.#load(backend, key));
     this.#refreshedAt = this.#now();
     this.#emit();
     return this.#rev !== before;

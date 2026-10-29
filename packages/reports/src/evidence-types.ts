@@ -11,6 +11,7 @@
 import type { EvidenceMeasurement, EvidenceStatus } from './explorer-types';
 import type { EvidenceScope, LayerRun } from '../../schema/src/layer';
 import type { LayerParameters } from './layer-types';
+import type { UiStateFact } from './ui-state';
 
 /** Where a recorded test's timeline and captured files are read from. */
 export type RecordingAddress =
@@ -171,6 +172,8 @@ export type LayerRow = {
   readonly durationMs: number | null;
   /** What this result carries beyond its outcome. Absent when nothing. */
   readonly evidence?: EvidenceSummary;
+  /** For a check of a `ui-state` or `ui-plan` part: its picture and declared facts, so a catalog is listed without another request (see `ui-state.ts`). Absent for every other kind. */
+  readonly state?: UiStateFact;
   /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
   readonly recording?: { readonly state: string; readonly reason?: string };
 };
