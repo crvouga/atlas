@@ -104,6 +104,23 @@ every kind of evidence and values from the future) and `layer-extensibility.test
 fields survive at every level, malformed evidence is dropped without losing the result, and a reader of the
 first version of the format still reads it all.
 
+### Saying what failed
+
+A failed check or step may declare the expectation it broke under the `atlas.failure` extension, so a reviewer sees
+it before the raw log. Every field is optional, and the declaration never changes the result.
+
+```json
+{
+  "name": "The list includes tea", "kind": "then", "status": "failed",
+  "extensions": { "atlas.failure": { "expected": "tea in the list", "actual": "the list is empty", "attribution": "product" } }
+}
+```
+
+`expected` and `actual` are shown as written. `attribution` is `product`, `test-harness` or `environment`; leave it out
+when you do not know, and the viewer says the cause is unknown. It is never inferred from the message. Whether setup
+failed before the behavior started comes from the failed step's `kind`: `hook`, `setup`, `fixture`, `before`,
+`beforeAll`, `beforeEach` or `given` mean preparation; `when`, `then`, `assertion` or `expect` mean the behavior.
+
 ## Attach evidence
 
 ### From the command line

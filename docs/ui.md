@@ -87,6 +87,20 @@ when Watch is on screen.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
 
+## Outcome summary
+
+A test or behavior detail states what the **selected** result says apart from what the other current sources say
+(`evidence/outcome.ts`, `outcome-summary.tsx`). The heading is the selected source's outcome first ("Selected result
+passed; another scoped source failed"), never the combined status; the combined status is labelled as the worst current
+result. Each other current source is one click away, and sources that share an environment are told apart by status,
+time, revision and their place among them. A failure leads with whether the behavior was reached (decided only by the
+recorded step `kind`: a `hook`, `setup`, `fixture`, `before*` or `given` step failing is "Behavior not verified: setup
+failed", `when`, `then`, `assertion` or `expect` is "Expectation not met", anything else is unknown), then the expected
+and observed values and the closest step and video, then the original output. The cause (product, test harness,
+environment) is unknown unless the producer declared it under the `atlas.failure` extension; it is never read from error
+wording. Records of one source whose outcome changed are listed oldest first, and a later pass is never called a fix.
+In the explorer the chosen source is the `source` search parameter (a layer id; unlike `layer` it does not pin a run).
+
 ## Icons and notation marks
 
 Use named imports from `@tabler/icons-react` for all UI glyphs. The icon package supplies SVG paths;

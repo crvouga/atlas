@@ -67,6 +67,8 @@ export const ExplorerSearchFields = {
   openRun: text,
   /** Pins the open test's detail to one exact layer (a run's record of it), instead of the latest combined evidence. With `openRun` and `artifact` it names the layer the file is in. */
   layer: text,
+  /** Which current source (a layer id) of the open test the detail's outcome summary, media and failure describe, without pinning a run. Unknown or absent: the newest. */
+  source: text,
   /** With `openRun` and `layer`: the one file of that layer (an `artifactRef`: `id:…`, `key:…` or `name:…`) the run's Artifacts select. */
   artifact: text,
   /** Only the runs, and the results of an opened run, that have a playable video recording. */
@@ -98,6 +100,7 @@ export type ExplorerSearch = {
   readonly tab?: 'runs' | 'artifacts';
   readonly openRun?: string;
   readonly layer?: string;
+  readonly source?: string;
   readonly artifact?: string;
   readonly video?: true;
 };
