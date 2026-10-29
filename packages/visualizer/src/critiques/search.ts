@@ -13,8 +13,8 @@ const text = z
   .optional()
   .catch(undefined);
 
-/** The `/critiques` route's search: the critic, the state kind and the open entry (an entry key). */
-export const CritiqueSearchFields = { critic: text, kind: text, entry: text };
+/** The `/critiques` route's search: the critic, the state kind, the open entry (an entry key) and the view (`ranked` or `agreement`). */
+export const CritiqueSearchFields = { critic: text, kind: text, entry: text, view: text };
 
 /** The address's parts, as the router holds them. */
 export type CritiqueSearch = { readonly [K in keyof typeof CritiqueSearchFields]?: string | undefined };

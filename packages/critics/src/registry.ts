@@ -19,7 +19,7 @@ import { z } from 'zod/v4';
 
 import { defineCritic, type Critic } from './contract';
 import { assertNoLiteralCredentials, createRedactor, resolveCredential } from './credentials';
-import { createLlmCritic, openAiCompatibleProvider } from './llm';
+import { ANTHROPIC_API_VERSION, anthropicProvider, createLlmCritic, geminiProvider, openAiCompatibleProvider, type LlmProvider } from './llm';
 import { createUiclipCritic, MissingDependencyError, setupUiclip, verifyCheckpoint } from './uiclip';
 
 const CheckpointConfig = z.object({
@@ -33,9 +33,9 @@ export const CriticConfigSchema = z.discriminatedUnion('type', [
   z.looseObject({ type: z.literal('uiclip'), checkpoint: CheckpointConfig }),
   z.looseObject({
     type: z.literal('llm'),
-    provider: z.literal('openai-compatible').default('openai-compatible'),
-    baseUrl: z.string().url().describe('For example https://llm.example.com/v1. Images are sent to this host'),
-    apiKey: z.string().optional().describe('A reference to the key: `env:NAME` or `file:PATH`. Never the key'),
+    provider: z.enum(['openai-compatible', 'anthropic', 'gemini']).default('openai-compatible').describe('`openai-compatible`: any server that speaks chat completions (needs baseUrl). `anthropic`: the Messages API. `gemini`: the Gemini API. All over plain fetch, with no SDK'),
+    baseUrl: z.string().url().optional().describe('For example https://llm.example.com/v1; required for `openai-compatible`. `anthropic` and `gemini` default to their own hosts. Images are sent to this host'),
+    apiKey: z.string().optional().describe('A reference to the key: `env:NAME` or `file:PATH`. Never the key. Required for `anthropic` and `gemini`'),
     model: z.string().min(1),
     rubric: z.string().optional().describe('What to look for, as text; recorded as a hash'),
     rubricFile: z.string().optional().describe('Or a file holding the rubric, relative to the configuration file'),
@@ -166,7 +166,15 @@ export async function buildCritic(loaded: LoadedConfig, name: string, io: Regist
     const secrets = key ? [key] : [];
     const redact = createRedactor(secrets);
     const rubric = entry.rubricFile ? await readFile(resolve(entry.rubricFile), 'utf8').catch(() => { throw new Error(`The rubric file ${entry.rubricFile} cannot be read`); }) : entry.rubric;
-    const provider = openAiCompatibleProvider({ baseUrl: entry.baseUrl, ...(key ? { apiKey: key } : {}), ...(io.fetch ? { fetch: io.fetch } : {}) });
+    const transport = io.fetch ? { fetch: io.fetch } : {};
+    let provider: LlmProvider;
+    if (entry.provider === 'anthropic' || entry.provider === 'gemini') {
+      if (!key) throw new Error(`The critic "${name}" uses the ${entry.provider} provider, which needs an apiKey: set it to a reference such as env:SOME_API_KEY`);
+      provider = (entry.provider === 'anthropic' ? anthropicProvider : geminiProvider)({ apiKey: key, ...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}), ...transport });
+    } else {
+      if (!entry.baseUrl) throw new Error(`The critic "${name}" uses the openai-compatible provider, which needs a baseUrl such as https://llm.example.com/v1`);
+      provider = openAiCompatibleProvider({ baseUrl: entry.baseUrl, ...(key ? { apiKey: key } : {}), ...transport });
+    }
     const critic = createLlmCritic({ provider, model: entry.model, name, ...(rubric ? { rubric } : {}), ...(entry.temperature === undefined ? {} : { temperature: entry.temperature }), ...(entry.maxTokens === undefined ? {} : { maxTokens: entry.maxTokens }), ...(entry.version ? { version: entry.version } : {}) });
     const doFetch = io.fetch ?? fetch;
     return {
@@ -174,14 +182,19 @@ export async function buildCritic(loaded: LoadedConfig, name: string, io: Regist
       async inspect() {
         const found: Inspection[] = [];
         found.push(entry.apiKey ? { aspect: 'credential', status: 'ok', detail: `${entry.apiKey} is set` } : { aspect: 'credential', status: 'warning', detail: 'No apiKey is configured: only a server that needs none will answer', fix: 'Set apiKey to a reference such as env:SOME_API_KEY' });
+        // A cheap authenticated listing per provider: it checks the host answers and the credential is accepted, and never sends an image.
+        const host = `https://${provider.sendsImagesTo}`;
+        const probe: { url: string; headers: Record<string, string> } = entry.provider === 'anthropic' ? { url: `${entry.baseUrl?.replace(/\/+$/, '') ?? host}/v1/models`, headers: { 'x-api-key': key!, 'anthropic-version': ANTHROPIC_API_VERSION } }
+          : entry.provider === 'gemini' ? { url: `${entry.baseUrl?.replace(/\/+$/, '') ?? host}/v1beta/models`, headers: { 'x-goog-api-key': key! } }
+          : { url: `${entry.baseUrl!.replace(/\/+$/, '')}/models`, headers: key ? { authorization: `Bearer ${key}` } : {} };
         try {
-          const response = await doFetch(`${entry.baseUrl.replace(/\/+$/, '')}/models`, { headers: key ? { authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(5_000) });
+          const response = await doFetch(probe.url, { headers: probe.headers, signal: AbortSignal.timeout(5_000) });
           await response.body?.cancel();
           if (response.status === 401 || response.status === 403) found.push({ aspect: 'provider', status: 'problem', detail: `${provider.sendsImagesTo} rejected the credential (${response.status})`, fix: `Check the key that ${entry.apiKey ?? 'apiKey'} names` });
           else if (response.status >= 500) found.push({ aspect: 'provider', status: 'problem', detail: `${provider.sendsImagesTo} answered ${response.status}`, fix: 'Try again later, or check the provider status' });
           else found.push({ aspect: 'provider', status: 'ok', detail: `${provider.sendsImagesTo} is reachable` });
         } catch (error) {
-          found.push({ aspect: 'provider', status: 'problem', detail: redact(`${provider.sendsImagesTo} is not reachable (${error instanceof Error ? error.name : 'error'})`), fix: `Check baseUrl (${entry.baseUrl}) and the network` });
+          found.push({ aspect: 'provider', status: 'problem', detail: redact(`${provider.sendsImagesTo} is not reachable (${error instanceof Error ? error.name : 'error'})`), fix: `Check ${entry.baseUrl ? `baseUrl (${entry.baseUrl})` : 'the network'}` });
         }
         return found;
       },

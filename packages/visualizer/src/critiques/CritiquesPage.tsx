@@ -5,22 +5,28 @@
  * problems first. It reads the report the viewer already holds, so a critique appears the moment its layer arrives. A critique is
  * an opinion and is shown as one: never with a passed or failed mark, never in a test count, and never changing whether anything
  * passes. A critique that judged an earlier picture is shown as that and is not ranked; a critic that could not judge says why.
+ *
+ * Three readings sit on the same evidence: the findings drawn where they were found on the picture (`FindingOverlay`), whether the
+ * critics agree about the pictures several of them judged (the Agreement view), and what reviewers decided about an opinion (marks:
+ * accepted or dismissed, per finding or for the whole opinion). Marks are made with `atlas critic review`, because a browser's sign-in
+ * box may only look; the viewer reads them and says how to make one.
  */
+import { markStanding, type AgreementOutcome, type MarkStanding, type Stance } from '@crvouga/atlas/reports/critique-review';
 import type { EntryCritique } from '@crvouga/atlas/reports/ui-catalog-entries';
-import { Accordion, Alert, Anchor, Badge, Code, Container, Drawer, Group, Image, NativeSelect, Stack, Table, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Anchor, Badge, Button, Code, Container, Drawer, Group, Image, NativeSelect, Stack, Switch, Table, Tabs, Text, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { reportAssetUrl } from '../evidence/api';
 import { useEvidence } from '../evidence/evidence-context';
 import { ago, exactTime, plural, useNow } from '../evidence/format';
 import { EvidenceIncomplete, EvidenceWaiting } from '../evidence/load-state';
-import { polishList, type RankedEntry } from './ranking';
+import { FindingOverlay, SEVERITY_COLOR } from './FindingOverlay';
+import { polishList, type PolishList, type RankedEntry } from './ranking';
 import { useCritiqueNavigate, useCritiqueSearch } from './search';
 
 type Critique = EntryCritique['critique'];
 
-const SEVERITY_COLOR: Readonly<Record<string, string>> = { major: 'red', minor: 'yellow', info: 'blue' };
 const severityRank = (severity: string | undefined) => (severity === 'major' ? 3 : severity === 'minor' ? 2 : severity === 'info' ? 1 : 0);
 
 function worst(critique: Critique): string | undefined {
@@ -36,6 +42,30 @@ function standing(critique: Critique): string {
   const relative = critique.verdict?.relative;
   if (!relative || relative.percentile === undefined) return 'Not compared';
   return `${Math.round(relative.percentile)}th percentile among ${plural(relative.sampleSize ?? 0, 'score', 'scores')} of ${relative.stateKind}`;
+}
+
+/** What reviewers decided, as a short word and who. Never a pass or a failure: accepting an opinion says the UI needs polish. */
+const MARK_WORD: Readonly<Record<MarkStanding['state'], string>> = { accepted: 'Accepted', dismissed: 'Dismissed', disputed: 'Reviewers disagree', unmarked: 'Not reviewed' };
+const MARK_COLOR: Readonly<Record<MarkStanding['state'], string>> = { accepted: 'orange', dismissed: 'gray', disputed: 'yellow', unmarked: 'gray' };
+
+/** Who decided what, one line each. */
+function markWho(standing: MarkStanding): string[] {
+  const lines = [];
+  if (standing.accepted.length) lines.push(`Accepted by ${standing.accepted.join(', ')}`);
+  if (standing.dismissed.length) lines.push(`Dismissed by ${standing.dismissed.join(', ')}`);
+  if (standing.earlier) lines.push(`Marks at an earlier picture (${standing.earlier}) count for nothing now`);
+  return lines;
+}
+
+function MarkBadge({ standing }: { standing: MarkStanding }) {
+  const who = markWho(standing);
+  return (
+    <Stack gap={2} align="flex-start">
+      <Badge variant={standing.state === 'unmarked' ? 'outline' : 'light'} color={MARK_COLOR[standing.state]}>{MARK_WORD[standing.state]}</Badge>
+      {who.map((line) => <Text key={line} fz="xs" c="dimmed">{line}</Text>)}
+      {standing.notes.map((note, index) => <Text key={index} fz="xs" c="dimmed">“{note}”</Text>)}
+    </Stack>
+  );
 }
 
 function Label({ critique }: { critique: Critique }) {
@@ -63,11 +93,18 @@ function Detail({ item, onClose }: { item: RankedEntry; onClose: () => void }) {
   const now = useNow();
   const { critique } = item.found;
   const findings = critique.findings ?? [];
+  const [showFindings, setShowFindings] = useState(true);
+  const [selected, setSelected] = useState<number | null>(null);
+  const placed = findings.some((finding) => finding.region);
+  const whole = markStanding(item.entry.marks, { critic: critique.critic.name });
   return (
     <Drawer opened onClose={onClose} position="right" size="xl" title={item.entry.title} closeButtonProps={{ 'aria-label': 'Close the critique' }}>
       <Stack gap="md">
         <Text c="dimmed" fz="sm">{item.entry.key} · {item.entry.state}</Text>
-        <Image src={reportAssetUrl(item.entry.image.path)} alt={`${item.entry.title}, ${item.entry.profile.label}`} loading="lazy" fit="contain" />
+        <FindingOverlay src={reportAssetUrl(item.entry.image.path)} alt={`${item.entry.title}, ${item.entry.profile.label}`} size={item.entry.image} findings={findings} selected={selected} show={showFindings && item.found.currency === 'current'} />
+        {placed && (
+          <Switch checked={showFindings} onChange={(event) => setShowFindings(event.currentTarget.checked)} label="Show findings on the picture" description={item.found.currency === 'current' ? 'Numbered boxes match the findings below. A finding without a region is listed but not drawn.' : 'Not drawn: the picture changed since these findings were made, so their places no longer apply.'} disabled={item.found.currency !== 'current'} />
+        )}
         {item.found.currency === 'earlier-image' && (
           <Alert role="status" color="orange" title="This critique judged an earlier picture">
             The picture of this state has changed since {critique.critic.name} looked at it. Its opinion is shown for reference and does not count as a judgement of what is shown now.
@@ -87,26 +124,44 @@ function Detail({ item, onClose }: { item: RankedEntry; onClose: () => void }) {
             {critique.verdict?.relative?.delta !== undefined && <Text fz="sm">Change against the previous picture: {critique.verdict.relative.delta > 0 ? '+' : ''}{critique.verdict.relative.delta}</Text>}
           </Group>
         )}
+        {!critique.failure && (
+          <Stack gap={4} aria-label="Review of the opinion">
+            <Title order={3}>Review</Title>
+            <MarkBadge standing={whole} />
+            <Text c="dimmed" fz="sm">
+              Accepting says the opinion is right and the UI needs polish; dismissing says it does not. Marks are made on the command line (a browser sign-in only reads):{' '}
+              <Code>atlas critic review --entry {item.entry.key} --critic {critique.critic.name} --accept</Code> or <Code>--dismiss</Code>, with <Code>--finding &lt;id&gt;</Code> for one finding. A mark never changes a result or the gate.
+            </Text>
+          </Stack>
+        )}
         {findings.length > 0 ? (
           <Table.ScrollContainer minWidth={420}>
             <Table aria-label="Findings">
               <Table.Thead>
                 <Table.Tr>
+                  <Table.Th scope="col">#</Table.Th>
                   <Table.Th scope="col">Category</Table.Th>
                   <Table.Th scope="col">Severity</Table.Th>
                   <Table.Th scope="col">Where</Table.Th>
                   <Table.Th scope="col">Why</Table.Th>
                   <Table.Th scope="col">Suggestion</Table.Th>
+                  <Table.Th scope="col">Review</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {findings.map((finding, index) => (
-                  <Table.Tr key={finding.id ?? index}>
+                  <Table.Tr key={finding.id ?? index} data-finding={finding.id ?? String(index + 1)}>
+                    <Table.Td>
+                      {finding.region && item.found.currency === 'current' && showFindings
+                        ? <Button size="compact-xs" variant={selected === index ? 'filled' : 'subtle'} aria-pressed={selected === index} aria-label={`Locate finding ${index + 1} on the picture`} onClick={() => setSelected(selected === index ? null : index)}>{index + 1}</Button>
+                        : index + 1}
+                    </Table.Td>
                     <Table.Td>{finding.category ?? 'Uncategorized'}</Table.Td>
                     <Table.Td><Badge variant="light" color={SEVERITY_COLOR[finding.severity ?? ''] ?? 'gray'}>{finding.severity ?? 'No severity'}</Badge></Table.Td>
                     <Table.Td>{regionText(finding.region) || <Text span c="dimmed">Whole picture</Text>}</Table.Td>
                     <Table.Td>{finding.rationale ?? ''}</Table.Td>
                     <Table.Td>{finding.suggestion ?? ''}</Table.Td>
+                    <Table.Td>{finding.id ? <MarkBadge standing={markStanding(item.entry.marks, { critic: critique.critic.name, finding: finding.id })} /> : <Text span c="dimmed" fz="sm">Cannot be marked alone: it has no id</Text>}</Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
@@ -145,6 +200,67 @@ function Detail({ item, onClose }: { item: RankedEntry; onClose: () => void }) {
   );
 }
 
+const STANCE_WORDS: Readonly<Record<Stance, string>> = { flags: 'Flags it', clear: 'Does not flag it', 'no-view': 'No view' };
+const STANCE_COLOR: Readonly<Record<Stance, string>> = { flags: 'orange', clear: 'gray', 'no-view': 'gray' };
+const OUTCOME_WORDS: Readonly<Record<AgreementOutcome, string>> = { 'agree-flag': 'All flag it', 'agree-clear': 'None flag it', disagree: 'Critics disagree', unclear: 'Not enough views' };
+
+/** Whether the critics agree about the pictures several of them judged. A reading for people: not a verdict, a status or a gate. */
+function AgreementPanel({ list }: { list: PolishList }) {
+  const { agreement } = list;
+  if (agreement.critics.length < 2 || agreement.rows.length === 0) {
+    return (
+      <Text c="dimmed" role="status" component="div" data-empty>
+        {agreement.critics.length < 2
+          ? 'Agreement needs two critics to have judged the same picture. Run another critic against this server (atlas critic run --critic <name> --all) and compare them here.'
+          : `No picture has been judged by more than one critic yet${list.kinds.length > 1 ? ' in this state kind' : ''}.`}
+      </Text>
+    );
+  }
+  return (
+    <Stack gap="md">
+      <Text c="dimmed" fz="sm">
+        Only each critic’s opinion of the picture an entry has now is compared. A critic flags a UI when its label says needs-polish, when it has findings, or, with neither, when its score is in the lowest quarter of its state kind; a bare score with no standing, or a critic that failed, gives no view and never makes critics agree. Entries every critic flags come first, then those they disagree about.
+        {agreement.single > 0 ? ` ${plural(agreement.single, 'state has', 'states have')} been judged by only one critic and ${agreement.single === 1 ? 'is' : 'are'} not shown.` : ''}
+      </Text>
+      <Table.ScrollContainer minWidth={560}>
+        <Table aria-label="Critics compared, those that all flag a state first" striped>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th scope="col">State</Table.Th>
+              <Table.Th scope="col">Kind</Table.Th>
+              {agreement.critics.map((critic) => <Table.Th key={critic} scope="col">{critic}</Table.Th>)}
+              <Table.Th scope="col">Agreement</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {agreement.rows.map((row) => (
+              <Table.Tr key={row.entry.key} data-entry={row.entry.key} data-outcome={row.outcome}>
+                <Table.Td><Stack gap={2}><Text fw={700}>{row.entry.title}</Text><Text c="dimmed" fz="xs">{row.entry.profile.label}</Text></Stack></Table.Td>
+                <Table.Td>{row.entry.state}</Table.Td>
+                {agreement.critics.map((critic) => {
+                  const view = row.views.find((candidate) => candidate.critic === critic);
+                  if (!view) return <Table.Td key={critic}><Text c="dimmed" fz="sm">Not judged at this picture</Text></Table.Td>;
+                  return (
+                    <Table.Td key={critic}>
+                      <Stack gap={2} align="flex-start">
+                        <Badge variant="light" color={STANCE_COLOR[view.stance]}>{STANCE_WORDS[view.stance]}</Badge>
+                        <Anchor fz="sm" aria-label={`Open ${critic}’s critique of ${row.entry.title}, ${row.entry.profile.label}`} renderRoot={(props) => <Link {...props} to="/critiques" search={((prev: Record<string, unknown>) => ({ ...prev, critic, entry: row.entry.key })) as never} resetScroll={false} />}>
+                          {view.score === undefined ? 'No score' : `Score ${Math.round(view.score * 1000) / 1000}`}{view.percentile === undefined ? '' : `, ${Math.round(view.percentile)}th percentile`}
+                        </Anchor>
+                      </Stack>
+                    </Table.Td>
+                  );
+                })}
+                <Table.Td><Badge variant={row.outcome === 'agree-flag' ? 'filled' : 'outline'} color={row.outcome === 'disagree' ? 'yellow' : row.outcome === 'agree-flag' ? 'orange' : 'gray'}>{OUTCOME_WORDS[row.outcome]}</Badge></Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
+    </Stack>
+  );
+}
+
 /** The `/critiques` route. */
 export function CritiquesPage() {
   const evidence = useEvidence();
@@ -153,6 +269,7 @@ export function CritiquesPage() {
   const list = useMemo(() => polishList(evidence.evidence, search), [evidence.evidence, search]);
   const unavailable = evidence.backends.filter((backend) => !backend.available);
   const all = [...list.ranked, ...list.unranked];
+  const view = search.view === 'agreement' ? 'agreement' : 'ranked';
   const open = search.entry ? all.find((item) => item.entry.key === search.entry) ?? null : null;
   return (
     <Container size="xl" w="100%" py="xl" component="article" aria-label="Needs polish">
@@ -180,9 +297,17 @@ export function CritiquesPage() {
         {list.critic && (
           <>
             <Group align="flex-end" gap="md">
-              <NativeSelect label="Critic" description="Scores are ranked within one critic" value={list.critic} data={list.critics.map((critic) => ({ value: critic.name, label: `${critic.name} (${critic.critiques})` }))} onChange={(event) => go({ critic: event.currentTarget.value })} />
+              {view === 'ranked' && <NativeSelect label="Critic" description="Scores are ranked within one critic" value={list.critic} data={list.critics.map((critic) => ({ value: critic.name, label: `${critic.name} (${critic.critiques})` }))} onChange={(event) => go({ critic: event.currentTarget.value })} />}
               <NativeSelect label="State kind" value={search.kind ?? ''} data={[{ value: '', label: 'All kinds' }, ...list.kinds.map((kind) => ({ value: kind, label: kind }))]} onChange={(event) => go({ kind: event.currentTarget.value || undefined })} />
             </Group>
+            <Tabs value={view} onChange={(next) => go({ view: next === 'agreement' ? 'agreement' : undefined })} keepMounted={false}>
+              <Tabs.List>
+                <Tabs.Tab value="ranked">Ranked</Tabs.Tab>
+                <Tabs.Tab value="agreement">Agreement across critics</Tabs.Tab>
+              </Tabs.List>
+              <Tabs.Panel value="agreement" pt="md"><AgreementPanel list={list} /></Tabs.Panel>
+              <Tabs.Panel value="ranked" pt="md">
+            <Stack gap="md">
             <Group gap="xs" role="status" aria-label="Critique summary">
               <Badge variant="light">{plural(list.ranked.length, 'state judged', 'states judged')}</Badge>
               {list.unranked.length > 0 && <Badge variant="outline">{list.unranked.length} not judged at the current picture</Badge>}
@@ -200,6 +325,7 @@ export function CritiquesPage() {
                       <Table.Th scope="col">Score</Table.Th>
                       <Table.Th scope="col">Within its kind</Table.Th>
                       <Table.Th scope="col">Findings</Table.Th>
+                      <Table.Th scope="col">Review</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -221,6 +347,7 @@ export function CritiquesPage() {
                               </Group>
                             ) : <Text span c="dimmed">None given</Text>}
                           </Table.Td>
+                          <Table.Td><MarkBadge standing={markStanding(item.entry.marks, { critic: item.found.critique.critic.name })} /></Table.Td>
                         </Table.Tr>
                       );
                     })}
@@ -257,6 +384,9 @@ export function CritiquesPage() {
                 </Table.ScrollContainer>
               </Stack>
             )}
+            </Stack>
+              </Tabs.Panel>
+            </Tabs>
           </>
         )}
         {search.entry && !open && evidence.ready && evidence.pending === 0 && (

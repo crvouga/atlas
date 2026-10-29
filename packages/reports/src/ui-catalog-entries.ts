@@ -14,7 +14,7 @@
  * @see docs/critics.md#reading-the-catalog
  * @see docs/ui-catalog.md
  */
-import type { Critique } from '../../schema/src/critique';
+import type { Critique, CritiqueMark } from '../../schema/src/critique';
 import { CRITIQUE_PART_KIND } from '../../schema/src/critique';
 import type { EvidenceStatus } from './explorer-types';
 import type { LayerEvidence } from './evidence-types';
@@ -51,6 +51,17 @@ export type EntryCritique = {
   readonly critique: Critique;
 };
 
+/** A person's accept or dismiss of a critic's opinion about an entry that wins its slot, and whether it was made about the picture the entry has now. */
+export type EntryMark = {
+  readonly layer: string;
+  /** `critic.review.<reviewer>`. */
+  readonly producer: string;
+  readonly recordedAtMs: number;
+  /** `current`: made about this picture. `earlier-image`: the picture changed since, so the mark is shown as about an earlier picture and counts for nothing now. */
+  readonly currency: 'current' | 'earlier-image';
+  readonly mark: CritiqueMark;
+};
+
 /** One captured state in one profile, ready to be judged. */
 export type CatalogEntry = {
   /** Stable identity, unique in the catalog: the state id, then `@` and the profile when it has one. */
@@ -67,6 +78,8 @@ export type CatalogEntry = {
   readonly origin: UiOrigin;
   /** Critiques of this entry that win their slot, newest first. */
   readonly critiques: readonly EntryCritique[];
+  /** Reviewers' marks (accept or dismiss) of those critiques that win their slot, newest first. Evidence: they never decide a result. */
+  readonly marks: readonly EntryMark[];
 };
 
 /** The entries of a report, and how many captured cells could not be offered for judging. */
@@ -102,11 +115,14 @@ export function catalogEntries(layers: readonly LayerEvidence[]): CatalogEntrySe
   const catalog = uiCatalog(layers);
   const opinions: LayerEvidence[] = [];
   for (const entry of layers) {
-    const rows = entry.rows.filter(row => row.kind === CRITIQUE_PART_KIND && row.critique !== undefined);
+    const rows = entry.rows.filter(row => row.kind === CRITIQUE_PART_KIND && (row.critique !== undefined || row.critiqueMark !== undefined));
     if (rows.length) opinions.push({ ...entry, rows });
   }
   const byEntry = new Map<string, { layer: LayerEvidence['layer']; status: EvidenceStatus; critique: Critique }[]>();
+  const marksByEntry = new Map<string, { layer: LayerEvidence['layer']; mark: CritiqueMark }[]>();
   for (const result of combineEvidence({ specs: [], sha: null, changedFiles: [] }, opinions).unassigned) {
+    const mark = result.row.critiqueMark;
+    if (mark) { const marked = marksByEntry.get(mark.subject.entryKey) ?? []; marked.push({ layer: result.layer, mark }); marksByEntry.set(mark.subject.entryKey, marked); }
     const critique = result.row.critique;
     if (!critique) continue;
     const list = byEntry.get(critique.subject.entryKey) ?? [];
@@ -129,10 +145,13 @@ export function catalogEntries(layers: readonly LayerEvidence[]): CatalogEntrySe
           currency: found.critique.subject.imageSha256 === sha256 ? 'current' as const : 'earlier-image' as const, critique: found.critique
         }))
         .sort((a, b) => b.recordedAtMs - a.recordedAtMs || compare(a.layer, b.layer));
+      const marks = (marksByEntry.get(key) ?? [])
+        .map(found => ({ layer: found.layer.id, producer: found.layer.producer, recordedAtMs: found.layer.recordedAtMs, currency: found.mark.subject.imageSha256 === sha256 ? 'current' as const : 'earlier-image' as const, mark: found.mark }))
+        .sort((a, b) => b.recordedAtMs - a.recordedAtMs || compare(a.layer, b.layer));
       entries.push({
         key, stateId: state.id, title: state.title, route: state.route, area: state.area, state: state.kind ?? UNKNOWN_STATE_KIND, profile: cell.profile,
         image: { sha256, path: image.path, ...(image.contentType ? { contentType: image.contentType } : {}), ...(image.width !== undefined ? { width: image.width } : {}), ...(image.height !== undefined ? { height: image.height } : {}), ...(image.bytes !== undefined ? { bytes: image.bytes } : {}) },
-        origin: cell.capture.origin, critiques
+        origin: cell.capture.origin, critiques, marks
       });
     }
   }

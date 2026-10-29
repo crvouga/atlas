@@ -13,6 +13,7 @@ Read [the critics guide](../../docs/critics.md). The function-level reference is
 | `runner` | `runCritic`: skip what was judged, bounded concurrency, timeout, backoff, budgets, dry run |
 | `critique` | build, read and key critiques; `critiqueLayer`, `readCritique`, `critiqueCurrency` |
 | `publish` | `publishCritiques` |
+| `marks` | `markLayer`, `publishMarks`: a reviewer's accept or dismiss of an opinion, as a layer |
 | `judging` | `relativeVerdict`, `calibrate`, `gateDecision` (report, warn, gate) |
 | `credentials` | references (`env:NAME`), literal-credential refusal, redaction |
 | `scope` | the rule a critic-role token is held to |

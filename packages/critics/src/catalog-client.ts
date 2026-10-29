@@ -156,7 +156,7 @@ export function createCatalogClient(options: CatalogClientOptions): CatalogClien
     if (!parsed.success) throw new CatalogClientError(`${base} answered something that is not a catalog list. Upgrade @crvouga/atlas, or the server.`, response.status);
     const document = parsed.data;
     return {
-      version: document.version, entries: document.entries as unknown as CatalogEntry[], total: document.total, unjudgeable: document.unjudgeable, notices: document.sources.notices,
+      version: document.version, entries: document.entries.map(entry => ({ ...entry, marks: entry.marks ?? [] })) as unknown as CatalogEntry[], total: document.total, unjudgeable: document.unjudgeable, notices: document.sources.notices,
       ...(document.nextCursor ? { nextCursor: document.nextCursor } : {}),
       ...(document.since ? { since: document.since } : {})
     };

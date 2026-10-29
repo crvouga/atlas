@@ -1500,6 +1500,189 @@ commutative and safe to repeat after a failure.
 A layer's catalog entry is copied last, and its manifest after its files, so a reader of `to` never sees an
 entry for a layer whose content has not arrived.
 
+### Reading critiques together
+
+Source: `packages/reports/src/critique-review.ts`. Import: `@crvouga/atlas/reports/critique-review`
+
+What a person or a command wants to know after critics have spoken: which states need polish first (`rankCritiques`), do the
+critics agree (`critiqueAgreement`), and what did people decide about the opinions (`markStanding`). These are readings of
+evidence that is already in the report. They count nothing toward a test total and decide no status, slot or gate: an
+opinion is an opinion, and so is a person's mark of it. Everything here is pure, so the viewer and `atlas critic review`
+read the same way.
+
+See docs/critics.md
+
+#### `RankedEntry`
+
+```ts
+export type RankedEntry<E extends Pick<CatalogEntry, 'key' | 'state' | 'critiques'> = CatalogEntry> = { readonly entry: E; readonly found: EntryCritique };
+```
+
+One entry and the critic's newest critique of it.
+
+#### `CritiqueRanking`
+
+```ts
+export type CritiqueRanking<E extends Pick<CatalogEntry, 'key' | 'state' | 'critiques'> = CatalogEntry> = {
+  /** Entries judged at their current picture with a score, lowest first. */
+  readonly ranked: readonly RankedEntry<E>[];
+  /** How the list was ranked: by standing within the state kind (when every score has one), or by raw score. */
+  readonly rankedBy: 'standing-within-kind' | 'score';
+  /** Entries whose newest critique judged an earlier picture, or that the critic could not judge: listed, never ranked. */
+  readonly unranked: readonly RankedEntry<E>[];
+  /** Entries in scope the critic has not judged at all. */
+  readonly unjudged: number;
+};
+```
+
+The ranking of the entries one critic judged.
+
+#### `rankCritiques`
+
+```ts
+export function rankCritiques<E extends Pick<CatalogEntry, 'key' | 'state' | 'critiques'>>(entries: readonly E[], critic: string | null, kind?: string): CritiqueRanking<E>
+```
+
+Ranks the entries a critic judged, lowest first, so the likeliest problems are reviewed first. A score is read as
+higher-is-better (the convention of the critique format). When every ranked score also carries its standing among the scores
+of the same state kind (`verdict.relative.percentile`) that standing ranks them instead, because a loading overlay is not
+compared with a full screen. An entry whose picture changed since it was judged, or that the critic could not judge, is not
+ranked but is returned; an entry the critic never saw is only counted.
+
+- `entries`: the entries in view.
+
+- `critic`: the critic whose critiques rank them.
+
+- `kind`: when given, only entries of this state kind.
+
+#### `Stance`
+
+```ts
+export type Stance = 'flags' | 'clear' | 'no-view';
+```
+
+What a critic's opinion amounts to for a reader who wants to know whether it flags the UI: it does, it does not, or it gives no view.
+
+#### `FLAGGING_PERCENTILE`
+
+```ts
+export const FLAGGING_PERCENTILE = …
+```
+
+A score at or below this standing within its state kind (the lowest quarter) counts as flagging, when the critic gave no label.
+
+#### `critiqueStance`
+
+```ts
+export function critiqueStance(critique: Critique): Stance
+```
+
+Whether a critique flags the UI. A failed critique, or one with nothing to go on, gives no view and is never read as fine.
+Otherwise the critic's own label decides (`needs-polish` flags, `ok` clears); with no label, findings flag; with neither, a score
+in the lowest quarter of its state kind (`relative.percentile` at most {@link FLAGGING_PERCENTILE}) flags and a higher one clears. A bare
+score with no standing gives no view, because a raw score is not absolute.
+
+#### `AgreementOutcome`
+
+```ts
+export type AgreementOutcome = 'agree-flag' | 'agree-clear' | 'disagree' | 'unclear';
+```
+
+How the critics who judged an entry at its current picture stand together.
+
+#### `CriticView`
+
+```ts
+export type CriticView = {
+  readonly critic: string;
+  readonly version: string;
+  readonly stance: Stance;
+  readonly score?: number;
+  readonly percentile?: number;
+  readonly label?: string;
+};
+```
+
+One critic's view of an entry.
+
+#### `AgreementRow`
+
+```ts
+export type AgreementRow<E extends Pick<CatalogEntry, 'key' | 'state' | 'critiques'> = CatalogEntry> = {
+  readonly entry: E;
+  readonly views: readonly CriticView[];
+  readonly outcome: AgreementOutcome;
+};
+```
+
+An entry judged at its current picture by two or more critics, and whether they agree.
+
+#### `CritiqueAgreement`
+
+```ts
+export type CritiqueAgreement<E extends Pick<CatalogEntry, 'key' | 'state' | 'critiques'> = CatalogEntry> = {
+  /** Entries judged by two or more critics at their current picture, those every critic flags first, then those they disagree on. */
+  readonly rows: readonly AgreementRow<E>[];
+  /** Entries only one critic has judged at the current picture: there is nothing to compare. */
+  readonly single: number;
+  /** The critics that have judged at least one entry at its current picture. */
+  readonly critics: readonly string[];
+};
+```
+
+The agreement of critics over some entries.
+
+#### `critiqueAgreement`
+
+```ts
+export function critiqueAgreement<E extends Pick<CatalogEntry, 'key' | 'state' | 'critiques'>>(entries: readonly E[], kind?: string): CritiqueAgreement<E>
+```
+
+Compares what the critics think of the same pictures. Only critiques of an entry's current picture count, and only each critic's
+newest. Critics that give no view ({@link critiqueStance}) are shown but do not make an entry agree or disagree: with fewer than
+two views the outcome is `unclear`, never agreement. An agreement is a reading for people; it is not a verdict, a status or a gate.
+
+#### `MarkStanding`
+
+```ts
+export type MarkStanding = {
+  /** `accepted`: only accepts. `dismissed`: only dismissals. `disputed`: reviewers disagree. `unmarked`: nobody has marked it at the current picture. */
+  readonly state: 'accepted' | 'dismissed' | 'disputed' | 'unmarked';
+  /** Reviewers who accepted it (their name, or the producer when they gave none). */
+  readonly accepted: readonly string[];
+  /** Reviewers who dismissed it. */
+  readonly dismissed: readonly string[];
+  /** Marks made about an earlier picture, which count for nothing now. */
+  readonly earlier: number;
+  /** The notes reviewers left, newest first. */
+  readonly notes: readonly string[];
+};
+```
+
+What people decided about one opinion (a critic's critique of an entry, or one of its findings).
+
+#### `markDecision`
+
+```ts
+export function markDecision(mark: Pick<EntryMark['mark'], 'decision'>): 'accept' | 'dismiss' | null
+```
+
+The decision a mark records: `accept`, `dismiss`, or `null` for a word this reader does not know (shown as written, counted as neither).
+
+#### `markStanding`
+
+```ts
+export function markStanding(marks: readonly EntryMark[], target: { readonly critic: string; readonly finding?: string | undefined }): MarkStanding
+```
+
+What reviewers decided about a critic's opinion of an entry. Only marks made about the picture the entry has now count; those
+about an earlier picture are tallied apart. Each reviewer's newest mark is the one that is held (the slot rule); a reviewer who
+accepted and later dismissed has dismissed. Marks with a decision this reader does not know count as neither.
+
+- `marks`: the entry's marks (`CatalogEntry.marks`).
+
+- `target`: the critic whose opinion is marked; `finding` names one finding, and without it the critique as a whole.
+
 ### Critiques in report rows
 
 Source: `packages/reports/src/critique-row.ts`. Import: `@crvouga/atlas/reports/critique-row`
@@ -1521,6 +1704,15 @@ export function critiqueOf(kind: string, check: Pick<Check, 'extensions'>): Crit
 
 The critique a check of a part of `kind` carries, or `undefined` for any other kind and for an extension that cannot be
 read. Unknown fields and values inside a readable critique are kept.
+
+#### `critiqueMarkOf`
+
+```ts
+export function critiqueMarkOf(kind: string, check: Pick<Check, 'extensions'>): CritiqueMark | undefined
+```
+
+The mark a check of a part of `kind` carries (a reviewer's accept or dismiss of a critic's opinion, `atlas.critique-mark`), or
+`undefined` for any other kind and for an extension that cannot be read. Like a critique it is evidence: it decides nothing.
 
 ### Spec outline from a directory
 
@@ -2380,6 +2572,8 @@ export type LayerRow = {
   readonly state?: UiStateFact;
   /** For a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer (see `critique-row.ts`). An opinion, never a result: it does not decide `status`, a slot or the gate. Absent for every other kind, and for an extension that cannot be read. */
   readonly critique?: Critique;
+  /** For a check of a `critique` part whose `atlas.critique-mark` extension can be read: a person's accept or dismiss of a critic's opinion (see `critique-row.ts`). Evidence, never a result: it does not decide `status`, a slot or the gate. Absent for every other kind, and for an extension that cannot be read. */
+  readonly critiqueMark?: CritiqueMark;
   /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
   readonly recording?: { readonly state: string; readonly reason?: string };
 };
@@ -10920,6 +11114,22 @@ export type EntryCritique = {
 
 A critique already made of an entry (any critic), and whether it judged the picture the entry has now.
 
+#### `EntryMark`
+
+```ts
+export type EntryMark = {
+  readonly layer: string;
+  /** `critic.review.<reviewer>`. */
+  readonly producer: string;
+  readonly recordedAtMs: number;
+  /** `current`: made about this picture. `earlier-image`: the picture changed since, so the mark is shown as about an earlier picture and counts for nothing now. */
+  readonly currency: 'current' | 'earlier-image';
+  readonly mark: CritiqueMark;
+};
+```
+
+A person's accept or dismiss of a critic's opinion about an entry that wins its slot, and whether it was made about the picture the entry has now.
+
 #### `CatalogEntry`
 
 ```ts
@@ -10938,6 +11148,8 @@ export type CatalogEntry = {
   readonly origin: UiOrigin;
   /** Critiques of this entry that win their slot, newest first. */
   readonly critiques: readonly EntryCritique[];
+  /** Reviewers' marks (accept or dismiss) of those critiques that win their slot, newest first. Evidence: they never decide a result. */
+  readonly marks: readonly EntryMark[];
 };
 ```
 

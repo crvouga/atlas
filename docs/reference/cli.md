@@ -2,7 +2,7 @@
 
 > Generated from the usage text each command prints (`atlas <command> --help`) by `bun run docs`. Do not edit.
 
-Add `--format json` (alias `--json`) to `init`, `report publish`, `stream`, `merge`, `doctor`, `status`, every `ui-catalog` command and `critic list`, `setup`, `doctor` and `run` for a JSON document on standard output (schemas in `@crvouga/atlas/schemas`). Exit codes: `0` it worked, `1` it ran and the answer is no, `2` the command was wrong.
+Add `--format json` (alias `--json`) to `init`, `report publish`, `stream`, `merge`, `doctor`, `status`, every `ui-catalog` command and `critic list`, `setup`, `doctor`, `run`, `watch`, `review` and `calibrate` for a JSON document on standard output (schemas in `@crvouga/atlas/schemas`). Exit codes: `0` it worked, `1` it ran and the answer is no, `2` the command was wrong.
 
 ## atlas
 
@@ -243,6 +243,15 @@ atlas critic — automated reviewers of the UI catalog
                        [--max-images n] [--max-tokens n] [--max-cost usd] [--concurrency n] [--timeout-ms n]
                        [--mode report|warn|gate] [--threshold state=score]... [--calibration file.json]
                        [--spool dir] [--project slug] [--config atlas.critics.json] [--format text|json]
+  atlas critic watch   --critic <name>... [--server <url>] [--since <version>] [filters] [--yes] [--dry-run]
+                       [--max-batches n] [--max-images n] [--max-tokens n] [--max-cost usd] [--concurrency n] [--timeout-ms n]
+                       [--spool dir] [--project slug] [--config atlas.critics.json] [--format text|json]
+  atlas critic review  [--server <url>] [--critic <name>] [--state kind] [--limit n] [--list] [--non-interactive]
+                       [--entry <key> ( --accept | --dismiss ) [--finding <id>]... [--note text] [--reviewer name] [--dry-run]]
+                       [--project slug] [--config atlas.critics.json] [--format text|json]
+  atlas critic calibrate <name> ( --good <dir>... --bad <dir>... [--heldout-good <dir>...] [--heldout-bad <dir>...] [--state kind]
+                       | --from-marks [--server <url>] [--critic-version v] ) [--out file.json] [--dry-run] [--yes]
+                       [--max-images n] [--concurrency n] [--timeout-ms n] [--config atlas.critics.json] [--format text|json]
 
   A critic is a producer: it runs here (on a laptop, in CI or in a worker), reads the catalog from an Atlas server, and publishes
   what it thinks as layers of critiques. The server never runs a model and never holds a provider key. A critique is an opinion,
@@ -269,7 +278,22 @@ atlas critic — automated reviewers of the UI catalog
                              gate: exit 1 when a score is below its state kind's threshold, refused (exit 2) unless a calibration
                              with held-out evidence of this critic and version is given with --calibration
 
-  --format json   prints one document (schemas: critic-list-result, critic-setup-result, critic-doctor-result, critic-run-result).
+  watch     A worker: run in a loop over the catalog. It catches up on connecting, judges new or changed entries as they arrive (a picture
+            already judged is skipped without a call), publishes as it goes, keeps what the server cannot take and sends it next time.
+            It stops on Ctrl-C, after --max-batches batches, or when a budget (for the whole watch) is spent, and prints the version to
+            resume from (--since). It reports; it never gates. --dry-run reads the catalog once and sends and publishes nothing.
+  review    The ranked "needs polish" list of one critic (lowest first) with its findings and the marks already made. With a terminal it
+            walks through the list and asks: accept (the opinion is right: the UI needs polish), dismiss (it is not), skip. With
+            --entry and --accept or --dismiss it records one decision, for the whole opinion or for --finding ids. A mark is a layer
+            under critic.review.<reviewer> (--reviewer, ATLAS_REVIEWER); it needs no more power than a critic token and never changes
+            a result, a count or the gate.
+  calibrate Judge labelled pictures (--good and --bad directories; a subdirectory's name is the state kind of the pictures in it) and/or
+            read the whole-opinion marks reviewers made (--from-marks), and measure the critic per state kind: sample sizes, precision,
+            recall, the threshold, and whether the figures are in-sample. --heldout-* pictures are never used to choose the threshold.
+            --out writes the calibration that run --calibration reads. Nothing is published.
+
+  --format json   prints one document (schemas: critic-list-result, critic-setup-result, critic-doctor-result, critic-run-result,
+                  critic-watch-result, critic-review-result, critic-calibrate-result).
                   A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   Exit codes: 0 ok, 1 the answer is no (a critic failed, a gate crossed, a problem found), 2 the command was wrong.
 ```

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 
 import { buildCritique, critiqueLayer, defineCritic, publishCritiques, type CritiqueOutcome } from '../../critics/src/index';
+import { markLayer } from '../../critics/src/marks';
 import { httpStore } from '../../reports/src/http-store';
 import { publishChecks } from '../../reports/src/publish-checks';
 import { memoryStore } from '../../reports/tests/memory-store';
@@ -43,6 +44,17 @@ describe('a critic-scoped token', () => {
     expect(await store.head(`layers/manifests/${layer!.id}.json`)).toBe(true);
     const after = await (await fetch(`${url}/api/status`, { headers: authorization('read-token-1234567') })).json() as { ok: boolean; checks: unknown; failing: unknown[] };
     expect(after).toMatchObject({ ok: true, checks: before.checks, failing: [] });
+  });
+
+  test('publishes a reviewer\'s marks of a critique (a layer of parts of kind critique under critic.review.*) and a read token cannot', async () => {
+    const { client, store } = await start();
+    const marks = markLayer({ reviewer: 'pat', recordedAtMs: 3, marks: [{ entry: { key: 'home', title: 'Home', imageSha256: 'a'.repeat(64) }, critic: { name: 'uiclip' }, decision: 'accept' }] });
+    await expect(publishChecks(client('read-token-1234567'), marks)).rejects.toThrow();
+    expect(await store.listKeys('layers/')).toEqual([]);
+    const layer = await publishChecks(client('critic-token-12345'), marks);
+    expect(await store.head(`layers/manifests/${layer.id}.json`)).toBe(true);
+    // The same marks under a producer outside critic.* are refused: a mark is not a way to publish anything else.
+    await expect(publishChecks(client('critic-token-12345'), { ...marks, producer: 'reviewer.pat' })).rejects.toThrow(/producer/);
   });
 
   test('may read, and says what it is', async () => {
