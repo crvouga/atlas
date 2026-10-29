@@ -23,7 +23,7 @@ import { outcomeHeadline, selectedResult } from '../evidence/outcome';
 import { useTestHistory } from './catalog';
 import { releaseOf } from './applicability';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
-import { Badges, runName } from './parts';
+import { Badges, ReadPromise, runName } from './parts';
 import { Reliability } from './Reliability';
 import { ProductLatency } from './ProductLatency';
 import { usePinnedResult, type PinnedResult } from './pinned';
@@ -237,6 +237,9 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           </Text>
         )}
         {test.spec && <Code c="dimmed">{test.spec!.path}</Code>}
+        <Box>
+          <ReadPromise specPath={test.spec?.path ?? null} check={test.id} />
+        </Box>
         <Code title="Check id" c="dimmed">
           {test.id}
         </Code>

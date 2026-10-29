@@ -4874,6 +4874,9 @@ same coverage state, revisions and recording in both.
 - The search words (`q`), the coverage filter (`coverage`), the selection (`behavior`) and the expanded state (`workspace`) are in the
   address. Selecting shows the Read / Watch / Inspect panel beside the list (below it on narrow screens), and *Read and watch* in the
   selected-behavior bar is reachable before the list in keyboard order.
+- The same release controls as a feature page (*Release build*, *commit*, *platform*, and the *Stale or unverified* filter) sit above the list;
+  they are the address (`release`, `releaseSha`, `releasePlatform`, `evidence=stale`), and the selected behavior and the workspace read their
+  evidence against that release.
 - **Read and watch workspace.** Expanding a behavior replaces the index with a page that uses the width: a two-column
   `SimpleGrid` (one column below `md`) with *What should happen* (the steps, an outline's example filled in) beside *Recording* (the
   player, status and provenance, promise and evidence revisions, applicability), the scoped summary below, and Inspect behind a
@@ -4889,6 +4892,39 @@ same coverage state, revisions and recording in both.
   warnings) and **performance** (`reports/latency`: only measurements named `product-latency`, percentiles withheld with the reason,
   budget and breaches). Absent evidence is stated as unknown, never as good; the test's duration is not product latency, and the
   summary says it describes the checks Atlas holds, not production. The full reliability and latency detail is one link away.
+
+## The review destination
+
+A team asks four connected questions of one project: what behavior it promises (**Read**), what that looks like (**Watch**), what
+evidence supports it (**Inspect**) and where the gaps are. The viewer answers them in three places that lead to one another, and
+`tests/review-destination.test.tsx` walks the whole workflow against a real server, one test per acceptance behavior of the
+tracking issue (#20).
+
+| Step | Where | Built by |
+| --- | --- | --- |
+| Find a promise by approximate words, a domain, a device and recordings; see each in its own coverage state | **Behaviors** (`/behaviors`) | #55, #74, #57, #44 |
+| Name the build and device to read the evidence against | the applicability controls of Behaviors and of a feature | #61, #73 |
+| Read what should happen beside the recording, with the scoped outcome, reliability and latency | the Read and watch workspace | #74, #60, #62, #63 |
+| Find recordings by tag and media type and play them as a labelled playlist | **Artifacts** (`?tab=artifacts`), Watch these N results | #49, #56, #59, #75 |
+| Go from a clip to its promise (**Read the promise**, also in a test's detail) or to its exact run (**Developer details**) | the playlist | #47, #54 |
+| See which run and execution a result came from, and which recordings never arrived or are gone | **Runs** (`?tab=runs`) | #45, #46, #48, #70, #72, #76 |
+| Seek to the step in a recording and share the moment | Timeline, Watch | #68 |
+| Freeze a selection with notes and gaps | **Collections** | #66 |
+| Compare two pinned runs | **Compare** | #67 |
+
+How the pieces stay honest, and what a test in that file holds them to:
+
+- The four states (not executed, API only, failed with a recording, demonstrated) are told apart in words and never counted as one
+  pass. A recording that was expected and not uploaded, or stored and then lost, is shown beside its green tests, never in place of them.
+- Behaviors, Runs and Videos and artifacts link to one another (the header of Behaviors and the Specs block of the explorer), and a
+  result in the playlist or in a test's detail links back to the exact check of its feature. Read names the check and no run;
+  Inspect names the run (`layer`), so it never falls back to the latest combined evidence.
+- The address holds the scope: the release (`release`, `releaseSha`, `releasePlatform`) and `evidence=stale` on Behaviors as on a feature,
+  the filters and the open playlist on Artifacts, the pinned runs on Compare, and the revision of a frozen collection.
+  A frozen collection does not change when newer runs arrive; the filtered view it was frozen from does.
+- An older producer (no spec fingerprint, no recording expectation, no tags) or an older server (no artifact search, read-back,
+  collections or health route) stays readable. What it cannot say is unknown: the revision is "not recorded", a run is not "complete",
+  and an unreported behavior is "Not executed", never passed.
 
 ## Catalog health
 
@@ -5029,7 +5065,8 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
   Speed, "Play the next clip when one ends" and "Repeat" are labelled controls. Captions (`text/vtt` attachments) are offered
   as `<track>` elements.
 - The scenario (title, recorded steps, why it failed) sits beside the player with the recording's scope badges
-  (paced, scripted, silent, synthetic) and the sentence that the length is the recording's, not production latency. Developer
+  (paced, scripted, silent, synthetic) and the sentence that the length is the recording's, not production latency. **Read the promise** opens the feature on that
+  exact check (the playlist stays in the address, so Back returns to the same clip); Developer
   details opens the test pinned to that run's record and closes the playlist.
 
 ## Steps and moments in a recording

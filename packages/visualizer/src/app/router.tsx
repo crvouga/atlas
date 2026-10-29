@@ -31,6 +31,13 @@ const ChartSearch = RootSearch.extend({
 export type ChartSearch = z.infer<typeof ChartSearch>;
 /** The project home: the test explorer's filters, grouping, order, open test and open run (see `explorer/search.ts`). */
 const HomeSearch = RootSearch.extend(ExplorerSearchFields);
+/** The release evidence is read against: its build, commit and platform, and the evidence filter (see `evidence/applicability.ts`). A build such as `90` is read from a typed link as a number: coerced back to its text. */
+const ReleaseSearch = {
+  release: z.coerce.string().min(1).optional().catch(undefined),
+  releaseSha: z.coerce.string().min(1).optional().catch(undefined),
+  releasePlatform: z.coerce.string().min(1).optional().catch(undefined),
+  evidence: z.enum(['stale']).optional().catch(undefined)
+};
 /** A spec document, the check opened in it, one layer's record of that check, and a recorded moment. */
 const SpecSearch = RootSearch.extend({
   spec: z.string().min(1).optional().catch(undefined),
@@ -41,11 +48,7 @@ const SpecSearch = RootSearch.extend({
   clipAt: z.coerce.number().nonnegative().optional().catch(undefined),
   view: z.enum(['recording']).optional().catch(undefined),
   moment: z.coerce.number().int().positive().optional().catch(undefined),
-  /** The release evidence is read against: its build, commit and platform, and the evidence filter (see `evidence/applicability.ts`). A build such as `90` is read from a typed link as a number: coerced back to its text. */
-  release: z.coerce.string().min(1).optional().catch(undefined),
-  releaseSha: z.coerce.string().min(1).optional().catch(undefined),
-  releasePlatform: z.coerce.string().min(1).optional().catch(undefined),
-  evidence: z.enum(['stale']).optional().catch(undefined)
+  ...ReleaseSearch
 });
 export type SpecSearch = z.infer<typeof SpecSearch>;
 /**
@@ -60,7 +63,8 @@ const BehaviorsSearch = RootSearch.extend({
   workspace: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined),
   layer: z.string().min(1).optional().catch(undefined),
   clip: z.coerce.string().min(1).optional().catch(undefined),
-  clipAt: z.coerce.number().nonnegative().optional().catch(undefined)
+  clipAt: z.coerce.number().nonnegative().optional().catch(undefined),
+  ...ReleaseSearch
 });
 export type BehaviorsSearch = z.infer<typeof BehaviorsSearch>;
 /** A fresh route tree per router, so a test can run its own viewer beside the page's. */

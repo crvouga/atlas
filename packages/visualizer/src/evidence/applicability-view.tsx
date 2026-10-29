@@ -21,13 +21,16 @@ export type ApplicabilityState = {
   readonly setOnlyStale: (on: boolean) => void;
 };
 
+/** The address fields the release and the evidence filter are held in, shared by the spec route and the behaviors route. */
+type ReleaseAddress = { release?: string; releaseSha?: string; releasePlatform?: string; evidence?: 'stale' };
+
 /**
- * The release (`release` build, `releaseSha`, `releasePlatform`) and evidence filter (`evidence=stale`) of the spec
- * address. They are held in the address, so a shared link shows the same reading. Must be used under the spec route.
+ * The release (`release` build, `releaseSha`, `releasePlatform`) and evidence filter (`evidence=stale`) of the address of a
+ * spec page or of the behaviors page. They are held in the address, so a shared link shows the same reading.
  */
 export function useApplicabilityState(): ApplicabilityState {
-  const search = useSearch({ from: '/specs/$kind' });
-  const navigate = useNavigate({ from: '/specs/$kind' });
+  const search = useSearch({ strict: false }) as ReleaseAddress;
+  const navigate = useNavigate();
   const release = useMemo<ReleaseIdentity>(
     () => ({
       ...(search.release ? { build: search.release } : {}),
@@ -39,18 +42,19 @@ export function useApplicabilityState(): ApplicabilityState {
   const setRelease = useCallback(
     (next: ReleaseIdentity) =>
       void navigate({
-        search: (prev) => ({
+        to: '.',
+        search: ((prev: Record<string, unknown>) => ({
           ...prev,
           release: next.build || undefined,
           releaseSha: next.sha || undefined,
           releasePlatform: next.platform || undefined
-        }),
+        })) as never,
         replace: true
       }),
     [navigate]
   );
   const setOnlyStale = useCallback(
-    (on: boolean) => void navigate({ search: (prev) => ({ ...prev, evidence: on ? ('stale' as const) : undefined }), replace: true }),
+    (on: boolean) => void navigate({ to: '.', search: ((prev: Record<string, unknown>) => ({ ...prev, evidence: on ? 'stale' : undefined })) as never, replace: true }),
     [navigate]
   );
   return { release, onlyStale: search.evidence === 'stale', setRelease, setOnlyStale };

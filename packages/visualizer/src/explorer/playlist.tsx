@@ -31,6 +31,7 @@ import { MomentBar, MomentPlayback, SeekStep, stepsOfRecording, useIsPlaying, us
 import { duration, exactTime, plural, statusWord } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { patched } from './navigate';
+import { ReadPromise } from './parts';
 import { clock, TEXT_KIND_WORD, type RecordingFocus } from './recording-text';
 import { clipHints, playableVideo, playlistCounts, RECORDING_STATE_TEXT, recordingState, stepFrom, type PlaylistEntry } from './playlist-entries';
 
@@ -276,13 +277,16 @@ function Clip({
   };
 
   const developer = (
-    <Anchor
-      renderRoot={(props) => (
-        <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, artifact: undefined, watch: undefined, watchClip: undefined, test: entry.key, layer: entry.layer })} resetScroll={false} activeOptions={{ exact: true }} onClick={onClose} />
-      )}
-    >
-      Developer details
-    </Anchor>
+    <Group gap="md" wrap="wrap">
+      <ReadPromise specPath={entry.specPath} check={entry.check} />
+      <Anchor
+        renderRoot={(props) => (
+          <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, artifact: undefined, watch: undefined, watchClip: undefined, test: entry.key, layer: entry.layer })} resetScroll={false} activeOptions={{ exact: true }} onClick={onClose} />
+        )}
+      >
+        Developer details
+      </Anchor>
+    </Group>
   );
 
   let body;
