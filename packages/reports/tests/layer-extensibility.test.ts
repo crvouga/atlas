@@ -18,6 +18,8 @@ describe('evidence is open', () => {
     const check = parsed.layer.parts[0]!.checks[0]!;
     expect(check.steps!.map(step => [step.id, step.parentId ?? null])).toEqual([['s1', null], ['s2', 's1'], ['s3', null]]);
     expect(check.attachments!.map(item => item.role)).toEqual(['video', 'screenshot', 'captions', 'snapshot', 'trace', 'hologram']);
+    expect(check.attachments![0]!.tags).toEqual(['demo']);
+    expect(check.attachments![0]!.scope).toMatchObject({ surface: 'browser', audioCaptured: false, verified: ['audioCaptured'], 'com.example.future': true });
     expect(check.attempts!.length).toBe(2);
     expect(check.tags).toEqual(['smoke', 'payments']);
     expect(check.labels).toEqual({ owner: 'payments-team', severity: 'high' });
