@@ -1,5 +1,5 @@
 import { Container, Text, Title } from '@mantine/core';
-import { Navigate, useSearch } from '@tanstack/react-router';
+import { Navigate, useLocation, useSearch } from '@tanstack/react-router';
 import { useAtlas } from '../app/atlas-context';
 import type { AtlasView } from '../data/model';
 function openingPlace(view: AtlasView) {
@@ -10,7 +10,10 @@ function openingPlace(view: AtlasView) {
 export function ProductPage() {
   const { view } = useAtlas();
   const search = useSearch({ strict: false });
+  const location = useLocation();
   const run = typeof search.run === 'string' ? search.run : undefined;
+  // The previous outlet can render briefly during navigation; only the actual home may choose a chart.
+  if (location.pathname !== '/' || location.search.view === 'tests') return null;
   if (!view)
     return (
       <Container role="status" component="article" size="xl" w="100%" py="xl">

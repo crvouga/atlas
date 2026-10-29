@@ -94,6 +94,8 @@ or edit these settings in the client. An interruption never turns missing outcom
 The workflow also captures the todo app's [UI catalog](docs/ui-catalog.md): seven states in desktop and mobile
 profiles, including empty lists, sync outages and pending changes. Choose **UI catalog** from the spec-type menu
 to browse the screenshots. The expected inventory, surface coverage and pictures are published automatically.
+Three labelled status examples also remain available: pending, running and errored. Find them in the catalog's
+**Status examples** area, or the **Example statuses** environment in Tests and Behaviors.
 
 ## Deploy to Railway without code
 

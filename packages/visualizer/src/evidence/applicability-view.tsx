@@ -238,17 +238,11 @@ export function ApplicabilityControls({
         )}
         {filter && (
           <Group role="group" aria-label="Evidence filter" gap="sm">
-            <Button type="button" aria-pressed={!onlyStale} onClick={() => setOnlyStale(false)} variant={onlyStale ? 'subtle' : 'light'}>
+            <Button type="button" aria-pressed={!onlyStale} onClick={() => setOnlyStale(false)} variant={onlyStale ? 'subtle' : 'light'} rightSection={<Text span inherit>{total}</Text>}>
               All evidence{' '}
-              <Text span inherit>
-                {total}
-              </Text>
             </Button>
-            <Button type="button" aria-pressed={onlyStale} onClick={() => setOnlyStale(true)} variant={onlyStale ? 'light' : 'subtle'}>
+            <Button type="button" aria-pressed={onlyStale} onClick={() => setOnlyStale(true)} variant={onlyStale ? 'light' : 'subtle'} rightSection={<Text span inherit>{stale}</Text>}>
               Stale or unverified{' '}
-              <Text span inherit>
-                {stale}
-              </Text>
             </Button>
           </Group>
         )}

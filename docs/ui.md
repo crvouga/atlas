@@ -27,6 +27,9 @@ they preserve evidence semantics, provenance, URL selection, or playback behavio
 
 - Primary action: `Button variant="filled"`. Secondary: default `Button` (light). Quiet: `variant="subtle"`.
   Destructive action: `color="red"`. Icon-only action: `ActionIcon` with an `aria-label`, usually a `Tooltip`.
+- Filter chips put counts and removal icons in Button's `rightSection`; numbered step buttons use `leftSection`.
+  Mantine supplies the gap. Whitespace between a label and a nested span disappears in the flex label, so it
+  cannot supply visual separation. Keep a text space for readable accessible names and copied text.
 - Inputs: Mantine inputs with a visible `label`, `description` when needed, and `error` for validation.
   Use `NativeSelect` for small native option lists; keep form values controlled. Settings validation and
   authorization stay on the server; its optional JSON editor also validates with the shared schema.
@@ -191,6 +194,10 @@ older server without the route is told so in words.
   checks are known only by title, how many declare `behavior-id` / `example-id`, and the limits of both.
 
 ## UI catalog
+
+The spec-type menu offers **Tests** even when a project has statecharts. It opens the existing explorer at
+`/?view=tests`; its filters, detail drawers and tabs (including Runs) keep that view in the address.
+The default home and **Statecharts** continue opening the product's chart view.
 
 `/catalog` (`catalog/`) is the viewer's inventory of captured UI states ([the guide](ui-catalog.md)). It is computed in the page from
 the layers the viewer already holds (`catalog/provider.tsx`, only while the page is open), so states appear as results stream in and
@@ -399,13 +406,24 @@ Atlas's theme. SVG data plots and statechart arrow markers are geometry, not han
 
 ## Search
 
-All search boxes (finder, test list, Runs tab, an opened run) use `src/find/query.ts` for the query language and
+The finder, test list, Runs tab and an opened run use `src/find/query.ts` for the query language and
 `src/find/rank.ts` for matching; do not add a second matcher or filter on `includes`. Build documents from
 `src/find/behaviors.ts` so a behavior has the same fields and facets everywhere. Match first, then count, filter and sort
 the whole set, then page. Show filters typed in the box as removable chips, show what was not understood
 (`SearchNotes`), show why a result matched and mark exact ones, and say when matching is words only (no embedder, or
 a failed one). A bounded list says it is bounded and offers all results. Selection follows result identity, never a
 position, when results change. The query, filters and sort stay in the address.
+
+The UI catalog uses a full-width Mantine Combobox/PillsInput in the main content, replacing the sidebar's
+separate filter controls. `catalog/query.ts` reuses the shared ranked matcher, intersects every free-text term,
+and adds common product/state vocabulary to recorded facts. Each typed term becomes a removable chip; exact
+facets and sorting are chips too (`kind:error`, `coverage:failed`, `area:"Patient visits"`, `sort:recent`).
+Suggestions come from the catalog's own facts and offer spelling/word-form/related-word matches. Product UI
+kind is distinct from capture coverage. The rich expression is `find` in the URL; old `q` and facet links
+still restore as chips. Keep Enter/Tab to commit, arrow-key suggestions, Escape dismissal, Backspace editing,
+focusable named removal controls, draft previews and bounded suggestions/cards. Compare reuses the same
+expression, except the coverage/profile dimensions it is comparing. The public API's literal query contract
+is unchanged.
 
 ## Accessibility and responsive behavior
 
@@ -445,13 +463,19 @@ The narrowly scoped exceptions are:
    No feature CSS, handcrafted code controls or custom syntax color theme is introduced.
 5. **Consumer test fixture:** `examples/todo/app` is the app Atlas tests and records, not an Atlas screen.
    Its intentionally separate implementation and selectors are test inputs; the overhaul does not restyle it.
+6. **Drawer scroll containment:** Mantine's native Drawer scrolls its Paper content, including the header;
+   the shared Paper padding also leaves an exposed strip above that sticky header. Drawer has no prop to
+   give only its body the remaining height and scrolling. The central Drawer Styles API removes the
+   content padding, uses a column layout with a nonshrinking header, and gives the body the remaining
+   height with its own overflow. This keeps scrolled evidence below the header and inside the drawer,
+   including at narrow widths, without changing the shared Paper spacing or stacking order.
 
 ## Inventory and migration boundary
 
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
+| UI catalog | Captured UI states per profile as cards with coverage badges, rich free-form search with forgiving keyboard suggestions and term/facet/sort chips in the main content, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | Combobox, PillsInput, Pill, SimpleGrid, Card, Image, Drawer, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |

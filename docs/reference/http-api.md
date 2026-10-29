@@ -984,12 +984,12 @@ Responses: `200` The matching results and the facets.; `304` Unchanged since the
 
 `GET /api/reports/ui-catalog` · role: read
 
-A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.
+A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface`, `producer` and `attribute` (`name=value`, a fact a producer declared): AND across parameters, OR within one value list; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. The document only grows within `schemaVersion` 1: a client ignores fields and `coverage`, `expected` and surface `status` values it does not know (and never reads an unknown coverage as `captured`), and a parameter or coverage a server does not know is ignored, which answers the whole catalog. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.
 
 - `limit` (query): At most this many states (default 200).
 - `offset` (query): Skip this many states (default 0).
-- `q` (query): Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces or producers.
-- `coverage` (query): Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.
+- `q` (query): Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces, producers or attribute values.
+- `coverage` (query): Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated. A value the server does not know is ignored.
 - `profile` (query): Profile keys, as listed in `profiles[].key`.
 - `area` (query): Areas.
 - `route` (query): Routes.
@@ -997,6 +997,7 @@ A browsable inventory of the product's user interface, computed from the winning
 - `flag` (query): Feature flags a state was captured with.
 - `surface` (query): Surfaces a state covers.
 - `producer` (query): Producers that captured or planned a state.
+- `attribute` (query): Attributes a producer declared, as `name=value` (a comma or backslash inside a value is written `\,` or `\\`). Several values of one name are alternatives; different names combine with AND.
 - `format` (query): `markdown` for Markdown instead of JSON.
 - `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
@@ -1006,15 +1007,15 @@ Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; 
 
 `GET /api/projects/{project}/reports/ui-catalog` · role: read
 
-A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.
+A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface`, `producer` and `attribute` (`name=value`, a fact a producer declared): AND across parameters, OR within one value list; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. The document only grows within `schemaVersion` 1: a client ignores fields and `coverage`, `expected` and surface `status` values it does not know (and never reads an unknown coverage as `captured`), and a parameter or coverage a server does not know is ignored, which answers the whole catalog. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
 - `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 - `limit` (query): At most this many states (default 200).
 - `offset` (query): Skip this many states (default 0).
-- `q` (query): Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces or producers.
-- `coverage` (query): Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.
+- `q` (query): Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces, producers or attribute values.
+- `coverage` (query): Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated. A value the server does not know is ignored.
 - `profile` (query): Profile keys, as listed in `profiles[].key`.
 - `area` (query): Areas.
 - `route` (query): Routes.
@@ -1022,6 +1023,7 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `flag` (query): Feature flags a state was captured with.
 - `surface` (query): Surfaces a state covers.
 - `producer` (query): Producers that captured or planned a state.
+- `attribute` (query): Attributes a producer declared, as `name=value` (a comma or backslash inside a value is written `\,` or `\\`). Several values of one name are alternatives; different names combine with AND.
 - `format` (query): `markdown` for Markdown instead of JSON.
 
 Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.

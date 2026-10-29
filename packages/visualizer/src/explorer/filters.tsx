@@ -262,11 +262,8 @@ export function FilterBar({
               </Badge>
             )}
             {chips.map((chip) => (
-              <Button key={chip.label} type="button" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light">
+              <Button key={chip.label} type="button" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light" rightSection={<IconX size={16} aria-hidden="true" />}>
                 {chip.label}{' '}
-                <Text aria-hidden="true" span inherit>
-                  <IconX size={16} aria-hidden="true" />
-                </Text>
               </Button>
             ))}
             {filtered(search) && (

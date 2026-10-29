@@ -36,6 +36,9 @@ The todo app's UI catalog is also populated: seven real states (welcome, naming,
 pending sync and completed), each captured in desktop and mobile profiles. Plans declare the expected set and
 surface coverage; screenshots and their provenance are uploaded with the other reports. **UI catalog** then appears
 in the viewer's spec-type menu. A failed capture remains a named failure and fails population.
+Three additional, intentional **Status examples** remain pending, running and errored for browsing in the catalog
+and report views. They are tagged `status-preview`, kept apart from real executions, and included in the preview too.
+The running sample leaves no background job active; these fixtures do not make the populate command fail.
 The example drivers start and stop their own application servers on isolated ports.
 
 Open the printed `Atlas server ready:` URL; `/admin` opens settings. The workflow publishes to the discovered URL

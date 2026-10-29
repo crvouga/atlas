@@ -3,7 +3,7 @@
  *
  * The picture of one captured cell, shared by the catalog's cards, the open state and the comparison. A picture is shown only
  * for a cell that was captured, or that failed (a picture of what the page showed, for diagnosis); every other cell says in
- * words what it is instead of showing an empty frame. Pictures are `loading="lazy"`, so only what is on screen is fetched.
+ * words what it is instead of showing an empty frame. Pictures are `loading="lazy"` and decoded off the main thread, so only what is on screen is fetched and drawing never waits for one.
  */
 import type { UiCell, UiImage } from '@crvouga/atlas/reports/ui-catalog';
 import { Image, Text } from '@mantine/core';
@@ -23,7 +23,7 @@ export function Picture({ cell, title, height, label }: { cell: UiCell; title: s
   const image = cell.capture?.image;
   const source = cell.coverage === 'captured' || cell.coverage === 'failed' ? imageSource(image) : null;
   const name = `${title}, ${label ?? cell.profile.label}`;
-  if (source) return <Image src={source} alt={name} loading="lazy" fit="contain" {...(height ? { h: height } : {})} {...(image?.width ? { w: 'auto', maw: '100%' } : {})} />;
+  if (source) return <Image src={source} alt={name} loading="lazy" decoding="async" fit="contain" {...(height ? { h: height } : {})} {...(image?.width ? { w: 'auto', maw: '100%' } : {})} />;
   return (
     <Text c="dimmed" fz="sm" role="img" aria-label={`${name}: no picture`}>
       {cell.coverage === 'captured' ? (image?.omitted ? `Picture left out (${image.omitted})` : 'Captured without a picture') : coverageWord(cell.coverage)}

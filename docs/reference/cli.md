@@ -197,14 +197,14 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
                            [--producer <name>] [--attach-root <dir>]... [--max-picture-mb <n>]
 
   filters (status, diff, export): --q <words> --coverage a,b --profile <key|label>... --area a --route r --cohort c
-                           --flag f --surface s --producer p
+                           --flag f --surface s --producer p --attribute name=value
 
   plan      Write one layer of kind ui-plan: the states (and with "inventory": true, the surfaces) that should exist under
             this profile. Every entry is not-run, so a plan never counts as a pass. The file is {"states":[{"id":…,
-            "title"?,"route"?,"fixture"?,"cohort"?,"area"?,"kind"?,"flags"?,"covers"?,"inventory"?}]} or just that list.
+            "title"?,"route"?,"fixture"?,"cohort"?,"area"?,"kind"?,"flags"?,"covers"?,"attributes"?,"inventory"?}]} or just that list.
   publish   Write one layer of kind ui-state: the states one collector or shard captured under this profile. The file is
             {"states":[{"id":…,"title"?,"status"?:"passed|failed|running|not-run","detail"?,"route"?,"fixture"?,"cohort"?,
-            "area"?,"kind"?,"flags"?,"covers"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?:"file.png"|{"path"|"uri",
+            "area"?,"kind"?,"flags"?,"covers"?,"attributes"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?:"file.png"|{"path"|"uri",
             "width"?,"height"?,"contentType"?}}]}. A picture file is read from beside the file and each --attach-root, never
             from a hidden file or a link out. A passed state whose picture cannot be read is published as failed, with the
             reason: a state without its picture is not shown as captured.

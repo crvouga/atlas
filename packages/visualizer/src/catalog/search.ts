@@ -18,6 +18,8 @@ const text = z
 
 /** The `/catalog` route's search: the query of `GET /api/reports/ui-catalog` and the state opened. */
 export const CatalogSearchFields = {
+  /** Rich UI-only expression, including free terms, facet chips and sorting. */
+  find: text,
   q: text,
   coverage: text,
   profile: text,
@@ -27,6 +29,8 @@ export const CatalogSearchFields = {
   flag: text,
   surface: text,
   producer: text,
+  /** `name=value` pairs of the attributes a producer declared. */
+  attribute: text,
   /** The open state: a state id. */
   state: text,
   /** A comparison is open: `commit` (two commits of the same profiles) or `profile` (two profiles of this report). */

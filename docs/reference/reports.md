@@ -12214,6 +12214,8 @@ export type UiCatalogState = {
   readonly flags: readonly string[];
   /** The surfaces it covers. */
   readonly covers: readonly string[];
+  /** Facts of the producers' own (`locale`, `brand`…), by name. Where two producers disagree the newest result's value is kept. Empty when none declared any. */
+  readonly attributes: Readonly<Record<string, string>>;
   /** The producers that captured or planned it. */
   readonly producers: readonly string[];
   /** One cell per profile, ordered by the profile's label. */
@@ -12261,6 +12263,8 @@ export type UiCatalogFacets = {
   readonly flags: readonly UiFacetValue[];
   readonly surfaces: readonly UiFacetValue[];
   readonly producers: readonly UiFacetValue[];
+  /** Every `name=value` pair of the states' attributes: the values the `attribute` filter takes. */
+  readonly attributes: readonly UiFacetValue[];
 };
 ```
 
@@ -12351,7 +12355,7 @@ catalog.states.map(state => [state.id, state.cells.map(cell => cell.coverage)]);
 
 ```ts
 export type UiCatalogQuery = {
-  /** Words (all of them) found in the id, title, route, fixture, cohort, area, flags, surfaces or producers. */
+  /** Words (all of them) found in the id, title, route, fixture, cohort, area, flags, surfaces, producers or attribute values. */
   readonly q?: string;
   readonly coverage?: readonly UiCoverage[];
   /** Profile keys, as {@link UiProfile.key}. */
@@ -12363,6 +12367,8 @@ export type UiCatalogQuery = {
   /** Surfaces a state covers. */
   readonly surface?: readonly string[];
   readonly producer?: readonly string[];
+  /** `name=value` pairs of the states' `attributes`. Several values of one name are alternatives; different names combine with AND. */
+  readonly attribute?: readonly string[];
 };
 ```
 
@@ -12506,6 +12512,13 @@ export type UiStateFacts = {
   readonly area?: string;
   /** The kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`, or any other word. Open vocabulary. Critics judge a state against others of its kind, so declare it; when it is absent the kind is unknown. */
   readonly kind?: string;
+  /**
+   * Facts of your own that the fields above do not name (`locale`, `brand`, `theme`, `build-channel`): a name and a text value each.
+   * This is where the convention grows without a new version: the catalog carries them, offers them as a filter
+   * (`attribute=name=value`) and shows them with the state, and none of them ever splits a slot or decides a result. A fact that
+   * must split a result (another viewport, another locale rendered as another picture) is a profile `parameter` of the layer instead.
+   */
+  readonly attributes?: Readonly<Record<string, string>>;
   /** On a `ui-plan` check only: this entry is a surface of the product's inventory, not a state. Nothing is captured for it. */
   readonly inventory?: boolean;
 };
@@ -12524,6 +12537,14 @@ export type UiStateFact = UiStateFacts & {
 
 What a row of a `ui-state` or `ui-plan` part carries for the catalog. Rides in the report row, only for those kinds.
 
+#### `MAX_ATTRIBUTES`
+
+```ts
+export const MAX_ATTRIBUTES = …
+```
+
+How many attributes a state keeps, and how long a name may be. The rest are dropped, in name order, never an error.
+
 #### `uiStateFacts`
 
 ```ts
@@ -12531,7 +12552,8 @@ export function uiStateFacts(check: Pick<Check, 'extensions'>): UiStateFacts
 ```
 
 The declared facts of a check, read from its `atlas.ui-state` extension. Strings are trimmed and bounded, lists are
-distinct and bounded, and anything of another shape is dropped; a check without the extension has no facts.
+distinct and bounded, `attributes` keep at most {@link MAX_ATTRIBUTES} text values, and anything of another shape (or a key
+this version does not know) is dropped from the reading and left in the layer; a check without the extension has no facts.
 
 #### `uiStateOf`
 

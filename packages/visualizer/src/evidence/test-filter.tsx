@@ -14,22 +14,18 @@ export function TestFilter({ slots }: { slots: readonly CheckSlot[] }) {
           aria-pressed={filter !== 'running'}
           onClick={() => setFilter('all')}
           variant={filter !== 'running' ? 'light' : 'subtle'}
+          rightSection={<Text span inherit>{slots.length}</Text>}
         >
           All tests{' '}
-          <Text span inherit>
-            {slots.length}
-          </Text>
         </Button>
         <Button
           type="button"
           aria-pressed={filter === 'running'}
           onClick={() => setFilter('running')}
           variant={filter === 'running' ? 'light' : 'subtle'}
+          rightSection={<Text span inherit>{running}</Text>}
         >
           Running{' '}
-          <Text span inherit>
-            {running}
-          </Text>
         </Button>
       </Group>
       {filter === 'running' && running === 0 && (

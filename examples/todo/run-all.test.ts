@@ -14,15 +14,15 @@ test('local population includes UI catalog and uploads even when earlier suites 
   expect(status).toBe(1);
   expect(called).toEqual([
     '--cwd examples/todo ../../packages/core/bin/atlas.mjs run --mode showcase',
-    'examples/todo/documents.ts', 'examples/todo/catalog.ts', 'publish'
+    'examples/todo/documents.ts', 'examples/todo/catalog.ts', 'examples/todo/statuses.ts', 'publish'
   ]);
 });
 
 test('catalog capture or upload failures fail the full workflow without discarding evidence', async () => {
-  for (const failure of ['catalog', 'upload', 'none']) {
+  for (const failure of ['catalog', 'statuses', 'upload', 'none']) {
     let published = false;
     expect(await runExampleWorkflow({
-      run: async args => failure === 'catalog' && args.includes('examples/todo/catalog.ts') ? 1 : 0,
+      run: async args => args.includes(`examples/todo/${failure}.ts`) ? 1 : 0,
       publish: async () => { published = true; if (failure === 'upload') throw new Error('unavailable'); }, error: () => {}
     })).toBe(failure === 'none' ? 0 : 1);
     expect(published).toBe(true);

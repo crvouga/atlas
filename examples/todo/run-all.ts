@@ -26,7 +26,8 @@ export async function runExampleWorkflow(options: {
   for (const args of [
     ['--cwd', 'examples/todo', '../../packages/core/bin/atlas.mjs', 'run', '--mode', 'showcase'],
     ['examples/todo/documents.ts'],
-    ['examples/todo/catalog.ts']
+    ['examples/todo/catalog.ts'],
+    ['examples/todo/statuses.ts']
   ]) {
     try { if (await execute(args) !== 0) failed = true; }
     catch (reason) { failed = true; error(reason instanceof Error ? reason.message : String(reason)); }

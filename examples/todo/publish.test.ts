@@ -10,6 +10,7 @@ import { listen } from '../../packages/server/src/host';
 import { memoryStore } from '../../packages/reports/tests/memory-store';
 import { publishExampleReports } from './publish';
 import { httpStore } from '../../packages/reports/src/http-store';
+import { uiPlanLayer, uiStateLayer } from '../../packages/reports/src/ui-catalog-publish';
 
 const roots: string[] = [];
 afterAll(async () => { await Promise.all(roots.map(root => rm(root, { recursive: true, force: true }))); });
@@ -25,6 +26,9 @@ test('example publication populates the singleton with specs, chart runs, docume
   await mkdir(path.join(run, 'media'), { recursive: true });
   await writeFile(path.join(run, 'media', 'proof.txt'), 'recorded evidence');
   await writeFile(path.join(run, 'manifest.json'), JSON.stringify({ run: { id: path.basename(run), mode: 'fast', startedAt: '2026-10-14T12:00:00Z', finishedAt: '2026-10-14T12:00:01Z', specDirectory: 'specs' }, privacy: { passed: true }, charts: [{ file: 'flow.machine.json' }], paths: [{ id: 'p', key: 'path', name: 'Completes flow', status: 'passed' }] }));
+  const clients = path.join(runs, '2026-10-14T12-30-00-000Z-fast');
+  await mkdir(clients);
+  await writeFile(path.join(clients, 'manifest.json'), JSON.stringify({ run: { id: path.basename(clients), mode: 'fast', startedAt: '2026-10-14T12:30:00Z', finishedAt: '2026-10-14T12:30:01Z', specDirectory: 'specs' }, privacy: { passed: true }, charts: [{ file: 'flow.machine.json' }], paths: [{ id: 'clients', key: 'clients', name: 'Multiple clients', status: 'passed' }] }));
   // A newer unfinished run must not hide the completed one.
   const newer = path.join(runs, '2026-10-14T13-00-00-000Z-fast');
   await mkdir(newer);
@@ -32,6 +36,8 @@ test('example publication populates the singleton with specs, chart runs, docume
   const documents = path.join(root, 'atlas-reports');
   await mkdir(documents);
   await publishChecks(directoryStore(documents), { producer: 'todo', recordedAtMs: 1, checks: [{ id: 'invariant', title: 'Invariant', status: 'passed', specPath: 'specs/todo.qnt' }] });
+  await publishChecks(directoryStore(documents), uiPlanLayer({ producer: 'ui-plan', recordedAtMs: 1, states: [{ id: 'todo/welcome' }] }));
+  await publishChecks(directoryStore(documents), uiStateLayer({ producer: 'ui-capture', recordedAtMs: 1, states: [{ id: 'todo/welcome', screenshot: { data: new Uint8Array([137, 80, 78, 71]), contentType: 'image/png', width: 1280, height: 800 } }] }));
   const app = createAtlasServer({ backends: [{ id: 'data', store: memoryStore() }], write: 'data' });
   const http = await listen(app.fetch, { host: '127.0.0.1', port: 0, maxBodyBytes: 32 << 20 });
   await app.ready;
@@ -44,15 +50,18 @@ test('example publication populates the singleton with specs, chart runs, docume
     await publishExampleReports(http.url, { root, out: () => {} });
     const get = async (file: string) => (await fetch(`${project}${file.replace(/^\/api/, '')}`)).json();
     const evidence = await get('/api/reports/evidence/effective');
-    expect(evidence.totalLayers).toBe(2);
-    expect(evidence.layers.map((entry: { layer: { producer: string } }) => entry.layer.producer).sort()).toEqual(['todo', 'todo-statecharts']);
+    expect(evidence.totalLayers).toBe(5);
+    expect(evidence.layers.map((entry: { layer: { producer: string } }) => entry.layer.producer).sort()).toEqual(['todo', 'todo-statecharts', 'todo-statecharts', 'ui-capture', 'ui-plan']);
     expect((await get('/api/data/specs/index.json')).files).toEqual(['flow.machine.json', 'todo.qnt']);
-    expect((await get('/api/data/runs/index.json')).runs.map((item: { id: string }) => item.id)).toEqual([path.basename(run)]);
+    expect((await get('/api/data/runs/index.json')).runs.map((item: { id: string }) => item.id).sort()).toEqual([path.basename(run), path.basename(clients)]);
+    const catalog = await get('/api/reports/ui-catalog');
+    expect(catalog.states.map((state: { id: string }) => state.id)).toEqual(['todo/welcome']);
+    expect(catalog.summary.coverage.captured).toBe(1);
     expect(await (await fetch(`${project}/data/runs/${path.basename(run)}/media/proof.txt`)).text()).toBe('recorded evidence');
     let heard = '';
     while (!heard.includes('event: report')) heard += new TextDecoder().decode((await reader.read()).value);
     expect(heard).toContain('event: report');
     await publishExampleReports(http.url, { root, out: () => {} });
-    expect((await get('/api/reports/evidence/effective')).totalLayers).toBe(2);
+    expect((await get('/api/reports/evidence/effective')).totalLayers).toBe(5);
   } finally { await reader?.cancel(); app.close(); await http.close(); }
 });

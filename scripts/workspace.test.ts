@@ -36,15 +36,17 @@ async function fixture() {
   return root;
 }
 
-async function start(root: string, mode = 'run') {
+async function start(root: string, mode = 'run', mockingbird = false) {
   // The server keeps everything in S3 only: each workspace gets a bucket of its own to run against.
   const bucket = listenFakeS3(fakeS3());
   buckets.push(bucket);
+  const env = { ...process.env, ...S3_TEST_ENV, ATLAS_S3_ENDPOINT: bucket.url, ATLAS_CONFIG: undefined, ATLAS_PORT: undefined, PORT: undefined };
+  if (mockingbird) for (const key of Object.keys(env)) if (key.startsWith('ATLAS_S3_')) delete env[key as keyof typeof env];
   const child = Bun.spawn([process.execPath, path.join(import.meta.dir, 'dev.ts'), ...(mode === 'populate' ? [] : [mode === 'preview' ? '--preview' : '--server']), '--port', '0'], {
     cwd: root,
     stdout: 'ignore',
     stderr: 'pipe',
-    env: { ...process.env, ...S3_TEST_ENV, ATLAS_S3_ENDPOINT: bucket.url, ATLAS_CONFIG: undefined, ATLAS_PORT: undefined, PORT: undefined }
+    env
   });
   const errors = new Response(child.stderr).text();
   children.push(child);
@@ -58,6 +60,17 @@ async function start(root: string, mode = 'run') {
   }
   throw new Error('Workspace did not become ready.');
 }
+
+test('credential-free Run owns Mockingbird and shuts its S3 endpoint down with the app', async () => {
+  const root = await fixture();
+  const { child, runtime } = await start(root, 'run', true);
+  expect(runtime.storage?.endpoint).toMatch(/^http:\/\/127\.0\.0\.1:/);
+  expect((await fetch(`${runtime.url}/api/settings`)).status).toBe(200);
+  expect((await fetch(`${runtime.url}/api/projects`)).status).toBe(200);
+  await stopWorkspace(root);
+  expect(await child.exited).toBe(0);
+  await expect(fetch(runtime.storage!.endpoint)).rejects.toThrow();
+}, 60_000);
 
 test('all three IDEs call shared lifecycle commands; Orca reserves its first tab for the agent', async () => {
   const superset = JSON.parse(await readFile(path.join(repo, '.superset/config.json'), 'utf8'));
