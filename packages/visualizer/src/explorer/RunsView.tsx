@@ -1,4 +1,4 @@
-import { IconAlertTriangle, IconArrowLeft, IconVideo } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowLeft, IconPlayerPlay, IconVideo } from '@tabler/icons-react';
 import { Alert, Anchor, Badge, Box, Button, Code, Flex, Group, List, NativeSelect, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
 /**
  * @module Runs view
@@ -25,6 +25,8 @@ import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidenc
 import { Meter, StatusMark } from '../evidence/marks';
 import { useRunDetail, useRunList, useTestCatalog } from './catalog';
 import { RunArtifacts } from './RunArtifacts';
+import { entriesFromRun } from './playlist-entries';
+import { WatchPlaylist } from './playlist';
 import { FilterBar } from './filters';
 import { SearchNotes, TypedFilters } from './search-notes';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
@@ -469,6 +471,8 @@ function RunDetailView({ runKey }: { runKey: string }) {
       ),
     [narrowedResults, status, statusFilters, model]
   );
+  const [watching, setWatching] = useState(false);
+  const playlist = useMemo(() => entriesFromRun(filtered, detail.data?.layers), [filtered, detail.data]);
   const bySpec = useMemo(() => {
     const groups = new Map<string, RunResult[]>();
     for (const result of filtered.slice(0, shown)) {
@@ -636,6 +640,12 @@ function RunDetailView({ runKey }: { runKey: string }) {
           No result matches.
         </Text>
       )}
+      {filtered.length > 0 && (
+        <Button type="button" variant="filled" my="sm" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => setWatching(true)}>
+          Watch these {plural(filtered.length, 'result', 'results')}
+        </Button>
+      )}
+      {watching && <WatchPlaylist entries={playlist} onClose={() => setWatching(false)} />}
       {bySpec.map(([spec, list]) => (
         <Box key={spec} data-open aria-label={spec || 'No spec'} component="section" mb="lg">
           <Button data-static variant="default" fullWidth h="auto" py="sm" justify="flex-start">
