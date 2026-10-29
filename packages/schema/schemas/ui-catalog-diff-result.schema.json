@@ -1,0 +1,201 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-catalog-diff-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "False when a layer or backend could not be read (the comparison may be wrong), or, with `--fail-on-change`, when anything differs. Otherwise true: a difference is not a failure by itself"
+    },
+    "from": {
+      "type": "object",
+      "properties": {
+        "sha": {
+          "type": "string"
+        },
+        "states": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "layers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "sha",
+        "states",
+        "layers"
+      ],
+      "additionalProperties": {}
+    },
+    "to": {
+      "type": "object",
+      "properties": {
+        "sha": {
+          "type": "string"
+        },
+        "states": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "layers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "sha",
+        "states",
+        "layers"
+      ],
+      "additionalProperties": {}
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Pairs that stand differently (captured against failed, for example)"
+        },
+        "picture": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Both captured, and the stored bytes differ. Not a measure of how many pixels"
+        },
+        "unverified": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Both captured, but a side has no content hash, so whether the picture changed is unknown"
+        },
+        "added": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Only `to` has it"
+        },
+        "removed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Only `from` has it. Not a regression: the other side may not have run it"
+        },
+        "unchanged": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "coverage",
+        "picture",
+        "unverified",
+        "added",
+        "removed",
+        "unchanged",
+        "total"
+      ],
+      "additionalProperties": {}
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "change": {
+            "type": "string",
+            "enum": [
+              "coverage",
+              "picture",
+              "unverified",
+              "added",
+              "removed"
+            ]
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "captured",
+                  "failed",
+                  "capturing",
+                  "skipped",
+                  "missing"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "captured",
+                  "failed",
+                  "capturing",
+                  "skipped",
+                  "missing"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "title",
+          "profile",
+          "change",
+          "from",
+          "to"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "Every pair that is not unchanged"
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What could not be read. Any makes `ok` false: an unreadable layer is unknown, never unchanged"
+    }
+  },
+  "required": [
+    "ok",
+    "from",
+    "to",
+    "summary",
+    "changes",
+    "notices"
+  ],
+  "additionalProperties": {}
+}

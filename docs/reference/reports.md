@@ -1420,6 +1420,32 @@ export function summarize(combined: CombinedEvidence): ReportSummary
 
 Counts a combined report's winning results in total and per environment, and lists the specs that have no result at all.
 
+#### `BackendLayers`
+
+```ts
+export type BackendLayers = {
+  /** Each layer that could be read, with the specs it recorded. A layer several backends hold appears once per backend. */
+  readonly loaded: readonly { readonly evidence: LayerEvidence; readonly specs: readonly SpecEntry[] }[];
+  /** Every backend given, sorted by id, with whether it could be listed. */
+  readonly backends: readonly BackendInfo[];
+  /** What could not be read, sorted and without repeats. */
+  readonly notices: readonly string[];
+};
+```
+
+Every layer of some backends, read but not yet composed.
+
+#### `readBackendLayers`
+
+```ts
+export async function readBackendLayers(backends: readonly BackendInput[], options: { readonly concurrency?: number } = {}): Promise<BackendLayers>
+```
+
+Reads every layer of every backend, superseded ones included, without composing them. This is what {@link combineBackends}
+starts from; a caller that needs layers a newer layer has replaced (to compare two commits, for example) reads them here.
+A backend that cannot be listed, or a layer that cannot be understood, is a notice, never an omission that looks like a pass.
+Throws for an invalid or repeated backend `id`, before anything is read.
+
 #### `combineBackends`
 
 ```ts
@@ -6988,6 +7014,32 @@ Whether the checks ran on exactly the commit they name. A CI checkout does. A de
 with edits to tracked files does not: its layer is `modified`, shown with a warning and never mistaken
 for the commit's own result. Outside git the origin is `unknown`.
 
+#### `keyValue`
+
+```ts
+export function keyValue(pair: string, flag: string): [string, string]
+```
+
+Splits `key=value` (the form of `--param` and `--label`), or throws a message naming `flag`.
+
+#### `parseTime`
+
+```ts
+export function parseTime(text: string | undefined, flag = '--recorded-at'): number | null
+```
+
+An ISO date or epoch milliseconds from a flag, `null` when the flag was not given. Throws a message naming `flag` for anything else.
+
+#### `executionOf`
+
+```ts
+export function executionOf(rest: readonly string[], env: Env, given?: unknown): LayerRun | undefined
+```
+
+The execution the producer named, from `--run-id`, `--run-title`, `--run-started-at`, `--run-ended-at` and then
+`ATLAS_RUN_ID` / `ATLAS_RUN_TITLE`, laid over a `run` the checks file gave. `undefined` when nothing names one, so the
+documented grouping (CI run URL, else branch@sha) applies. A title or time without an id is refused: it would have nothing to belong to.
+
 #### `runReportCommand`
 
 ```ts
@@ -6996,6 +7048,14 @@ export async function runReportCommand(argv: readonly string[]): Promise<number>
 
 `atlas report …` for a terminal: a mistake in the command or a path is a message on stderr and exit
 code 2, so a CI job can tell a broken invocation (2) from a report that does not pass (1).
+
+#### `wantsJson`
+
+```ts
+export function wantsJson(argv: readonly string[]): boolean
+```
+
+Does the command ask for a JSON document (`--format json` or `--json`) instead of prose?
 
 #### `reportMain`
 
@@ -10551,6 +10611,338 @@ export type ReportData = HtmlReportBundle & {
 ```
 
 A run's tests (`HtmlReportBundle`) plus the document title shown for them, for the standalone / Solid report viewer.
+
+### The `atlas ui-catalog` command
+
+Source: `packages/reports/src/ui-catalog-cli.ts`. Import: `@crvouga/atlas/reports/ui-catalog-cli`
+
+`uiCatalogMain` is `atlas ui-catalog plan | publish | status | diff | export`: the UI catalog ({@link ./ui-catalog}) without
+a script. `plan` and `publish` turn a small JSON file (and the pictures beside it) into the layers of the expected set and of
+the captures; `status` reads every store and says whether the catalog is complete and free of failures; `diff` sets two
+commits against each other; `export` writes the catalog as one HTML file that needs no server. Like `atlas report`, it is
+written so it can be called from code and tests: it takes its arguments, environment, working directory, clock and git as
+parameters and returns the exit code, every command prints a JSON document with `--format json`, and a command that is wrong
+throws, which `runUiCatalogCommand` turns into a message (or a JSON error) and exit code 2.
+
+Nothing here knows how a picture was taken: the files it reads are the same data any collector can write. Publishing a
+catalog to a hosting platform is not a command: it would need that platform's credentials and API, which Atlas does not
+hold. The file `export` writes, or a folder of them, is what to hand to whatever hosts static files.
+
+Exit codes: 0 it worked, 1 it ran and the answer is no (an incomplete catalog, a failed capture, an unreadable store, a
+difference under `--fail-on-change`), 2 the command itself was wrong.
+
+See docs/ui-catalog.md
+See docs/agents.md
+
+#### `UI_CATALOG_USAGE`
+
+```ts
+export const UI_CATALOG_USAGE = …
+```
+
+The text `atlas ui-catalog --help` prints: every subcommand, its flags, what each does and the exit codes. Also the source of its entry in `docs/reference/cli.md`.
+
+#### `uiCatalogMain`
+
+```ts
+export async function uiCatalogMain(argv: readonly string[], io: ReportIo = { out: text => process.stdout.write(text) }): Promise<number>
+```
+
+`atlas ui-catalog …`. Returns the exit code. Throws on a mistake in the command (see {@link runUiCatalogCommand}).
+
+#### `runUiCatalogCommand`
+
+```ts
+export async function runUiCatalogCommand(argv: readonly string[]): Promise<number>
+```
+
+`atlas ui-catalog …` for a terminal: a mistake in the command or a path is a message on stderr and exit code 2, so a CI job can
+tell a broken invocation (2) from a catalog that needs attention (1). With `--format json` the mistake is a JSON document.
+
+### UI catalog comparison
+
+Source: `packages/reports/src/ui-catalog-diff.ts`. Import: `@crvouga/atlas/reports/ui-catalog-diff`
+
+What changed in the UI catalog between two commits, or between two profiles, without claiming more than the evidence
+supports. Pure functions of {@link UiCatalog} documents (and of the layers they came from), safe in a browser; nothing here
+changes a status, a slot or a winner.
+
+- **Two commits.** The catalog of a commit is the catalog of the layers recorded at that commit ({@link uiCatalogAtCommit}).
+  A state is paired with itself in the same profile. A layer replaces the older one of its slot, so the effective report no
+  longer holds an earlier commit's captures: compare from the layers themselves ({@link readBackendLayers}), which keep them.
+- **Two profiles.** Within one catalog, each state's cell in one profile is set beside its cell in another
+  ({@link diffUiProfiles}): desktop against mobile, light against dark.
+- **Pictures are compared by content.** Two captures have the same picture when their stored bytes have the same SHA-256.
+  A different hash means different bytes, which is not a measure of how different the pixels are. When a side has no
+  content hash (a picture given only by address, or left out), whether it changed is `unverified`, never "unchanged".
+- **A state only one side has** is `added` or `removed`. It may be new or renamed, or the other side's shard may not have
+  run, and the comparison cannot tell which: it is not called a regression.
+- **A capture that did not pass is not a picture.** A cell that failed, is being taken or was skipped on a side is a change of
+  `coverage`, never compared by picture.
+
+See docs/ui-catalog.md
+
+#### `UI_DIFF_VERSION`
+
+```ts
+export const UI_DIFF_VERSION = …
+```
+
+The `schemaVersion` of the comparison document.
+
+#### `UiCellChange`
+
+```ts
+export type UiCellChange = 'added' | 'removed' | 'coverage' | 'picture' | 'unverified' | 'unchanged';
+```
+
+How one pair of cells stands. `added`: only the after side has the cell. `removed`: only the before side has it.
+`coverage`: both have it and it stands differently (captured against failed, for example). `picture`: both captured and
+the bytes differ. `unverified`: both captured, but a side has no content hash, so whether the picture changed is unknown.
+`unchanged`: the same coverage and, when captured, the same bytes.
+
+#### `UI_CELL_CHANGES`
+
+```ts
+export const UI_CELL_CHANGES = …
+```
+
+The values of {@link UiCellChange}, in the order a review reads them.
+
+#### `UiDiffEntry`
+
+```ts
+export type UiDiffEntry = {
+  /** The state's id. */
+  readonly id: string;
+  /** Its title, from the after side when it has the state. */
+  readonly title: string;
+  /** The profile both sides are in (a comparison of commits), or null when the two sides are different profiles. */
+  readonly profile: UiProfile | null;
+  readonly before: UiCell | null;
+  readonly after: UiCell | null;
+  readonly change: UiCellChange;
+};
+```
+
+One state in one profile on each side.
+
+#### `UiCatalogDiff`
+
+```ts
+export type UiCatalogDiff = {
+  readonly schemaVersion: typeof UI_DIFF_VERSION;
+  /** How many entries are in each {@link UiCellChange}. */
+  readonly summary: Readonly<Record<UiCellChange, number>> & { readonly total: number };
+  /** Every pair, ordered by state id and then profile label. */
+  readonly entries: readonly UiDiffEntry[];
+};
+```
+
+A comparison, as `atlas ui-catalog diff --format json` prints it and the viewer shows it.
+
+#### `pictureIdentity`
+
+```ts
+export function pictureIdentity(image: UiImage | null | undefined): string | null
+```
+
+What identifies a picture's content: its recorded SHA-256, else the hash in a content-addressed bundle key
+(`attachments/<sha256>`), else `null`. A picture given only by address, or left out, has no identity here: its content is
+not Atlas's to vouch for.
+
+#### `diffUiCatalogs`
+
+```ts
+export function diffUiCatalogs(before: UiCatalog, after: UiCatalog): UiCatalogDiff
+```
+
+Sets the catalog of an earlier commit (`before`) against a later one (`after`): each state in each profile is paired with
+itself. A cell that is only a plan (`missing`) on one side is a change of coverage like any other. The order of the
+states in either catalog does not matter.
+
+#### `diffUiProfiles`
+
+```ts
+export function diffUiProfiles(catalog: UiCatalog, from: string, to: string): UiCatalogDiff
+```
+
+Sets one profile of a catalog (`from`, a {@link UiProfile.key}) against another (`to`): each state's cell in `from` beside its
+cell in `to`. A state that has a cell in only one of them is `added` or `removed`. Throws when the two are the same profile,
+because that compares a catalog with itself.
+
+#### `changedUiEntries`
+
+```ts
+export function changedUiEntries(diff: UiCatalogDiff): readonly UiDiffEntry[]
+```
+
+The entries of a comparison that changed, or all of them. A change the comparison cannot verify is a change worth looking at, so it is kept.
+
+#### `UiCommit`
+
+```ts
+export type UiCommit = {
+  readonly sha: string;
+  /** The branch of the newest layer recorded at the commit, or null. */
+  readonly branch: string | null;
+  /** When the newest layer at the commit was recorded, epoch milliseconds. */
+  readonly recordedAtMs: number;
+  /** How many layers were recorded at the commit. */
+  readonly layers: number;
+};
+```
+
+A commit that has layers of the catalog's producers.
+
+#### `uiCatalogCommits`
+
+```ts
+export function uiCatalogCommits(layers: readonly Pick<LayerEvidence['layer'], 'sha' | 'branch' | 'recordedAtMs' | 'freshness'>[]): UiCommit[]
+```
+
+The commits layers were recorded at, newest first. A layer with no commit is left out: it cannot be compared by commit.
+Layers recorded from a checkout with uncommitted changes (`freshness` `modified`) are not the commit's own result and are
+left out too, as the gate does by default for comparisons.
+
+#### `layersAtCommit`
+
+```ts
+export function layersAtCommit(layers: readonly LayerEvidence[], sha: string): LayerEvidence[]
+```
+
+The layers recorded at one commit (`sha` is the whole commit id, or a prefix of at least 7 hexadecimal digits that names
+exactly one commit among `layers`). Throws when a prefix names none, or more than one, so a comparison never silently uses
+the wrong commit.
+
+#### `uiCatalogAtCommit`
+
+```ts
+export function uiCatalogAtCommit(layers: readonly LayerEvidence[], sha: string, options: UiCatalogOptions = {}): UiCatalog
+```
+
+The UI catalog as it was recorded at one commit: only the layers recorded there take part. A state the commit's layers do
+not hold is absent, not failed. See {@link layersAtCommit} for how `sha` is matched.
+
+### UI catalog single-file export
+
+Source: `packages/reports/src/ui-catalog-export.ts`. Import: `@crvouga/atlas/reports/ui-catalog-export`
+
+The UI catalog as one HTML file that needs no server, no network and no build: open it from a disk, attach it to a ticket,
+host it anywhere that serves a file. Pictures are embedded as `data:` addresses, the manifest is embedded as JSON
+(`<script type="application/json" id="ui-catalog">`), and a few lines of script filter the states; with scripts off, every
+state is simply shown. It shows what the viewer's catalog shows, but it does not stream: it is the catalog at the moment it
+was made, and says when.
+
+Hosting platforms cap the size of one file, which is the reason a catalog is also a store and a viewer. The export keeps to a
+budget ({@link gatherUiPictures}): pictures past it are listed as left out with the reason, never silently dropped, and the
+manifest stays complete.
+
+Everything in the page is data from a test run. Text is escaped; only PNG, JPEG, GIF and WebP bytes whose first bytes say so
+are embedded (never SVG, never what a layer merely claims); a page address is linked only when it is `http` or `https`; the
+page carries a Content-Security-Policy that allows no network request at all.
+
+See docs/ui-catalog.md
+
+#### `UiExportPicture`
+
+```ts
+export type UiExportPicture = { readonly contentType: string; readonly data: Uint8Array };
+```
+
+A picture ready to embed.
+
+#### `UiExportOptions`
+
+```ts
+export type UiExportOptions = {
+  /** The page's title. Default `UI catalog`. */
+  readonly title?: string;
+  /** The pictures to embed, by {@link uiPictureKey}. A cell whose key is not here shows why it has no picture. */
+  readonly pictures?: ReadonlyMap<string, UiExportPicture>;
+  /** Why a picture that could not be embedded is not here, by {@link uiPictureKey}: shown in its place. */
+  readonly left?: ReadonlyMap<string, string>;
+  /** When the export was made, epoch milliseconds. It is stated on the page so nobody mistakes it for a live view. Default: now. */
+  readonly generatedAtMs?: number;
+};
+```
+
+What {@link uiCatalogHtml} may be given besides the catalog.
+
+#### `uiPictureKey`
+
+```ts
+export function uiPictureKey(capture: Pick<UiCapture, 'origin' | 'image'> | null | undefined): string | null
+```
+
+The key of a capture's picture in {@link UiExportOptions.pictures}: its layer and its bundle key, or `null` when the picture is not stored in a layer.
+
+#### `UiPictureWant`
+
+```ts
+export type UiPictureWant = { readonly key: string; readonly layer: string; readonly backend: string; readonly bundleKey: string; readonly bytes?: number };
+```
+
+One picture an export may embed.
+
+#### `uiPicturesWanted`
+
+```ts
+export function uiPicturesWanted(catalog: UiCatalog): UiPictureWant[]
+```
+
+The pictures of a catalog an export would embed, once each, in the order the page shows them. Only a cell that was captured, or
+that failed (a picture of what the page showed), and whose picture is stored in a layer, has one.
+
+#### `sniffImage`
+
+```ts
+export function sniffImage(data: Uint8Array): string | null
+```
+
+The media type a picture's first bytes say it has (`image/png`, `image/jpeg`, `image/gif`, `image/webp`), or `null` for anything else, SVG included.
+
+#### `UiPicturesGathered`
+
+```ts
+export type UiPicturesGathered = {
+  readonly pictures: ReadonlyMap<string, UiExportPicture>;
+  /** Why each picture that is not in `pictures` is not. */
+  readonly left: ReadonlyMap<string, string>;
+  /** Bytes embedded. */
+  readonly bytes: number;
+};
+```
+
+What {@link gatherUiPictures} found.
+
+#### `gatherUiPictures`
+
+```ts
+export async function gatherUiPictures(wanted: readonly UiPictureWant[], read: (want: UiPictureWant) => Promise<Uint8Array | null>, options: { readonly maxBytes: number }): Promise<UiPicturesGathered>
+```
+
+Reads the pictures an export wants through `read` (which returns the stored bytes of a picture, or `null` when the store
+no longer holds it) and keeps those that fit in `maxBytes` in total. A picture that is not stored, is not a PNG, JPEG, GIF or
+WebP, cannot be read, or would pass the budget is recorded in `left` with the reason; the pictures are taken in the page's
+order, so which are left out is deterministic. A `read` that throws is a picture left out, never a failed export.
+
+#### `uiCatalogHtml`
+
+```ts
+export function uiCatalogHtml(catalog: UiCatalog, options: UiExportOptions = {}): string
+```
+
+The whole catalog as one self-contained HTML document. See the module description for what it contains and how it treats
+the data in it. Deterministic for the same catalog, pictures and `generatedAtMs`.
+
+**Example**
+
+```ts
+const wanted = uiPicturesWanted(catalog);
+const { pictures, left } = await gatherUiPictures(wanted, want => readPicture(want), { maxBytes: 32 * 1024 * 1024 });
+await writeFile('catalog.html', uiCatalogHtml(catalog, { pictures, left }));
+```
 
 ### Writing a UI catalog from any collector
 
