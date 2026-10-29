@@ -598,6 +598,54 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `200` The test and its history.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No test in the report has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
+### How reliable one test is in a scope, and how that was counted
+
+`GET /api/reports/tests/reliability` · role: read
+
+A success rate for one test that says what it counted. The snapshots one run recorded for one producer, environment and parameter set (running, finished, enriched) are one independent execution; its last word counts once with the tries it recorded. `eventual` is the share of executions that passed in the end, `firstAttempt` the share whose first try passed (over executions that recorded their tries; the rest are `unrecordedAttempts`, never assumed to have passed first time).
+
+Choose the scope with `environment`, `producer`, `parameter` (`key=value`), `branch`, `sha`, `specRevision`, `since` and `until`; executions elsewhere never count. By default only the newest recorded spec revision counts and earlier ones appear under `historical`; send `revision=any` to pool them. Only `passed` and `failed` executions are trials: `not-run` and unfinished ones are listed under `excluded` and never counted as a pass. `sample` is `none`, `insufficient` (fewer than `minimumExecutions`) or `sufficient`, a count only: `notes` say when environments, producers or branches are pooled, failed cases were published again, or history is bounded to the newest 100 results. `executions` is the denominator, open to inspection. The interval states its assumptions. This is not a production failure probability. Send `format=markdown` for Markdown.
+
+- `key` (query, required): The test's `key` from `/api/reports/tests`.
+- `environment` (query): Environments or devices to count. Comma-separated.
+- `producer` (query): Producers to count. Comma-separated.
+- `parameter` (query): Parameter choices `key=value`; all must match. Comma-separated.
+- `branch` (query): Branches to count. Comma-separated.
+- `sha` (query): Commits: a full id or a prefix of at least seven characters. Comma-separated.
+- `specRevision` (query): Only executions recorded against these spec fingerprints (overrides `revision`). Comma-separated.
+- `revision` (query): `any` pools every spec revision; otherwise only the newest recorded one counts.
+- `since` (query): Only executions at or after this time: epoch milliseconds or a date.
+- `until` (query): Only executions at or before this time: epoch milliseconds or a date.
+- `format` (query): `markdown` for Markdown instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The reliability of the test in the scope.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No test in the report has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### How reliable one test is in a scope, and how that was counted
+
+`GET /api/projects/{project}/reports/tests/reliability` · role: read
+
+A success rate for one test that says what it counted. The snapshots one run recorded for one producer, environment and parameter set (running, finished, enriched) are one independent execution; its last word counts once with the tries it recorded. `eventual` is the share of executions that passed in the end, `firstAttempt` the share whose first try passed (over executions that recorded their tries; the rest are `unrecordedAttempts`, never assumed to have passed first time).
+
+Choose the scope with `environment`, `producer`, `parameter` (`key=value`), `branch`, `sha`, `specRevision`, `since` and `until`; executions elsewhere never count. By default only the newest recorded spec revision counts and earlier ones appear under `historical`; send `revision=any` to pool them. Only `passed` and `failed` executions are trials: `not-run` and unfinished ones are listed under `excluded` and never counted as a pass. `sample` is `none`, `insufficient` (fewer than `minimumExecutions`) or `sufficient`, a count only: `notes` say when environments, producers or branches are pooled, failed cases were published again, or history is bounded to the newest 100 results. `executions` is the denominator, open to inspection. The interval states its assumptions. This is not a production failure probability. Send `format=markdown` for Markdown.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `key` (query, required): The test's `key` from `/api/reports/tests`.
+- `environment` (query): Environments or devices to count. Comma-separated.
+- `producer` (query): Producers to count. Comma-separated.
+- `parameter` (query): Parameter choices `key=value`; all must match. Comma-separated.
+- `branch` (query): Branches to count. Comma-separated.
+- `sha` (query): Commits: a full id or a prefix of at least seven characters. Comma-separated.
+- `specRevision` (query): Only executions recorded against these spec fingerprints (overrides `revision`). Comma-separated.
+- `revision` (query): `any` pools every spec revision; otherwise only the newest recorded one counts.
+- `since` (query): Only executions at or after this time: epoch milliseconds or a date.
+- `until` (query): Only executions at or before this time: epoch milliseconds or a date.
+- `format` (query): `markdown` for Markdown instead of JSON.
+
+Responses: `200` The reliability of the test in the scope.; `304` Unchanged since the `If-None-Match` ETag.; `400` No `key`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No test in the report has that key.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
 ### Reviewer tags of attachments: every recorded edit
 
 `GET /api/reports/artifact-tags` · role: read

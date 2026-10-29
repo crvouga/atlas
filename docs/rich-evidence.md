@@ -109,6 +109,49 @@ Every field is optional, and every value except the booleans is an open string.
 - **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
   dropped, and the attachment, check and layer stay.
 
+## Product latency
+
+A test's `durationMs` includes fixture setup, deliberate waits, demo pacing, retries and cleanup, so it says how long the
+test ran and nothing about how quickly the product responded. Name the numbers that do, as measurements of `kind`
+`product-latency` between two events:
+
+```ts
+measurements: [
+  { name: 'Fixture setup', value: 20_000, unit: 'ms' },              // just a number: never read as latency
+  {
+    name: 'Confirmation', value: 500, unit: 'ms', kind: 'product-latency',
+    from: 'submit pressed', to: 'confirmation visible',             // the boundaries are part of the claim
+    limit: 800,                                                     // the budget
+    source: 'app-instrumentation', instrumentation: 'spans-v2',
+    labels: { device: 'pixel-8', build: '4821' }                    // what it is comparable with
+  }
+]
+```
+
+The test page shows **Product latency** apart from the test statistics, whose durations are labelled as test execution
+time. Every field after `unit` is optional and none of them decides a status, a slot or a winner.
+
+- **Only named measurements are latency.** A check's duration, a video's length, a step and a number with no `kind` are
+  never product latency. A test that recorded none shows that its latency is unknown, not fast.
+- **Boundaries are part of the claim.** Without both `from` and `to` the numbers are shown but no percentile or product
+  claim is made, and the page says so. When the interval you measured is only part of what the name claims, say what it
+  claims in `intended` (`{ "to": "audible response" }` on a measurement that ends at `tts dispatch`) and the viewer labels
+  it a partial interval, never the complete one.
+- **Percentiles need samples.** p50 needs 5 observations and p95 needs 20; fewer shows `Withheld` with the count it has.
+  One observation shows no spread or confidence.
+- **A timeout is a sample.** `outcome: "timeout"` or `"failed"` (anything but `observed`) means `value` is how long the
+  observation waited. It stays in the sample count and the percentiles, counts as over budget whenever a `limit` is set,
+  and marks the figures as lower bounds, so a stuck product never looks healthy.
+- **Groups.** The viewer groups observations by `device`, `build` or the UTC day they were recorded, taking `device` and
+  `build` from the measurement's `labels`, else the result's labels, parameters, environment and commit. Each group has
+  its own sample count, p50/p95, budget and breaches. A group that names nothing is `unknown device` or `unknown build`.
+- **Baselines.** A group is compared with a chosen baseline by absolute and relative change of p50 (and p95), or of the
+  newest observation when percentiles are not supported on both sides. Measurements with different names, units or
+  boundaries are not compared. A change of `instrumentation`, environment, other labels or parameters, or budget between
+  the two sides is listed beside the change.
+- **Reading it from the API.** `GET /api/reports/tests/history` entries carry `latency` (their product-latency
+  measurements) next to `durationMs`. The pure functions are in `@crvouga/atlas/reports/latency`.
+
 ## Finding runs and artifacts
 
 The viewer's **Runs** and **Artifacts** tabs and the API answer one query, so a link means the same thing everywhere.

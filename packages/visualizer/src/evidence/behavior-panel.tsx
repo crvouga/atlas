@@ -6,12 +6,9 @@
  * record: run, environment, source, attempts). Also the coverage summary of the whole feature. A recording is always
  * labelled as illustrative evidence with its own status, provenance and revision; it never stands for approval.
  */
-import type { EvidenceHolder } from '@crvouga/atlas/reports/evidence-detail';
-import { isVideoAttachment } from '@crvouga/atlas/reports/evidence-detail';
 import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
-import type { Attachment } from '@crvouga/atlas/schema';
 import { Alert, Badge, Box, Group, List, Paper, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useMemo, type ReactNode } from 'react';
 
@@ -25,6 +22,7 @@ import { ScopeNotice } from './evidence-scope';
 import { plural, statusWord, useNow } from './format';
 import { exampleIndexFor, exampleRows, fillExample, type FeatureStep } from './gherkin';
 import { Origin, StatusMark } from './marks';
+import { outcomeHeadline, videosIn } from './outcome';
 
 /** The short, readable form of a spec fingerprint (`<length>:<hash>:<hash>`): its length and the start of its hash. */
 export function shortRevision(fingerprint: string): string {
@@ -80,19 +78,6 @@ export function RevisionLine({ revision }: { revision: Revision }) {
 function expectedSteps(steps: readonly FeatureStep[]): FeatureStep[] {
   const at = steps.findIndex((step) => step.keyword === 'Then');
   return at < 0 ? [] : steps.slice(at);
-}
-
-function videosIn(holder: EvidenceHolder | undefined): Attachment[] {
-  if (!holder) return [];
-  const own = (holder.attachments ?? []).filter(isVideoAttachment);
-  return [
-    ...own,
-    ...(holder.steps ?? []).flatMap((step) => (step.attachments ?? []).filter(isVideoAttachment)),
-    ...(holder.attempts ?? []).flatMap((attempt) => [
-      ...(attempt.attachments ?? []).filter(isVideoAttachment),
-      ...(attempt.steps ?? []).flatMap((step) => (step.attachments ?? []).filter(isVideoAttachment))
-    ])
-  ];
 }
 
 /** The recording of one result, read only when this is on screen. */
@@ -179,6 +164,13 @@ export function BehaviorPanel({
   const steps = useMemo(() => (entry ? fillExample(scenario.steps, entry) : scenario.steps), [scenario, entry]);
   const expected = expectedSteps(steps);
   const named = example !== null && entry === null;
+  // The coverage state is the check's combined status; this says what the recording or result shown here recorded, apart from it.
+  const outcome =
+    subject && behavior.slot ? (
+      <Text component="div" fw={600} data-outcome-headline>
+        {outcomeHeadline({ layer: subject.layer, row: subject.row }, behavior.slot).text}
+      </Text>
+    ) : null;
   return (
     <Tabs
       defaultValue={start ?? (demo ? 'watch' : state === 'running' || behavior.slot?.live ? 'inspect' : 'read')}
@@ -198,6 +190,7 @@ export function BehaviorPanel({
               {COVERAGE[state].meaning}
             </Text>
           </Group>
+          {outcome}
           {example !== null && (
             <Text component="div" c="dimmed">
               Example: {example}
@@ -217,6 +210,7 @@ export function BehaviorPanel({
             <CoverageBadge state={state} />
             {behavior.representative && <Badge variant="outline">Representative demo</Badge>}
           </Group>
+          {outcome}
           {expected.length > 0 && (
             <Box component="section" aria-label="Expected outcome">
               <Title order={4} mb="xs">
