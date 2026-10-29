@@ -10,7 +10,7 @@ import {
   ProjectSlugSchema, ProjectSchema, ProjectsSchema,
   ServerConfigSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, UserStateSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema,
   CLI_RESULTS,
-  ProblemSchema, ServerInfoSchema, ReadySchema, EffectiveEvidenceSchema, EffectiveDeltaSchema, OutlineSchema, EvidencePageSchema, LayerRowsSchema, CheckDetailSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, RunListSchema, RunDetailSchema,
+  ProblemSchema, ServerInfoSchema, ReadySchema, EffectiveEvidenceSchema, EffectiveDeltaSchema, OutlineSchema, EvidencePageSchema, LayerRowsSchema, CheckDetailSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema,
   PublishChecksSchema,
   ManifestEnvelopeSchema,
   PathRecordSchema,
@@ -73,6 +73,7 @@ export const SCHEMAS: Record<string, z.ZodType> = {
   'test-catalog': TestCatalogSchema,
   'catalog-health': CatalogHealthSchema,
   'test-history': TestHistorySchema,
+  'test-reliability': TestReliabilitySchema,
   'report-runs': RunListSchema,
   'report-run': RunDetailSchema,
   // What `atlas report … --format json` prints (docs/agents.md).

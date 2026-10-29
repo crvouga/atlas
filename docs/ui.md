@@ -82,10 +82,73 @@ when Watch is on screen.
 - The promise's revision (the spec's fingerprint now) and the evidence's revision (the fingerprint the layer recorded)
   are shown separately. A known difference demotes a recording to "Recording is older" with an alert; a missing
   fingerprint is "not recorded", never a match.
+- Whether the evidence applies is a separate reading (`evidence/applicability.ts`), shown on Watch and Inspect and as a
+  row badge when it is stale (or unknown against a named release): `applies`, `stale` (an earlier promise or another
+  build), `unknown`, or `none`. It never changes a status or a coverage state. Age is when the checks ran
+  (`recordedAtMs`), never when the layer was uploaded or annotated. A release is named in the address (`release` build,
+  `releaseSha`, `releasePlatform`); a branch name or a passing run never supplies one. Another platform, a missing
+  build or commit, or a checkout with local changes (`freshness`) is `unknown`, never an exact match. Producers say
+  what they know with labels: `build`, `platform`, and `applies-to` with `applies-to-by` (the policy that asserts the
+  evidence still holds for those builds; without it the assertion is refused). The "Stale or unverified" filter
+  (`evidence=stale`) lists every behavior whose evidence does not apply, including those with none.
 - A recording is always labelled illustrative: it shows one run and does not approve a behavior for production.
   `demo`/`representative` tags only add a "Representative demo" label.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
+
+## Reliability
+
+An open test shows its reliability (`explorer/Reliability.tsx`, worked out by `reports/reliability` from the history the page
+already holds). Never show a bare percentage: it always comes with the number of independent executions it rests on, the
+"Insufficient evidence" badge below the minimum (one pass is not established reliability), the scope (environment,
+producer, branch, parameters, time window, spec revision) and the warning notes (pooled environments, failed cases
+published again, bounded history). First-try success is over executions that recorded their tries only; a result that
+did not run or did not finish is excluded by name and never counted as a pass. The scope and the open executions table
+are in the address (`rel*`), so a link reproduces the figure and the executions behind it.
+
+## Product latency
+
+A test's duration and its product latency are different things and the viewer never mixes them (`explorer/ProductLatency.tsx`,
+`@crvouga/atlas/reports/latency`). Statistics and the trend are labelled test execution time. Product latency is read only from
+measurements named `product-latency`; it shows boundaries, group (device, build, day), samples, budget and breaches, and a
+baseline comparison that lists changes of instrumentation or conditions. Percentiles and product claims that the evidence
+cannot support are shown as `Withheld` with the reason, a partial interval is badged, timeouts count as samples and breaches,
+and a test with no latency says it is unknown, not fast.
+
+## Outcome summary
+
+A test or behavior detail states what the **selected** result says apart from what the other current sources say
+(`evidence/outcome.ts`, `outcome-summary.tsx`). The heading is the selected source's outcome first ("Selected result
+passed; another scoped source failed"), never the combined status; the combined status is labelled as the worst current
+result. Each other current source is one click away, and sources that share an environment are told apart by status,
+time, revision and their place among them. A failure leads with whether the behavior was reached (decided only by the
+recorded step `kind`: a `hook`, `setup`, `fixture`, `before*` or `given` step failing is "Behavior not verified: setup
+failed", `when`, `then`, `assertion` or `expect` is "Expectation not met", anything else is unknown), then the expected
+and observed values and the closest step and video, then the original output. The cause (product, test harness,
+environment) is unknown unless the producer declared it under the `atlas.failure` extension; it is never read from error
+wording. Records of one source whose outcome changed are listed oldest first, and a later pass is never called a fix.
+In the explorer the chosen source is the `source` search parameter (a layer id; unlike `layer` it does not pin a run).
+
+## Watch a filtered set as a playlist
+
+The Artifacts tab and an opened run have a **Watch these N results** button. It opens a Mantine `Modal` (`explorer/playlist.tsx`)
+over the same filtered set the page lists, in the same order (`explorer/playlist-entries.ts` builds the entries).
+
+- Every result of the set is an entry. A failed one is never dropped, and one with no recording, an API-only one or one
+  whose file is missing says so in words (`Recording not available`, `API only`, `No recording`); none of these is shown as
+  demonstrated. A set longer than the page's limit says it is only the newest results.
+- Only the selected clip is read: the list is the metadata the catalog already sent, the selected result's evidence is read
+  when it is selected, and the one `<video>` uses `preload="metadata"`. Opening the playlist downloads no recordings in bulk.
+  Posters and durations of unselected entries are not shown for that reason.
+- One player: selecting another clip replaces it, and the position of the clip left is kept for the session so returning
+  resumes there. Previous/next and advancing on end move over the watchable entries; a result with nothing to play is
+  selected from the list to read why.
+- A clip that fails to load, or whose autoplay the browser blocked, stays in the list and offers Retry, Play and Next clip.
+  Speed, "Play the next clip when one ends" and "Repeat" are labelled controls. Captions (`text/vtt` attachments) are offered
+  as `<track>` elements.
+- The scenario (title, recorded steps, why it failed) sits beside the player with the recording's scope badges
+  (paced, scripted, silent, synthetic) and the sentence that the length is the recording's, not production latency. Developer
+  details opens the test pinned to that run's record and closes the playlist.
 
 ## Icons and notation marks
 
@@ -155,8 +218,8 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| Project home | Tests/runs/artifacts tabs, a run's Artifacts (files of its layers, shared recordings, direct links), metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion |
-| Test detail | Current outcomes, statistics, duration graph, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
+| Project home | Tests/runs/artifacts tabs, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
+| Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |
 | Evidence | Steps, retries, annotations, facts, unknown extensions, safe downloads and previews | List, Badge, Accordion, Code, Image, native media |

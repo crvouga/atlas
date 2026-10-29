@@ -50,7 +50,7 @@ function shownTags(attachment: Attachment, context: TagsContext | null): Artifac
 }
 
 /** Every attachment a holder carries, on its steps and attempts too. */
-function everyAttachment(holder: EvidenceHolder): Attachment[] {
+export function everyAttachment(holder: EvidenceHolder): Attachment[] {
   const out: Attachment[] = [...(holder.attachments ?? [])];
   for (const step of holder.steps ?? []) out.push(...(step.attachments ?? []));
   for (const attempt of holder.attempts ?? []) {

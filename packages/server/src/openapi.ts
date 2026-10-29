@@ -15,7 +15,7 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
@@ -66,7 +66,7 @@ const COMPONENTS = {
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
-  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -359,6 +359,29 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The test and its history.', 'TestHistory'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('No `key`.'), '401': UNAUTHORIZED, '404': problem('No test in the report has that key.'), '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/tests/reliability', path: '/api/reports/tests/reliability', operationId: 'getTestReliability', tag: 'Report', role: 'read',
+    summary: 'How reliable one test is in a scope, and how that was counted',
+    description: [
+      'A success rate for one test that says what it counted. The snapshots one run recorded for one producer, environment and parameter set (running, finished, enriched) are one independent execution; its last word counts once with the tries it recorded. `eventual` is the share of executions that passed in the end, `firstAttempt` the share whose first try passed (over executions that recorded their tries; the rest are `unrecordedAttempts`, never assumed to have passed first time).',
+      '',
+      'Choose the scope with `environment`, `producer`, `parameter` (`key=value`), `branch`, `sha`, `specRevision`, `since` and `until`; executions elsewhere never count. By default only the newest recorded spec revision counts and earlier ones appear under `historical`; send `revision=any` to pool them. Only `passed` and `failed` executions are trials: `not-run` and unfinished ones are listed under `excluded` and never counted as a pass. `sample` is `none`, `insufficient` (fewer than `minimumExecutions`) or `sufficient`, a count only: `notes` say when environments, producers or branches are pooled, failed cases were published again, or history is bounded to the newest 100 results. `executions` is the denominator, open to inspection. The interval states its assumptions. This is not a production failure probability. Send `format=markdown` for Markdown.'
+    ].join('\n'),
+    parameters: [
+      { name: 'key', in: 'query', required: true, description: 'The test\'s `key` from `/api/reports/tests`.', schema: str, example: '["specs/checkout/pay.feature","Pay with a card"]' },
+      { name: 'environment', in: 'query', description: 'Environments or devices to count. Comma-separated.', schema: str, example: 'phone' },
+      { name: 'producer', in: 'query', description: 'Producers to count. Comma-separated.', schema: str },
+      { name: 'parameter', in: 'query', description: 'Parameter choices `key=value`; all must match. Comma-separated.', schema: str, example: 'device=small' },
+      { name: 'branch', in: 'query', description: 'Branches to count. Comma-separated.', schema: str },
+      { name: 'sha', in: 'query', description: 'Commits: a full id or a prefix of at least seven characters. Comma-separated.', schema: str },
+      { name: 'specRevision', in: 'query', description: 'Only executions recorded against these spec fingerprints (overrides `revision`). Comma-separated.', schema: str },
+      { name: 'revision', in: 'query', description: '`any` pools every spec revision; otherwise only the newest recorded one counts.', schema: { type: 'string', enum: ['current', 'any'] } },
+      { name: 'since', in: 'query', description: 'Only executions at or after this time: epoch milliseconds or a date.', schema: str, example: '2026-01-01' },
+      { name: 'until', in: 'query', description: 'Only executions at or before this time: epoch milliseconds or a date.', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The reliability of the test in the scope.', 'TestReliability'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('No `key`.'), '401': UNAUTHORIZED, '404': problem('No test in the report has that key.'), '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/artifact-tags', path: '/api/reports/artifact-tags', operationId: 'getArtifactTags', tag: 'Report', role: 'read',

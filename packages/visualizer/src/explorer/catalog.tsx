@@ -180,7 +180,7 @@ function usePageHistory(layers: readonly LayerEvidence[] | null): PageHistory | 
       const key = `${entry.layer.backend}|${entry.layer.id}`;
       if (current.rows.has(key)) continue;
       current.rows.set(key, entry.rows);
-      current.history.add(entry.layer, entry.rows, [], entry.layer.backend);
+      current.history.add(entry.layer, entry.rows, [], entry.layer.backend, entry.fingerprints);
     }
     return { history: current.history, stamp: `page:${current.gen}:${current.history.rev}` };
   }, [layers]);

@@ -38,6 +38,22 @@ export type EvidenceMeasurement = {
   readonly unit: string;
   /** The allowance for `value`, in the same unit, when there is one. */
   readonly limit?: number;
+  /** What the number is, in an open vocabulary. `product-latency` is a user-visible response time between `from` and `to`; absent is just a number. */
+  readonly kind?: string;
+  /** The event the measured interval starts at. */
+  readonly from?: string;
+  /** The event the measured interval ends at. */
+  readonly to?: string;
+  /** The interval the name claims, when the measured one is only part of it. */
+  readonly intended?: { readonly from?: string; readonly to?: string };
+  /** How it was measured. */
+  readonly source?: string;
+  /** `observed` (default), `timeout`, `failed`; otherwise `value` is how long the observation waited, at least. */
+  readonly outcome?: string;
+  /** The version or method of the measurement. */
+  readonly instrumentation?: string;
+  /** What the observation is comparable with: `device`, `build`. */
+  readonly labels?: Readonly<Record<string, string>>;
 };
 
 /** What a check may carry beyond its outcome. All optional and open: see docs/extending.md. */

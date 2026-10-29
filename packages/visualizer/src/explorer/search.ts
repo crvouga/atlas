@@ -10,6 +10,7 @@
  * `type`, `label`, `branch`, `outcome`, `since` and `until`, so a link to one tab's filters opens the same query on another.
  */
 import { joinList, splitList, type ArtifactFilter } from '@crvouga/atlas/reports/artifact-query';
+import type { ReliabilityScope } from '@crvouga/atlas/reports/reliability';
 import { TEST_SORTS, type TestQuery } from '@crvouga/atlas/reports/test-catalog';
 import { z } from 'zod/v4';
 
@@ -67,8 +68,22 @@ export const ExplorerSearchFields = {
   openRun: text,
   /** Pins the open test's detail to one exact layer (a run's record of it), instead of the latest combined evidence. With `openRun` and `artifact` it names the layer the file is in. */
   layer: text,
+  /** Which current source (a layer id) of the open test the detail's outcome summary, media and failure describe, without pinning a run. Unknown or absent: the newest. */
+  source: text,
   /** With `openRun` and `layer`: the one file of that layer (an `artifactRef`: `id:…`, `key:…` or `name:…`) the run's Artifacts select. */
   artifact: text,
+  /** The scope of the open test's reliability figure: environments, producers, branches, `key=value` parameters. */
+  relEnv: text,
+  relProducer: text,
+  relBranch: text,
+  relParam: text,
+  /** The reliability window, as `since` and `until` (`YYYY-MM-DD`, local time). */
+  relSince: text,
+  relUntil: text,
+  /** `any`: count every spec revision. Otherwise only the current one is counted. */
+  relRevision: z.enum(['any']).optional().catch(undefined),
+  /** The reliability's independent executions (its denominator) are open. */
+  relOpen: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined),
   /** Only the runs, and the results of an opened run, that have a playable video recording. */
   video: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined)
 };
@@ -98,7 +113,16 @@ export type ExplorerSearch = {
   readonly tab?: 'runs' | 'artifacts';
   readonly openRun?: string;
   readonly layer?: string;
+  readonly source?: string;
   readonly artifact?: string;
+  readonly relEnv?: string;
+  readonly relProducer?: string;
+  readonly relBranch?: string;
+  readonly relParam?: string;
+  readonly relSince?: string;
+  readonly relUntil?: string;
+  readonly relRevision?: 'any';
+  readonly relOpen?: true;
   readonly video?: true;
 };
 
@@ -148,6 +172,21 @@ export function explorerSearch(search: Record<string, unknown>): ExplorerSearch 
 /** True when any filter or search narrows the list. */
 export function narrowed(search: ExplorerSearch): boolean {
   return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.scope || search.artifactTag || search.inRun || search.video);
+}
+
+/** The reliability scope an address asks for, in the shape `reliability` reads: days are the viewer's local days. */
+export function reliabilityScopeOf(search: ExplorerSearch): ReliabilityScope {
+  const list = (value: string | undefined) => (values(value).length ? values(value) : undefined);
+  const parts = {
+    environment: list(search.relEnv),
+    producer: list(search.relProducer),
+    branch: list(search.relBranch),
+    parameter: list(search.relParam),
+    ...(search.relRevision ? { revision: search.relRevision } : {}),
+    since: dayMs(search.relSince, false),
+    until: dayMs(search.relUntil, true)
+  };
+  return Object.fromEntries(Object.entries(parts).filter(([, value]) => value !== undefined)) as ReliabilityScope;
 }
 
 /** The filters of the Runs and Artifacts tabs, in the address. */
