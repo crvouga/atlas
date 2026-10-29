@@ -42,6 +42,14 @@ describe('server configuration', () => {
     expect(withSaved(['--refresh', '3'], { ATLAS_REFRESH_SECONDS: '15' }).refreshSeconds).toBe(3);
   });
 
+  test('catalog root mappings persist in the file or the environment, the environment replaces the file, and one without ">" is refused in words', () => {
+    expect(load().catalog.roots).toEqual([]);
+    expect(filed([], {}, { catalog: { roots: ['>specs/'] } }).catalog.roots).toEqual(['>specs/']);
+    expect(filed([], { ATLAS_CATALOG_ROOTS: 'apps/>specs/web/, >specs/' }, { catalog: { roots: ['x>y'] } }).catalog.roots).toEqual(['apps/>specs/web/', '>specs/']);
+    expect(() => filed([], {}, { catalog: { roots: ['specs'] } })).toThrow('from>to');
+    expect(() => load([], { ATLAS_CATALOG_ROOTS: 'specs' })).toThrow('catalog.roots');
+  });
+
   test('where reports are kept is no longer a setting: a file that still names a folder or backends is refused, in words', () => {
     for (const removed of ['data', 'backends', 'write']) expect(() => filed([], {}, { [removed]: removed === 'backends' ? [] : 'x' })).toThrow(`"${removed}" is no longer supported`);
     expect(() => load(['--data', 'x'])).toThrow(ConfigError);

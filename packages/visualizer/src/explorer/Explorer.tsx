@@ -62,6 +62,7 @@ import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, EnvironmentChips, projectTitle, runName } from './parts';
 import { ArtifactsView } from './ArtifactsView';
 import { CompareView } from './CompareView';
+import { HealthView } from './HealthView';
 import { CollectionsView } from './collections';
 import { RunsView } from './RunsView';
 import { SearchNotes, TypedFilters } from './search-notes';
@@ -186,7 +187,7 @@ export function Explorer() {
   const model = catalog.model;
   const selected = search.test ? (model?.byKey.get(search.test) ?? null) : null;
   const empty = model !== null && model.tests.length === 0;
-  const split = !!search.test && search.tab !== 'runs' && search.tab !== 'artifacts' && search.tab !== 'collections' && search.tab !== 'compare';
+  const split = !!search.test && search.tab !== 'runs' && search.tab !== 'artifacts' && search.tab !== 'collections' && search.tab !== 'compare' && search.tab !== 'health';
   return (
     <Container size="xl" py="xl">
       <Box aria-label="Test explorer" component="article" miw={0}>
@@ -197,7 +198,7 @@ export function Explorer() {
           {model && (model.tests.length > 0 || model.summary.runs > 0) && (
             <Tabs
               value={search.tab ?? 'tests'}
-              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' || value === 'collections' || value === 'compare' ? value : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined, collection: undefined, rev: undefined, pair: undefined })}
+              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' || value === 'collections' || value === 'compare' || value === 'health' ? value : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined, collection: undefined, rev: undefined, pair: undefined })}
             >
               <Tabs.List aria-label="Explorer view">
                 <Tabs.Tab
@@ -222,6 +223,7 @@ export function Explorer() {
                 </Tabs.Tab>
                 <Tabs.Tab value="artifacts">Artifacts</Tabs.Tab>
                 <Tabs.Tab value="compare">Compare</Tabs.Tab>
+                <Tabs.Tab value="health">Catalog health</Tabs.Tab>
                 {!staticEvidence && <Tabs.Tab value="collections">Collections</Tabs.Tab>}
               </Tabs.List>
             </Tabs>
@@ -259,6 +261,9 @@ export function Explorer() {
                 </List.Item>
               ))}
             </List>
+            <Anchor mt="xs" display="inline-block" size="sm" renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'health', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+              Why do these counts differ from the Tests?
+            </Anchor>
           </Box>
         )}
         {!model && !evidence.unavailable && (
@@ -289,6 +294,8 @@ export function Explorer() {
             <ArtifactsView />
           ) : search.tab === 'compare' ? (
             <CompareView />
+          ) : search.tab === 'health' ? (
+            <HealthView />
           ) : search.tab === 'collections' ? (
             <CollectionsView />
           ) : empty ? null : (

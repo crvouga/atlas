@@ -78,7 +78,7 @@ export const VideoRefSchema = z.looseObject({
   step: z.string().optional().describe('The name of the step that holds it'),
   tags: z.array(z.string()).optional().describe('The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)'),
   recording: z.string().optional().describe('What identifies the bytes; references with the same value are one recording. Absent when it cannot be played'),
-  available: z.boolean().describe('False when the reference names no bytes (no bundle key, address or inline text)'),
+  available: z.boolean().describe('False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer\'s own bundle does not hold'),
   scope: EvidenceScopeSchema.optional().describe('What this recording shows as its producer declared it: its own `scope`, else its attempt\'s, check\'s, part\'s or layer\'s. Absent: the scope is unknown, never live, physical or audible')
 });
 
@@ -86,7 +86,7 @@ export const VideoRefSchema = z.looseObject({
 export const VideoCountsSchema = z.looseObject({
   references: z.number().int().nonnegative().describe('Every reference to a video; identical bytes referenced twice count twice'),
   recordings: z.number().int().nonnegative().describe('Distinct playable recordings'),
-  unavailable: z.number().int().nonnegative().describe('References that name no bytes')
+  unavailable: z.number().int().nonnegative().describe('References that name no bytes, or bytes the layer does not hold')
 });
 
 /** What a result carries beyond its outcome, as counts and short facts. Present only when there is something. */
@@ -593,9 +593,15 @@ export const CatalogHealthSchema = z.looseObject({
     testsWithoutSpec: nonneg,
     explanation: z.array(z.string())
   }),
-  identity: z.looseObject({ checks: nonneg, fallbackIdentity: nonneg.describe('Checks whose id equals their title'), basis: z.string() }),
+  identity: z.looseObject({
+    checks: nonneg,
+    fallbackIdentity: nonneg.describe('Checks whose id equals their title'),
+    declaredBehaviorIds: nonneg.optional().describe('Checks that declare a `behavior-id` label'),
+    declaredExampleIds: nonneg.optional().describe('Checks that declare an `example-id` label'),
+    basis: z.string()
+  }),
   domains: z.array(z.looseObject({ name: z.string(), specs: nonneg })).describe('Specs per domain, most first'),
-  roots: z.array(z.looseObject({ from: z.string(), to: z.string(), matched: nonneg.describe('Distinct paths the mapping changed') })),
+  roots: z.array(z.looseObject({ from: z.string(), to: z.string(), matched: nonneg.describe('Distinct paths the mapping changed'), source: z.enum(['configuration', 'request']).optional().describe('Where it was declared: the server\'s `catalog.roots` setting or this request\'s `root` parameter') })),
   aliases: z.array(z.looseObject({ path: z.string(), sources: z.array(z.string()) })).describe('Logical specs seen under more than one original path, joined by a root mapping'),
   findings: z.array(z.looseObject({
     code: z.string().describe('An open set: treat a code you do not know as informational'),

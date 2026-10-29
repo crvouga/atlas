@@ -192,3 +192,42 @@ test('an HTML archive stays sandboxed and is served by the protected route', asy
   expect(frame.getAttribute('src')).toContain(`/layers/${layer.id}/blobs/`);
   expect((window as unknown as { pwned?: number }).pwned).toBeUndefined();
 });
+
+test('a run row counts its layer movie with its test videos, links straight to the movie, and says when a movie was never stored', async () => {
+  const store = memoryStore();
+  await publishChecks(store, {
+    ...base,
+    runUrl: RUN(1),
+    recordedAtMs: 1_000,
+    attachments: [movie('review.webm', 'the review', { role: 'demo' })],
+    checks: [
+      { ...PAY, status: 'passed', attachments: [movie('pay.webm', 'pay')] },
+      { ...REFUND, status: 'passed', attachments: [movie('refund.webm', 'refund')] }
+    ]
+  });
+  // A producer that named a file in the layer's bundle and never stored it.
+  await publishChecks(store, {
+    ...base,
+    runUrl: RUN(2),
+    recordedAtMs: 2_000,
+    attachments: [{ name: 'lost.webm', contentType: 'video/webm', bundleKey: 'attachments/never-uploaded' }],
+    checks: [{ ...PAY, status: 'passed' }]
+  });
+  await open(store, '/?tab=runs');
+  await atlas!.until(() => document.querySelectorAll('section[aria-label="Runs"] tbody tr').length === 2, 'both runs');
+  const rowOf = (n: number) => [...document.querySelectorAll<HTMLElement>('section[aria-label="Runs"] tbody tr')].find((row) => row.querySelector(`a[aria-label="Open run #${n}"]`))!;
+  // Two test videos and the layer's movie are three recordings, watched from one link, with no filename or producer named.
+  expect(rowOf(1).textContent).toContain('3 videos');
+  expect(rowOf(1).querySelector('a[aria-label="Watch 3 recordings in run #1"]')).not.toBeNull();
+  // The run's own file has its own link, which opens the run on its files; the movie plays there.
+  expect(rowOf(1).querySelector('a[aria-label^="Open the 1 file of run"]')).not.toBeNull();
+  // A movie whose file the layer does not hold is unavailable: not a recording, not a "Watch" link.
+  expect(rowOf(2).textContent).toContain('1 video unavailable');
+  expect(rowOf(2).querySelector('a[aria-label^="Watch"]')).toBeNull();
+  const filter = document.querySelector<HTMLButtonElement>('section[aria-label="Runs"] button[aria-label^="Has video"]')!;
+  expect(filter.getAttribute('aria-label')).toBe('Has video: 1 run');
+
+  await atlas!.click('section[aria-label="Runs"] a', 'Open the 1 file of run #1');
+  await atlas!.until(() => !!hub()?.querySelector('video'), 'the run-level movie');
+  expect(hub().textContent).toContain('review.webm');
+});

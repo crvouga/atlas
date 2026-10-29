@@ -54,7 +54,7 @@ export type VideoRef = {
   readonly tags?: readonly string[];
   /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
   readonly recording?: string;
-  /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
+  /** False when the reference names no bytes at all (no bundle key, address or inline text), or a bundle key that the layer's own bundle does not hold, so it can never be played. */
   readonly available: boolean;
   /** What this recording shows, as declared for it: its own `scope`, else its attempt's, check's, part's or layer's. Absent when none declared one: its scope is unknown, not live, physical or audible. */
   readonly scope?: EvidenceScope;
@@ -66,7 +66,7 @@ export type VideoCounts = {
   readonly references: number;
   /** Distinct playable recordings: identical bytes referenced twice are one. */
   readonly recordings: number;
-  /** References that name no bytes. A report that predates availability metadata has none of these and none of the others. */
+  /** References that name no bytes, or bytes the layer does not hold. A report that predates availability metadata has none of these and none of the others. */
   readonly unavailable: number;
 };
 
