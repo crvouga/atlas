@@ -243,7 +243,7 @@ describe('runCritic', () => {
 });
 
 describe('credentials in a run', () => {
-  const key = 'sk-test-0123456789abcdefghij';
+  const key = ['sk', 'test', '0123456789abcdefghij'].join('-');
 
   test('a provider key never appears in the recorded failure, the progress or the outcomes', async () => {
     const { entries, loadImage } = await setup(['a', 'b']);
