@@ -120,6 +120,20 @@ clients, viewers and servers meet over its HTTP API, so treat that API like the 
   loading, run `ATLAS_BENCH_DIR=/tmp/atlas-bench bun packages/server/bench/bench.ts 2000 100` and do not make
   the numbers worse. Speed never buys a weaker guarantee: keep the code as simple as the numbers allow.
 
+## The UI catalog is a contract with a budget
+
+The UI catalog (`packages/reports/src/ui-catalog*.ts`, `ui-state.ts`, the viewer's `catalog/`, `GET /api/reports/ui-catalog`, `atlas ui-catalog`)
+is read by viewers, critics and other projects, so it follows the same rule as the report contract: [only optional additions within version
+1](docs/ui-catalog.md#stability-what-may-change-and-what-may-not).
+
+- `packages/reports/tests/fixtures/ui-catalog-v1.json` is the frozen first document and `ui-catalog-contract.test.ts` holds the code to it.
+  Never edit the fixture to make a test pass; fix the code. A new fact goes in as an optional field, or as an `attribute` with no code change at all.
+- Vocabularies are open: a reader ignores unknown fields and treats an unknown `coverage`, `expected` or surface `status` as not captured.
+  Never close one in a schema, and never let a picture, an attribute or a plan decide a result.
+- Performance is a feature. `uiCatalog` is one linear pass and `ui-catalog-performance.test.ts` fails if cost grows faster than size. Before and
+  after a change to it, run `bun packages/server/bench/ui-catalog-bench.ts 5000 10` and do not make the numbers worse.
+- Playwright stays in `packages/playwright`. Nothing that reads, composes or shows the catalog imports a collection framework (`scripts/ui-architecture.test.ts`).
+
 ## Documentation lives in the code, and is generated from it
 
 An agent integrating Atlas reads generated documentation, so it must not be able to disagree with the code. The rule is

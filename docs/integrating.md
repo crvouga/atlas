@@ -231,6 +231,13 @@ offered for download otherwise. [Evidence](extending.md) is the full model, and 
 breaks anything.
 [Send rich evidence](rich-evidence.md) lists what to send and what the viewer does with it, and covers the Playwright Test reporter.
 
+### A catalog of every screen
+
+If the project wants a picture of each screen per viewport and color scheme, with the screens nobody captured called out, that is the
+[UI catalog](ui-catalog.md): publish what should exist with `atlas ui-catalog plan`, what each collector captured with
+`atlas ui-catalog publish` (any shard, any machine, any tool), and gate on `atlas ui-catalog status`. The order of work, the commands and the
+mistakes to avoid are in [Capturing and reading the UI catalog](agents.md#capturing-and-reading-the-ui-catalog).
+
 ### Statecharts
 
 Atlas can also run statecharts against the real product (see [executable statecharts](statecharts.md)).

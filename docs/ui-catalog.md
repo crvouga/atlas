@@ -9,6 +9,8 @@ Nothing about it is new to the report contract. A state is an ordinary check wit
 layer, and the stream is the one every viewer already holds. This page is the convention that makes those usable as a catalog, the
 decisions behind it, the command line, and what stays in your project.
 
+**Agents:** the order of work and the mistakes to avoid are in [Capturing and reading the UI catalog](agents.md#capturing-and-reading-the-ui-catalog). This page is the reference.
+
 - [How a state is written](#how-a-state-is-written)
 - [What is expected](#what-is-expected)
 - [Publishing from any collector](#publishing-from-any-collector)
@@ -18,6 +20,8 @@ decisions behind it, the command line, and what stays in your project.
 - [Exploring it](#exploring-it)
 - [Comparing two commits or two profiles](#comparing-two-commits-or-two-profiles)
 - [A single file that needs no server](#a-single-file-that-needs-no-server)
+- [Stability: what may change and what may not](#stability-what-may-change-and-what-may-not)
+- [Performance and scale](#performance-and-scale)
 - [Decisions](#decisions)
 - [What stays in your project, and what Atlas does not do](#what-stays-in-your-project-and-what-atlas-does-not-do)
 
@@ -32,6 +36,7 @@ A state is one **check** in a layer whose part has `kind` **`ui-state`**.
 | The picture | An attachment with `role: "screenshot"` (else the first image), stored in the layer by content or given as an `https` `uri`. `width` and `height` help the viewer lay it out. |
 | The profile | The layer's `environment` (`desktop-web`, `mobile-web`, `ios`, `android`) and `parameters` (`{ "viewport": "390x844", "scheme": "dark" }`). Parameters split a slot, so the same state at another viewport is **another result, side by side**, never a replacement. |
 | Facts the producer declares | The check's `extensions["atlas.ui-state"]`: `route`, `fixture`, `cohort`, `area`, `kind` (the kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`… an open vocabulary that [critics](critics.md#reading-the-catalog) judge a state by), `flags` (a list), `covers` (the product surfaces the state shows). All optional. |
+| Facts of your own | The same extension's `attributes`: a map of names to text (`{ "locale": "de-DE", "brand": "acme" }`), at most 32 of them per state. The catalog carries them, offers each `name=value` as a filter and shows them with the state. A new dimension needs no new Atlas, no new field and no new version. They never split a slot (a fact that must, such as another locale rendered as another picture, is a profile `parameter`) and never decide a result |
 | Facts that describe without splitting | The check's `labels` (`shard`, `browser`) and `tags`. Labels never make a different slot. |
 | Where it came from | The layer's `producer`, `sha`, `branch`, `runUrl`, `freshness`, `recordedAtMs`: shown with every capture, with the layer id and the backend that holds it. |
 
@@ -122,8 +127,8 @@ atlas ui-catalog export --out public/catalog.html # one file, no server
 ```
 
 `captures.json` is `{"states":[…]}` (or just the list); a state is `{"id","title"?,"status"?,"detail"?,"route"?,"fixture"?,"cohort"?,"area"?,
-"flags"?,"covers"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?}` with `screenshot` a file name or `{"path"|"uri","width"?,"height"?,"contentType"?}`.
-A misspelled field is refused with its path, not ignored. A picture file is read from beside the file and from each `--attach-root`,
+"flags"?,"covers"?,"attributes"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?}` with `screenshot` a file name or `{"path"|"uri","width"?,"height"?,"contentType"?}`.
+A misspelled field is refused with its path, not ignored (a typo in a hand-written file is worth an error); put your own data in `attributes`, which takes any name. A picture file is read from beside the file and from each `--attach-root`,
 never from a hidden file or a link out. **A `passed` state whose picture cannot be read is published as `failed`, with the reason**: a
 state without its picture is not shown as captured. `--recorded-at` defaults to the file's modification time, so publishing the same
 file twice is the same layer.
@@ -164,7 +169,7 @@ layer ([the contract](report-contract.md#guarantees)), which is what the tests p
 
 The viewer's **UI catalog** (`/catalog`, in the menu beside the spec types once the report holds a state or a plan) shows a card per
 state with its picture and a coverage badge per profile, and filters by words, coverage, profile, area, route, cohort, feature flag,
-surface and producer. The address holds the filters and the open state, so a link reproduces the view. Opening a state shows its
+surface, producer and the attributes your collectors declare. The address holds the filters and the open state, so a link reproduces the view. Opening a state shows its
 profiles side by side with the declared facts, the failure reason, and for each picture the layer, backend, producer, shard, commit
 and time. *Download the manifest* saves the filtered catalog as JSON.
 
@@ -176,8 +181,8 @@ A separate process that reviews the pictures (a [critic](critics.md#reading-the-
 `GET /api/reports/ui-catalog/entries`: cursor-paged, `since` a report version, with the hash of each stored picture.
 
 `GET /api/reports/ui-catalog` answers the same document the viewer computes (`uiCatalog` from
-`@crvouga/atlas/reports/ui-catalog`), filtered by `q`, `coverage`, `profile`, `area`, `route`, `cohort`, `flag`, `surface` and
-`producer`, paged with `limit` and `offset`, with an ETag. Its picture `path` is relative to `/api/reports`.
+`@crvouga/atlas/reports/ui-catalog`), filtered by `q`, `coverage`, `profile`, `area`, `route`, `cohort`, `flag`, `surface`, `producer` and
+`attribute` (`name=value`), paged with `limit` and `offset`, with an ETag. Its picture `path` is relative to `/api/reports`.
 
 ## Comparing two commits or two profiles
 
@@ -201,7 +206,7 @@ so a link reproduces it) and `atlas ui-catalog diff` set one side against the ot
   the report the viewer holds.
 - A layer or backend that could not be read is named, and what it held is unknown, never "unchanged": `diff` exits `1` for it.
   `--fail-on-change` also exits `1` for any difference, for a gate that must stay the same.
-- The filters (words, area, route, cohort, flag, surface, producer) narrow a comparison; coverage does not, because coverage is what is
+- The filters (words, area, route, cohort, flag, surface, producer, attribute) narrow a comparison; coverage does not, because coverage is what is
   compared.
 
 ## A single file that needs no server
@@ -219,6 +224,66 @@ serve the store with `atlas serve` or build the site with `atlas client build`, 
   `http` or `https`, and a Content-Security-Policy forbids every network request. Without scripts every state is simply shown.
 - It is a generated document, not the viewer: it carries its own small inline style and script because it must work with no build
   and no server, which [the viewer's UI conventions](ui.md) forbid inside the viewer.
+
+## Stability: what may change and what may not
+
+The UI catalog is built on the [report contract](report-contract.md#versioning-and-stability) and the
+[server's API rules](server.md), and adds nothing that could break either. Four things are contracts, each with the same promise:
+within version 1 **only optional things are added**, never removed, renamed or given another meaning.
+
+| Contract | What is fixed | Where it grows |
+| --- | --- | --- |
+| **The convention in a layer** (`ui-state` and `ui-plan` parts, the `screenshot` attachment, the `atlas.ui-state` extension) | The part kinds, that a check id is the state, that `passed` is captured, that `environment` and `parameters` are the profile, that a plan is `not-run`. | New facts: put them in `attributes`, or add an optional key to the extension. A reader keeps the keys it knows and ignores the rest, and the layer keeps all of them. A reader never rejects a layer for what it does not understand: it leaves it out, and a state it cannot read is never captured. |
+| **The catalog document** (`uiCatalog`, `GET /api/reports/ui-catalog`, the manifest) | The names and meaning of every field, the order of states and cells, and that only `captured` is a capture. | New optional fields, and new values of `coverage`, `expected` and a surface's `status`. |
+| **The query** (`q`, `coverage`, `profile`, `area`, `route`, `cohort`, `flag`, `surface`, `producer`, `attribute`, `limit`, `offset`, `format`) | What each parameter selects, AND across parameters and OR within one. | New optional parameters. One the server does not know is ignored and the whole catalog is answered, as for every Atlas API. |
+| **The command line** (`atlas ui-catalog …`, `--format json`) | Flags, exit codes and the result documents. | New optional flags and result fields. |
+
+How to write a reader that never needs to change:
+
+- **Ignore what you do not know.** Unknown fields of a document, unknown keys of the extension and unknown parameters are not errors.
+  The published JSON Schemas are open objects for this reason (`additionalProperties` is not `false`).
+- **Treat an unknown word as the cautious one.** `coverage` today is `captured`, `failed`, `capturing`, `skipped` or `missing`; a later
+  version may add another (`quarantined`, `stale`…). A reader shows it as it is and counts it as *not captured*. `expected` that is not
+  `declared` or `undeclared` is `unknown`; a surface `status` that is not `covered` is not covered. The schema types these as text for that reason.
+- **Do not depend on absence meaning "none" unless the field says so.** `attributes` and `facets.attributes` are absent from a server that predates
+  them; absent means none.
+- **Never read evidence as a result.** A picture, an attribute or a fact never changes a status, a slot or a winner.
+
+The promise is tested, not only written: `packages/reports/tests/fixtures/ui-catalog-v1.json` is the first version of the document,
+frozen, and `ui-catalog-contract.test.ts` fails if the code stops writing any of it or changes any value. It also feeds every reader a
+document from a "later version" (a new field on every object, new words for coverage) and a layer with keys nobody has heard of. Do not
+edit the fixture to make a test pass; fix the code. A change a reader would have to be rewritten for is a new `schemaVersion`, a `!`
+commit and a migration note, exactly as for the report contract.
+
+Adding to the catalog, from least to most work:
+
+1. **A new dimension of your product** (locale, brand, theme, build channel): write it as an `attribute`. Nothing in Atlas changes.
+2. **A new profile choice** (another viewport, another scheme): it is a layer `parameter`, so it makes another result side by side.
+3. **A new kind of state** (`toast`, `drawer`): `kind` is an open vocabulary. Write it.
+4. **A new fact Atlas should know about** (searchable, a facet): add an optional key to `UiStateFacts`, read it in `uiStateFacts`, carry it
+   in `UiCatalogState`, and add it to the schema as optional. Then run `bun run docs`.
+
+## Performance and scale
+
+The catalog is meant for runs of thousands of captures that are watched while they happen.
+
+- **One pass, linear.** `uiCatalog` makes one pass over the winning results; a layer's profile, origin and file address are made once per
+  layer and not once per cell. Filtering searches text built once per state. A test builds catalogs of 250 and 2,000 states and fails if the
+  cost grows faster than the size (`ui-catalog-performance.test.ts`).
+- **About 20,000 cells** (5,000 states in 4 profiles, captured by 40 shards) are combined in tens of milliseconds, filtered in under 10, and the
+  first 200 states are serialized in a couple of milliseconds. Measure your own with
+  `bun packages/server/bench/ui-catalog-bench.ts <states> <shards>`; run it before and after a change to `ui-catalog.ts`.
+- **The server builds once per report version** and narrows per question; the written answer of a version and a query is kept and
+  answered with an ETag (`304`) to a client that already has it. Page with `limit` (default 200): a page is a few kilobytes per state, and
+  the whole catalog is never sent to look at one screen.
+- **The viewer draws what is on screen.** It shows 48 cards and the first 100 surfaces and asks for more, loads each picture only when its
+  card scrolls into view (`loading="lazy"`, decoded off the main thread, from a content address), offers at most
+  100 options in a filter at a time, and rebuilds the catalog for newly arrived layers at low priority, so typing and scrolling are not held up
+  while a run streams in.
+- **Pictures are never in the stream.** An event carries metadata; the bytes are fetched on demand, by content.
+- **Keep it so.** Before and after changing the index, the upload path or the viewer's data loading, run the server benchmark of
+  [the server guide](server.md); for the catalog's own code, the benchmark above. Speed never buys a weaker guarantee: the same layers in any
+  order, split any way, still give the same catalog.
 
 ## Decisions
 
@@ -239,6 +304,7 @@ The questions the original proposal left open, and how they are answered here. E
 | Exploration capabilities | Search, filters, profile comparison, coverage and surface coverage, failure diagnostics, deep links, manifest export. |
 | Static export | Two ways, neither needs a server. The catalog is computed from the layers a viewer holds, so the static site (`atlas client build`) shows it, without streaming. `atlas ui-catalog export` writes it as one self-contained HTML file with a size budget. |
 | Comparing | Two commits (from the layers recorded at each, because the report keeps only the newest) or two profiles; pictures by content hash, never by a pixel measure; one-sided states are not regressions. |
+| Growing without a break | `attributes` for new dimensions; open objects and open words in every reader; a frozen version 1 document that a test holds the code to. See [Stability](#stability-what-may-change-and-what-may-not). |
 | Command line | `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, each with `--format json`. Running a collector is not one: that is the product's. |
 
 ## What stays in your project, and what Atlas does not do
