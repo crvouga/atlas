@@ -6,22 +6,25 @@
  * record: run, environment, source, attempts). Also the coverage summary of the whole feature. A recording is always
  * labelled as illustrative evidence with its own status, provenance and revision; it never stands for approval.
  */
+import { attachmentIdentity } from '@crvouga/atlas/reports/evidence-detail';
 import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { Alert, Badge, Box, Group, List, Paper, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useMemo, type ReactNode } from 'react';
+import type { Attachment } from '@crvouga/atlas/schema';
 
 import type { Assessment, ReleaseIdentity } from './applicability';
 import { ApplicabilitySummary } from './applicability-view';
-import { attachmentSource, useCheckDetail } from './artifacts';
+import { attachmentSource, Timeline, useCheckDetail } from './artifacts';
 import { COVERAGE, COVERAGE_ORDER, type Behavior, type CoverageCounts, type CoverageState, type Revision } from './behavior';
 import { PlainSteps } from './check-detail';
 import { useEvidence } from './evidence-context';
-import { ScopeNotice } from './evidence-scope';
+import { ScopeNotice, ScopeProvider } from './evidence-scope';
 import { plural, statusWord, useNow } from './format';
 import { exampleIndexFor, exampleRows, fillExample, type FeatureStep } from './gherkin';
 import { Origin, StatusMark } from './marks';
+import { MomentPlayback, stepsOfRecording, useMomentVideo, useRequestedMoment } from './moments';
 import { outcomeHeadline, videosIn } from './outcome';
 
 /** The short, readable form of a spec fingerprint (`<length>:<hash>:<hash>`): its length and the start of its hash. */
@@ -80,14 +83,37 @@ function expectedSteps(steps: readonly FeatureStep[]): FeatureStep[] {
   return at < 0 ? [] : steps.slice(at);
 }
 
+/** The recording itself: the one player the steps beside it seek, which marks the step playing. */
+function WatchVideo({ attachment, url }: { attachment: Attachment; url: string }) {
+  const moments = useMomentVideo(attachment);
+  return (
+    <Box
+      component="video"
+      src={url}
+      controls
+      preload="metadata"
+      aria-label={`Recording: ${attachment.description ?? attachment.name}`}
+      maw="100%"
+      w="100%"
+      mah="70vh"
+      {...moments}
+    />
+  );
+}
+
 /** The recording of one result, read only when this is on screen. */
 function Player({ result }: { result: EvidenceResult }) {
   const detail = useCheckDetail(result.layer, result.row);
   const videos = useMemo(() => videosIn(detail.data?.check), [detail.data]);
-  const sources = videos.flatMap((attachment) => {
-    const { url } = attachmentSource(attachment, result.layer.id);
-    return url ? [{ attachment, url }] : [];
-  });
+  const requested = useRequestedMoment();
+  const sources = useMemo(
+    () =>
+      videos.flatMap((attachment) => {
+        const { url } = attachmentSource(attachment, result.layer.id);
+        return url ? [{ attachment, url, list: [attachment] }] : [];
+      }),
+    [videos, result.layer.id]
+  );
   if (detail.isLoading) {
     return (
       <Text role="status" component="div" c="dimmed">
@@ -109,27 +135,20 @@ function Player({ result }: { result: EvidenceResult }) {
       </Text>
     );
   }
+  const shown = sources.find(({ attachment }) => attachmentIdentity(attachment) === requested.clip) ?? sources[0]!;
+  const { attachment, url } = shown;
+  const check = detail.data!.check;
+  const steps = stepsOfRecording(check, attachmentIdentity(attachment));
   return (
     <Stack gap="sm">
-      {sources.slice(0, 1).map(({ attachment, url }) => (
-        <Stack key={url} gap="xs">
-          {/* What the recording does and does not show, as its producer declared it; undeclared says unknown. */}
-          <ScopeNotice
-            scope={effectiveScope(attachment.scope, detail.data?.check.scope, detail.data?.inheritedScope)}
-            name={attachment.name}
-          />
-          <Box
-            component="video"
-            src={url}
-            controls
-            preload="metadata"
-            aria-label={`Recording: ${attachment.description ?? attachment.name}`}
-            maw="100%"
-            w="100%"
-            mah="70vh"
-          />
-        </Stack>
-      ))}
+      {/* What the recording does and does not show, as its producer declared it; undeclared says unknown. */}
+      <ScopeProvider scope={effectiveScope(check.scope, detail.data?.inheritedScope)}>
+        <MomentPlayback steps={steps} attachments={shown.list} layer={result.layer.id}>
+          <ScopeNotice scope={effectiveScope(attachment.scope, check.scope, detail.data?.inheritedScope)} name={attachment.name} />
+          <WatchVideo attachment={attachment} url={url} />
+          {steps.length > 0 && <Timeline steps={steps} layer={result.layer.id} />}
+        </MomentPlayback>
+      </ScopeProvider>
       {sources.length > 1 && (
         <Text component="div" c="dimmed">
           {plural(sources.length - 1, 'more recording', 'more recordings')} in Inspect.
