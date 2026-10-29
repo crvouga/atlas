@@ -63,7 +63,10 @@ export const ExplorerSearchFields = {
   inRun: text,
   group: z.enum(TEST_GROUPS).optional().catch(undefined),
   sort: z.enum(EXPLORER_SORTS).optional().catch(undefined),
-  tab: z.enum(['runs', 'artifacts']).optional().catch(undefined),
+  tab: z.enum(['runs', 'artifacts', 'collections']).optional().catch(undefined),
+  /** The review collection opened in the Collections tab (its stable id), and the revision of it (default: the newest). */
+  collection: text,
+  rev: z.coerce.number().int().positive().optional().catch(undefined),
   /** The run opened in the Runs tab. */
   openRun: text,
   /** Pins the open test's detail to one exact layer (a run's record of it), instead of the latest combined evidence. With `openRun` and `artifact` it names the layer the file is in. */
@@ -88,6 +91,8 @@ export const ExplorerSearchFields = {
   relRevision: z.enum(['any']).optional().catch(undefined),
   /** The reliability's independent executions (its denominator) are open. */
   relOpen: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined),
+  /** Words to find inside the recordings of the Artifacts tab (what was said or shown, from the text producers supplied). Not a filter of the list. */
+  inside: text,
   /** Only the runs, and the results of an opened run, that have a playable video recording. */
   video: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined)
 };
@@ -114,7 +119,9 @@ export type ExplorerSearch = {
   readonly inRun?: string;
   readonly group?: TestGroup;
   readonly sort?: ExplorerSort;
-  readonly tab?: 'runs' | 'artifacts';
+  readonly tab?: 'runs' | 'artifacts' | 'collections';
+  readonly collection?: string;
+  readonly rev?: number;
   readonly openRun?: string;
   readonly layer?: string;
   readonly clip?: string;
@@ -129,6 +136,7 @@ export type ExplorerSearch = {
   readonly relUntil?: string;
   readonly relRevision?: 'any';
   readonly relOpen?: true;
+  readonly inside?: string;
   readonly video?: true;
 };
 

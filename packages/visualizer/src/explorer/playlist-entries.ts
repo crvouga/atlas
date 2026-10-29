@@ -9,6 +9,7 @@
 import { videoCounts } from '@crvouga/atlas/reports/evidence-detail';
 import type { VideoRef } from '@crvouga/atlas/reports/evidence-types';
 import type { EvidenceStatus } from '@crvouga/atlas/reports/explorer-types';
+import type { ReviewAvailability, ReviewCollection } from '@crvouga/atlas/reports/review-collection';
 import type { ArtifactResult, RunLayer, RunResult } from '@crvouga/atlas/reports/test-catalog';
 
 /** One recorded result in a playlist: where to read its evidence, what to say about it, and its video references. */
@@ -106,6 +107,34 @@ export function entriesFromRun(results: readonly RunResult[], layers: readonly R
     tags: [...new Set((result.videos ?? []).flatMap((video) => video.tags ?? []))].sort(),
     videos: result.videos ?? []
   }));
+}
+
+/**
+ * The entries of a review collection as playlist entries, in the collection's order (never re-sorted). Each is what the
+ * collection froze: its recorded status and time. An entry whose layer is gone has no backend to read, so it is said to
+ * have no recording that can be played rather than dropped. An entry that names one recording lists only that one.
+ */
+export function entriesFromCollection(collection: Pick<ReviewCollection, 'entries'>, availability: readonly ReviewAvailability[]): PlaylistEntry[] {
+  const gone = new Set(availability.filter((item) => item.state === 'unavailable').map((item) => item.entry));
+  return collection.entries.map((entry) => {
+    const videos = ((entry.snapshot.videos ?? []) as readonly VideoRef[]).filter((video) => entry.source.recording === undefined || video.recording === entry.source.recording);
+    return {
+      id: entry.id,
+      title: entry.snapshot.title,
+      key: entry.snapshot.testKey,
+      specPath: entry.snapshot.specPath,
+      status: entry.snapshot.status,
+      environment: entry.snapshot.environment,
+      producer: entry.snapshot.producer,
+      at: entry.snapshot.recordedAtMs,
+      layer: entry.source.layer,
+      backend: gone.has(entry.id) ? null : entry.snapshot.backend,
+      check: entry.source.check,
+      kind: entry.source.kind ?? null,
+      tags: [...new Set(videos.flatMap((video) => video.tags ?? []))].sort(),
+      videos
+    };
+  });
 }
 
 /** How many entries are in each state, and how many failed (a failure is counted whether or not it was recorded). */
