@@ -9,7 +9,7 @@ Executable statecharts: loading, composing, linting, planning and running specs 
 Source: `packages/core/src/cli.ts`. Import: `@crvouga/atlas/cli`
 
 Dispatches `atlas <command>`: the statechart commands (`lint`, `plan`, `run`, `merge`, `export`) and, loaded on demand so
-they cost nothing otherwise, `serve`, `dev`, `init` and `report`. Statechart configuration is `atlas.config.ts` (see
+they cost nothing otherwise, `serve`, `dev`, `init`, `report` and `critic`. Statechart configuration is `atlas.config.ts` (see
 `defineConfig`). A command that is wrong prints a message and exits 2; a plan, lint or run that finds problems exits 1.
 
 See docs/statecharts.md

@@ -16,6 +16,7 @@ import { summarizeStoredEvidence, summarizeStoredLayerEvidence } from './evidenc
 import { effectiveScope } from './evidence-scope';
 import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
+import { critiqueOf } from './critique-row';
 import { UI_PLAN_KIND, uiStateOf } from './ui-state';
 
 /**
@@ -116,6 +117,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
       const evidence = summarizeStoredEvidence(effectiveScope(part.scope, summary.scope), unstored, check);
       const item = expectations?.get(check.id);
       const state = uiStateOf(part.kind, check);
+      const critique = critiqueOf(part.kind, check);
       rows.push({
         kind: part.kind,
         id: check.id,
@@ -129,6 +131,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
         durationMs: test?.durationMs ?? check.durationMs ?? null,
         ...(evidence ? { evidence } : {}),
         ...(state ? { state } : {}),
+        ...(critique ? { critique } : {}),
         ...(item ? { recording: { state: item.state, ...(item.reason ? { reason: item.reason } : {}) } } : {}),
       });
     }

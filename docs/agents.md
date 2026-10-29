@@ -104,6 +104,8 @@ The complete public export map is generated from the package manifest (wildcards
 @crvouga/atlas/schema
 @crvouga/atlas/server
 @crvouga/atlas/critics
+@crvouga/atlas/critics/uiclip
+@crvouga/atlas/critics/llm
 @crvouga/atlas/reports/*
 @crvouga/atlas/schemas/*
 @crvouga/atlas/openapi.json
@@ -151,7 +153,7 @@ and authentication. Keep synthetic failure checks in a scratch store rather than
 ## What an agent can rely on
 
 **Machine-readable output.** Add `--format json` (alias `--json`) to `atlas init`, `atlas report publish`, `stream`,
-`merge`, `doctor` and `status`. Each prints one JSON document on standard output that validates against a published
+`merge`, `doctor`, `status` and `verify-recordings`, to `atlas ui-catalog`, and to `atlas critic list`, `setup`, `doctor` and `run`. Each prints one JSON document on standard output that validates against a published
 JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 
 <!-- generated:json-command-schemas -->
@@ -164,6 +166,10 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas report doctor` | `doctor-result` |
 | `atlas report status` | `report-status` |
 | `atlas report verify-recordings` | `verify-recordings-result` |
+| `atlas critic list` | `critic-list-result` |
+| `atlas critic setup` | `critic-setup-result` |
+| `atlas critic doctor` | `critic-doctor-result` |
+| `atlas critic run` | `critic-run-result` |
 | `atlas ui-catalog plan` | `ui-catalog-publish-result` |
 | `atlas ui-catalog publish` | `ui-catalog-publish-result` |
 | `atlas ui-catalog status` | `ui-catalog-status` |
@@ -177,7 +183,7 @@ pass, a store that needs attention, checks that could not be sent, a token that 
 itself was wrong (nothing was written). With `--format json` a wrong command is `{"ok":false,"error":{"message":…,"code":"usage"}}`
 on standard error.
 
-**No prompts, no interactive steps, no hidden state.** Configuration is flags and environment variables:
+**No prompts, no interactive steps, no hidden state.** (`atlas critic` asks questions only when a person is at a terminal and never with `--non-interactive` or `--format json`.) Configuration is flags and environment variables:
 `ATLAS_STORE` (a folder, `s3://…`, or the server's `https://…`), `ATLAS_TOKEN` (or `ATLAS_TOKEN_FILE`). A token is
 a secret of one server and is never sent over plain `http://` beyond this machine.
 For HTTP stores, `ATLAS_PROJECT` (or `--project <slug>` on report commands) selects the project. Native runner

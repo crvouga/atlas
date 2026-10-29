@@ -15,6 +15,7 @@
  */
 import { z } from 'zod/v4';
 
+import { CritiqueSchema } from './critique';
 import { CheckSchema, EvidenceScopeSchema, LayerRunSchema, MeasurementSchema } from './layer';
 
 /** One of the statuses a check has in a report: `passed`, `failed`, `running` (not finished) or `not-run`. Closed. */
@@ -148,6 +149,7 @@ export const LayerRowSchema = z.looseObject({
   evidence: EvidenceSummarySchema.optional(),
   state: z.looseObject({
     route: z.string().optional(), fixture: z.string().optional(), cohort: z.string().optional(), area: z.string().optional(),
+    kind: z.string().optional().describe('The kind of UI state the producer declared: `screen`, `overlay`, `loading`, `error`, `empty`… Open vocabulary'),
     flags: z.array(z.string()).optional(), covers: z.array(z.string()).optional(),
     inventory: z.boolean().optional().describe('A `ui-plan` entry that names a surface of the product\'s inventory, not a state'),
     screenshot: z.looseObject({
@@ -156,6 +158,7 @@ export const LayerRowSchema = z.looseObject({
       omitted: z.string().optional().describe('Why the producer left the bytes out')
     }).optional().describe('The check\'s picture: its `screenshot` attachment, else its first image')
   }).optional().describe('Only for a check of a `ui-state` or `ui-plan` part: its picture and the facts its producer declared under the `atlas.ui-state` extension. See the UI catalog guide. Never decides a result'),
+  critique: CritiqueSchema.optional().describe('Only for a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer. An opinion, never a result: it does not decide `status`, a slot or the gate. See the critics guide'),
   recording: z.looseObject({ state: z.string(), reason: z.string().optional() }).optional().describe('What became of the check\'s expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`')
 });
 
@@ -865,6 +868,7 @@ export const UiCatalogSchema = z.looseObject({
   states: z.array(z.looseObject({
     id: z.string(), title: z.string(),
     route: z.string().nullable(), fixture: z.string().nullable(), cohort: z.string().nullable(), area: z.string().nullable(),
+    kind: z.string().nullable().optional().describe('The kind of UI state the producers declared (`screen`, `overlay`, `loading`…), or null. Absent from an older server'),
     flags: z.array(z.string()), covers: z.array(z.string()).describe('The surfaces it covers'), producers: z.array(z.string()),
     cells: z.array(UiCellSchema)
   })),
@@ -877,4 +881,40 @@ export const UiCatalogSchema = z.looseObject({
   sources: z.looseObject({ layers: z.number().int().nonnegative(), backends: z.array(BackendInfoSchema), notices: z.array(z.string()) }).describe('What was read. A backend that is unavailable, or a layer that could not be read, is named here; what depended on it is not shown as captured'),
   total: z.number().int().nonnegative().optional().describe('States that matched, before `offset` and `limit`'),
   offset: z.number().int().nonnegative().optional(), limit: z.number().int().nonnegative().optional()
+});
+
+/** An entry of the catalog as a critic reads it: one captured state in one profile, with the hash of its stored picture and the critiques already made of it. */
+export const CatalogEntrySchema = z.looseObject({
+  key: z.string().describe('Stable identity, unique in the catalog: the state id, then `@` and the profile when it has one. A critique names it as `subject.entryKey`'),
+  stateId: z.string(), title: z.string(), route: z.string().nullable(), area: z.string().nullable(),
+  state: z.string().describe('The kind of UI state the producers declared: `screen`, `overlay`, `loading`, `error`, `empty`… or `unknown` when none did. Open vocabulary'),
+  profile: UiProfileSchema,
+  image: z.looseObject({
+    sha256: z.string().describe('The hash of the exact stored bytes. A critique is anchored to it'),
+    path: z.string().describe('Where the bytes are, relative to the reports API root (`/api/reports`): `/layers/<layer>/blobs/attachments/<sha256>`. Served by the safe attachment path'),
+    contentType: z.string().optional(), width: z.number().optional(), height: z.number().optional(), bytes: z.number().optional()
+  }),
+  origin: z.looseObject({
+    layer: z.string(), backend: z.string(), producer: z.string(), recordedAtMs: z.number(), sha: z.string().nullable(), branch: z.string().nullable(), runUrl: z.string().nullable(),
+    freshness: z.enum(['unknown', 'modified']).optional()
+  }),
+  critiques: z.array(z.looseObject({
+    layer: z.string(), producer: z.string(), recordedAtMs: z.number(), status: EvidenceStatusSchema.describe('Whether the critic ran, never what it thought'),
+    currency: z.enum(['current', 'earlier-image']).describe('`earlier-image`: the picture changed since, so the entry counts as not yet judged by that critic'),
+    critique: CritiqueSchema
+  })).describe('The critiques of this entry that win their slot, newest first. Opinions: they never decide a result')
+});
+
+/**
+ * `GET /api/reports/ui-catalog/entries`: the UI catalog as a flat, cursor-paged list of captured states for a critic.
+ */
+export const CatalogEntriesSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string().describe('The report version this page was read at. Keep the first page\'s: reading `since` it later finds whatever changed while the rest was read'),
+  entries: z.array(CatalogEntrySchema),
+  total: z.number().int().nonnegative().describe('Entries that match the query, across all pages'),
+  nextCursor: z.string().optional().describe('Pass as `cursor` to read the next page. Absent on the last page'),
+  since: z.looseObject({ requested: z.string(), honored: z.boolean().describe('False when the server does not remember that version: the answer is then the whole catalog') }).optional().describe('Present when `since` was asked'),
+  unjudgeable: z.number().int().nonnegative().describe('Captured cells that are not entries because no stored picture of a known hash backs them (given only by address, left out, or not archived yet)'),
+  sources: z.looseObject({ backends: z.array(BackendInfoSchema), notices: z.array(z.string()) }).describe('What could not be read; what depended on it is not offered')
 });

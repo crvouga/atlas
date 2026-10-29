@@ -362,6 +362,18 @@ export class ReportIndex {
   }
 
   /**
+   * The ids of the layers that were added or changed (took a slot, or lost one) since the report a reader holds, named by
+   * its version: what `delta` sends, without the text. `null` when that version is not remembered, and the reader should
+   * take everything. Used to answer "what changed" about a view of the report, such as the entries of the UI catalog.
+   */
+  changedSince(since: string): ReadonlySet<string> | null {
+    const current = this.#current();
+    const base = this.#versions.get(since);
+    if (base === undefined || base < this.#forgotten) return null;
+    return new Set(current.held.filter(item => item.rev > base).map(item => item.evidence.id));
+  }
+
+  /**
    * Every recorded result of every test and every run, as layers were folded in: what the test catalog, a test's history
    * and the run list are built from. Read-only for callers; `history.rev` changes whenever a layer is taken in.
    */

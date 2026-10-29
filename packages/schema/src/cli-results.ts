@@ -1,7 +1,7 @@
 /**
  * @module Command results (`--format json`)
  *
- * What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, and `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, print on standard output with `--format json` (alias
+ * What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, and `atlas critic list`, `setup`, `doctor` and `run`, print on standard output with `--format json` (alias
  * `--json`), and what any `atlas` command prints on standard error for a command that was wrong: one JSON document,
  * so an agent or a script never has to parse prose. (`status` and `policy` already print documents:
  * `ReportStatusSchema`, and an IAM policy.) Each is also published as a JSON Schema.
@@ -167,6 +167,89 @@ export const InitPlanSchema = z.looseObject({
   warnings: z.array(z.string())
 });
 
+/** One critic as `atlas critic list` shows it. */
+export const CriticListEntrySchema = z.looseObject({
+  name: z.string().describe('The name in the configuration; also the producer suffix (`critic.<name>`)'),
+  type: z.string().describe('`uiclip`, `llm`, `module`, or `not-configured` for a built-in critic that has no configuration yet'),
+  kind: z.string().nullable().describe('`model`, `llm`, `heuristic`… as the critic says; null when it is not configured'),
+  version: z.string().nullable(),
+  status: z.enum(['ready', 'needs-setup', 'misconfigured', 'not-configured']).describe('`needs-setup`: run `atlas critic setup <name>`. `misconfigured`: the configuration or a credential reference cannot be used (see `detail`)'),
+  sendsImagesTo: z.string().nullable().describe('Where images are sent: a host, or null when they never leave this machine. A run that sends images to a third party needs confirmation'),
+  model: z.string().nullable(),
+  detail: z.string().optional().describe('Why it is not ready, and what to do. Never holds a credential')
+});
+
+/** What `atlas critic list --format json` prints. */
+export const CriticListResultSchema = z.looseObject({
+  ok: z.literal(true),
+  config: z.string().nullable().describe('The configuration file that was read, or null when there is none'),
+  critics: z.array(CriticListEntrySchema)
+});
+
+/** What `atlas critic setup --format json` prints. */
+export const CriticSetupResultSchema = z.looseObject({
+  ok: z.boolean(),
+  critic: z.string(),
+  type: z.string(),
+  details: z.array(z.string()).describe('What was provisioned or checked. A checkpoint is verified against its pinned SHA-256; inference never downloads anything'),
+  error: z.string().optional().describe('Why setup failed, with no credential in it. The exit code is then 1')
+});
+
+/** One thing `atlas critic doctor` checked. */
+export const CriticDoctorCheckSchema = z.looseObject({
+  name: z.string().describe('`server`, `token`, `scope`, `catalog`, `spool`, or `<critic>:<aspect>` such as `uiclip:model-file`'),
+  status: z.enum(['ok', 'warning', 'problem']).describe('`problem` makes the exit code 1; `warning` does not'),
+  detail: z.string(),
+  fix: z.string().optional().describe('What to change, when the status is not `ok`')
+});
+
+/** What `atlas critic doctor --format json` prints. */
+export const CriticDoctorResultSchema = z.looseObject({
+  ok: z.boolean().describe('False when any check is a `problem` (the exit code is then 1)'),
+  server: z.string().nullable().describe('The server that was checked, with no secrets'),
+  role: z.string().nullable().describe('What the token may do: `read`, `critic`, `publish` or `admin`; null when the server could not be asked'),
+  open: z.boolean().nullable().describe('True when the server has no tokens, so every caller is an administrator; null when unknown'),
+  checks: z.array(CriticDoctorCheckSchema)
+});
+
+/** What `atlas critic run` did for one critic. */
+export const CriticRunCriticSchema = z.looseObject({
+  critic: z.string(),
+  version: z.string(),
+  sendsImagesTo: z.string().nullable(),
+  entries: z.number().int().nonnegative().describe('Entries in the chosen scope'),
+  judged: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative().describe('Entries that already had a current critique of the same identity (critic, version, model, parameters, image hash): no call was made'),
+  failed: z.number().int().nonnegative().describe('Entries recorded as failed with a reason code; the next run retries them'),
+  waiting: z.number().int().nonnegative().describe('Entries left unjudged because the run stopped'),
+  stoppedBy: z.enum(['budget', 'aborted']).optional(),
+  failures: z.array(z.looseObject({ entry: z.string(), reason: z.string() })).describe('Each failed entry and its reason code'),
+  spent: z.looseObject({ images: z.number(), tokens: z.number(), costUsd: z.number() }),
+  published: z.looseObject({ layer: z.string().nullable().describe('The layer id of the critiques, or null when nothing was published (a dry run, or nothing to publish)'), critiques: z.number().int().nonnegative() }),
+  gate: z.looseObject({
+    mode: z.enum(['report', 'warn', 'gate']),
+    exitCode: z.number().int(),
+    below: z.number().int().nonnegative().describe('Scores below their state kind\'s threshold'),
+    warnings: z.array(z.string()),
+    refusal: z.array(z.string()).describe('Why `gate` was refused, when it was')
+  }).optional()
+});
+
+/** What `atlas critic run --format json` prints. A dry run publishes and sends nothing. */
+export const CriticRunResultSchema = z.looseObject({
+  ok: z.boolean().describe('False when a critic failed on any entry or a gate was crossed (the exit code is then 1)'),
+  dryRun: z.boolean(),
+  server: z.string(),
+  scope: z.record(z.string(), z.string()).describe('The choices that narrowed the catalog, as given'),
+  critics: z.array(CriticRunCriticSchema),
+  spool: z.looseObject({
+    flushed: z.number().int().nonnegative().describe('Objects from an earlier run that were sent now'),
+    spooled: z.number().int().nonnegative().describe('Objects of this run kept locally because the server could not be reached; the next invocation sends them'),
+    pending: z.number().int().nonnegative().describe('Objects still waiting in the spool')
+  }),
+  warnings: z.array(z.string())
+});
+
 /** The coverage of one state in one profile, as the UI catalog words it. */
 const UiCoverageSchema = z.enum(['captured', 'failed', 'capturing', 'skipped', 'missing']);
 
@@ -269,6 +352,10 @@ export const CLI_RESULTS = {
   doctor: { command: 'atlas report doctor', schemaName: 'doctor-result', schema: DoctorResultSchema },
   status: { command: 'atlas report status', schemaName: 'report-status', schema: ReportStatusSchema },
   verifyRecordings: { command: 'atlas report verify-recordings', schemaName: 'verify-recordings-result', schema: VerifyRecordingsResultSchema },
+  criticList: { command: 'atlas critic list', schemaName: 'critic-list-result', schema: CriticListResultSchema },
+  criticSetup: { command: 'atlas critic setup', schemaName: 'critic-setup-result', schema: CriticSetupResultSchema },
+  criticDoctor: { command: 'atlas critic doctor', schemaName: 'critic-doctor-result', schema: CriticDoctorResultSchema },
+  criticRun: { command: 'atlas critic run', schemaName: 'critic-run-result', schema: CriticRunResultSchema },
   uiCatalogPlan: { command: 'atlas ui-catalog plan', schemaName: 'ui-catalog-publish-result', schema: UiCatalogPublishResultSchema },
   uiCatalogPublish: { command: 'atlas ui-catalog publish', schemaName: 'ui-catalog-publish-result', schema: UiCatalogPublishResultSchema },
   uiCatalogStatus: { command: 'atlas ui-catalog status', schemaName: 'ui-catalog-status', schema: UiCatalogStatusSchema },

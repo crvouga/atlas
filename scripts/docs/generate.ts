@@ -20,6 +20,7 @@ import YAML from 'yaml';
 
 import { USAGE } from '../../packages/core/src/cli';
 import { INIT_USAGE } from '../../packages/reports/src/init';
+import { CRITIC_USAGE } from '../../packages/critics/src/cli';
 import { REPORT_USAGE } from '../../packages/reports/src/report-cli';
 import { UI_CATALOG_USAGE } from '../../packages/reports/src/ui-catalog-cli';
 import { packageManagerTable } from '../../packages/reports/src/package-managers';
@@ -47,7 +48,7 @@ export const PACKAGES: Readonly<Record<string, string>> = {
   detox: 'The Detox driver for statechart runs of React Native apps. Import path `@crvouga/atlas/detox`.',
   runners: 'Native reporters that upload to the project server. Import paths `@crvouga/atlas/codecept`, `@crvouga/atlas/mocha`, `@crvouga/atlas/jest`, `@crvouga/atlas/node-test`.',
   vitest: 'Run a statechart plan as Vitest tests. Import path `@crvouga/atlas/vitest`.',
-  critics: 'Automated reviewers of the UI catalog: the critic contract, the runner (caching, retries, rate limits, budgets), credential references and redaction, the `atlas.critique` evidence as layers, calibration and report, warn and gate modes. Import path `@crvouga/atlas/critics`.',
+  critics: 'Automated reviewers of the UI catalog: the critic contract, the runner (caching, retries, rate limits, budgets), credential references and redaction, the `atlas.critique` evidence as layers, the catalog client, spooling, calibration and report, warn and gate modes, the `atlas critic` command, and the UIClip and LLM critic adapters. Import paths `@crvouga/atlas/critics`, `@crvouga/atlas/critics/uiclip`, `@crvouga/atlas/critics/llm`.',
   'playwright-reporter': 'A Playwright Test reporter that streams every test to Atlas with its duration, device labels, steps, retries, videos, screenshots and traces. Import path `@crvouga/atlas/playwright-reporter`.'
 };
 
@@ -83,13 +84,14 @@ export const CLI_HELP = [
   { title: 'atlas serve', args: ['serve'], usage: SERVER_USAGE },
   { title: 'atlas dev', args: ['dev'], usage: DEV_USAGE },
   { title: 'atlas report', args: ['report'], usage: REPORT_USAGE },
-  { title: 'atlas ui-catalog', args: ['ui-catalog'], usage: UI_CATALOG_USAGE }
+  { title: 'atlas ui-catalog', args: ['ui-catalog'], usage: UI_CATALOG_USAGE },
+  { title: 'atlas critic', args: ['critic'], usage: CRITIC_USAGE }
 ];
 
 /** The command line reference, using the same help inventory the executable documentation checks exercise. */
 function cliReference(): string {
   const block = (title: string, text: string) => `## ${title}\n\n\`\`\`text\n${text.trimEnd()}\n\`\`\`\n`;
-  return `# Command line reference\n\n> Generated from the usage text each command prints (\`atlas <command> --help\`) by \`bun run docs\`. Do not edit.\n\nAdd \`--format json\` (alias \`--json\`) to \`init\`, \`report publish\`, \`stream\`, \`merge\`, \`doctor\`, \`status\` and every \`ui-catalog\` command for a JSON document on standard output (schemas in \`@crvouga/atlas/schemas\`). Exit codes: \`0\` it worked, \`1\` it ran and the answer is no, \`2\` the command was wrong.\n\n${CLI_HELP.map(help => block(help.title, help.usage)).join('\n')}`;
+  return `# Command line reference\n\n> Generated from the usage text each command prints (\`atlas <command> --help\`) by \`bun run docs\`. Do not edit.\n\nAdd \`--format json\` (alias \`--json\`) to \`init\`, \`report publish\`, \`stream\`, \`merge\`, \`doctor\`, \`status\`, every \`ui-catalog\` command and \`critic list\`, \`setup\`, \`doctor\` and \`run\` for a JSON document on standard output (schemas in \`@crvouga/atlas/schemas\`). Exit codes: \`0\` it worked, \`1\` it ran and the answer is no, \`2\` the command was wrong.\n\n${CLI_HELP.map(help => block(help.title, help.usage)).join('\n')}`;
 }
 
 /** The operations of the HTTP API as Markdown, in full. */

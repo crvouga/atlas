@@ -1,5 +1,5 @@
 import { SpecLogo } from './SpecLogo';
-import { IconDots, IconLayoutGrid, IconListSearch } from '@tabler/icons-react';
+import { IconDots, IconLayoutGrid, IconListSearch, IconSparkles } from '@tabler/icons-react';
 import { isUiKind } from '@crvouga/atlas/reports/ui-state';
 import { isStatechartFile } from '@crvouga/atlas/schema';
 import { ActionIcon, Anchor, Badge, Box, Button, Group, Menu, NativeSelect, Popover, Stack, Tooltip } from '@mantine/core';
@@ -139,10 +139,13 @@ export function Header() {
   );
   const project = currentProject();
   const catalogOpen = pathname === '/catalog';
+  const critiquesOpen = pathname === '/critiques';
   const behaviorsOpen = pathname === '/behaviors';
   const hasFeatures = evidence.files.some(SPEC_KINDS[0]!.accepts);
   // The catalog is offered once the report holds a state or a plan for one.
   const hasCatalog = useMemo(() => evidence.evidence.some((layer) => layer.rows.some((row) => isUiKind(row.kind))), [evidence.evidence]);
+  // Needs polish is offered once a critic has recorded an opinion.
+  const hasCritiques = useMemo(() => evidence.evidence.some((layer) => layer.rows.some((row) => row.critique !== undefined)), [evidence.evidence]);
   return (
     <Group flex={1} miw={0} justify="space-between" wrap="nowrap" gap="xs">
       <Group gap="xs" wrap="nowrap" miw={0}>
@@ -157,13 +160,13 @@ export function Header() {
               leftSection={kind ? <SpecLogo kind={kind} /> : undefined}
               rightSection={<ChevronDownIcon aria-hidden="true" size={12} />}
             >
-              {catalogOpen ? 'UI catalog' : behaviorsOpen ? 'Behaviors' : (kind?.label ?? (hasCharts ? 'Statecharts' : evidence.ready && !tabs.length ? 'Tests' : 'Specs'))}
+              {catalogOpen ? 'UI catalog' : critiquesOpen ? 'Needs polish' : behaviorsOpen ? 'Behaviors' : (kind?.label ?? (hasCharts ? 'Statecharts' : evidence.ready && !tabs.length ? 'Tests' : 'Specs'))}
             </Button>
           </Menu.Target>
           <Menu.Dropdown>
             <Box component="nav" aria-label="Spec type">
               <Menu.Item
-                aria-current={pathname.startsWith('/specs/') || catalogOpen || behaviorsOpen ? undefined : 'page'}
+                aria-current={pathname.startsWith('/specs/') || catalogOpen || behaviorsOpen || critiquesOpen ? undefined : 'page'}
                 renderRoot={(props) => <Link {...props} to="/" search={(prev) => runOnly(prev)} />}
               >
                 {hasCharts || !evidence.ready ? 'Statecharts' : 'Tests'}
@@ -201,6 +204,15 @@ export function Header() {
                   renderRoot={(props) => <Link {...props} to="/catalog" search={{}} />}
                 >
                   UI catalog
+                </Menu.Item>
+              )}
+              {(hasCritiques || critiquesOpen) && (
+                <Menu.Item
+                  leftSection={<IconSparkles size={16} aria-hidden="true" />}
+                  aria-current={critiquesOpen ? 'page' : undefined}
+                  renderRoot={(props) => <Link {...props} to="/critiques" search={{}} />}
+                >
+                  Needs polish
                 </Menu.Item>
               )}
             </Box>
@@ -274,7 +286,7 @@ function SpecBreadcrumb() {
         name: item.name,
         running: (evidence.view.specs.get(outlinePath(item.file))?.summary.counts.running ?? 0) > 0
       }));
-  if (!options.length || pathname === '/catalog' || pathname === '/behaviors') return null;
+  if (!options.length || pathname === '/catalog' || pathname === '/behaviors' || pathname === '/critiques') return null;
   return (
     <NativeSelect
       data-running={options.some((option) => option.running) || undefined}

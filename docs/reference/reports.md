@@ -1500,6 +1500,28 @@ commutative and safe to repeat after a failure.
 A layer's catalog entry is copied last, and its manifest after its files, so a reader of `to` never sees an
 entry for a layer whose content has not arrived.
 
+### Critiques in report rows
+
+Source: `packages/reports/src/critique-row.ts`. Import: `@crvouga/atlas/reports/critique-row`
+
+A check of a part of kind `critique` carries an automated reviewer's opinion in `extensions["atlas.critique"]`
+(see `@crvouga/atlas/critics`). This module reads that extension into the optional `critique` field of a report row,
+so a viewer can list critiques without a second request, exactly as `state` carries a UI state. It decides nothing:
+the row's `status` says only whether the critic ran, a critique is never counted, and an extension this reader cannot
+read (a missing subject, a score that is not a number, a version it does not know) leaves the row as it was, an
+unknown opinion and never a pass.
+
+See docs/critics.md
+
+#### `critiqueOf`
+
+```ts
+export function critiqueOf(kind: string, check: Pick<Check, 'extensions'>): Critique | undefined
+```
+
+The critique a check of a part of `kind` carries, or `undefined` for any other kind and for an extension that cannot be
+read. Unknown fields and values inside a readable critique are kept.
+
 ### Spec outline from a directory
 
 Source: `packages/reports/src/directory-outline.ts`. Import: `@crvouga/atlas/reports/directory-outline`
@@ -2356,6 +2378,8 @@ export type LayerRow = {
   readonly evidence?: EvidenceSummary;
   /** For a check of a `ui-state` or `ui-plan` part: its picture and declared facts, so a catalog is listed without another request (see `ui-state.ts`). Absent for every other kind. */
   readonly state?: UiStateFact;
+  /** For a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer (see `critique-row.ts`). An opinion, never a result: it does not decide `status`, a slot or the gate. Absent for every other kind, and for an extension that cannot be read. */
+  readonly critique?: Critique;
   /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
   readonly recording?: { readonly state: string; readonly reason?: string };
 };
@@ -7136,6 +7160,7 @@ It reads only immutable layers (`layers/index/…`), which is what makes "read o
 - `snapshot(): EffectiveEvidence` — The current report, ready to send. Built once per change, and only the layers that changed are rebuilt.
 - `json(): { readonly version: string; readonly text: string }` — The report as JSON text: exactly what `JSON.stringify({ ...snapshot(), active: [] })` writes, put together from the text of each layer, which is written once. `active` is what a store without live runs always sends: none.
 - `delta(since: string): { readonly text: string; readonly version: string } | null` — What differs between the report a viewer holds (named by its version) and the current one: the layers that changed in full, and the ids of those that no longer hold a winner. Null when that version is not remembered, and the viewer should ask for the whole report. See `applyEffectiveDelta`.
+- `changedSince(since: string): ReadonlySet<string> | null` — The ids of the layers that were added or changed (took a slot, or lost one) since the report a reader holds, named by its version: what `delta` sends, without the text. `null` when that version is not remembered, and the reader should take everything. Used to answer "what changed" about a view of the report, such as the entries of the UI catalog.
 - `get history(): TestHistory { return this.#history; }` — Every recorded result of every test and every run, as layers were folded in: what the test catalog, a test's history and the run list are built from. Read-only for callers; `history.rev` changes whenever a layer is taken in.
 - `superseded(): ReadonlySet<string>` — The ids of layers this index has read and that no longer decide any result. Removing one from its store cannot change the report (every slot it filled is held by a newer layer), which is what makes it safe for garbage collection to delete. A layer that failed to load, is hidden by `include`, or still holds a result is not here.
 - `stats()` — For `/readyz` and logs.
@@ -10828,6 +10853,228 @@ export function uiCatalogAtCommit(layers: readonly LayerEvidence[], sha: string,
 The UI catalog as it was recorded at one commit: only the layers recorded there take part. A state the commit's layers do
 not hold is absent, not failed. See {@link layersAtCommit} for how `sha` is matched.
 
+### UI catalog entries for critics
+
+Source: `packages/reports/src/ui-catalog-entries.ts`. Import: `@crvouga/atlas/reports/ui-catalog-entries`
+
+The UI catalog seen as a flat, orderable list that a separate process can iterate: one **entry** per captured state in
+one profile that has a stored picture, with the hash of that picture and the critiques already made of it. A critic
+lists entries a page at a time with a stable cursor, asks only for those that changed since a report version it holds,
+asks only for those a given critic has not judged at the picture they have now, and fetches the picture itself by the
+`image.path` (served by the same safe attachment path as every other file). Nothing here is stored: entries are a function of the
+report, so the same layers in any order give the same list, and a missed event is covered by the next read.
+
+Critiques are opinions, never results: they ride along as evidence of an entry and change nothing about whether a
+report passes.
+
+See docs/critics.md#reading-the-catalog
+See docs/ui-catalog.md
+
+#### `CATALOG_ENTRIES_VERSION`
+
+```ts
+export const CATALOG_ENTRIES_VERSION = …
+```
+
+The `schemaVersion` of the entries document.
+
+#### `UNKNOWN_STATE_KIND`
+
+```ts
+export const UNKNOWN_STATE_KIND = …
+```
+
+The state kind of an entry whose producers declared none. It is unknown, not `screen`.
+
+#### `EntryImage`
+
+```ts
+export type EntryImage = {
+  /** SHA-256 of the exact stored bytes, lowercase hex. */
+  readonly sha256: string;
+  /** Where the bytes are, relative to the reports API root: `/layers/<layer>/blobs/attachments/<sha256>`. */
+  readonly path: string;
+  readonly contentType?: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly bytes?: number;
+};
+```
+
+The picture an entry was captured as: the hash critiques are anchored to, and where its stored bytes are.
+
+#### `EntryCritique`
+
+```ts
+export type EntryCritique = {
+  readonly layer: string;
+  readonly producer: string;
+  readonly recordedAtMs: number;
+  /** The check's own status: whether the critic ran, never what it thought. */
+  readonly status: EvidenceStatus;
+  /** `current`: it judged this picture. `earlier-image`: the picture changed since, so the entry counts as not yet judged by that critic. */
+  readonly currency: 'current' | 'earlier-image';
+  readonly critique: Critique;
+};
+```
+
+A critique already made of an entry (any critic), and whether it judged the picture the entry has now.
+
+#### `CatalogEntry`
+
+```ts
+export type CatalogEntry = {
+  /** Stable identity, unique in the catalog: the state id, then `@` and the profile when it has one. */
+  readonly key: string;
+  readonly stateId: string;
+  readonly title: string;
+  readonly route: string | null;
+  readonly area: string | null;
+  /** The kind of UI state (`screen`, `overlay`, `loading`, `error`, `empty`…), or `unknown`. */
+  readonly state: string;
+  readonly profile: UiProfile;
+  readonly image: EntryImage;
+  /** The layer, backend and provenance of the capture. */
+  readonly origin: UiOrigin;
+  /** Critiques of this entry that win their slot, newest first. */
+  readonly critiques: readonly EntryCritique[];
+};
+```
+
+One captured state in one profile, ready to be judged.
+
+#### `CatalogEntrySet`
+
+```ts
+export type CatalogEntrySet = {
+  readonly entries: readonly CatalogEntry[];
+  /** Captured cells without a stored picture of a known hash (given only by address, left out, or not yet archived). They are not entries. */
+  readonly unjudgeable: number;
+};
+```
+
+The entries of a report, and how many captured cells could not be offered for judging.
+
+#### `catalogEntryKey`
+
+```ts
+export function catalogEntryKey(stateId: string, profile: Pick<UiProfile, 'environment' | 'parameters'>): string
+```
+
+The key of the entry for a state in a profile. The state id alone when the profile says nothing; else
+`id@environment;name=value;…` with the parameters sorted and every part percent-encoded, so two profiles never share a key.
+
+#### `catalogEntries`
+
+```ts
+export function catalogEntries(layers: readonly LayerEvidence[]): CatalogEntrySet
+```
+
+The entries of some layers, in key order. Only a `captured` cell with a picture stored in its layer (`image.path`) and a
+known hash is an entry. Critiques are matched to entries by `subject.entryKey`, take the winner of each of their slots by
+the report contract, and are marked `earlier-image` when they judged other bytes.
+
+#### `isJudgedBy`
+
+```ts
+export function isJudgedBy(entry: Pick<CatalogEntry, 'critiques'>, critic: { readonly name: string; readonly version?: string }): boolean
+```
+
+Whether an entry has a current critique with a verdict from the critic (and, when given, its version). A failed critique is not a judgement: the next run retries it.
+
+#### `CatalogEntriesQuery`
+
+```ts
+export type CatalogEntriesQuery = {
+  /** Words (all of them) found in the key, title, route or area. */
+  readonly q?: string;
+  readonly area?: readonly string[];
+  /** Profile keys, as `UiProfile.key`. */
+  readonly profile?: readonly string[];
+  /** State kinds: `screen`, `overlay`, `loading`… */
+  readonly state?: readonly string[];
+  readonly route?: readonly string[];
+  /** Only entries with no current critique with a verdict from this critic (`name`, or `name@version`). */
+  readonly unjudgedBy?: { readonly name: string; readonly version?: string };
+  /** Only entries added or changed since this report version. A version the server does not remember is answered with everything. */
+  readonly since?: string;
+  /** Resume after the entry this cursor names. Opaque: take it from the previous page. */
+  readonly cursor?: string;
+  /** Entries per page. Default 100, at most 1000. */
+  readonly limit?: number;
+};
+```
+
+What a critic narrows the entries by. Every field is optional; nothing asked is everything. Values within a field are alternatives, fields combine with AND.
+
+#### `MAX_ENTRIES_LIMIT`
+
+```ts
+export const MAX_ENTRIES_LIMIT = …
+```
+
+The most entries one page holds.
+
+#### `parseCatalogEntriesQuery`
+
+```ts
+export function parseCatalogEntriesQuery(params: URLSearchParams): CatalogEntriesQuery
+```
+
+Reads a query from URL search parameters; the comma-separated lists, `q`, `unjudgedBy=name@version`, `since`, `cursor` and `limit`. A `limit` that is not a whole number is left out.
+
+#### `catalogEntriesParams`
+
+```ts
+export function catalogEntriesParams(query: CatalogEntriesQuery): URLSearchParams
+```
+
+A query as URL search parameters, the form {@link parseCatalogEntriesQuery} reads back.
+
+#### `encodeEntryCursor`
+
+```ts
+export function encodeEntryCursor(key: string): string
+```
+
+The opaque cursor after an entry.
+
+#### `decodeEntryCursor`
+
+```ts
+export function decodeEntryCursor(cursor: string): string | null
+```
+
+The key a cursor names, or `null` when it is not a cursor this reader made.
+
+#### `CatalogEntryPage`
+
+```ts
+export type CatalogEntryPage = {
+  /** The page, in key order. */
+  readonly entries: readonly CatalogEntry[];
+  /** Entries that match the query (all pages). */
+  readonly total: number;
+  /** The `cursor` of the next page, absent on the last. */
+  readonly nextCursor?: string;
+};
+```
+
+One page of entries and where to resume.
+
+#### `pageCatalogEntries`
+
+```ts
+export function pageCatalogEntries(all: readonly CatalogEntry[], query: CatalogEntriesQuery, changed: ReadonlySet<string> | null = null): CatalogEntryPage
+```
+
+One page of the entries that match a query, in key order. The order is by key and the cursor names the last key of a page, so
+a critic that iterates sees each entry exactly once however the catalog grows meanwhile (a new entry that sorts before the
+cursor is found by the next `since` read). `changed` is the set of layer ids that changed since `query.since`
+(`ReportIndex.changedSince`): `null` means the version was not remembered, and then everything matches.
+
+**Throws** Error when `query.cursor` is not a cursor.
+
 ### UI catalog single-file export
 
 Source: `packages/reports/src/ui-catalog-export.ts`. Import: `@crvouga/atlas/reports/ui-catalog-export`
@@ -11202,6 +11449,8 @@ export type UiCatalogState = {
   readonly fixture: string | null;
   readonly cohort: string | null;
   readonly area: string | null;
+  /** The kind of UI state the producers declared (`screen`, `overlay`, `loading`…), or null when none did. */
+  readonly kind: string | null;
   readonly flags: readonly string[];
   /** The surfaces it covers. */
   readonly covers: readonly string[];
@@ -11495,6 +11744,8 @@ export type UiStateFacts = {
   readonly covers?: readonly string[];
   /** A grouping a person navigates by (`checkout`). */
   readonly area?: string;
+  /** The kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`, or any other word. Open vocabulary. Critics judge a state against others of its kind, so declare it; when it is absent the kind is unknown. */
+  readonly kind?: string;
   /** On a `ui-plan` check only: this entry is a surface of the product's inventory, not a state. Nothing is captured for it. */
   readonly inventory?: boolean;
 };

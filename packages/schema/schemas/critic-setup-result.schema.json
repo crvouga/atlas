@@ -1,0 +1,34 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/critic-setup-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "critic": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    },
+    "details": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What was provisioned or checked. A checkpoint is verified against its pinned SHA-256; inference never downloads anything"
+    },
+    "error": {
+      "description": "Why setup failed, with no credential in it. The exit code is then 1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ok",
+    "critic",
+    "type",
+    "details"
+  ],
+  "additionalProperties": {}
+}

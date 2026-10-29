@@ -2,7 +2,7 @@
  * @module The `atlas` command
  *
  * Dispatches `atlas <command>`: the statechart commands (`lint`, `plan`, `run`, `merge`, `export`) and, loaded on demand so
- * they cost nothing otherwise, `serve`, `dev`, `init` and `report`. Statechart configuration is `atlas.config.ts` (see
+ * they cost nothing otherwise, `serve`, `dev`, `init`, `report` and `critic`. Statechart configuration is `atlas.config.ts` (see
  * `defineConfig`). A command that is wrong prints a message and exits 2; a plan, lint or run that finds problems exits 1.
  *
  * @see docs/statecharts.md
@@ -38,6 +38,7 @@ export const USAGE = `atlas — executable statecharts
   atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
   atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
+  atlas critic list|setup|doctor|run …                           automated reviewers that mark which UIs need polish (atlas critic --help)
   atlas ui-catalog plan|publish|status|diff|export …              the UI catalog of captured states (atlas ui-catalog --help)
 
   --workers       path attempts that run at once (default: one per CPU, capped by the driver)
@@ -110,6 +111,7 @@ export async function main(argv = process.argv.slice(2)) {
     return devMain(argv.slice(1), { out: text => process.stdout.write(text) });
   }
   if (command === 'init') return (await import('../../reports/src/init')).initMain(argv.slice(1), { out: text => process.stdout.write(text) });
+  if (command === 'critic') return (await import('../../critics/src/cli')).runCriticCommand(argv.slice(1));
   if (command === 'report') return (await import('../../reports/src/report-cli')).runReportCommand(argv.slice(1));
   if (command === 'ui-catalog') return (await import('../../reports/src/ui-catalog-cli')).runUiCatalogCommand(argv.slice(1));
   const configFile = flag(argv, 'config') ?? 'atlas.config.ts';

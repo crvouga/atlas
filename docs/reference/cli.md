@@ -2,7 +2,7 @@
 
 > Generated from the usage text each command prints (`atlas <command> --help`) by `bun run docs`. Do not edit.
 
-Add `--format json` (alias `--json`) to `init`, `report publish`, `stream`, `merge`, `doctor`, `status` and every `ui-catalog` command for a JSON document on standard output (schemas in `@crvouga/atlas/schemas`). Exit codes: `0` it worked, `1` it ran and the answer is no, `2` the command was wrong.
+Add `--format json` (alias `--json`) to `init`, `report publish`, `stream`, `merge`, `doctor`, `status`, every `ui-catalog` command and `critic list`, `setup`, `doctor` and `run` for a JSON document on standard output (schemas in `@crvouga/atlas/schemas`). Exit codes: `0` it worked, `1` it ran and the answer is no, `2` the command was wrong.
 
 ## atlas
 
@@ -21,6 +21,7 @@ atlas — executable statecharts
   atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
   atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
+  atlas critic list|setup|doctor|run …                           automated reviewers that mark which UIs need polish (atlas critic --help)
   atlas ui-catalog plan|publish|status|diff|export …              the UI catalog of captured states (atlas ui-catalog --help)
 
   --workers       path attempts that run at once (default: one per CPU, capped by the driver)
@@ -196,10 +197,10 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
 
   plan      Write one layer of kind ui-plan: the states (and with "inventory": true, the surfaces) that should exist under
             this profile. Every entry is not-run, so a plan never counts as a pass. The file is {"states":[{"id":…,
-            "title"?,"route"?,"fixture"?,"cohort"?,"area"?,"flags"?,"covers"?,"inventory"?}]} or just that list.
+            "title"?,"route"?,"fixture"?,"cohort"?,"area"?,"kind"?,"flags"?,"covers"?,"inventory"?}]} or just that list.
   publish   Write one layer of kind ui-state: the states one collector or shard captured under this profile. The file is
             {"states":[{"id":…,"title"?,"status"?:"passed|failed|running|not-run","detail"?,"route"?,"fixture"?,"cohort"?,
-            "area"?,"flags"?,"covers"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?:"file.png"|{"path"|"uri",
+            "area"?,"kind"?,"flags"?,"covers"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?:"file.png"|{"path"|"uri",
             "width"?,"height"?,"contentType"?}}]}. A picture file is read from beside the file and each --attach-root, never
             from a hidden file or a link out. A passed state whose picture cannot be read is published as failed, with the
             reason: a state without its picture is not shown as captured.
@@ -226,4 +227,49 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
   with --project <slug> or ATLAS_PROJECT. When no --store is given, ATLAS_STORE is used.
 
   Exit codes: 0 ok, 1 the answer is no (see each command), 2 the command was wrong.
+```
+
+## atlas critic
+
+```text
+atlas critic — automated reviewers of the UI catalog
+
+  atlas critic list    [--config atlas.critics.json] [--format text|json]
+  atlas critic setup   <name> [--config atlas.critics.json] [--format text|json]
+  atlas critic doctor  [--server <url>] [--critic <name>]... [--config atlas.critics.json] [--format text|json]
+  atlas critic run     --critic <name>... ( --all | --unjudged | --since <version> | filters ) [--server <url>]
+                       [--area a,b] [--profile key] [--state screen,overlay] [--route r] [--q words]
+                       [--dry-run] [--yes] [--non-interactive] [--force]
+                       [--max-images n] [--max-tokens n] [--max-cost usd] [--concurrency n] [--timeout-ms n]
+                       [--mode report|warn|gate] [--threshold state=score]... [--calibration file.json]
+                       [--spool dir] [--project slug] [--config atlas.critics.json] [--format text|json]
+
+  A critic is a producer: it runs here (on a laptop, in CI or in a worker), reads the catalog from an Atlas server, and publishes
+  what it thinks as layers of critiques. The server never runs a model and never holds a provider key. A critique is an opinion,
+  not a test result: it never changes whether a report passes.
+
+  Configuration is atlas.critics.json, which may be committed: it names credentials by reference (env:NAME, file:PATH) and a
+  literal credential in it is refused. The server is --server, "server.url" there, ATLAS_SERVER_URL or an https ATLAS_STORE;
+  the token is ATLAS_CRITIC_TOKEN (or ATLAS_TOKEN), never a flag, and is never sent over plain http beyond this machine.
+
+  list      The critics available and configured: type, whether each is ready or needs setup, and where it sends images.
+  setup     Provision a critic: fetch and verify a model checkpoint against its pinned SHA-256 (a bad checksum is an error), or
+            check that a credential reference resolves. This is the only place anything is downloaded; judging never downloads.
+  doctor    Check the server is reachable, the token is accepted and has the scope a critic needs (and warn when the server is
+            open, so every caller is an administrator), that the server lists the catalog, and for each configured critic its
+            model file, dependencies, credential and provider. Each problem is reported separately, with how to fix it.
+  run       Judge the entries in the chosen scope. An entry that already has a current critique of the same critic, version,
+            model, parameters and image is skipped without a call; a changed image is judged again. Failures are recorded
+            with a reason code and retried by the next run. Critiques that cannot be sent (the server went away) are kept in
+            the spool directory (default .atlas/critic-spool) and sent, byte for byte, by the next invocation.
+            --dry-run        send and publish nothing: say how many entries would be judged or skipped, and where images would go
+            --yes            allow sending images to a third party without asking (required without a terminal)
+            --max-images n   stop cleanly after n images; --max-tokens and --max-cost likewise, from what critics report
+            --mode           report (default): scores are shown and the exit code is 0; warn: also list scores below their threshold;
+                             gate: exit 1 when a score is below its state kind's threshold, refused (exit 2) unless a calibration
+                             with held-out evidence of this critic and version is given with --calibration
+
+  --format json   prints one document (schemas: critic-list-result, critic-setup-result, critic-doctor-result, critic-run-result).
+                  A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
+  Exit codes: 0 ok, 1 the answer is no (a critic failed, a gate crossed, a problem found), 2 the command was wrong.
 ```

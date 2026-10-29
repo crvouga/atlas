@@ -31,7 +31,7 @@ A state is one **check** in a layer whose part has `kind` **`ui-state`**.
 | How the capture went | `status`: `passed` is **captured**, `failed` is attempted and failed (say why in `detail`), `running` is being taken, `not-run` is skipped. |
 | The picture | An attachment with `role: "screenshot"` (else the first image), stored in the layer by content or given as an `https` `uri`. `width` and `height` help the viewer lay it out. |
 | The profile | The layer's `environment` (`desktop-web`, `mobile-web`, `ios`, `android`) and `parameters` (`{ "viewport": "390x844", "scheme": "dark" }`). Parameters split a slot, so the same state at another viewport is **another result, side by side**, never a replacement. |
-| Facts the producer declares | The check's `extensions["atlas.ui-state"]`: `route`, `fixture`, `cohort`, `area`, `flags` (a list), `covers` (the product surfaces the state shows). All optional. |
+| Facts the producer declares | The check's `extensions["atlas.ui-state"]`: `route`, `fixture`, `cohort`, `area`, `kind` (the kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`… an open vocabulary that [critics](critics.md#reading-the-catalog) judge a state by), `flags` (a list), `covers` (the product surfaces the state shows). All optional. |
 | Facts that describe without splitting | The check's `labels` (`shard`, `browser`) and `tags`. Labels never make a different slot. |
 | Where it came from | The layer's `producer`, `sha`, `branch`, `runUrl`, `freshness`, `recordedAtMs`: shown with every capture, with the layer id and the backend that holds it. |
 
@@ -171,6 +171,9 @@ and time. *Download the manifest* saves the filtered catalog as JSON.
 ```sh
 curl "$ATLAS_SERVER_URL/api/reports/ui-catalog?coverage=failed,missing&profile=…"   # JSON; add format=markdown for text
 ```
+
+A separate process that reviews the pictures (a [critic](critics.md#reading-the-catalog)) reads the same catalog as a flat list at
+`GET /api/reports/ui-catalog/entries`: cursor-paged, `since` a report version, with the hash of each stored picture.
 
 `GET /api/reports/ui-catalog` answers the same document the viewer computes (`uiCatalog` from
 `@crvouga/atlas/reports/ui-catalog`), filtered by `q`, `coverage`, `profile`, `area`, `route`, `cohort`, `flag`, `surface` and

@@ -12,6 +12,8 @@ import {
 import { z } from 'zod/v4';
 import { CatalogSearchFields } from '../catalog/search';
 import { UiCatalogPage } from '../catalog/UiCatalogPage';
+import { CritiquesPage } from '../critiques/CritiquesPage';
+import { CritiqueSearchFields } from '../critiques/search';
 import { COVERAGE_ORDER } from '../evidence/behavior';
 import { BehaviorsPage } from '../evidence/behaviors-page';
 import { SpecPage } from '../evidence/spec-page';
@@ -120,7 +122,14 @@ function routeTree() {
     validateSearch: (search) => BehaviorsSearch.parse(search),
     component: BehaviorsPage
   });
-  return rootRoute.addChildren([productRoute, chartRoute, specRoute, catalogRoute, behaviorsRoute]);
+  /** Needs polish: the opinions of automated reviewers about the captured states, ranked (see `critiques/`). */
+  const critiquesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/critiques',
+    validateSearch: (search) => RootSearch.extend(CritiqueSearchFields).parse(search),
+    component: CritiquesPage
+  });
+  return rootRoute.addChildren([productRoute, chartRoute, specRoute, catalogRoute, behaviorsRoute, critiquesRoute]);
 }
 export function createAtlasRouter(history: RouterHistory) {
   return createRouter({ routeTree: routeTree(), history, defaultPreload: false, scrollRestoration: true });
