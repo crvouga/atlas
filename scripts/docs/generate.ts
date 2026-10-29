@@ -56,6 +56,7 @@ export const GUIDES: readonly { readonly file: string; readonly section: string 
   { file: 'docs/integrating.md', section: 'Start here' },
   { file: 'docs/runners.md', section: 'Start here' },
   { file: 'docs/rich-evidence.md', section: 'Start here' },
+  { file: 'docs/ui-catalog.md', section: 'Start here' },
   { file: 'docs/server.md', section: 'Run and use the server' },
   { file: 'docs/deploying.md', section: 'Run and use the server' },
   { file: 'docs/report-contract.md', section: 'Formats and rules' },

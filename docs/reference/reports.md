@@ -2252,6 +2252,8 @@ export type LayerRow = {
   readonly durationMs: number | null;
   /** What this result carries beyond its outcome. Absent when nothing. */
   readonly evidence?: EvidenceSummary;
+  /** For a check of a `ui-state` or `ui-plan` part: its picture and declared facts, so a catalog is listed without another request (see `ui-state.ts`). Absent for every other kind. */
+  readonly state?: UiStateFact;
   /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
   readonly recording?: { readonly state: string; readonly reason?: string };
 };
@@ -4580,7 +4582,9 @@ Serialises parameters as JSON key/value pairs sorted by key, so equal parameter 
 export function isDiagnosticKind(kind: string): boolean
 ```
 
-Whether a part `kind` only qualifies an outcome (today only `performance`) and so is not counted as a check when anything else is recorded.
+Whether a part `kind` only qualifies an outcome and so is not counted as a check when anything else is recorded: a
+`performance` timing, or a `ui-plan` entry (what a UI catalog expects, which a capture of the same state replaces in the
+tests' view). It never decides a slot: both still fill their own.
 
 #### `emptyCounts`
 
@@ -9674,6 +9678,589 @@ export type ReportData = HtmlReportBundle & {
 ```
 
 A run's tests (`HtmlReportBundle`) plus the document title shown for them, for the standalone / Solid report viewer.
+
+### Writing a UI catalog from any collector
+
+Source: `packages/reports/src/ui-catalog-publish.ts`. Import: `@crvouga/atlas/reports/ui-catalog-publish`
+
+Two small builders that turn what a collector captured, or what a planner expects, into the input of `publishChecks`
+(and of `atlas report publish --checks`), following the convention in {@link ./ui-state}. They are plain data in and plain
+data out: no browser, no test framework, no file system. A Playwright test, a Cypress run, a mobile device lab, a Storybook
+crawler or a shell script that writes the same JSON all produce the same catalog.
+
+Shards need no coordination: each shard calls {@link uiStateLayer} for the states it captured (and optionally
+{@link uiPlanLayer} for the states it was given), with its own `shard` label, and publishes. A planner that knows the whole
+product publishes the plan once.
+
+See docs/ui-catalog.md
+
+#### `UiPicture`
+
+```ts
+export type UiPicture = {
+  /** The file name; default `<id>.png`. */
+  readonly name?: string;
+  readonly data?: Uint8Array;
+  readonly base64?: string;
+  readonly uri?: string;
+  /** Default `image/png`. */
+  readonly contentType?: string;
+  readonly width?: number;
+  readonly height?: number;
+};
+```
+
+A picture to store with a capture: its bytes (`data`, `base64`), or where it already is (`uri`).
+
+#### `UiStateCapture`
+
+```ts
+export type UiStateCapture = UiStateFacts & {
+  readonly id: string;
+  /** For a person; default the id. */
+  readonly title?: string;
+  /** `passed` (default): captured. `failed`: the capture was attempted and did not work (say why in `detail`). `running`: being taken. `not-run`: skipped. */
+  readonly status?: 'passed' | 'failed' | 'running' | 'not-run';
+  /** Why it failed or was skipped: a readiness check that never became true, a console error. */
+  readonly detail?: string;
+  readonly screenshot?: UiPicture;
+  readonly durationMs?: number;
+  /** More facts about the capture that never split it (`browser`, `os`). */
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly tags?: readonly string[];
+};
+```
+
+One captured state. `id` must be stable across runs: it is how a new capture replaces an old one.
+
+#### `UiStatePlan`
+
+```ts
+export type UiStatePlan = UiStateFacts & {
+  readonly id: string;
+  readonly title?: string;
+};
+```
+
+One expected state, or (with `inventory`) one surface of the product's inventory.
+
+#### `UiLayerOrigin`
+
+```ts
+export type UiLayerOrigin = {
+  /** The suite or tool that makes the layer. Part of the slot; a planner and a collector normally differ. */
+  readonly producer: string;
+  /** When the captures were taken (or the plan was made), epoch milliseconds. Take it from the run, not from the moment of publishing. */
+  readonly recordedAtMs: number;
+  /** The client: `desktop-web`, `mobile-web`, `ios`, `android`… Part of the slot. */
+  readonly environment?: string;
+  /** The rest of the profile, such as `{ viewport: '390x844', scheme: 'dark' }`. Each combination is its own result. Part of the slot. */
+  readonly profile?: Readonly<Record<string, string>>;
+  readonly sha?: string | null;
+  readonly branch?: string | null;
+  readonly runUrl?: string | null;
+  /** Which shard this is (`2/4`, `checkout`, a machine name). Shown with each capture; never part of the slot. */
+  readonly shard?: string;
+  /** The execution these layers belong to, so shards of one run stay one run. */
+  readonly run?: { readonly id: string; readonly title?: string };
+};
+```
+
+What every layer of a catalog says about where and when it was recorded.
+
+#### `uiStateLayer`
+
+```ts
+export function uiStateLayer(input: UiLayerOrigin & { readonly states: readonly UiStateCapture[] }): PublishChecksInput
+```
+
+The input of `publishChecks` for the states one collector (or one shard) captured under one profile. Throws when a state id
+repeats, because the second would silently replace the first. A state without a `status` is `passed`: it was captured.
+
+**Example**
+
+```ts
+await publishChecks(store, uiStateLayer({
+  producer: 'web-capture', recordedAtMs: Date.now(), environment: 'mobile-web', profile: { viewport: '390x844', scheme: 'dark' }, shard: '1/4',
+  states: [{ id: 'checkout/payment', title: 'Payment', route: '/checkout', covers: ['payment-form'], screenshot: { data: png } }]
+}));
+```
+
+#### `uiPlanLayer`
+
+```ts
+export function uiPlanLayer(input: UiLayerOrigin & { readonly states: readonly UiStatePlan[] }): PublishChecksInput
+```
+
+The input of `publishChecks` for what is expected: states that should be captured under this profile and, with `inventory`,
+surfaces the product is known to have. Every entry is `not-run`, so a plan never counts as a pass, and it fills a slot of
+its own (kind `ui-plan`), so a capture never erases it and it never hides a capture. Throws when an id repeats.
+
+### UI catalog
+
+Source: `packages/reports/src/ui-catalog.ts`. Import: `@crvouga/atlas/reports/ui-catalog`
+
+A browsable inventory of a product's user interface, computed from layers and nothing else: each **state** (a screen, or
+one state of a screen) captured once per **profile** (viewport, color scheme, device), with the facts needed to find and
+trust it, and what should exist but has not been captured yet. `uiCatalog` is a pure function of the winning results of
+the layers it is given, so it inherits the report contract's laws: the same layers in any order, split any way across
+backends, shards and machines, give the same catalog; a layer changes only the cells it fills; an unreadable layer is
+absent, never captured. It imports no collection framework and knows nothing about how a picture was taken.
+
+How the convention maps onto the layer format is in {@link ./ui-state}: a state is a check of a `ui-state` part, a profile
+is the layer's `environment` and `parameters`, the expected set is a `ui-plan` part. The viewer computes the catalog from
+the report it already streams (so it fills in as results arrive), and the server answers the same document at
+`GET /api/reports/ui-catalog`.
+
+See docs/ui-catalog.md
+See docs/report-contract.md#how-layers-compose
+
+#### `UI_CATALOG_VERSION`
+
+```ts
+export const UI_CATALOG_VERSION = …
+```
+
+The `schemaVersion` of the catalog document.
+
+#### `UiProfile`
+
+```ts
+export type UiProfile = {
+  /** Stable identity: the environment and the sorted parameters. */
+  readonly key: string;
+  /** The client (`desktop-web`, `ios`…), or null when the layer named none. */
+  readonly environment: string | null;
+  /** The layer's other choices, such as `{ viewport: '390x844', scheme: 'dark' }`. */
+  readonly parameters: Readonly<Record<string, string>>;
+  /** For a person: the client and each parameter's value. */
+  readonly label: string;
+};
+```
+
+One profile: the client and the choices a state was captured under. Its `key` identifies it across layers.
+
+#### `UiCoverage`
+
+```ts
+export type UiCoverage = 'captured' | 'failed' | 'capturing' | 'skipped' | 'missing';
+```
+
+How one state stands in one profile. `captured`: a capture passed. `failed`: it was attempted and failed (its `detail`
+says why). `capturing`: it is being taken now. `skipped`: a producer recorded it as not run. `missing`: expected, and
+nothing has been recorded. Only `captured` is ever shown as captured; every other value means there is no picture to trust.
+
+#### `UI_COVERAGE`
+
+```ts
+export const UI_COVERAGE = …
+```
+
+The values of {@link UiCoverage}, in the order a person reads them.
+
+#### `UiImage`
+
+```ts
+export type UiImage = UiScreenshot & {
+  /** Where the stored bytes are, relative to the reports API root (`/layers/<layer>/blobs/attachments/<sha256>`). Absent for an address-only or omitted picture. */
+  readonly path?: string;
+};
+```
+
+A picture, with the address a browser loads it from.
+
+#### `UiOrigin`
+
+```ts
+export type UiOrigin = {
+  readonly layer: string;
+  readonly backend: string;
+  readonly producer: string;
+  readonly recordedAtMs: number;
+  readonly sha: string | null;
+  readonly branch: string | null;
+  readonly runUrl: string | null;
+  readonly freshness?: 'unknown' | 'modified';
+};
+```
+
+Where a capture came from: the layer, the backend that holds it, and the provenance the layer recorded.
+
+#### `UiCapture`
+
+```ts
+export type UiCapture = {
+  readonly status: EvidenceStatus;
+  /** Why it failed or was skipped; empty otherwise. */
+  readonly detail: string;
+  readonly durationMs: number | null;
+  /** The picture, or null when the capture has none (or it was left out: see `omitted`). */
+  readonly image: UiImage | null;
+  /** The check's labels: what describes the capture without splitting it (a `shard`, a `browser`). */
+  readonly labels: Readonly<Record<string, string>>;
+  readonly origin: UiOrigin;
+  /** How many other captures of this cell exist from other producers. The winner is the one the report contract picks. */
+  readonly alternatives: number;
+};
+```
+
+The winning capture of one cell.
+
+#### `UiCell`
+
+```ts
+export type UiCell = {
+  readonly profile: UiProfile;
+  readonly coverage: UiCoverage;
+  /** Whether a plan expects this state in this profile: `declared`; `undeclared` when plans exist and none names it; `unknown` when no plan was published at all. */
+  readonly expected: 'declared' | 'undeclared' | 'unknown';
+  readonly capture: UiCapture | null;
+  /** The layer of the plan that expects it, when one does. */
+  readonly planned: { readonly layer: string; readonly backend: string } | null;
+};
+```
+
+One state in one profile.
+
+#### `UiCatalogState`
+
+```ts
+export type UiCatalogState = {
+  /** The check id the producers gave it. */
+  readonly id: string;
+  readonly title: string;
+  readonly route: string | null;
+  readonly fixture: string | null;
+  readonly cohort: string | null;
+  readonly area: string | null;
+  readonly flags: readonly string[];
+  /** The surfaces it covers. */
+  readonly covers: readonly string[];
+  /** The producers that captured or planned it. */
+  readonly producers: readonly string[];
+  /** One cell per profile, ordered by the profile's label. */
+  readonly cells: readonly UiCell[];
+};
+```
+
+One state of the product's interface, across its profiles.
+
+#### `UiSurface`
+
+```ts
+export type UiSurface = {
+  readonly id: string;
+  /** True when a `ui-plan` inventory entry names it: the product is known to have it. */
+  readonly inventoried: boolean;
+  /** States that cover it. */
+  readonly states: number;
+  /** Of those, states with at least one captured profile. */
+  readonly captured: number;
+  /** `covered`: some covering state is captured. `uncaptured`: states cover it and none is captured yet. `uncovered`: no state covers it. */
+  readonly status: 'covered' | 'uncaptured' | 'uncovered';
+};
+```
+
+One surface of the product: an inventory entry, or something a state says it covers.
+
+#### `UiFacetValue`
+
+```ts
+export type UiFacetValue = { readonly value: string; readonly count: number; readonly label?: string };
+```
+
+A value of a facet and how many states have it.
+
+#### `UiCatalogFacets`
+
+```ts
+export type UiCatalogFacets = {
+  readonly profiles: readonly UiFacetValue[];
+  readonly coverage: readonly UiFacetValue[];
+  readonly areas: readonly UiFacetValue[];
+  readonly routes: readonly UiFacetValue[];
+  readonly cohorts: readonly UiFacetValue[];
+  readonly flags: readonly UiFacetValue[];
+  readonly surfaces: readonly UiFacetValue[];
+  readonly producers: readonly UiFacetValue[];
+};
+```
+
+The values each filter offers, over every state of the catalog.
+
+#### `UiCatalogSummary`
+
+```ts
+export type UiCatalogSummary = {
+  readonly states: number;
+  readonly profiles: number;
+  readonly cells: number;
+  readonly coverage: Readonly<Record<UiCoverage, number>>;
+  /** Captured or failed cells no plan expects. Zero when no plan was published, because then nothing is known to be unexpected. */
+  readonly undeclared: number;
+  /** Whether any plan (an expected set) was published. Without one, `missing` can only ever be zero. */
+  readonly planned: boolean;
+  readonly surfaces: number;
+  readonly uncoveredSurfaces: number;
+};
+```
+
+The catalog in numbers. Cells count a state once per profile.
+
+#### `UiCatalog`
+
+```ts
+export type UiCatalog = {
+  readonly schemaVersion: typeof UI_CATALOG_VERSION;
+  readonly version?: string;
+  readonly summary: UiCatalogSummary;
+  readonly profiles: readonly UiProfile[];
+  readonly states: readonly UiCatalogState[];
+  readonly surfaces: readonly UiSurface[];
+  readonly facets: UiCatalogFacets;
+  /** What could not be read. A state that depended on it is not in the catalog as captured. Filled by the caller who read the backends. */
+  readonly sources: { readonly layers: number; readonly backends: readonly BackendInfo[]; readonly notices: readonly string[] };
+};
+```
+
+The catalog, as `GET /api/reports/ui-catalog` answers it (`version` is the report's, when the caller knows it).
+
+#### `UiCatalogOptions`
+
+```ts
+export type UiCatalogOptions = {
+  /** The report's version, repeated in the document. */
+  readonly version?: string;
+  /** The backends, with whether each could be read. */
+  readonly backends?: readonly BackendInfo[];
+  /** What could not be read. */
+  readonly notices?: readonly string[];
+};
+```
+
+What a caller may say about how the layers were read.
+
+#### `uiProfile`
+
+```ts
+export function uiProfile(layer: Pick<LayerHeader, 'environment' | 'parameters'>): UiProfile
+```
+
+The profile of a layer: its environment and its other parameters.
+
+#### `uiCatalog`
+
+```ts
+export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOptions = {}): UiCatalog
+```
+
+The UI catalog of some layers (as the effective report holds them, or any set of {@link LayerEvidence}).
+
+Only rows of `ui-state` and `ui-plan` parts take part. The winner of every slot is decided by the report contract
+(`combineEvidence`), so the result does not depend on the order of `layers` or on how they are divided among backends. A
+state is the set of cells that share a check `id`; a cell is one profile of it. A cell is `captured` only when the winning
+capture passed; a plan that nothing has captured is `missing`. When no plan exists nothing is `missing` and nothing is
+`undeclared`: what is expected is then unknown, and the catalog says so (`summary.planned`).
+
+**Example**
+
+```ts
+const catalog = uiCatalog(effective.layers, { version: effective.version, backends: effective.backends });
+catalog.states.map(state => [state.id, state.cells.map(cell => cell.coverage)]);
+```
+
+#### `UiCatalogQuery`
+
+```ts
+export type UiCatalogQuery = {
+  /** Words (all of them) found in the id, title, route, fixture, cohort, area, flags, surfaces or producers. */
+  readonly q?: string;
+  readonly coverage?: readonly UiCoverage[];
+  /** Profile keys, as {@link UiProfile.key}. */
+  readonly profile?: readonly string[];
+  readonly area?: readonly string[];
+  readonly route?: readonly string[];
+  readonly cohort?: readonly string[];
+  readonly flag?: readonly string[];
+  /** Surfaces a state covers. */
+  readonly surface?: readonly string[];
+  readonly producer?: readonly string[];
+};
+```
+
+What a person narrows the catalog by. Every field is optional; nothing asked is everything. Values within a field are alternatives, fields combine with AND.
+
+#### `parseUiCatalogQuery`
+
+```ts
+export function parseUiCatalogQuery(params: URLSearchParams): UiCatalogQuery
+```
+
+Reads a query from URL search parameters (`q`, and the comma-separated {@link UiCatalogQuery} lists). Unknown coverage values are left out, never an error.
+
+#### `uiCatalogParams`
+
+```ts
+export function uiCatalogParams(query: UiCatalogQuery): URLSearchParams
+```
+
+A query as URL search parameters, the form {@link parseUiCatalogQuery} reads back.
+
+#### `isUiCatalogFiltered`
+
+```ts
+export function isUiCatalogFiltered(query: UiCatalogQuery): boolean
+```
+
+Whether a query narrows anything.
+
+#### `filterUiCatalog`
+
+```ts
+export function filterUiCatalog(catalog: UiCatalog, query: UiCatalogQuery): UiCatalog
+```
+
+The part of a catalog a query asks for. A state is kept when it matches the words and the fact filters; its cells are
+kept when they match the `profile` and `coverage` filters, and a state left with no cell is dropped. The summary is
+recomputed for what is kept; the profiles, surfaces, facets and sources stay those of the whole catalog, so the
+controls keep offering every choice.
+
+#### `pageUiCatalog`
+
+```ts
+export function pageUiCatalog(catalog: UiCatalog, page: { readonly limit?: number; readonly offset?: number }): UiCatalog & { readonly total: number; readonly offset: number; readonly limit: number }
+```
+
+A page of a catalog's states, for a document that would otherwise be large. The summary, facets and sources are the whole catalog's.
+
+#### `uiCatalogMarkdown`
+
+```ts
+export function uiCatalogMarkdown(catalog: UiCatalog): string
+```
+
+The catalog as Markdown for a person or an agent reading text: the summary in words, the surfaces that are not covered, and
+one line per state with its coverage in each profile. Only `captured` is called captured.
+
+### UI state conventions
+
+Source: `packages/reports/src/ui-state.ts`. Import: `@crvouga/atlas/reports/ui-state`
+
+How a captured UI state is written in a layer, using nothing but what the layer format already has. A **state** is a
+check in a part of kind `ui-state`: its `id` names the state, its `status` says how the capture went, a `screenshot`
+attachment is the picture, and the facts the producer declares about it (route, fixture, cohort, flags, the surfaces it
+covers) sit under the `atlas.ui-state` extension. A **profile** (viewport, color scheme, device) is the layer's
+`environment` and `parameters`, so a state captured at another viewport is another result, side by side. What is
+**expected** is a layer of kind `ui-plan` with the same ids and profiles, every check `not-run`.
+
+Nothing here decides a result: a status, a slot and a winner are what the report contract says they are. This module
+only reads the convention into a small optional row field ({@link UiStateFact}) so a viewer needs no second request to
+list a catalog. A producer that writes something else is still read; what cannot be read is left out, never rejected.
+
+See docs/ui-catalog.md
+
+#### `UI_STATE_KIND`
+
+```ts
+export const UI_STATE_KIND = …
+```
+
+The part kind of captured states.
+
+#### `UI_PLAN_KIND`
+
+```ts
+export const UI_PLAN_KIND = …
+```
+
+The part kind of the expected set: states (and surfaces) that should exist, whether or not they were captured.
+
+#### `UI_STATE_EXTENSION`
+
+```ts
+export const UI_STATE_EXTENSION = …
+```
+
+The check extension that carries the facts a producer declares about a state.
+
+#### `isUiKind`
+
+```ts
+export function isUiKind(kind: string): boolean
+```
+
+Whether a part kind belongs to the UI catalog (`ui-state` or `ui-plan`).
+
+#### `UiScreenshot`
+
+```ts
+export type UiScreenshot = {
+  readonly name: string;
+  readonly bundleKey?: string;
+  readonly uri?: string;
+  readonly contentType?: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly bytes?: number;
+  readonly sha256?: string;
+  /** Why the producer left the bytes out (`too-large`, `policy`…): a picture that was never taken is told apart from one left out. */
+  readonly omitted?: string;
+};
+```
+
+The picture of a captured state: a stored file (`bundleKey`), or an address (`uri`). Everything but `name` is optional.
+
+#### `UiStateFacts`
+
+```ts
+export type UiStateFacts = {
+  /** The address or screen the state is of (`/checkout/payment`). */
+  readonly route?: string;
+  /** The test data it was captured with. */
+  readonly fixture?: string;
+  /** The audience or account kind it shows (`new-customer`). */
+  readonly cohort?: string;
+  /** Feature flags that were on. */
+  readonly flags?: readonly string[];
+  /** The product surfaces (screens, components) this state covers, for coverage against an inventory. */
+  readonly covers?: readonly string[];
+  /** A grouping a person navigates by (`checkout`). */
+  readonly area?: string;
+  /** On a `ui-plan` check only: this entry is a surface of the product's inventory, not a state. Nothing is captured for it. */
+  readonly inventory?: boolean;
+};
+```
+
+The facts a producer declares about a state, under the `atlas.ui-state` extension. All optional, all strings or lists of strings.
+
+#### `UiStateFact`
+
+```ts
+export type UiStateFact = UiStateFacts & {
+  /** The check's picture: its `screenshot` attachment, else its first image. */
+  readonly screenshot?: UiScreenshot;
+};
+```
+
+What a row of a `ui-state` or `ui-plan` part carries for the catalog. Rides in the report row, only for those kinds.
+
+#### `uiStateFacts`
+
+```ts
+export function uiStateFacts(check: Pick<Check, 'extensions'>): UiStateFacts
+```
+
+The declared facts of a check, read from its `atlas.ui-state` extension. Strings are trimmed and bounded, lists are
+distinct and bounded, and anything of another shape is dropped; a check without the extension has no facts.
+
+#### `uiStateOf`
+
+```ts
+export function uiStateOf(kind: string, check: Pick<Check, 'extensions' | 'attachments'>): UiStateFact | undefined
+```
+
+What a check of a part of `kind` carries for the catalog: its declared facts and, in a `ui-state` part, its picture.
+`undefined` for any other kind, and for a UI check that carries neither, so ordinary rows stay as small as they were.
 
 ### Report viewer navigation state
 

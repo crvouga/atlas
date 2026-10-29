@@ -2,6 +2,8 @@ import { isStatechartFile } from '@crvouga/atlas/schema';
 import { Alert, Box, Burger, Button, Container, Group, AppShell as MantineAppShell, ScrollArea, Stack, Text } from '@mantine/core';
 import { Outlet, useLocation, useSearch } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { UiCatalogFilters } from '../catalog/UiCatalogFilters';
+import { UiCatalogProvider } from '../catalog/provider';
 import { Header } from '../components/Header';
 import { EvidenceProvider, useEvidence } from '../evidence/evidence-context';
 import { SourcesPanel } from '../evidence/sources-panel';
@@ -20,7 +22,9 @@ function Index() {
   const evidence = useEvidence();
   const { pathname } = useLocation();
   const kind = kindOfAddress(pathname);
-  return kind ? (
+  return pathname === '/catalog' ? (
+    <UiCatalogFilters />
+  ) : kind ? (
     <SpecIndex kind={kind} />
   ) : pathname.startsWith('/specs/') ? (
     <Box component="nav" aria-label="Specs" />
@@ -35,7 +39,7 @@ function Body() {
   const { view, spec } = useAtlas();
   const { pathname } = useLocation();
   if (pathname === '/' && evidence.ready && !evidence.filesPending && !evidence.files.some(isStatechartFile)) return <Explorer />;
-  if (!pathname.startsWith('/specs/') && !view && spec.error)
+  if (!pathname.startsWith('/specs/') && pathname !== '/catalog' && !view && spec.error)
     return (
       <Container py="xl">
         <Alert color="red" title="The spec couldn’t be loaded">
@@ -53,34 +57,36 @@ function Layout() {
   const location = useLocation();
   useEffect(() => setOpened(false), [location.href]);
   return (
-    <MantineAppShell header={{ height: 64 }} navbar={{ width: 288, breakpoint: 'md', collapsed: { mobile: !opened } }} padding={0}>
-      <MantineAppShell.Header>
-        <Group h="100%" px="md" gap="sm" wrap="nowrap">
-          <Burger
-            aria-expanded={opened}
-            aria-controls="atlas-navigation"
-            opened={opened}
-            onClick={() => setOpened((v) => !v)}
-            hiddenFrom="md"
-            size="sm"
-            aria-label="Toggle navigation"
-          />
-          <Header />
-        </Group>
-      </MantineAppShell.Header>
-      <MantineAppShell.Navbar id="atlas-navigation" component="div">
-        <ScrollArea h="100%">
-          <Index />
-        </ScrollArea>
-      </MantineAppShell.Navbar>
-      <MantineAppShell.Main>
-        <Body />
-      </MantineAppShell.Main>
-      <SourcesPanel />
-      <Suspense fallback={null}>
-        <Finder />
-      </Suspense>
-    </MantineAppShell>
+    <UiCatalogProvider enabled={location.pathname === '/catalog'}>
+      <MantineAppShell header={{ height: 64 }} navbar={{ width: 288, breakpoint: 'md', collapsed: { mobile: !opened } }} padding={0}>
+        <MantineAppShell.Header>
+          <Group h="100%" px="md" gap="sm" wrap="nowrap">
+            <Burger
+              aria-expanded={opened}
+              aria-controls="atlas-navigation"
+              opened={opened}
+              onClick={() => setOpened((v) => !v)}
+              hiddenFrom="md"
+              size="sm"
+              aria-label="Toggle navigation"
+            />
+            <Header />
+          </Group>
+        </MantineAppShell.Header>
+        <MantineAppShell.Navbar id="atlas-navigation" component="div">
+          <ScrollArea h="100%">
+            <Index />
+          </ScrollArea>
+        </MantineAppShell.Navbar>
+        <MantineAppShell.Main>
+          <Body />
+        </MantineAppShell.Main>
+        <SourcesPanel />
+        <Suspense fallback={null}>
+          <Finder />
+        </Suspense>
+      </MantineAppShell>
+    </UiCatalogProvider>
   );
 }
 export function AppShell() {

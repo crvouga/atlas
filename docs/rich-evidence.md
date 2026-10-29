@@ -152,6 +152,11 @@ time. Every field after `unit` is optional and none of them decides a status, a 
 - **Reading it from the API.** `GET /api/reports/tests/history` entries carry `latency` (their product-latency
   measurements) next to `durationMs`. The pure functions are in `@crvouga/atlas/reports/latency`.
 
+## A catalog of UI states
+
+A screenshot per screen, per viewport and color scheme, is a *UI catalog*: check ids are the states, the viewport and scheme are
+`parameters`, and the viewer's `/catalog` shows them with what is still to be captured. See [the UI catalog](ui-catalog.md).
+
 ## Finding runs and artifacts
 
 The viewer's **Runs** and **Artifacts** tabs and the API answer one query, so a link means the same thing everywhere.

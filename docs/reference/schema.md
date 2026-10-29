@@ -367,6 +367,39 @@ export const RunDetailSchema = …
 
 `GET /api/reports/runs/detail`: one run and its last result for every test, environment and producer it recorded.
 
+#### `UiProfileSchema`
+
+```ts
+export const UiProfileSchema = …
+```
+
+A state's profile: the client and the choices it was captured under.
+
+#### `UiImageSchema`
+
+```ts
+export const UiImageSchema = …
+```
+
+The picture of a capture.
+
+#### `UiCellSchema`
+
+```ts
+export const UiCellSchema = …
+```
+
+One state in one profile.
+
+#### `UiCatalogSchema`
+
+```ts
+export const UiCatalogSchema = …
+```
+
+`GET /api/reports/ui-catalog`: the UI catalog, computed from the winning results of the `ui-state` and `ui-plan` parts
+of every layer. States are in id order and cells in profile order, so the same layers always give the same document.
+
 ### Command results (`--format json`)
 
 Source: `packages/schema/src/cli-results.ts`

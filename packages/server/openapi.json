@@ -5690,6 +5690,370 @@
         }
       }
     },
+    "/api/reports/ui-catalog": {
+      "get": {
+        "operationId": "getUiCatalog",
+        "tags": [
+          "Report"
+        ],
+        "summary": "The UI catalog: captured UI states per profile, and what is still expected",
+        "description": "A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many states (default 200).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "offset",
+            "in": "query",
+            "description": "Skip this many states (default 0).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "q",
+            "in": "query",
+            "description": "Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces or producers.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "coverage",
+            "in": "query",
+            "description": "Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "profile",
+            "in": "query",
+            "description": "Profile keys, as listed in `profiles[].key`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "area",
+            "in": "query",
+            "description": "Areas.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "route",
+            "in": "query",
+            "description": "Routes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "cohort",
+            "in": "query",
+            "description": "Cohorts.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "flag",
+            "in": "query",
+            "description": "Feature flags a state was captured with.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "surface",
+            "in": "query",
+            "description": "Surfaces a state covers.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "producer",
+            "in": "query",
+            "description": "Producers that captured or planned a state.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for Markdown instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiCatalog"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/ui-catalog": {
+      "get": {
+        "operationId": "getUiCatalogForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "The UI catalog: captured UI states per profile, and what is still expected",
+        "description": "A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many states (default 200).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "offset",
+            "in": "query",
+            "description": "Skip this many states (default 0).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "q",
+            "in": "query",
+            "description": "Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces or producers.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "coverage",
+            "in": "query",
+            "description": "Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "profile",
+            "in": "query",
+            "description": "Profile keys, as listed in `profiles[].key`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "area",
+            "in": "query",
+            "description": "Areas.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "route",
+            "in": "query",
+            "description": "Routes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "cohort",
+            "in": "query",
+            "description": "Cohorts.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "flag",
+            "in": "query",
+            "description": "Feature flags a state was captured with.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "surface",
+            "in": "query",
+            "description": "Surfaces a state covers.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "producer",
+            "in": "query",
+            "description": "Producers that captured or planned a state.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for Markdown instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiCatalog"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/runs/detail": {
       "get": {
         "operationId": "getReportRun",
@@ -9547,6 +9911,79 @@
                         ],
                         "additionalProperties": {}
                       },
+                      "state": {
+                        "description": "Only for a check of a `ui-state` or `ui-plan` part: its picture and the facts its producer declared under the `atlas.ui-state` extension. See the UI catalog guide. Never decides a result",
+                        "type": "object",
+                        "properties": {
+                          "route": {
+                            "type": "string"
+                          },
+                          "fixture": {
+                            "type": "string"
+                          },
+                          "cohort": {
+                            "type": "string"
+                          },
+                          "area": {
+                            "type": "string"
+                          },
+                          "flags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "covers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "inventory": {
+                            "description": "A `ui-plan` entry that names a surface of the product's inventory, not a state",
+                            "type": "boolean"
+                          },
+                          "screenshot": {
+                            "description": "The check's picture: its `screenshot` attachment, else its first image",
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "bundleKey": {
+                                "type": "string"
+                              },
+                              "uri": {
+                                "type": "string"
+                              },
+                              "contentType": {
+                                "type": "string"
+                              },
+                              "width": {
+                                "type": "number"
+                              },
+                              "height": {
+                                "type": "number"
+                              },
+                              "bytes": {
+                                "type": "number"
+                              },
+                              "sha256": {
+                                "type": "string"
+                              },
+                              "omitted": {
+                                "description": "Why the producer left the bytes out",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        },
+                        "additionalProperties": {}
+                      },
                       "recording": {
                         "description": "What became of the check's expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`",
                         "type": "object",
@@ -10465,6 +10902,79 @@
                           "labels",
                           "roles"
                         ],
+                        "additionalProperties": {}
+                      },
+                      "state": {
+                        "description": "Only for a check of a `ui-state` or `ui-plan` part: its picture and the facts its producer declared under the `atlas.ui-state` extension. See the UI catalog guide. Never decides a result",
+                        "type": "object",
+                        "properties": {
+                          "route": {
+                            "type": "string"
+                          },
+                          "fixture": {
+                            "type": "string"
+                          },
+                          "cohort": {
+                            "type": "string"
+                          },
+                          "area": {
+                            "type": "string"
+                          },
+                          "flags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "covers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "inventory": {
+                            "description": "A `ui-plan` entry that names a surface of the product's inventory, not a state",
+                            "type": "boolean"
+                          },
+                          "screenshot": {
+                            "description": "The check's picture: its `screenshot` attachment, else its first image",
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "bundleKey": {
+                                "type": "string"
+                              },
+                              "uri": {
+                                "type": "string"
+                              },
+                              "contentType": {
+                                "type": "string"
+                              },
+                              "width": {
+                                "type": "number"
+                              },
+                              "height": {
+                                "type": "number"
+                              },
+                              "bytes": {
+                                "type": "number"
+                              },
+                              "sha256": {
+                                "type": "string"
+                              },
+                              "omitted": {
+                                "description": "Why the producer left the bytes out",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        },
                         "additionalProperties": {}
                       },
                       "recording": {
@@ -14773,6 +15283,79 @@
                     "labels",
                     "roles"
                   ],
+                  "additionalProperties": {}
+                },
+                "state": {
+                  "description": "Only for a check of a `ui-state` or `ui-plan` part: its picture and the facts its producer declared under the `atlas.ui-state` extension. See the UI catalog guide. Never decides a result",
+                  "type": "object",
+                  "properties": {
+                    "route": {
+                      "type": "string"
+                    },
+                    "fixture": {
+                      "type": "string"
+                    },
+                    "cohort": {
+                      "type": "string"
+                    },
+                    "area": {
+                      "type": "string"
+                    },
+                    "flags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "covers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "inventory": {
+                      "description": "A `ui-plan` entry that names a surface of the product's inventory, not a state",
+                      "type": "boolean"
+                    },
+                    "screenshot": {
+                      "description": "The check's picture: its `screenshot` attachment, else its first image",
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "bundleKey": {
+                          "type": "string"
+                        },
+                        "uri": {
+                          "type": "string"
+                        },
+                        "contentType": {
+                          "type": "string"
+                        },
+                        "width": {
+                          "type": "number"
+                        },
+                        "height": {
+                          "type": "number"
+                        },
+                        "bytes": {
+                          "type": "number"
+                        },
+                        "sha256": {
+                          "type": "string"
+                        },
+                        "omitted": {
+                          "description": "Why the producer left the bytes out",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
                   "additionalProperties": {}
                 },
                 "recording": {
@@ -21477,6 +22060,785 @@
           "results",
           "filters",
           "facets"
+        ],
+        "additionalProperties": {}
+      },
+      "UiCatalog": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "description": "The report version this was computed from; equal exactly when the report is",
+            "type": "string"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "states": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "profiles": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "cells": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "coverage": {
+                "type": "object",
+                "properties": {
+                  "captured": {
+                    "type": "number"
+                  },
+                  "failed": {
+                    "type": "number"
+                  },
+                  "capturing": {
+                    "type": "number"
+                  },
+                  "skipped": {
+                    "type": "number"
+                  },
+                  "missing": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "captured",
+                  "failed",
+                  "capturing",
+                  "skipped",
+                  "missing"
+                ],
+                "additionalProperties": {}
+              },
+              "undeclared": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Cells captured or failed that no plan expects. Zero when no plan was published"
+              },
+              "planned": {
+                "type": "boolean",
+                "description": "Whether any plan was published. Without one `missing` is always zero: what should exist is unknown"
+              },
+              "surfaces": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "uncoveredSurfaces": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "states",
+              "profiles",
+              "cells",
+              "coverage",
+              "undeclared",
+              "planned",
+              "surfaces",
+              "uncoveredSurfaces"
+            ],
+            "additionalProperties": {}
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "Identifies the profile across layers: the environment and the sorted parameters"
+                },
+                "environment": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "parameters": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "label": {
+                  "type": "string",
+                  "description": "For a person: the client and each parameter's value"
+                }
+              },
+              "required": [
+                "key",
+                "environment",
+                "parameters",
+                "label"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "route": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fixture": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cohort": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "area": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "flags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "covers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The surfaces it covers"
+                },
+                "producers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "cells": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "profile": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "description": "Identifies the profile across layers: the environment and the sorted parameters"
+                          },
+                          "environment": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "parameters": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "label": {
+                            "type": "string",
+                            "description": "For a person: the client and each parameter's value"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "environment",
+                          "parameters",
+                          "label"
+                        ],
+                        "additionalProperties": {}
+                      },
+                      "coverage": {
+                        "type": "string",
+                        "enum": [
+                          "captured",
+                          "failed",
+                          "capturing",
+                          "skipped",
+                          "missing"
+                        ],
+                        "description": "`captured` only when the winning capture passed. Every other value means there is no picture to trust"
+                      },
+                      "expected": {
+                        "type": "string",
+                        "enum": [
+                          "declared",
+                          "undeclared",
+                          "unknown"
+                        ],
+                        "description": "`declared`: a plan expects it. `undeclared`: plans exist and none names it. `unknown`: no plan was published, so nothing is known to be unexpected"
+                      },
+                      "capture": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "passed",
+                                  "failed",
+                                  "running",
+                                  "not-run"
+                                ]
+                              },
+                              "detail": {
+                                "type": "string"
+                              },
+                              "durationMs": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "image": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "contentType": {
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "type": "number"
+                                      },
+                                      "height": {
+                                        "type": "number"
+                                      },
+                                      "bytes": {
+                                        "type": "number"
+                                      },
+                                      "sha256": {
+                                        "type": "string"
+                                      },
+                                      "bundleKey": {
+                                        "type": "string"
+                                      },
+                                      "uri": {
+                                        "description": "An http(s) address, when the picture lives elsewhere",
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "description": "Where the stored bytes are, relative to the reports API root (`/api/reports` on a server): `/layers/<layer>/blobs/attachments/<sha256>`",
+                                        "type": "string"
+                                      },
+                                      "omitted": {
+                                        "description": "Why the producer left the bytes out. A picture that is left out is not a picture that was never taken",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": {}
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "labels": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "What describes the capture without splitting it: a `shard`, a `browser`"
+                              },
+                              "origin": {
+                                "type": "object",
+                                "properties": {
+                                  "layer": {
+                                    "type": "string"
+                                  },
+                                  "backend": {
+                                    "type": "string"
+                                  },
+                                  "producer": {
+                                    "type": "string"
+                                  },
+                                  "recordedAtMs": {
+                                    "type": "number"
+                                  },
+                                  "sha": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "branch": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "runUrl": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "freshness": {
+                                    "type": "string",
+                                    "enum": [
+                                      "unknown",
+                                      "modified"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "layer",
+                                  "backend",
+                                  "producer",
+                                  "recordedAtMs",
+                                  "sha",
+                                  "branch",
+                                  "runUrl"
+                                ],
+                                "additionalProperties": {}
+                              },
+                              "alternatives": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991,
+                                "description": "Other captures of this cell from other producers; the winner is the one the report contract picks"
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "detail",
+                              "durationMs",
+                              "image",
+                              "labels",
+                              "origin",
+                              "alternatives"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "planned": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "layer": {
+                                "type": "string"
+                              },
+                              "backend": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "layer",
+                              "backend"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "The plan layer that expects this cell"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "coverage",
+                      "expected",
+                      "capture",
+                      "planned"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "route",
+                "fixture",
+                "cohort",
+                "area",
+                "flags",
+                "covers",
+                "producers",
+                "cells"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "inventoried": {
+                  "type": "boolean",
+                  "description": "A `ui-plan` inventory entry names it: the product is known to have it"
+                },
+                "states": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "captured": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "covered",
+                    "uncaptured",
+                    "uncovered"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "inventoried",
+                "states",
+                "captured",
+                "status"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "facets": {
+            "type": "object",
+            "properties": {
+              "profiles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "coverage": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "areas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "routes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "cohorts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "flags": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "surfaces": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "producers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "profiles",
+              "coverage",
+              "areas",
+              "routes",
+              "cohorts",
+              "flags",
+              "surfaces",
+              "producers"
+            ],
+            "additionalProperties": {}
+          },
+          "sources": {
+            "type": "object",
+            "properties": {
+              "layers": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "backends": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "live": {
+                      "type": "boolean",
+                      "description": "Always false on a server"
+                    },
+                    "available": {
+                      "type": "boolean",
+                      "description": "False when the backend could not be read; its results are then unknown, never passed"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "live",
+                    "available"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "layers",
+              "backends",
+              "notices"
+            ],
+            "additionalProperties": {},
+            "description": "What was read. A backend that is unavailable, or a layer that could not be read, is named here; what depended on it is not shown as captured"
+          },
+          "total": {
+            "description": "States that matched, before `offset` and `limit`",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "summary",
+          "profiles",
+          "states",
+          "surfaces",
+          "facets",
+          "sources"
         ],
         "additionalProperties": {}
       },

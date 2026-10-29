@@ -1,5 +1,6 @@
 import { SpecLogo } from './SpecLogo';
-import { IconDots } from '@tabler/icons-react';
+import { IconDots, IconLayoutGrid } from '@tabler/icons-react';
+import { isUiKind } from '@crvouga/atlas/reports/ui-state';
 import { isStatechartFile } from '@crvouga/atlas/schema';
 import { ActionIcon, Anchor, Badge, Box, Button, Group, Menu, NativeSelect, Popover, Stack, Tooltip } from '@mantine/core';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
@@ -137,6 +138,9 @@ export function Header() {
     [evidence.files, evidence.view, kind]
   );
   const project = currentProject();
+  const catalogOpen = pathname === '/catalog';
+  // The catalog is offered once the report holds a state or a plan for one.
+  const hasCatalog = useMemo(() => evidence.evidence.some((layer) => layer.rows.some((row) => isUiKind(row.kind))), [evidence.evidence]);
   return (
     <Group flex={1} miw={0} justify="space-between" wrap="nowrap" gap="xs">
       <Group gap="xs" wrap="nowrap" miw={0}>
@@ -151,13 +155,13 @@ export function Header() {
               leftSection={kind ? <SpecLogo kind={kind} /> : undefined}
               rightSection={<ChevronDownIcon aria-hidden="true" size={12} />}
             >
-              {kind?.label ?? (hasCharts ? 'Statecharts' : evidence.ready && !tabs.length ? 'Tests' : 'Specs')}
+              {catalogOpen ? 'UI catalog' : (kind?.label ?? (hasCharts ? 'Statecharts' : evidence.ready && !tabs.length ? 'Tests' : 'Specs'))}
             </Button>
           </Menu.Target>
           <Menu.Dropdown>
             <Box component="nav" aria-label="Spec type">
               <Menu.Item
-                aria-current={pathname.startsWith('/specs/') ? undefined : 'page'}
+                aria-current={pathname.startsWith('/specs/') || catalogOpen ? undefined : 'page'}
                 renderRoot={(props) => <Link {...props} to="/" search={(prev) => runOnly(prev)} />}
               >
                 {hasCharts || !evidence.ready ? 'Statecharts' : 'Tests'}
@@ -179,6 +183,15 @@ export function Header() {
                   {tab.kind.label}
                 </Menu.Item>
               ))}
+              {(hasCatalog || catalogOpen) && (
+                <Menu.Item
+                  leftSection={<IconLayoutGrid size={16} aria-hidden="true" />}
+                  aria-current={catalogOpen ? 'page' : undefined}
+                  renderRoot={(props) => <Link {...props} to="/catalog" search={{}} />}
+                >
+                  UI catalog
+                </Menu.Item>
+              )}
             </Box>
           </Menu.Dropdown>
         </Menu>
@@ -250,7 +263,7 @@ function SpecBreadcrumb() {
         name: item.name,
         running: (evidence.view.specs.get(outlinePath(item.file))?.summary.counts.running ?? 0) > 0
       }));
-  if (!options.length) return null;
+  if (!options.length || pathname === '/catalog') return null;
   return (
     <NativeSelect
       data-running={options.some((option) => option.running) || undefined}

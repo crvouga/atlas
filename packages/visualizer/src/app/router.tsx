@@ -10,6 +10,8 @@ import {
   type RouterHistory
 } from '@tanstack/react-router';
 import { z } from 'zod/v4';
+import { CatalogSearchFields } from '../catalog/search';
+import { UiCatalogPage } from '../catalog/UiCatalogPage';
 import { SpecPage } from '../evidence/spec-page';
 import { ExplorerSearchFields } from '../explorer/search';
 import { ProductPage } from '../views/ProductPage';
@@ -84,7 +86,14 @@ function routeTree() {
     validateSearch: (search) => SpecSearch.parse(search),
     component: SpecPage
   });
-  return rootRoute.addChildren([productRoute, chartRoute, specRoute]);
+  /** The UI catalog: the captured states of the interface, filtered by the address (see `catalog/search.ts`). */
+  const catalogRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/catalog',
+    validateSearch: (search) => RootSearch.extend(CatalogSearchFields).parse(search),
+    component: UiCatalogPage
+  });
+  return rootRoute.addChildren([productRoute, chartRoute, specRoute, catalogRoute]);
 }
 export function createAtlasRouter(history: RouterHistory) {
   return createRouter({ routeTree: routeTree(), history, defaultPreload: false, scrollRestoration: true });

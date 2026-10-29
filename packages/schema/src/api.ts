@@ -142,6 +142,16 @@ export const LayerRowSchema = z.looseObject({
   variant: z.record(z.string(), z.string()),
   durationMs: z.number().nullable(),
   evidence: EvidenceSummarySchema.optional(),
+  state: z.looseObject({
+    route: z.string().optional(), fixture: z.string().optional(), cohort: z.string().optional(), area: z.string().optional(),
+    flags: z.array(z.string()).optional(), covers: z.array(z.string()).optional(),
+    inventory: z.boolean().optional().describe('A `ui-plan` entry that names a surface of the product\'s inventory, not a state'),
+    screenshot: z.looseObject({
+      name: z.string(), bundleKey: z.string().optional(), uri: z.string().optional(), contentType: z.string().optional(),
+      width: z.number().optional(), height: z.number().optional(), bytes: z.number().optional(), sha256: z.string().optional(),
+      omitted: z.string().optional().describe('Why the producer left the bytes out')
+    }).optional().describe('The check\'s picture: its `screenshot` attachment, else its first image')
+  }).optional().describe('Only for a check of a `ui-state` or `ui-plan` part: its picture and the facts its producer declared under the `atlas.ui-state` extension. See the UI catalog guide. Never decides a result'),
   recording: z.looseObject({ state: z.string(), reason: z.string().optional() }).optional().describe('What became of the check\'s expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`')
 });
 
@@ -568,4 +578,70 @@ export const RunDetailSchema = z.looseObject({
     attachments: z.number().int().nonnegative().describe('Files the layer carries as a whole, not those of its checks'),
     videos: VideoCountsSchema.optional()
   })).optional().describe('Every layer of the run, oldest first. Absent from an older server')
+});
+
+/** A state's profile: the client and the choices it was captured under. */
+export const UiProfileSchema = z.looseObject({
+  key: z.string().describe('Identifies the profile across layers: the environment and the sorted parameters'),
+  environment: z.string().nullable(), parameters: z.record(z.string(), z.string()),
+  label: z.string().describe('For a person: the client and each parameter\'s value')
+});
+
+/** The picture of a capture. */
+export const UiImageSchema = z.looseObject({
+  name: z.string(), contentType: z.string().optional(), width: z.number().optional(), height: z.number().optional(), bytes: z.number().optional(), sha256: z.string().optional(),
+  bundleKey: z.string().optional(), uri: z.string().optional().describe('An http(s) address, when the picture lives elsewhere'),
+  path: z.string().optional().describe('Where the stored bytes are, relative to the reports API root (`/api/reports` on a server): `/layers/<layer>/blobs/attachments/<sha256>`'),
+  omitted: z.string().optional().describe('Why the producer left the bytes out. A picture that is left out is not a picture that was never taken')
+});
+
+/** One state in one profile. */
+export const UiCellSchema = z.looseObject({
+  profile: UiProfileSchema,
+  coverage: z.enum(['captured', 'failed', 'capturing', 'skipped', 'missing']).describe('`captured` only when the winning capture passed. Every other value means there is no picture to trust'),
+  expected: z.enum(['declared', 'undeclared', 'unknown']).describe('`declared`: a plan expects it. `undeclared`: plans exist and none names it. `unknown`: no plan was published, so nothing is known to be unexpected'),
+  capture: z.looseObject({
+    status: EvidenceStatusSchema, detail: z.string(), durationMs: z.number().nullable(), image: UiImageSchema.nullable(),
+    labels: z.record(z.string(), z.string()).describe('What describes the capture without splitting it: a `shard`, a `browser`'),
+    origin: z.looseObject({
+      layer: z.string(), backend: z.string(), producer: z.string(), recordedAtMs: z.number(), sha: z.string().nullable(), branch: z.string().nullable(), runUrl: z.string().nullable(),
+      freshness: z.enum(['unknown', 'modified']).optional()
+    }),
+    alternatives: z.number().int().nonnegative().describe('Other captures of this cell from other producers; the winner is the one the report contract picks')
+  }).nullable(),
+  planned: z.looseObject({ layer: z.string(), backend: z.string() }).nullable().describe('The plan layer that expects this cell')
+});
+
+const UiFacetSchema = z.array(z.looseObject({ value: z.string(), count: z.number().int().nonnegative(), label: z.string().optional() }));
+
+/**
+ * `GET /api/reports/ui-catalog`: the UI catalog, computed from the winning results of the `ui-state` and `ui-plan` parts
+ * of every layer. States are in id order and cells in profile order, so the same layers always give the same document.
+ */
+export const UiCatalogSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string().optional().describe('The report version this was computed from; equal exactly when the report is'),
+  summary: z.looseObject({
+    states: z.number().int().nonnegative(), profiles: z.number().int().nonnegative(), cells: z.number().int().nonnegative(),
+    coverage: z.looseObject({ captured: z.number(), failed: z.number(), capturing: z.number(), skipped: z.number(), missing: z.number() }),
+    undeclared: z.number().int().nonnegative().describe('Cells captured or failed that no plan expects. Zero when no plan was published'),
+    planned: z.boolean().describe('Whether any plan was published. Without one `missing` is always zero: what should exist is unknown'),
+    surfaces: z.number().int().nonnegative(), uncoveredSurfaces: z.number().int().nonnegative()
+  }),
+  profiles: z.array(UiProfileSchema),
+  states: z.array(z.looseObject({
+    id: z.string(), title: z.string(),
+    route: z.string().nullable(), fixture: z.string().nullable(), cohort: z.string().nullable(), area: z.string().nullable(),
+    flags: z.array(z.string()), covers: z.array(z.string()).describe('The surfaces it covers'), producers: z.array(z.string()),
+    cells: z.array(UiCellSchema)
+  })),
+  surfaces: z.array(z.looseObject({
+    id: z.string(), inventoried: z.boolean().describe('A `ui-plan` inventory entry names it: the product is known to have it'),
+    states: z.number().int().nonnegative(), captured: z.number().int().nonnegative(),
+    status: z.enum(['covered', 'uncaptured', 'uncovered'])
+  })),
+  facets: z.looseObject({ profiles: UiFacetSchema, coverage: UiFacetSchema, areas: UiFacetSchema, routes: UiFacetSchema, cohorts: UiFacetSchema, flags: UiFacetSchema, surfaces: UiFacetSchema, producers: UiFacetSchema }),
+  sources: z.looseObject({ layers: z.number().int().nonnegative(), backends: z.array(BackendInfoSchema), notices: z.array(z.string()) }).describe('What was read. A backend that is unavailable, or a layer that could not be read, is named here; what depended on it is not shown as captured'),
+  total: z.number().int().nonnegative().optional().describe('States that matched, before `offset` and `limit`'),
+  offset: z.number().int().nonnegative().optional(), limit: z.number().int().nonnegative().optional()
 });

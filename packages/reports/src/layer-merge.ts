@@ -16,6 +16,7 @@ import { summarizeEvidenceIn, summarizeLayerEvidence } from './evidence-detail';
 import { effectiveScope } from './evidence-scope';
 import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
+import { UI_PLAN_KIND, uiStateOf } from './ui-state';
 
 /**
  * A short, deterministic fingerprint of a spec's text, shaped `<length>:<hash>:<hash>` (the length in UTF-16 code
@@ -48,9 +49,13 @@ export function parameterKey(parameters: LayerParameters): string {
   return JSON.stringify(Object.entries(parameters).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
 }
 
-/** Whether a part `kind` only qualifies an outcome (today only `performance`) and so is not counted as a check when anything else is recorded. */
+/**
+ * Whether a part `kind` only qualifies an outcome and so is not counted as a check when anything else is recorded: a
+ * `performance` timing, or a `ui-plan` entry (what a UI catalog expects, which a capture of the same state replaces in the
+ * tests' view). It never decides a slot: both still fill their own.
+ */
 export function isDiagnosticKind(kind: string): boolean {
-  return kind === 'performance';
+  return kind === 'performance' || kind === UI_PLAN_KIND;
 }
 
 /** A fresh status tally with every status at zero. */
@@ -97,6 +102,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
       const test = tests.get(check.id);
       const evidence = summarizeEvidenceIn(effectiveScope(part.scope, summary.scope), check);
       const item = expectations?.get(check.id);
+      const state = uiStateOf(part.kind, check);
       rows.push({
         kind: part.kind,
         id: check.id,
@@ -109,6 +115,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
         variant: test ? { system: test.system, runtime: test.runtime, seed: test.seed } : {},
         durationMs: test?.durationMs ?? check.durationMs ?? null,
         ...(evidence ? { evidence } : {}),
+        ...(state ? { state } : {}),
         ...(item ? { recording: { state: item.state, ...(item.reason ? { reason: item.reason } : {}) } } : {}),
       });
     }
