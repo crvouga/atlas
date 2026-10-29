@@ -44,7 +44,7 @@ import {
   type TestHistoryDocument,
   type TestSummary
 } from '@crvouga/atlas/reports/test-catalog';
-import { isStatechartFile } from '@crvouga/atlas/schema';
+import { isStatechartFile, type RecordingVerification } from '@crvouga/atlas/schema';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -369,6 +369,29 @@ export function useRunDetail(key: string | undefined) {
     },
     enabled: !!key && catalog.model !== null,
     staleTime: Number.POSITIVE_INFINITY,
+    retry: false
+  });
+}
+
+/**
+ * What the server last read back of the stored videos, per layer (`GET /recordings/verification`; see
+ * `recording-verification.ts`). The question is only asked of a server, never reads a blob, and an older server (no route)
+ * or an unanswered request means nothing is known: `null`, which is never shown as verified.
+ */
+export function useRecordingVerification() {
+  const catalog = useTestCatalog();
+  return useQuery({
+    queryKey: ['recording-verification', catalog.version],
+    queryFn: async ({ signal }): Promise<RecordingVerification | null> => {
+      try {
+        return await reportJson<RecordingVerification>('/recordings/verification', signal);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        return null;
+      }
+    },
+    enabled: catalog.source === 'server',
+    staleTime: 30_000,
     retry: false
   });
 }

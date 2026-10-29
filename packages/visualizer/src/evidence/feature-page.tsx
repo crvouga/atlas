@@ -1,14 +1,14 @@
-import type { CheckSlot, SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
+import type { SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
 import { Alert, Box, Container, Group, List, Stack, Text, Title } from '@mantine/core';
 import { useMemo } from 'react';
 import { outlinePath, type SpecKind } from '../spec-kind';
 import { CheckDetail, PlainSteps, ResultRow, type CheckSelection, type SelectCheck } from './check-detail';
 import { assessBehavior, hasRelease, needsAttention, type Assessment } from './applicability';
 import { ApplicabilityControls, useApplicabilityState, VerdictBadge } from './applicability-view';
-import { behaviorOf, coverageCounts, scenarioBehaviors, type Behavior, type RevisionSource } from './behavior';
+import { coverageCounts, featureBehaviors, type RevisionSource } from './behavior';
 import { BehaviorPanel, CoverageBadge, CoverageSummary } from './behavior-panel';
 import { useEvidence } from './evidence-context';
-import { featureModel, scenarioLabel, slotsByScenario, type FeatureModel, type FeatureScenario } from './gherkin';
+import { featureModel, scenarioLabel, type FeatureModel, type FeatureScenario } from './gherkin';
 import { Bounded } from './marks';
 import { SpecHeader } from './spec-header';
 import { SourceText } from './source-text';
@@ -39,10 +39,6 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
   const { feature, error } = useMemo(() => parse(text), [text]);
   const slots = entry?.slots ?? [];
   const runningOnly = useRunningFilter();
-  const filed = useMemo(
-    () => (feature ? slotsByScenario(feature, slots) : { byScenario: new Map<string, CheckSlot[]>(), leftOver: slots }),
-    [feature, slots]
-  );
   const { specs, evidence } = useEvidence();
   const specPath = outlinePath(file);
   const revisions = useMemo<RevisionSource>(() => {
@@ -52,24 +48,7 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
       recorded: (id) => recorded.get(id)
     };
   }, [specs, evidence, specPath]);
-  const behaviors = useMemo(() => {
-    const byScenario = new Map<FeatureScenario, Behavior[]>();
-    for (const scenario of feature?.rules.flatMap((rule) => rule.scenarios.filter((each) => !each.background)) ?? []) {
-      byScenario.set(scenario, scenarioBehaviors(scenario, filed.byScenario.get(scenario.name) ?? [], feature!.name, revisions));
-    }
-    // A result no scenario claims is still a behavior that was checked, so it is counted.
-    const stray: FeatureScenario = {
-      keyword: 'Scenario',
-      name: '',
-      description: '',
-      background: false,
-      tags: [],
-      steps: [],
-      examples: []
-    };
-    const other = filed.leftOver.map((slot) => behaviorOf({ ...stray, name: slot.title }, slot, null, revisions, slot.key));
-    return { byScenario, all: [...[...byScenario.values()].flat(), ...other] };
-  }, [feature, filed, revisions]);
+  const behaviors = useMemo(() => featureBehaviors(feature, slots, revisions), [feature, slots, revisions]);
   const counts = useMemo(() => coverageCounts(behaviors.all), [behaviors]);
   const applicability = useApplicabilityState();
   const { release, onlyStale } = applicability;
@@ -80,7 +59,7 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
   const staleCount = useMemo(() => [...assessments.values()].filter(needsAttention).length, [assessments]);
   const hidden = (key: string) => onlyStale && assessments.get(key) !== undefined && !needsAttention(assessments.get(key)!);
   const planned = behaviors.all.length;
-  const leftOver = filed.leftOver.filter((slot) => (!runningOnly || slot.status === 'running') && !hidden(slot.key));
+  const leftOver = behaviors.leftOver.filter((slot) => (!runningOnly || slot.status === 'running') && !hidden(slot.key));
   const toggle = (id: string) => select({ check: selection.check === id ? null : id, layer: null });
   const rows = (scenario: FeatureScenario) =>
     (behaviors.byScenario.get(scenario) ?? []).map((behavior) => {

@@ -26,6 +26,7 @@ import { exampleIndexFor, exampleRows, fillExample, type FeatureStep } from './g
 import { Origin, StatusMark } from './marks';
 import { MomentPlayback, stepsOfRecording, useMomentVideo, useRequestedMoment } from './moments';
 import { outcomeHeadline, videosIn } from './outcome';
+import { ScopedSummary } from './scoped-summary-view';
 
 /** The short, readable form of a spec fingerprint (`<length>:<hash>:<hash>`): its length and the start of its hash. */
 export function shortRevision(fingerprint: string): string {
@@ -83,6 +84,18 @@ function expectedSteps(steps: readonly FeatureStep[]): FeatureStep[] {
   return at < 0 ? [] : steps.slice(at);
 }
 
+/**
+ * The steps a behavior reads as: an outline's example with its values filled in, else the scenario's own. `expected` is
+ * what should be true afterwards; `named` is true when the recorded example name matches no row, so nothing was filled in.
+ */
+export function behaviorSteps(behavior: Behavior) {
+  const { scenario, example } = behavior;
+  const at = example === null ? -1 : exampleIndexFor(scenario, example);
+  const entry = at < 0 ? null : exampleRows(scenario)[at]!;
+  const steps = entry ? fillExample(scenario.steps, entry) : scenario.steps;
+  return { steps, entry, expected: expectedSteps(steps), named: example !== null && entry === null };
+}
+
 /** The recording itself: the one player the steps beside it seek, which marks the step playing. */
 function WatchVideo({ attachment, url }: { attachment: Attachment; url: string }) {
   const moments = useMomentVideo(attachment);
@@ -101,8 +114,8 @@ function WatchVideo({ attachment, url }: { attachment: Attachment; url: string }
   );
 }
 
-/** The recording of one result, read only when this is on screen. */
-function Player({ result }: { result: EvidenceResult }) {
+/** The recording of one result, read only when this is on screen, with the steps beside it that seek it. */
+export function Player({ result }: { result: EvidenceResult }) {
   const detail = useCheckDetail(result.layer, result.row);
   const videos = useMemo(() => videosIn(detail.data?.check), [detail.data]);
   const requested = useRequestedMoment();
@@ -158,6 +171,24 @@ function Player({ result }: { result: EvidenceResult }) {
   );
 }
 
+/** What the result shown recorded and where it came from: its status, environment, run, commit and time. */
+export function Provenance({ subject }: { subject: EvidenceResult }) {
+  const { backends } = useEvidence();
+  const now = useNow();
+  return (
+    <Group gap="xs" wrap="wrap" align="center">
+      <StatusMark status={subject.row.status} size={14} />
+      <Text span inherit fw={600}>
+        {statusWord(subject.row.status)}
+      </Text>
+      <Text span inherit c="dimmed">
+        in {environmentLabel(subject.layer.environment)}
+      </Text>
+      <Origin layer={subject.layer} backends={backends} now={now} />
+    </Group>
+  );
+}
+
 /** Read, Watch and Inspect for one behavior. `inspect` is the technical record, shown only under Inspect. */
 export function BehaviorPanel({
   behavior,
@@ -175,14 +206,8 @@ export function BehaviorPanel({
   /** The tab to open on; by default Watch when there is something to watch, Inspect while a run is in progress (its progress lives there), else Read. */ start?:
     'read' | 'watch' | 'inspect';
 }) {
-  const { backends } = useEvidence();
-  const now = useNow();
   const { scenario, example, demo, subject, revision, state } = behavior;
-  const at = example === null ? -1 : exampleIndexFor(scenario, example);
-  const entry = at < 0 ? null : exampleRows(scenario)[at]!;
-  const steps = useMemo(() => (entry ? fillExample(scenario.steps, entry) : scenario.steps), [scenario, entry]);
-  const expected = expectedSteps(steps);
-  const named = example !== null && entry === null;
+  const { steps, entry, expected, named } = useMemo(() => behaviorSteps(behavior), [behavior]);
   // The coverage state is the check's combined status; this says what the recording or result shown here recorded, apart from it.
   const outcome =
     subject && behavior.slot ? (
@@ -229,7 +254,6 @@ export function BehaviorPanel({
             <CoverageBadge state={state} />
             {behavior.representative && <Badge variant="outline">Representative demo</Badge>}
           </Group>
-          {outcome}
           {expected.length > 0 && (
             <Box component="section" aria-label="Expected outcome">
               <Title order={4} mb="xs">
@@ -250,19 +274,9 @@ export function BehaviorPanel({
               Nothing to watch. {COVERAGE[state].meaning}
             </Text>
           )}
-          {subject && (
-            <Group gap="xs" wrap="wrap" align="center">
-              <StatusMark status={subject.row.status} size={14} />
-              <Text span inherit fw={600}>
-                {statusWord(subject.row.status)}
-              </Text>
-              <Text span inherit c="dimmed">
-                in {environmentLabel(subject.layer.environment)}
-              </Text>
-              <Origin layer={subject.layer} backends={backends} now={now} />
-            </Group>
-          )}
+          {subject && <Provenance subject={subject} />}
           <RevisionLine revision={revision} />
+          <ScopedSummary behavior={behavior} />
           {applicability && <ApplicabilitySummary assessment={applicability} release={release} />}
         </Stack>
       </Tabs.Panel>

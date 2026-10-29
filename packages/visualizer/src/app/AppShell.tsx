@@ -26,7 +26,7 @@ function Index() {
     <UiCatalogFilters />
   ) : kind ? (
     <SpecIndex kind={kind} />
-  ) : pathname.startsWith('/specs/') ? (
+  ) : pathname.startsWith('/specs/') || pathname === '/behaviors' ? (
     <Box component="nav" aria-label="Specs" />
   ) : evidence.ready && !evidence.files.some(isStatechartFile) ? (
     <ProjectIndex />
@@ -39,7 +39,7 @@ function Body() {
   const { view, spec } = useAtlas();
   const { pathname } = useLocation();
   if (pathname === '/' && evidence.ready && !evidence.filesPending && !evidence.files.some(isStatechartFile)) return <Explorer />;
-  if (!pathname.startsWith('/specs/') && pathname !== '/catalog' && !view && spec.error)
+  if (!pathname.startsWith('/specs/') && pathname !== '/catalog' && pathname !== '/behaviors' && !view && spec.error)
     return (
       <Container py="xl">
         <Alert color="red" title="The spec couldn’t be loaded">
