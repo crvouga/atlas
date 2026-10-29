@@ -164,6 +164,11 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas report doctor` | `doctor-result` |
 | `atlas report status` | `report-status` |
 | `atlas report verify-recordings` | `verify-recordings-result` |
+| `atlas ui-catalog plan` | `ui-catalog-publish-result` |
+| `atlas ui-catalog publish` | `ui-catalog-publish-result` |
+| `atlas ui-catalog status` | `ui-catalog-status` |
+| `atlas ui-catalog diff` | `ui-catalog-diff-result` |
+| `atlas ui-catalog export` | `ui-catalog-export-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 

@@ -38,6 +38,7 @@ export const USAGE = `atlas — executable statecharts
   atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
   atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
+  atlas ui-catalog plan|publish|status|diff|export …              the UI catalog of captured states (atlas ui-catalog --help)
 
   --workers       path attempts that run at once (default: one per CPU, capped by the driver)
   --seed          only paths that start from this seed ("start" for paths setup starts); repeatable
@@ -110,6 +111,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'init') return (await import('../../reports/src/init')).initMain(argv.slice(1), { out: text => process.stdout.write(text) });
   if (command === 'report') return (await import('../../reports/src/report-cli')).runReportCommand(argv.slice(1));
+  if (command === 'ui-catalog') return (await import('../../reports/src/ui-catalog-cli')).runUiCatalogCommand(argv.slice(1));
   const configFile = flag(argv, 'config') ?? 'atlas.config.ts';
   const specs = flag(argv, 'specs');
   const output = flag(argv, 'output');

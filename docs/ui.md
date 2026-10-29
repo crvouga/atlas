@@ -167,6 +167,11 @@ it works without a server. Cards are Mantine `Card`s in a responsive `SimpleGrid
   incomplete. Waiting follows the loading policy below, and layers still arriving are counted.
 - Pictures are `loading="lazy"` and only the cards on screen are fetched. The grid is bounded with *Show more*.
 - The open state shows every profile side by side with the layer, backend, producer, shard, commit and time of each picture.
+- **Compare** (`catalog/UiCatalogCompare.tsx`, `?compare=commit|profile&from&to`) sets two commits or two profiles against each other. Two
+  commits need the layers a newer layer replaced, which the held report no longer has, so `catalog/history.ts` reads the layer list and
+  the rows of the two commits only while the comparison is open (sharing the rows cache). Say what "changed" means (the stored bytes
+  differ, not a pixel measure), never call a one-sided state a regression, and say a layer that could not be read is unknown. The
+  coverage filter does not apply to a comparison.
 
 ## Reliability
 
@@ -384,7 +389,7 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
+| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |

@@ -160,7 +160,8 @@ export function detectFreshness(origin: { sha: string | null; ci: boolean }, git
   return git(['status', '--porcelain', '--untracked-files=no']) ? 'modified' : undefined;
 }
 
-function keyValue(pair: string, flag: string): [string, string] {
+/** Splits `key=value` (the form of `--param` and `--label`), or throws a message naming `flag`. */
+export function keyValue(pair: string, flag: string): [string, string] {
   const at = pair.indexOf('=');
   if (at < 1) throw new Error(`${flag} takes key=value (got "${pair}")`);
   return [pair.slice(0, at), pair.slice(at + 1)];
@@ -180,7 +181,8 @@ function linkSpec(spec: string): Record<string, unknown> {
   return named ? { name: named[1]!, url: named[2]! } : { url: spec };
 }
 
-function parseTime(text: string | undefined, flag = '--recorded-at'): number | null {
+/** An ISO date or epoch milliseconds from a flag, `null` when the flag was not given. Throws a message naming `flag` for anything else. */
+export function parseTime(text: string | undefined, flag = '--recorded-at'): number | null {
   if (text === undefined) return null;
   const numeric = Number(text);
   const parsed = Number.isFinite(numeric) ? numeric : Date.parse(text);
@@ -193,7 +195,7 @@ function parseTime(text: string | undefined, flag = '--recorded-at'): number | n
  * `ATLAS_RUN_ID` / `ATLAS_RUN_TITLE`, laid over a `run` the checks file gave. `undefined` when nothing names one, so the
  * documented grouping (CI run URL, else branch@sha) applies. A title or time without an id is refused: it would have nothing to belong to.
  */
-function executionOf(rest: readonly string[], env: Env, given?: unknown): LayerRun | undefined {
+export function executionOf(rest: readonly string[], env: Env, given?: unknown): LayerRun | undefined {
   const file = typeof given === 'object' && given !== null && !Array.isArray(given) ? given as Record<string, unknown> : {};
   const id = value(rest, 'run-id') ?? env.ATLAS_RUN_ID ?? (typeof file.id === 'string' ? file.id : undefined);
   const title = value(rest, 'run-title') ?? env.ATLAS_RUN_TITLE;
@@ -237,7 +239,7 @@ export async function runReportCommand(argv: readonly string[]): Promise<number>
 }
 
 /** Does the command ask for a JSON document (`--format json` or `--json`) instead of prose? */
-function wantsJson(argv: readonly string[]): boolean {
+export function wantsJson(argv: readonly string[]): boolean {
   return value(argv, 'format') === 'json' || argv.includes('--json');
 }
 

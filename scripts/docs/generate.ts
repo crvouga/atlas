@@ -21,6 +21,7 @@ import YAML from 'yaml';
 import { USAGE } from '../../packages/core/src/cli';
 import { INIT_USAGE } from '../../packages/reports/src/init';
 import { REPORT_USAGE } from '../../packages/reports/src/report-cli';
+import { UI_CATALOG_USAGE } from '../../packages/reports/src/ui-catalog-cli';
 import { packageManagerTable } from '../../packages/reports/src/package-managers';
 import { CLI_RESULTS } from '../../packages/schema/src/cli-results';
 import { renderSchemas } from '../../packages/schema/scripts/schemas';
@@ -81,13 +82,14 @@ export const CLI_HELP = [
   { title: 'atlas init', args: ['init'], usage: INIT_USAGE },
   { title: 'atlas serve', args: ['serve'], usage: SERVER_USAGE },
   { title: 'atlas dev', args: ['dev'], usage: DEV_USAGE },
-  { title: 'atlas report', args: ['report'], usage: REPORT_USAGE }
+  { title: 'atlas report', args: ['report'], usage: REPORT_USAGE },
+  { title: 'atlas ui-catalog', args: ['ui-catalog'], usage: UI_CATALOG_USAGE }
 ];
 
 /** The command line reference, using the same help inventory the executable documentation checks exercise. */
 function cliReference(): string {
   const block = (title: string, text: string) => `## ${title}\n\n\`\`\`text\n${text.trimEnd()}\n\`\`\`\n`;
-  return `# Command line reference\n\n> Generated from the usage text each command prints (\`atlas <command> --help\`) by \`bun run docs\`. Do not edit.\n\nAdd \`--format json\` (alias \`--json\`) to \`init\`, \`report publish\`, \`stream\`, \`merge\`, \`doctor\` and \`status\` for a JSON document on standard output (schemas in \`@crvouga/atlas/schemas\`). Exit codes: \`0\` it worked, \`1\` it ran and the answer is no, \`2\` the command was wrong.\n\n${CLI_HELP.map(help => block(help.title, help.usage)).join('\n')}`;
+  return `# Command line reference\n\n> Generated from the usage text each command prints (\`atlas <command> --help\`) by \`bun run docs\`. Do not edit.\n\nAdd \`--format json\` (alias \`--json\`) to \`init\`, \`report publish\`, \`stream\`, \`merge\`, \`doctor\`, \`status\` and every \`ui-catalog\` command for a JSON document on standard output (schemas in \`@crvouga/atlas/schemas\`). Exit codes: \`0\` it worked, \`1\` it ran and the answer is no, \`2\` the command was wrong.\n\n${CLI_HELP.map(help => block(help.title, help.usage)).join('\n')}`;
 }
 
 /** The operations of the HTTP API as Markdown, in full. */

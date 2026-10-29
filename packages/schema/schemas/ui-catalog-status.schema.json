@@ -1,0 +1,197 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-catalog-status.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "True only when the catalog holds a state and has no problem: nothing failed, nothing expected is missing, nothing is still being captured, and every backend and layer was read (otherwise the exit code is 1). Skipped cells are counted, not problems"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "states": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "profiles": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cells": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "States counted once per profile"
+        },
+        "coverage": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "captured",
+              "failed",
+              "capturing",
+              "skipped",
+              "missing"
+            ]
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "required": [
+            "captured",
+            "failed",
+            "capturing",
+            "skipped",
+            "missing"
+          ],
+          "description": "Cells by coverage"
+        },
+        "undeclared": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Captured cells no plan expects; zero when no plan exists"
+        },
+        "planned": {
+          "type": "boolean",
+          "description": "Whether any plan was published. Without one, `missing` is always zero because what should exist is unknown"
+        },
+        "surfaces": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "uncoveredSurfaces": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "states",
+        "profiles",
+        "cells",
+        "coverage",
+        "undeclared",
+        "planned",
+        "surfaces",
+        "uncoveredSurfaces"
+      ],
+      "additionalProperties": {}
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "failed",
+              "missing",
+              "capturing",
+              "unavailable",
+              "unreadable",
+              "empty"
+            ],
+            "description": "`failed`: a capture was attempted and failed. `missing`: a plan expects it and nothing was captured. `capturing`: still being taken, so not known. `unavailable`: a backend could not be read. `unreadable`: a layer could not be read. `empty`: the catalog holds no state at all"
+          },
+          "state": {
+            "description": "The state id, for `failed`, `missing` and `capturing`",
+            "type": "string"
+          },
+          "profile": {
+            "description": "The profile label, for `failed`, `missing` and `capturing`",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Why, when the producer said",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "sources": {
+      "type": "object",
+      "properties": {
+        "layers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "backends": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "available": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "available"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "notices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "layers",
+        "backends",
+        "notices"
+      ],
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "ok",
+    "summary",
+    "profiles",
+    "problems",
+    "sources"
+  ],
+  "additionalProperties": {}
+}

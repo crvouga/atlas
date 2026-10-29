@@ -576,7 +576,7 @@ of every layer. States are in id order and cells in profile order, so the same l
 
 Source: `packages/schema/src/cli-results.ts`
 
-What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings` print on standard output with `--format json` (alias
+What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, and `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, print on standard output with `--format json` (alias
 `--json`), and what any `atlas` command prints on standard error for a command that was wrong: one JSON document,
 so an agent or a script never has to parse prose. (`status` and `policy` already print documents:
 `ReportStatusSchema`, and an IAM policy.) Each is also published as a JSON Schema.
@@ -685,6 +685,46 @@ export const InitPlanSchema = …
 
 What `atlas init --format json` prints: everything found about the project, and everything it would change.
 Without `--write` nothing is changed. With `--write`, the files are written and `written` says which.
+
+#### `UiCatalogPublishResultSchema`
+
+```ts
+export const UiCatalogPublishResultSchema = …
+```
+
+What `atlas ui-catalog plan --format json` and `atlas ui-catalog publish --format json` print: the one layer that was written.
+
+#### `UiCatalogProblemSchema`
+
+```ts
+export const UiCatalogProblemSchema = …
+```
+
+One thing that keeps a UI catalog from being complete and good.
+
+#### `UiCatalogStatusSchema`
+
+```ts
+export const UiCatalogStatusSchema = …
+```
+
+What `atlas ui-catalog status --format json` prints.
+
+#### `UiCatalogDiffResultSchema`
+
+```ts
+export const UiCatalogDiffResultSchema = …
+```
+
+What `atlas ui-catalog diff --format json` prints.
+
+#### `UiCatalogExportResultSchema`
+
+```ts
+export const UiCatalogExportResultSchema = …
+```
+
+What `atlas ui-catalog export --format json` prints.
 
 #### `CLI_RESULTS`
 

@@ -173,6 +173,11 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas report doctor` | `doctor-result` |
 | `atlas report status` | `report-status` |
 | `atlas report verify-recordings` | `verify-recordings-result` |
+| `atlas ui-catalog plan` | `ui-catalog-publish-result` |
+| `atlas ui-catalog publish` | `ui-catalog-publish-result` |
+| `atlas ui-catalog status` | `ui-catalog-status` |
+| `atlas ui-catalog diff` | `ui-catalog-diff-result` |
+| `atlas ui-catalog export` | `ui-catalog-export-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 
@@ -1520,16 +1525,19 @@ thousands of captures can be watched while it happens and split across as many m
 
 Nothing about it is new to the report contract. A state is an ordinary check with a screenshot, the expected set is an ordinary
 layer, and the stream is the one every viewer already holds. This page is the convention that makes those usable as a catalog, the
-decisions behind it, and what is not built yet.
+decisions behind it, the command line, and what stays in your project.
 
 - [How a state is written](#how-a-state-is-written)
 - [What is expected](#what-is-expected)
 - [Publishing from any collector](#publishing-from-any-collector)
+- [The command line](#the-command-line)
 - [Sharding](#sharding)
 - [Streaming and loading](#streaming-and-loading)
 - [Exploring it](#exploring-it)
+- [Comparing two commits or two profiles](#comparing-two-commits-or-two-profiles)
+- [A single file that needs no server](#a-single-file-that-needs-no-server)
 - [Decisions](#decisions)
-- [What stays in your project, and what is not built yet](#what-stays-in-your-project-and-what-is-not-built-yet)
+- [What stays in your project, and what Atlas does not do](#what-stays-in-your-project-and-what-atlas-does-not-do)
 
 ## How a state is written
 
@@ -1614,6 +1622,35 @@ for a readiness check (bounded), photographs the page and returns the capture fo
 a `failed` capture that says why (with a picture of what it showed), never an exception that ends the run. Nothing that reads,
 composes or shows the catalog imports a collection framework, and a test keeps it that way.
 
+## The command line
+
+`atlas ui-catalog` does the same without a script. Every subcommand prints a JSON document with `--format json`
+([`atlas ui-catalog --help`](reference/cli.md) lists every flag), and exits `0` it worked, `1` the answer is no, `2` the command was wrong.
+
+```sh
+# The expected set under one profile. The file is {"states":[{"id":"checkout/payment","covers":["payment-form"]},{"id":"settings","inventory":true}]}.
+atlas ui-catalog plan --states plan.json --producer catalog-plan --environment mobile-web --param viewport=390x844 --param scheme=dark
+
+# The states one collector or shard captured. "screenshot" names a file beside captures.json.
+atlas ui-catalog publish --captures captures.json --producer web-capture --environment mobile-web --param viewport=390x844 --param scheme=dark --shard 2/8
+
+atlas ui-catalog status                          # exit 1 while anything failed, is missing, is still being captured or could not be read
+atlas ui-catalog diff --from 3f9a2c1 --to 8b41d70 # two commits (the whole id, or at least 7 digits)
+atlas ui-catalog export --out public/catalog.html # one file, no server
+```
+
+`captures.json` is `{"states":[…]}` (or just the list); a state is `{"id","title"?,"status"?,"detail"?,"route"?,"fixture"?,"cohort"?,"area"?,
+"flags"?,"covers"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?}` with `screenshot` a file name or `{"path"|"uri","width"?,"height"?,"contentType"?}`.
+A misspelled field is refused with its path, not ignored. A picture file is read from beside the file and from each `--attach-root`,
+never from a hidden file or a link out. **A `passed` state whose picture cannot be read is published as `failed`, with the reason**: a
+state without its picture is not shown as captured. `--recorded-at` defaults to the file's modification time, so publishing the same
+file twice is the same layer.
+
+`status` is the gate: it exits `1` unless the catalog holds a state and nothing needs attention (a failed capture, a state a plan expects
+with nothing captured, a capture still in progress, a backend or layer that could not be read). Without a plan nothing is expected, so
+nothing can be missing: it says so. A skipped cell is counted, not a problem. Schemas: `ui-catalog-publish-result`,
+`ui-catalog-status`, `ui-catalog-diff-result`, `ui-catalog-export-result`.
+
 ## Sharding
 
 A shard is **any publisher that does not know the others**: by case, by profile, by area or by machine; Atlas does not care which.
@@ -1657,6 +1694,47 @@ curl "$ATLAS_SERVER_URL/api/reports/ui-catalog?coverage=failed,missing&profile=�
 `@crvouga/atlas/reports/ui-catalog`), filtered by `q`, `coverage`, `profile`, `area`, `route`, `cohort`, `flag`, `surface` and
 `producer`, paged with `limit` and `offset`, with an ETag. Its picture `path` is relative to `/api/reports`.
 
+## Comparing two commits or two profiles
+
+The viewer's **Compare** button on `/catalog` (`?compare=commit&from=<commit>&to=<commit>`, or `?compare=profile&from=<profile>&to=<profile>`,
+so a link reproduces it) and `atlas ui-catalog diff` set one side against the other. Every pair is one state in one profile.
+
+| A pair is | When |
+| --- | --- |
+| **Unchanged** | the same coverage and, when captured, the same stored picture |
+| **Picture changed** | captured on both sides, and the picture's bytes (SHA-256) differ. This is not a measure of how many pixels differ |
+| **Coverage changed** | it stands differently (captured against failed, failed against not captured yet…). A capture that did not pass is never compared by picture |
+| **Cannot tell** | captured on both sides, but a picture has no content hash (it is given only by address, or was left out) |
+| **Only after** / **Only before** | one side has no such cell. It may be new, renamed, or the other side's shard may not have run: it is not called a regression |
+
+- **Two commits** compares the layers recorded at each commit. A layer replaces the older one of its slot, so the report keeps only the
+  newest capture of every state; the comparison therefore reads the layers themselves (the viewer asks for the layer list and the rows of
+  the two commits only; the command line reads the stores). Layers recorded from a checkout with uncommitted changes are not a commit's
+  own result and are left out. A commit is the whole id or at least 7 digits that name exactly one commit; anything else is an error
+  that lists the commits found, never a guess.
+- **Two profiles** sets each state's cell in one profile beside its cell in another (desktop against mobile, light against dark) in
+  the report the viewer holds.
+- A layer or backend that could not be read is named, and what it held is unknown, never "unchanged": `diff` exits `1` for it.
+  `--fail-on-change` also exits `1` for any difference, for a gate that must stay the same.
+- The filters (words, area, route, cohort, flag, surface, producer) narrow a comparison; coverage does not, because coverage is what is
+  compared.
+
+## A single file that needs no server
+
+`atlas ui-catalog export --out catalog.html` writes the catalog as **one HTML file**: the pictures embedded as `data:` addresses, the
+manifest embedded as JSON (`<script type="application/json" id="ui-catalog">`), a search box and a coverage filter. Open it from a disk,
+attach it to a ticket or serve it as a file. It is the catalog at the moment it was made, and says so; it does not stream (for that,
+serve the store with `atlas serve` or build the site with `atlas client build`, which shows the same catalog).
+
+- **Size.** Hosting platforms cap the size of one file. `--max-mb` (default 32) limits the embedded pictures; pictures past it are listed
+  in the page as left out, with the reason, in the order the page shows them, and the manifest stays complete. `--images none` embeds none.
+  `--manifest catalog.json` also writes the manifest as its own file.
+- **Safe to open.** The page is generated from data written by test runs, and treats it so: text is escaped, only PNG, JPEG, GIF and WebP
+  bytes (by their first bytes, never SVG, never a layer's claimed type) are embedded, a picture given by address is linked only if it is
+  `http` or `https`, and a Content-Security-Policy forbids every network request. Without scripts every state is simply shown.
+- It is a generated document, not the viewer: it carries its own small inline style and script because it must work with no build
+  and no server, which [the viewer's UI conventions](ui.md) forbid inside the viewer.
+
 ## Decisions
 
 The questions the original proposal left open, and how they are answered here. Each is the simplest answer that stays inside the
@@ -1674,16 +1752,37 @@ The questions the original proposal left open, and how they are answered here. E
 | What moves | Reading, composing, the viewer, the document and the API, the publish builders, a Playwright capture adapter. Staying with a product: its state declarations, its inventory, its fixtures and its runner. |
 | Where it lives | `@crvouga/atlas/reports/ui-catalog` (model), `…/ui-catalog-publish` (builders), `…/ui-state` (convention); the viewer's `/catalog`; the server's `/api/reports/ui-catalog`; `@crvouga/atlas/playwright`'s `captureUiState`. |
 | Exploration capabilities | Search, filters, profile comparison, coverage and surface coverage, failure diagnostics, deep links, manifest export. |
-| Static export | The catalog is computed from the layers a viewer holds, so a static export (`atlas client build`) shows it; it just does not stream. |
+| Static export | Two ways, neither needs a server. The catalog is computed from the layers a viewer holds, so the static site (`atlas client build`) shows it, without streaming. `atlas ui-catalog export` writes it as one self-contained HTML file with a size budget. |
+| Comparing | Two commits (from the layers recorded at each, because the report keeps only the newest) or two profiles; pictures by content hash, never by a pixel measure; one-sided states are not regressions. |
+| Command line | `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, each with `--format json`. Running a collector is not one: that is the product's. |
 
-## What stays in your project, and what is not built yet
+## What stays in your project, and what Atlas does not do
 
-**Stays in a project** (it is specific to the product): the list of states and profiles to capture, the inventory of surfaces,
-fixtures and test data, the runner that drives the product to each state, and the readiness conditions of each screen.
+A project that had its own catalog moves each role it had to Atlas, and keeps only what is specific to its product. The eight roles, and
+where each now is:
 
-**Not built yet:** a command line to list and publish a catalog without a script (use `atlas report publish --checks` today), a
-dedicated static single-file export, diff views that compare two commits of a state, and a hosting-platform publish step beyond
-`atlas serve`. The first slice makes the catalog explorable, streaming, shardable and independent of how it was collected.
+| # | Role | In Atlas | Stays in your project |
+| --- | --- | --- | --- |
+| 1 | Declaration of the states to capture, and the plan of what is expected | The plan format (`ui-plan` layers), `uiPlanLayer`, `atlas ui-catalog plan` | **The list itself**: which states and profiles your product has |
+| 2 | A capture helper, with readiness checks and diagnostics | An optional adapter, `captureUiState` in `@crvouga/atlas/playwright`; any other tool writes the same layer | **The readiness condition of each screen**, and the helper for a framework Atlas has no adapter for |
+| 3 | An evidence store: one atomic record per capture, images by content | Layers and the stores that hold them (`publishChecks`, a directory, S3, a server) | Nothing |
+| 4 | An inventory of the product's surfaces, and reconciliation against it | Reconciliation: `inventory` plan entries and `covers`, the surface coverage table | **The inventory**: the list of surfaces your product has |
+| 5 | A manifest and report builder | `uiCatalog`, the JSON manifest, Markdown, the single HTML file | Nothing |
+| 6 | A viewer: as a single file, as a site, and live | `atlas ui-catalog export`, `atlas client build`, and `/catalog` on `atlas serve` | Nothing |
+| 7 | A command line (list, run, report, publish, watch) | `atlas ui-catalog plan\|publish\|status\|diff\|export`; watching is the live `/catalog` and `atlas report stream` | **Run**: the runner that drives your product to each state |
+| 8 | A publish step to a hosting platform | Not in Atlas, see below | **The deploy step** of your platform |
+
+What stays is, in one list: the states and profiles to capture, the inventory of surfaces, the fixtures and test data, the runner that
+drives the product to each state, the readiness condition of each screen, and the deploy step of your hosting platform. Nothing else is
+specific to your product, so a project that installs a release holds none of the reporting and exploring code, only that.
+
+**A hosting publish step is not a command, on purpose.** Publishing to a platform needs that platform's credentials and API, which Atlas
+neither holds nor should. Hand the platform what Atlas produces: the `export` file (or a folder of them) for any host that serves
+files, the output of `atlas client build` for a static site, or run `atlas serve` for a live one. Keep the credentials in the CI of the
+project, where they already are.
+
+**Not built:** reconciliation against an external inventory beyond `inventory` entries and `covers`; a comparison of pictures by pixels
+(only by content); a comparison fetched from the server (the viewer and the command line read the layers themselves).
 </doc>
 
 <doc path="docs/server.md">
@@ -4648,6 +4747,11 @@ it works without a server. Cards are Mantine `Card`s in a responsive `SimpleGrid
   incomplete. Waiting follows the loading policy below, and layers still arriving are counted.
 - Pictures are `loading="lazy"` and only the cards on screen are fetched. The grid is bounded with *Show more*.
 - The open state shows every profile side by side with the layer, backend, producer, shard, commit and time of each picture.
+- **Compare** (`catalog/UiCatalogCompare.tsx`, `?compare=commit|profile&from&to`) sets two commits or two profiles against each other. Two
+  commits need the layers a newer layer replaced, which the held report no longer has, so `catalog/history.ts` reads the layer list and
+  the rows of the two commits only while the comparison is open (sharing the rows cache). Say what "changed" means (the stored bytes
+  differ, not a pixel measure), never call a one-sided state a regression, and say a layer that could not be read is unknown. The
+  coverage filter does not apply to a comparison.
 
 ## Reliability
 
@@ -4865,7 +4969,7 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
+| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
@@ -5241,7 +5345,7 @@ carries it. Upgrade (`bun update @crvouga/atlas --latest`) and remove your worka
 
 > Generated from the usage text each command prints (`atlas <command> --help`) by `bun run docs`. Do not edit.
 
-Add `--format json` (alias `--json`) to `init`, `report publish`, `stream`, `merge`, `doctor` and `status` for a JSON document on standard output (schemas in `@crvouga/atlas/schemas`). Exit codes: `0` it worked, `1` it ran and the answer is no, `2` the command was wrong.
+Add `--format json` (alias `--json`) to `init`, `report publish`, `stream`, `merge`, `doctor`, `status` and every `ui-catalog` command for a JSON document on standard output (schemas in `@crvouga/atlas/schemas`). Exit codes: `0` it worked, `1` it ran and the answer is no, `2` the command was wrong.
 
 ## atlas
 
@@ -5260,6 +5364,7 @@ atlas — executable statecharts
   atlas dev    [--port 5180]                                     develop the Atlas server and client on one host
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
   atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
+  atlas ui-catalog plan|publish|status|diff|export …              the UI catalog of captured states (atlas ui-catalog --help)
 
   --workers       path attempts that run at once (default: one per CPU, capped by the driver)
   --seed          only paths that start from this seed ("start" for paths setup starts); repeatable
@@ -5410,6 +5515,60 @@ atlas report — layered evidence for any kind of spec
   A store may be an Atlas server (https://…): ATLAS_STORE=https://atlas.example.com, with ATLAS_TOKEN.
 
   Exit codes: 0 ok, 1 the report does not pass (or a check failed), 2 the command was wrong.
+```
+
+## atlas ui-catalog
+
+```text
+atlas ui-catalog — a browsable inventory of captured UI states, from any collector
+
+  atlas ui-catalog plan    --states <file.json> --producer <name> [--store <dir|s3://bucket/prefix|https://…>]
+                           [--environment <name>] [--param key=value]... [--shard <label>]
+                           [--branch <b>] [--sha <s>] [--run-url <u>] [--run-id <id>] [--run-title <t>] [--recorded-at <iso|ms>]
+  atlas ui-catalog publish --captures <file.json> --producer <name> [the same flags as plan]
+                           [--attach-root <dir>]... [--max-picture-mb <n>]
+  atlas ui-catalog status  [--store <dir|s3://…|id=url>]... [--backends <module>] [filters] [--branch <name>]...
+                           [--ignore-modified] [--format text|json|markdown]
+  atlas ui-catalog diff    --from <commit> --to <commit> [--store …]... [--backends <module>] [filters]
+                           [--fail-on-change] [--format text|json|markdown]
+  atlas ui-catalog export  --out <file.html> [--store …]... [--backends <module>] [filters]
+                           [--images inline|none] [--max-mb <n>] [--manifest <file.json>] [--title <t>]
+
+  filters (status, diff, export): --q <words> --coverage a,b --profile <key|label>... --area a --route r --cohort c
+                           --flag f --surface s --producer p
+
+  plan      Write one layer of kind ui-plan: the states (and with "inventory": true, the surfaces) that should exist under
+            this profile. Every entry is not-run, so a plan never counts as a pass. The file is {"states":[{"id":…,
+            "title"?,"route"?,"fixture"?,"cohort"?,"area"?,"flags"?,"covers"?,"inventory"?}]} or just that list.
+  publish   Write one layer of kind ui-state: the states one collector or shard captured under this profile. The file is
+            {"states":[{"id":…,"title"?,"status"?:"passed|failed|running|not-run","detail"?,"route"?,"fixture"?,"cohort"?,
+            "area"?,"flags"?,"covers"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?:"file.png"|{"path"|"uri",
+            "width"?,"height"?,"contentType"?}}]}. A picture file is read from beside the file and each --attach-root, never
+            from a hidden file or a link out. A passed state whose picture cannot be read is published as failed, with the
+            reason: a state without its picture is not shown as captured.
+            --environment and each --param key=value are the profile (a viewport, a color scheme, a device): another
+            profile is another result side by side. --shard only describes the layer; it never splits a result.
+            --recorded-at defaults to the modification time of the file, so publishing the same file twice is one layer.
+  status    Read every store and print the catalog's summary. Exit 1 unless the catalog holds a state and there is nothing
+            to attend to: a failed capture, a state a plan expects with nothing captured, a capture still in progress, a
+            backend or layer that could not be read. Without a plan nothing is expected, so nothing is missing.
+            --profile takes a profile's key or its label, as printed by status.
+  diff      Set the catalog recorded at one commit (--from) against another (--to): each state in each profile is paired
+            with itself and is unchanged, changed in coverage, changed in picture (the stored bytes differ), unverified (a
+            side has no content hash), only in --to (added) or only in --from (removed). A commit is the whole id or at
+            least 7 digits of it. Exit 0 unless a store could not be read, or, with --fail-on-change, anything differs.
+  export    Write the catalog as one HTML file with its pictures embedded and its manifest in it: no server, no network.
+            It is the catalog at the moment it was made. --images none leaves the pictures out. --max-mb (default 32) limits
+            the embedded pictures; those past it are listed in the page as left out, and the manifest stays complete.
+            --manifest writes the catalog's JSON manifest too.
+
+  --format json (alias --json)   every subcommand prints one JSON document instead of prose
+                       (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result).
+                       A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
+  A store is a directory, s3://bucket/prefix or an Atlas server (https://…), exactly as for atlas report; select a project
+  with --project <slug> or ATLAS_PROJECT. When no --store is given, ATLAS_STORE is used.
+
+  Exit codes: 0 ok, 1 the answer is no (see each command), 2 the command was wrong.
 ```
 </doc>
 

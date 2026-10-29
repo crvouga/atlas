@@ -73,7 +73,8 @@ function immutable(id: string) {
   return /^[0-9a-f]{64}$/.test(id);
 }
 
-function rowsKey(layer: LayerHeader) {
+/** The cache key of one layer's rows, shared by everything that reads them so a layer is read once. */
+export function rowsKey(layer: LayerHeader) {
   return ['evidence-rows', layer.backend, layer.id, immutable(layer.id) ? '' : layer.execution] as const;
 }
 
