@@ -82,6 +82,15 @@ when Watch is on screen.
 - The promise's revision (the spec's fingerprint now) and the evidence's revision (the fingerprint the layer recorded)
   are shown separately. A known difference demotes a recording to "Recording is older" with an alert; a missing
   fingerprint is "not recorded", never a match.
+- Whether the evidence applies is a separate reading (`evidence/applicability.ts`), shown on Watch and Inspect and as a
+  row badge when it is stale (or unknown against a named release): `applies`, `stale` (an earlier promise or another
+  build), `unknown`, or `none`. It never changes a status or a coverage state. Age is when the checks ran
+  (`recordedAtMs`), never when the layer was uploaded or annotated. A release is named in the address (`release` build,
+  `releaseSha`, `releasePlatform`); a branch name or a passing run never supplies one. Another platform, a missing
+  build or commit, or a checkout with local changes (`freshness`) is `unknown`, never an exact match. Producers say
+  what they know with labels: `build`, `platform`, and `applies-to` with `applies-to-by` (the policy that asserts the
+  evidence still holds for those builds; without it the assertion is refused). The "Stale or unverified" filter
+  (`evidence=stale`) lists every behavior whose evidence does not apply, including those with none.
 - A recording is always labelled illustrative: it shows one run and does not approve a behavior for production.
   `demo`/`representative` tags only add a "Representative demo" label.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with

@@ -12,6 +12,8 @@ import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { Alert, Badge, Box, Group, List, Paper, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useMemo, type ReactNode } from 'react';
 
+import type { Assessment, ReleaseIdentity } from './applicability';
+import { ApplicabilitySummary } from './applicability-view';
 import { attachmentSource, useCheckDetail } from './artifacts';
 import { COVERAGE, COVERAGE_ORDER, type Behavior, type CoverageCounts, type CoverageState, type Revision } from './behavior';
 import { PlainSteps } from './check-detail';
@@ -141,10 +143,16 @@ function Player({ result }: { result: EvidenceResult }) {
 export function BehaviorPanel({
   behavior,
   inspect,
-  start
+  start,
+  applicability,
+  release = {}
 }: {
   behavior: Behavior;
   inspect: ReactNode;
+  /** How the evidence applies to the promise and the named release, shown with the recording and under Inspect. */
+  applicability?: Assessment;
+  /** The release the reader named, if any. */
+  release?: ReleaseIdentity;
   /** The tab to open on; by default Watch when there is something to watch, Inspect while a run is in progress (its progress lives there), else Read. */ start?:
     'read' | 'watch' | 'inspect';
 }) {
@@ -236,11 +244,13 @@ export function BehaviorPanel({
             </Group>
           )}
           <RevisionLine revision={revision} />
+          {applicability && <ApplicabilitySummary assessment={applicability} release={release} />}
         </Stack>
       </Tabs.Panel>
       <Tabs.Panel value="inspect">
         <Stack gap="sm" miw={0}>
           <RevisionLine revision={revision} />
+          {applicability && <ApplicabilitySummary assessment={applicability} release={release} />}
           {inspect}
         </Stack>
       </Tabs.Panel>
