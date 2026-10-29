@@ -50,7 +50,7 @@ export const ReadySchema = z.looseObject({
 export const ServerInfoSchema = z.looseObject({
   name: z.literal('atlas'),
   version: z.string().nullable().describe('The @crvouga/atlas version the server runs, or null when it does not know'),
-  role: z.enum(['read', 'publish', 'admin']).describe('What the token of this request may do. A server with no tokens treats everyone as admin'),
+  role: z.enum(['read', 'critic', 'publish', 'admin']).describe('What the token of this request may do. A server with no tokens treats everyone as admin'),
   open: z.boolean().describe('True when the server has no tokens at all'),
   write: z.string().describe('The id of the backend uploads go to'),
   ready: z.boolean(),

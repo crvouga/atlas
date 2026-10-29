@@ -32,6 +32,9 @@ const SpecSearch = RootSearch.extend({
   spec: z.string().min(1).optional().catch(undefined),
   check: z.string().min(1).optional().catch(undefined),
   layer: z.string().min(1).optional().catch(undefined),
+  /** A shared moment: the exact recording (an `attachmentIdentity`) of that layer, and the position in it in milliseconds. */
+  clip: z.coerce.string().min(1).optional().catch(undefined),
+  clipAt: z.coerce.number().nonnegative().optional().catch(undefined),
   view: z.enum(['recording']).optional().catch(undefined),
   moment: z.coerce.number().int().positive().optional().catch(undefined),
   /** The release evidence is read against: its build, commit and platform, and the evidence filter (see `evidence/applicability.ts`). A build such as `90` is read from a typed link as a number: coerced back to its text. */

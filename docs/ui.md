@@ -164,6 +164,28 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
   (paced, scripted, silent, synthetic) and the sentence that the length is the recording's, not production latency. Developer
   details opens the test pinned to that run's record and closes the playlist.
 
+## Steps and moments in a recording
+
+Wherever a result's steps sit beside its recording (a result's Timeline under Inspect, the Watch tab of a behavior, an
+opened watch playlist), `evidence/moments.tsx` joins them. Placement is from the recording's own declared timing
+(`evidence/media-timing.ts`, the `atlas.media` extension; see [Place steps in a recording](rich-evidence.md#place-steps-in-a-recording)),
+never from an assumption that the recording starts with the check.
+
+- A step has a "Recording m:ss.s" button that seeks the selected recording; the step's test-clock offset stays visible beside it.
+  A step that cannot be placed (no timing, no origin, no offset, outside the recording, unreadable declaration) is "Not aligned"
+  and selecting it states the reason in a status alert. Nothing is guessed and the video is not moved.
+- While playing, the step under the playhead gets `aria-current="step"` and "Playing now". It never moves focus, scrolls
+  the page or announces itself. Seeking only scrolls the player into view.
+- A paced recording (pauses declared, or a `pacing: paced` scope) says that gaps between steps include deliberate pauses and are
+  not application latency.
+- A failed step has "Jump to the failing moment" in the bar above the timeline, and the failure summary has the same action
+  (`requestFailureMoment`). If the recording is not on screen, or the step cannot be placed, it says so.
+- "Copy link to this moment" names the run (`layer`), the exact recording (`clip`) and the position (`clipAt`, ms), as the
+  explorer address `/?test=…&layer=…&clip=…&clipAt=…` (the playlist links to the result it is playing). Opening it selects that
+  recording of that exact run and seeks once the player knows its length; a position past the end or a recording that the run
+  does not hold is reported and nothing else is played in its place. If the browser refuses to copy, the link is shown to copy.
+- One provider serves one holder: the check, or one try. A try's steps are placed by that try's recording and timing only.
+
 ## Review collections
 
 The **Collections** tab (`explorer/collections.tsx`, `?tab=collections&collection=<id>&rev=<n>`) lists and opens review

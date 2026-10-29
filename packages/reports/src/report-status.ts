@@ -11,7 +11,7 @@
 import { REPORT_STATUS_SCHEMA_VERSION, type ReportStatus } from '../../schema/src/layer';
 import { countResults, type CombinedReport } from './compose';
 import { normalizeEnvironment } from './layer-axes';
-import { isDiagnosticKind, type EvidenceResult } from './layer-merge';
+import { isDiagnosticKind, isOpinionKind, type EvidenceResult } from './layer-merge';
 import { recordingCompleteness } from './recording-receipt';
 
 /** Extra conditions for the gate beyond "all checks pass". */
@@ -33,7 +33,7 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  * checks (or none completed), failed checks, running checks, specs without results (only with `requireAllSpecs`),
  * each required environment with no checks (the name is normalised, so `iOS` means `ios`), then every notice of the
  * report (an unreadable layer or backend). `failing` lists each failed or running winner, in a fixed order that does
- * not depend on read order; diagnostic `performance` checks are left out unless nothing else was recorded.
+ * not depend on read order; diagnostic `performance` checks are left out unless nothing else was recorded, and `critique` opinions are always left out.
  * `recordings` reports recording completeness of the same results apart from `ok`: an incomplete or unknown
  * completeness never changes the gate (use `atlas report publish --require-recordings` to fail on a missing video).
  *
@@ -44,7 +44,8 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  * @see docs/report-contract.md#atlas-report-status
  */
 export function reportStatus(report: CombinedReport, options: StatusOptions = {}): ReportStatus {
-  const results: EvidenceResult[] = [...report.combined.specs.flatMap(entry => entry.results), ...report.combined.unassigned];
+  // A critique is an opinion: a low score or a crashed critic never fails the gate (see `isOpinionKind`).
+  const results: EvidenceResult[] = [...report.combined.specs.flatMap(entry => entry.results), ...report.combined.unassigned].filter(result => !isOpinionKind(result.row.kind));
   const outcomes = results.some(result => !isDiagnosticKind(result.row.kind)) ? results.filter(result => !isDiagnosticKind(result.row.kind)) : results;
   const failing = outcomes
     .filter(result => result.row.status === 'failed' || result.row.status === 'running')
@@ -104,7 +105,8 @@ export function reportStatus(report: CombinedReport, options: StatusOptions = {}
 /** `spec › check`, unless the check's id already starts with its spec. */
 const label = (item: { spec: string | null; check: string }) => (item.spec && !item.check.startsWith(item.spec) ? `${item.spec} › ${item.check}` : item.check);
 
-function specOutcome(path: string | null, title: string, kind: string, results: readonly EvidenceResult[]) {
+function specOutcome(path: string | null, title: string, kind: string, all: readonly EvidenceResult[]) {
+  const results = all.filter(result => !isOpinionKind(result.row.kind));
   const environments = new Map<string, EvidenceResult[]>();
   for (const result of results) {
     const key = result.layer.environment ?? 'unspecified';

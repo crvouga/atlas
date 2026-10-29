@@ -230,6 +230,10 @@ An Atlas path that passed on retry (`flaky`) is `passed`, with the detail "Passe
 Timings that only qualify a check (parts of kind `performance`), and what a UI catalog expects (`ui-plan`), are not counted as checks when
 anything else is recorded. A measurement over its allowance is reported and never fails a check.
 
+Opinions (parts of kind `critique`, the verdicts of [automated UI reviewers](critics.md)) are never counted as checks,
+even when they are all that was recorded, and are never part of the gate: a low score, or a critic that crashed, leaves
+`atlas report status` as it was. The `status` of a critique check says only whether the critic ran.
+
 **Freshness never changes a status.** A layer whose spec fingerprint no longer matches, whose
 checkout was modified, or whose related code changed still shows its recorded outcome, with a
 warning ("Potentially outdated: spec changed"). Atlas favours quick, possibly stale evidence over

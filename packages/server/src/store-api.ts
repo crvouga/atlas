@@ -15,6 +15,7 @@ import { isPaged, type ObjectStore } from '../../reports/src/object-store';
 import { readBytes } from '../../reports/src/object-io';
 import { UNTRUSTED_HEADERS } from '../../reports/src/attachment-response';
 import type { ReportLayer } from '../../reports/src/layer-types';
+import { criticScopeViolation } from '../../critics/src/scope';
 import type { Auth } from './auth';
 import { classify, isCatalog, Refusal, sameBytes, validateUpload, validKey } from './validate';
 
@@ -53,6 +54,32 @@ export async function readLimited(request: Request, limit: number): Promise<Uint
 const decode = (c: Context, prefix: string): string | null => {
   try { return decodeURIComponent(new URL(c.req.url).pathname.slice(prefix.length)); } catch { return null; }
 };
+
+const decoder = new TextDecoder();
+
+/**
+ * What a critic-role token may upload: blobs, and layers (and the catalog entries that make them visible) whose producer
+ * is `critic.<name>` and whose parts are all of kind `critique`. Anything else, including a key that is not a layer at
+ * all, is refused with `403` and the rule it broke, before anything is stored. Blobs are checked against their name by
+ * the upload validation, so on their own they are harmless.
+ */
+async function assertCriticMayStore(name: string, bytes: Uint8Array, store: ObjectStore): Promise<void> {
+  const known = classify(name);
+  if (known?.kind === 'blob') return;
+  if (known?.kind !== 'layer' && known?.kind !== 'layer-catalog') throw new Refusal(403, `A critic token may upload only critiques, not "${name}". Use a publish token for anything else.`);
+  let text: string;
+  if (known.kind === 'layer') text = decoder.decode(bytes);
+  else {
+    const stored = await store.get(`layers/manifests/${known.id}.json`);
+    // A catalog entry for a layer that is not there is refused by the upload validation, as for everyone.
+    if (!stored) return;
+    text = decoder.decode(await readBytes(stored.body));
+  }
+  let layer: { producer?: unknown; parts?: unknown };
+  try { layer = JSON.parse(text) as typeof layer; } catch { return; }
+  const violation = criticScopeViolation(layer ?? {});
+  if (violation) throw new Refusal(403, violation);
+}
 
 /**
  * The store protocol: the seven operations of an object store over HTTP, for what the server keeps. A client
@@ -123,13 +150,15 @@ export function storeApi(options: StoreApiOptions) {
   });
 
   app.put('/*', async c => {
-    const verdict = auth.check(c.req.raw, 'publish');
+    // A critic may upload too, but only what a critic publishes (see `assertCriticMayStore`).
+    const verdict = auth.check(c.req.raw, 'critic');
     if (!verdict.ok) return refuse(c, verdict.status, verdict.message);
     const name = key(c);
     if (name === null || !validKey(name)) return refuse(c, 422, 'Not a key Atlas holds');
     try {
       const bytes = await readLimited(c.req.raw, options.maxObjectBytes);
       return await exclusive(name, async () => {
+        if (verdict.identity.role === 'critic') await assertCriticMayStore(name, bytes, store);
         const kind = await validateUpload(name, bytes, store, layer => { recent.set(layer.id, layer); if (recent.size > 8) recent.delete(recent.keys().next().value!); });
         // A blob's name is the digest of what is in it, which was just checked: one that is there is this one, however it was compressed.
         const present = kind === 'blob' && (await store.head(name)) ? 'same' : await sameBytes(store, name, bytes);

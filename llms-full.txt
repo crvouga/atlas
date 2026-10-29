@@ -112,6 +112,7 @@ The complete public export map is generated from the package manifest (wildcards
 @crvouga/atlas/vitest
 @crvouga/atlas/schema
 @crvouga/atlas/server
+@crvouga/atlas/critics
 @crvouga/atlas/reports/*
 @crvouga/atlas/schemas/*
 @crvouga/atlas/openapi.json
@@ -1014,6 +1015,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `extensions['atlas.media']` | attachment (video) | Where the check's steps are in the recording, so a click on a step seeks the video. See [Place steps in a recording](#place-steps-in-a-recording). |
 | `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
 | `specPath` | check | The spec a check belongs to (a `.feature`, a test file), relative to the repository. Checks are grouped by it. |
@@ -1095,6 +1097,44 @@ Every field is optional, and every value except the booleans is an open string.
   `scopes`, and the search box finds the words in them.
 - **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
   dropped, and the attachment, check and layer stay.
+
+## Place steps in a recording
+
+A step says when it started on the check's clock (`offsetMs`, after the check started). A video has its own clock, which
+began when the recorder did, and the two are not assumed to agree: a recorder usually starts before the first step, and a
+paced demo may have delays put into the video that the check never waited for. To let a reviewer click a step and land on
+its moment in the video, say how the clocks relate in the `atlas.media` extension of the video attachment:
+
+```ts
+{
+  name: 'checkout.webm', role: 'video', durationMs: 9000,
+  extensions: {
+    'atlas.media': {
+      checkStartMs: 1200,                                           // the check started 1.2 s into the video
+      pauses: [{ atMs: 900, durationMs: 2000, reason: 'title card' }], // 2 s put into the video before the step at +900 ms
+      marks: [{ step: 'pay', mediaMs: 4100 }]                        // a step whose moment in the video you know exactly
+    }
+  }
+}
+```
+
+Every field is optional and none of it decides a status, a slot or a winner. A step is placed at `checkStartMs` + its
+`offsetMs` + the `durationMs` of every pause whose `atMs` is at or before the step; a mark names the moment outright and
+wins. Anything else is unavailable and said so, never guessed.
+
+- **Without timing, nothing is placed.** A video with no `atlas.media`, no `checkStartMs`, or a step with no `offsetMs` and
+  no mark, is never assumed to start with the check, and a step is never placed from the wording of its name. Selecting
+  such a step says why it cannot be shown, and moves nothing.
+- **Outside the video is not clamped.** A moment before the start, or after `durationMs` (or the length the player reports),
+  is unavailable. A declaration with a field Atlas cannot read (a pause without a duration) is reported and places nothing.
+- **Pacing is not latency.** A video with `pauses`, or with a `scope` of `pacing: 'paced'`, is labelled as paced: the time
+  between its steps includes deliberate pauses and is not application latency, and no measurement is changed by it.
+- **Each try has its own clock.** Put the video and the `atlas.media` of a retry on its `attempts[]` entry, with that
+  try's `steps`. A try is aligned only by its own video, never by the check's or an earlier try's.
+- **Link to a moment.** The viewer copies a link that names the run (`layer`), the exact recording (`clip`, its digest or
+  stored key) and the position (`clipAt`, milliseconds into the video). Opening it selects that recording of that run, even
+  when a newer run exists, and goes to the position; a recording the run does not hold is reported, never replaced.
+- **Older layers.** A layer without `atlas.media` reads exactly as before; the video plays and its steps list as ever.
 
 ## Product latency
 
@@ -1813,7 +1853,7 @@ is said in words and the server does not start. The file has a published
 | How often (seconds) the backends are looked at for layers written by something else | `refreshSeconds` | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
 | Let anyone look, not upload | `auth.anonymousRead` | `--anonymous-read` | `ATLAS_ANONYMOUS_READ` | no |
 | Listen publicly with no tokens (something in front signs people in) | `auth.insecure` | `--insecure` | `ATLAS_INSECURE` | no |
-| The admin token (also `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
+| The admin token (also `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
 | The configuration file | `(the file itself)` | `--config <file>` | `ATLAS_CONFIG` | `./atlas.server.json` when it exists |
 | Largest uploaded object in MiB | `limits.maxObjectMiB` |  | `ATLAS_MAX_OBJECT_MIB` | `256` |
 | Largest JSON upload in MiB | `limits.maxJsonMiB` |  | `ATLAS_MAX_JSON_MIB` | `32` |
@@ -1846,16 +1886,18 @@ backend in the client and `/readyz`, and recovers by itself.
 | Role | May |
 | --- | --- |
 | `read` | look: the client, the report, `/api/status` |
+| `critic` | also publish [critiques](critics.md#authentication-and-authorization) and nothing else: blobs and layers whose producer is `critic.<name>` and whose parts are all of kind `critique`. It cannot post test results, start live runs or change settings |
 | `publish` | also upload layers, specs and runs, and remove the scratch objects `atlas report doctor` writes |
 | `admin` | all server operations |
 
 Tokens are at least 12 characters (`openssl rand -hex 24`) and different from one another. Give them as
-`ATLAS_TOKEN` (admin), `ATLAS_PUBLISH_TOKEN`, `ATLAS_READ_TOKEN`, or under `auth.tokens` in the file, preferably
+`ATLAS_TOKEN` (admin), `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN`, `ATLAS_READ_TOKEN`, or under `auth.tokens` in the file, preferably
 with `tokenEnv` so the file holds no secret.
 
 - **Sending a token:** `Authorization: Bearer <token>`. A browser's sign-in box also works for *looking* (any
   user name, the token as the password). **Uploading needs the Bearer header, never the sign-in box**: a browser
   sends those credentials by itself to any page that asks, which would let another site upload with them.
+- **Run critics against a server with tokens.** With no tokens every caller is an administrator, a critic included.
 - **No tokens** means open, and then the server refuses to listen beyond this machine unless told
   `--insecure` (for when a proxy in front does the signing in).
 - `/healthz` and `/readyz` never need a token, so a load balancer can use them.
@@ -2098,8 +2140,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/store/{key}` | read | Read an object. |
 | `HEAD /api/store/{key}` | read | Does an object exist. |
 | `HEAD /api/projects/{project}/store/{key}` | read | Does an object exist. |
-| `PUT /api/store/{key}` | publish | Upload an object. |
-| `PUT /api/projects/{project}/store/{key}` | publish | Upload an object. |
+| `PUT /api/store/{key}` | critic | Upload an object. |
+| `PUT /api/projects/{project}/store/{key}` | critic | Upload an object. |
 | `DELETE /api/store/{key}` | publish | Remove a scratch object. |
 | `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
 | `GET /api/reports/tests` | read | Every test, with insights, facets and history statistics. |
@@ -2942,6 +2984,10 @@ An Atlas path that passed on retry (`flaky`) is `passed`, with the detail "Passe
 Timings that only qualify a check (parts of kind `performance`), and what a UI catalog expects (`ui-plan`), are not counted as checks when
 anything else is recorded. A measurement over its allowance is reported and never fails a check.
 
+Opinions (parts of kind `critique`, the verdicts of [automated UI reviewers](critics.md)) are never counted as checks,
+even when they are all that was recorded, and are never part of the gate: a low score, or a critic that crashed, leaves
+`atlas report status` as it was. The `status` of a critique check says only whether the critic ran.
+
 **Freshness never changes a status.** A layer whose spec fingerprint no longer matches, whose
 checkout was modified, or whose related code changed still shows its recorded outcome, with a
 warning ("Potentially outdated: spec changed"). Atlas favours quick, possibly stale evidence over
@@ -3240,6 +3286,13 @@ when you do not know, and the viewer says the cause is unknown. It is never infe
 failed before the behavior started comes from the failed step's `kind`: `hook`, `setup`, `fixture`, `before`,
 `beforeAll`, `beforeEach` or `given` mean preparation; `when`, `then`, `assertion` or `expect` mean the behavior.
 
+### Placing steps in a recording
+
+A video may declare how its clock relates to the check's under the `atlas.media` extension (`checkStartMs`, `pauses`,
+`marks`), so the viewer can seek it from a step and mark the step playing. Without it the video plays as ever and no step
+is placed. The fields, the rules and the link to a moment are in
+[Place steps in a recording](rich-evidence.md#place-steps-in-a-recording).
+
 ## Attach evidence
 
 ### From the command line
@@ -3361,6 +3414,7 @@ Annotation `type`: `note`, `warning`, `deprecation`, `issue`, `accessibility`, `
 | A kind of file Atlas has never seen | Attach it with its media type and a `role`. It is stored and offered for download today. |
 | Structured data of your own | Put it in `extensions` under a name you own. It is kept, and shown as raw data. |
 | A new annotation type, role or step kind | Use it. Open vocabularies need no registration. |
+| An automated reviewer's opinion of a captured UI | A [critique](critics.md): a part of kind `critique` with the `atlas.critique` extension. It is never counted and never gates. |
 | Something that should be shown well | Ask for a renderer (below). |
 | A field every tool should have | Open an issue. It is added as an optional field, and the rules above guarantee nothing breaks. |
 
@@ -3380,6 +3434,199 @@ The client is part of Atlas, so a renderer for a new media type is a contributio
 ([reporting issues](reporting-issues.md)) with a sample file. Until it lands, the attachment is still stored,
 listed with its name, role, type and size, and offered for download, and everything else about the result is
 unaffected.
+</doc>
+
+<doc path="docs/critics.md">
+# Critics: automated reviewers that mark which UIs need polish
+
+A **critic** looks at one captured UI (an image and what is known about it) and says how polished it is, and ideally
+where and why it is not. A critic may be a pretrained model that gives a score, a vision-capable language model that
+follows a rubric, or a classic measure such as a contrast ratio. All three are the same thing to Atlas, through one small
+contract, so people review the likeliest problems first.
+
+**Critics are producers that publish layers.** Atlas supplies the contract, the runner, the evidence format and the
+credential. It never executes a model on the server and never holds a provider key. A critique is not a test result and
+is not human review: it never changes whether a report passes.
+
+- [What is available](#what-is-available)
+- [The critic contract](#the-critic-contract)
+- [A critique is a layer](#a-critique-is-a-layer)
+- [Running critics](#running-critics)
+- [State-aware judging, calibration and modes](#state-aware-judging-calibration-and-modes)
+- [Authentication and authorization](#authentication-and-authorization)
+- [Credentials](#credentials)
+- [What is not here yet](#what-is-not-here-yet)
+
+## What is available
+
+Import `@crvouga/atlas/critics`. It needs no model, no provider SDK and no network; a critic brings its own.
+
+| You want | Use |
+| --- | --- |
+| Define a critic | `defineCritic` (the contract below) |
+| Judge many images with caching, retries, rate limits, timeouts and budgets | `runCritic` |
+| Store the opinions | `critiqueLayer`, `publishCritiques` (a layer of parts of kind `critique`) |
+| Read them back | `readCritique`, `critiquesOfLayer`, `critiqueCurrency` |
+| Read a score in context, measure a threshold, decide an exit code | `relativeVerdict`, `calibrate`, `gateDecision` |
+| Keep keys out of configuration and logs | `parseCredentialRef`, `resolveCredential`, `assertNoLiteralCredentials`, `createRedactor` |
+| Let a token publish critiques and nothing else | the `critic` role (below) |
+
+The JSON Schema of the evidence is [`critique.schema.json`](../packages/schema/schemas/critique.schema.json). The
+function-level reference is generated from the code: [critics](reference/critics.md).
+
+## The critic contract
+
+```ts
+import { defineCritic } from '@crvouga/atlas/critics';
+
+export default defineCritic({
+  name: 'contrast', version: '1.0.0', kind: 'heuristic',   // kind is an open string: model, llm, ml, heuristic…
+  describe: () => ({ sendsImagesTo: null, needsSetup: false }),
+  evaluate: async ({ image, imageSha256, entry, signal }) => ({
+    verdict: { score: measureContrast(image), scale: '0..1, higher is better' }
+  })
+});
+```
+
+A critic only judges one image. `describe()` says where images are sent (`sendsImagesTo`, `null` when they never leave
+the machine), the model, and the fixed parameters (temperature, the SHA-256 of the rubric): together with the critic's
+`name` and `version` and the image hash they are the identity of a judgement. `evaluate` returns a `verdict` (a score
+and how to read it), `findings`, or both, and may throw: throw a `RateLimitedError` (with the provider's `Retry-After` in
+milliseconds), an `InvalidOutputError`, or any `CriticError` with your own reason code. The runner records the failure
+and the next run retries it. A failure never becomes a score.
+
+## A critique is a layer
+
+A critique is a check inside a part of kind `critique`, in a layer whose `producer` is `critic.<name>`. The check's
+`status` says only whether the critic ran: `passed` a verdict was produced, `failed` the critic could not produce one.
+The opinion is evidence, by the rules of [extending.md](extending.md#the-rules-that-keep-it-compatible-forever), so it
+can never decide a result. It lives in `extensions["atlas.critique"]` and is repeated as standard evidence, so a viewer
+that has never heard of critics still shows it: the score is a measurement named `polish`, and each finding is an
+annotation of type `critique`.
+
+```json
+{
+  "producer": "critic.vision-llm",
+  "kind": "critique",
+  "checks": [{
+    "id": "critique/checkout/payment-sheet",
+    "status": "passed",
+    "measurements": [{ "name": "polish", "value": 0.62, "unit": "score" }],
+    "annotations": [{ "type": "critique", "level": "warning", "message": "spacing: Label touches both edges of the button. (suggestion: Increase horizontal padding.)" }],
+    "extensions": { "atlas.critique": {
+      "schema": 1,
+      "subject": { "entryKey": "checkout/payment-sheet", "imageSha256": "…", "state": "overlay" },
+      "critic": { "name": "vision-llm", "kind": "llm", "version": "1.0.0" },
+      "model": { "id": "…", "provider": "…" },
+      "parameters": { "temperature": 0, "rubric": "<sha256 of the rubric>" },
+      "verdict": { "score": 0.62, "scale": "0..1, higher is better", "label": "needs-polish", "confidence": 0.7 },
+      "findings": [{ "id": "f1", "category": "spacing", "severity": "minor", "region": { "unit": "px", "x": 24, "y": 612, "w": 342, "h": 48 }, "rationale": "Label touches both edges of the button.", "suggestion": "Increase horizontal padding." }]
+    } }
+  }]
+}
+```
+
+- A single score (a model-based critic) is a valid critique: everything except `schema`, `subject` and `critic` is optional.
+- `kind`, `category`, `severity`, `label` and failure `reason` are open strings, and every object is open. A value or field
+  nobody has heard of is kept and shown generically, never rejected.
+- A reader that cannot read the whole extension (a missing `subject`, a score that is not a number, a `schema` version it
+  does not know) drops the extension and keeps the check and its status. An unreadable opinion is unknown.
+- **Anchored to pixels.** `subject.imageSha256` is the hash of the image that was judged. When an entry's image changes,
+  `critiqueCurrency` says the old critique judged an earlier image: it is shown, never hidden, and the entry counts as not
+  yet judged.
+- **Slots.** The producer is the critic's name; the critic and model versions are labels. A newer version of a critic
+  replaces an older one's critique of the same entry. Put the version in `parameters` of `critiqueLayer` to compare
+  versions side by side instead.
+- **The prompt is recorded as a hash** (`parameters.rubric`), not as text.
+- **Failures are data.** A crash, a timeout, a rate limit that never cleared and an unparseable answer are `failed`
+  critiques with `failure.reason` (`error`, `timeout`, `rate-limited`, `invalid-output`, `image-mismatch`…) and a message.
+
+**Critiques never change the gate.** Parts of kind `critique` are left out of every count and of `atlas report status`,
+even when they are the only thing recorded (a report of opinions alone has no test results, so the gate says so). A low
+score does not fail it, and neither does a critic that crashed. A project that wants a score to fail something opts in
+with `gateDecision` in `gate` mode, which is computed by the reader from critique data and never changes a check's
+status, a slot or a winner.
+
+## Running critics
+
+`runCritic` owns everything around the judgement; a critic only judges one image.
+
+- **Caching.** An entry is skipped, without fetching its image, when a critique with a verdict already exists for the same
+  critic, version, model, parameters and image hash (`existing`, read with `critiquesOfLayer`). Identical images across
+  runs are judged once; only a changed image is judged again. A failed critique is not a cache hit. `force` judges again.
+  Layers are content-addressed, so publishing the same outcomes twice is harmless.
+- **Concurrency, timeout, rate limits.** A bounded number of calls in flight. A call over `timeoutMs` is aborted and
+  recorded as `timeout`; the run goes on. A rate-limit answer waits at least `Retry-After`, with exponential backoff and
+  jitter, for a bounded number of attempts, and then is recorded as `rate-limited`.
+- **Budgets.** `budget: { maxImages, maxTokens, maxCostUsd }`. When one is reached the run stops cleanly and returns what
+  it finished with `stoppedBy: 'budget'`. Cost and tokens come from the `usage` a critic reports.
+- **Dry run.** `dryRun` loads and sends nothing and returns what would be judged and skipped, and where images would go
+  (`sendsImagesTo`).
+- **Reproducibility.** Results come back in the order of the entries, so the same inputs publish the same layer; a
+  deterministic critic gives identical scores on every run. Atlas records what explains a result (critic, version,
+  model, rubric hash, parameters) and does not promise that a language model answers the same twice. A re-run adds a
+  newer layer instead of changing an old one.
+- **Images may leave the machine.** `describe().sendsImagesTo` is the thing to show a person before a run that sends
+  images to a third party, and to require explicit confirmation for.
+
+```ts
+import { critiquesOfLayer, publishCritiques, runCritic } from '@crvouga/atlas/critics';
+
+const result = await runCritic({
+  critic, entries, loadImage: (entry) => fetchImage(entry),
+  existing: layers.flatMap((layer) => critiquesOfLayer(layer).map((found) => found.critique)),
+  budget: { maxImages: 200 }, secrets: [providerKey]
+});
+await publishCritiques(store, { critic, outcomes: result.outcomes, recordedAtMs: Date.now() });
+```
+
+## State-aware judging, calibration and modes
+
+A raw score is not absolute: a loading overlay is not a full screen.
+
+- `relativeVerdict` reads a score against the project's scores of the **same state kind** (a percentile within the kind)
+  and against the same entry's previous image (`delta`), and goes into `verdict.relative`.
+- `calibrate` measures a critic against labelled examples **per state kind**: sample sizes, precision, recall, the
+  threshold chosen, and `inSample`, which is true unless held-out examples were given. In-sample figures flatter a critic
+  and are labelled as such.
+- `gateDecision` turns scores into an exit code. Modes: `report` (default: shown, always exit 0), `warn` (a warning for each
+  score below its threshold, exit 0), `gate` (exit 1 when a threshold is crossed). `gate` is **refused** (exit 2, with the
+  reasons) unless every state kind present has a calibration of this critic and version with a threshold, at least 10 bad
+  and 10 good examples, and held-out figures. An explicit threshold never waives that evidence.
+
+## Authentication and authorization
+
+Run critics against a server that has tokens: a server with no tokens is open and every caller is an administrator, a
+critic included.
+
+A token of role `critic` (`ATLAS_CRITIC_TOKEN`, or `role: "critic"` under `auth.tokens`) may do what `read` may, and
+publish critiques, and nothing else. Through the store protocol (`PUT /api/store/…`) it may upload blobs and layers, and
+the catalog entries that make them visible, whose `producer` is `critic.<name>` and whose parts are all of kind
+`critique`. Anything else is `403` naming the rule it broke, and the layer is not stored. It cannot post test results,
+start live runs, change settings or remove anything. `publish` and `admin` tokens may publish critiques too. As for every
+token: send it as `Authorization: Bearer`, never in a URL, never over plain `http` beyond this machine.
+
+## Credentials
+
+Developers bring their own models and AI accounts. Configuration names a credential by **reference**
+(`env:SOME_API_KEY`, `file:/run/secrets/key`) and never contains one, so it can be committed;
+`assertNoLiteralCredentials` refuses a configuration with a literal key and says where, never what. Credentials are read at
+run time (`resolveCredential`) and every message the runner records goes through a redactor (`secrets` in `runCritic`,
+`createRedactor`) that removes them, in their URL-encoded and base64 forms too, and anything shaped like a provider key,
+token or JWT. A credential never reaches a layer, a progress event or an error message.
+
+## What is not here yet
+
+This release delivers the contract, the evidence format, the runner, state-aware judging and calibration, credential
+handling and the scoped `critic` role. Still to come, tracked in [issue 50](https://github.com/crvouga/atlas/issues/50):
+
+- the **catalog read surface** for critics (cursor pagination, `since`, realtime events, images by hash), which builds on
+  the UI catalog of [issue 43](https://github.com/crvouga/atlas/issues/43);
+- the **`atlas critic` command** (`list`, `setup`, `doctor`, `run`, `watch`, `review`, `calibrate`), its interactive mode
+  and its `--format json` documents;
+- the **built-in UIClip critic** and the **LLM critic** with provider adapters;
+- the **viewer**: a ranked "needs polish" list, finding overlays and agreement across critics. Until then critiques are
+  stored, composed and kept out of test counts, and the viewer lists only test results.
 </doc>
 
 <doc path="docs/report-backends.md">
@@ -4335,6 +4582,28 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
 - The scenario (title, recorded steps, why it failed) sits beside the player with the recording's scope badges
   (paced, scripted, silent, synthetic) and the sentence that the length is the recording's, not production latency. Developer
   details opens the test pinned to that run's record and closes the playlist.
+
+## Steps and moments in a recording
+
+Wherever a result's steps sit beside its recording (a result's Timeline under Inspect, the Watch tab of a behavior, an
+opened watch playlist), `evidence/moments.tsx` joins them. Placement is from the recording's own declared timing
+(`evidence/media-timing.ts`, the `atlas.media` extension; see [Place steps in a recording](rich-evidence.md#place-steps-in-a-recording)),
+never from an assumption that the recording starts with the check.
+
+- A step has a "Recording m:ss.s" button that seeks the selected recording; the step's test-clock offset stays visible beside it.
+  A step that cannot be placed (no timing, no origin, no offset, outside the recording, unreadable declaration) is "Not aligned"
+  and selecting it states the reason in a status alert. Nothing is guessed and the video is not moved.
+- While playing, the step under the playhead gets `aria-current="step"` and "Playing now". It never moves focus, scrolls
+  the page or announces itself. Seeking only scrolls the player into view.
+- A paced recording (pauses declared, or a `pacing: paced` scope) says that gaps between steps include deliberate pauses and are
+  not application latency.
+- A failed step has "Jump to the failing moment" in the bar above the timeline, and the failure summary has the same action
+  (`requestFailureMoment`). If the recording is not on screen, or the step cannot be placed, it says so.
+- "Copy link to this moment" names the run (`layer`), the exact recording (`clip`) and the position (`clipAt`, ms), as the
+  explorer address `/?test=…&layer=…&clip=…&clipAt=…` (the playlist links to the result it is playing). Opening it selects that
+  recording of that exact run and seeks once the player knows its length; a position past the end or a recording that the run
+  does not hold is reported and nothing else is played in its place. If the browser refuses to copy, the link is shown to copy.
+- One provider serves one holder: the check, or one try. A try's steps are placed by that try's recording and timing only.
 
 ## Review collections
 
@@ -5395,7 +5664,7 @@ Responses: `200` It exists.; `401` No token, or an unknown one. Send `Authorizat
 
 ### Upload an object
 
-`PUT /api/store/{key}` · role: publish
+`PUT /api/store/{key}` · role: critic
 
 The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
 
@@ -5406,6 +5675,8 @@ The write half of the `ObjectStore` interface. The server checks what it can fro
 - keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
 
 Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.
 
 - `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
 - `content-type` (header): Stored with the object and returned when it is read.
@@ -5415,7 +5686,7 @@ Responses: `200` Already there with the same bytes.; `201` Stored.; `401` No tok
 
 ### Upload an object
 
-`PUT /api/projects/{project}/store/{key}` · role: publish
+`PUT /api/projects/{project}/store/{key}` · role: critic
 
 The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
 
@@ -5426,6 +5697,8 @@ The write half of the `ObjectStore` interface. The server checks what it can fro
 - keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
 
 Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 

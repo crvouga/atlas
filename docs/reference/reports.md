@@ -1366,10 +1366,10 @@ A report: the results laid over the specs, with what was read and what could not
 #### `countResults`
 
 ```ts
-export function countResults(results: readonly EvidenceResult[]): StatusCounts & { total: number }
+export function countResults(all: readonly EvidenceResult[]): StatusCounts & { total: number }
 ```
 
-Counts results by status. Diagnostic results (parts of kind `performance`, which only qualify a check) are left out
+Counts results by status. Opinion results (parts of kind `critique`) are never counted. Diagnostic results (parts of kind `performance`, which only qualify a check) are left out
 whenever any other result is present; if only diagnostics exist, they are counted so the report is not empty.
 
 #### `summarize`
@@ -2373,7 +2373,8 @@ export function checkSlots(results: readonly EvidenceResult[]): CheckSlot[]
 
 Groups the combined results (the winners of the slots) by check, in the order the checks were first seen.
 A check's status is the worst of its non-diagnostic results; if it has only diagnostics (timings), those are its
-outcomes. The title and id shown are the newest result's.
+outcomes. The title and id shown are the newest result's. Opinions (parts of kind `critique`, see `isOpinionKind`) are
+not checks and are left out.
 
 #### `SpecStatus`
 
@@ -4586,6 +4587,17 @@ Whether a part `kind` only qualifies an outcome and so is not counted as a check
 `performance` timing, or a `ui-plan` entry (what a UI catalog expects, which a capture of the same state replaces in the
 tests' view). It never decides a slot: both still fill their own.
 
+#### `isOpinionKind`
+
+```ts
+export function isOpinionKind(kind: string): boolean
+```
+
+Whether a part `kind` records an opinion rather than an outcome (today only `critique`, an automated reviewer's
+judgement of a captured UI). An opinion is never counted as a check, never gates, and is not folded into a spec's
+rollup, even when it is the only thing recorded: a report of opinions alone has no test results. The check's `status`
+of such a part says whether the reviewer ran, not whether anything passed.
+
 #### `emptyCounts`
 
 ```ts
@@ -4597,11 +4609,12 @@ A fresh status tally with every status at zero.
 #### `outcomeCounts`
 
 ```ts
-export function outcomeCounts(rows: readonly LayerRow[]): StatusCounts
+export function outcomeCounts(allRows: readonly LayerRow[]): StatusCounts
 ```
 
-Counts rows by status, leaving out the diagnostic rows (see `isDiagnosticKind`) that only qualify an outcome.
-When every row is diagnostic they are counted, so a layer of timings alone is not empty.
+Counts rows by status, leaving out the opinion rows (see `isOpinionKind`) always, and the diagnostic rows (see
+`isDiagnosticKind`) that only qualify an outcome. When every remaining row is diagnostic they are counted, so a
+layer of timings alone is not empty.
 
 #### `layerEvidence`
 
@@ -6985,7 +6998,7 @@ Returns a `ReportStatus` (schemaVersion 1): `ok` is true exactly when `reasons` 
 checks (or none completed), failed checks, running checks, specs without results (only with `requireAllSpecs`),
 each required environment with no checks (the name is normalised, so `iOS` means `ios`), then every notice of the
 report (an unreadable layer or backend). `failing` lists each failed or running winner, in a fixed order that does
-not depend on read order; diagnostic `performance` checks are left out unless nothing else was recorded.
+not depend on read order; diagnostic `performance` checks are left out unless nothing else was recorded, and `critique` opinions are always left out.
 `recordings` reports recording completeness of the same results apart from `ok`: an incomplete or unknown
 completeness never changes the gate (use `atlas report publish --require-recordings` to fail on a missing video).
 

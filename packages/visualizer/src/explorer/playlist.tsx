@@ -15,6 +15,7 @@
 import { attachmentIdentity, isVideoAttachment, type CheckDetail } from '@crvouga/atlas/reports/evidence-detail';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
+import type { Attachment, Step } from '@crvouga/atlas/schema';
 import { Alert, Anchor, Badge, Box, Button, Code, Flex, Grid, Group, List, Modal, NativeSelect, Stack, Switch, Text, Title } from '@mantine/core';
 import { IconAlertTriangle, IconPlayerPlay, IconPlayerSkipBack, IconPlayerSkipForward } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
@@ -25,6 +26,7 @@ import { reportJson } from '../evidence/api';
 import { attachmentSource } from '../evidence/artifacts';
 import { everyAttachment } from '../evidence/artifact-tags';
 import { ScopeNotice } from '../evidence/evidence-scope';
+import { MomentBar, MomentPlayback, SeekStep, stepsOfRecording, useIsPlaying, useMomentVideo } from '../evidence/moments';
 import { duration, exactTime, plural, statusWord } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { patched } from './navigate';
@@ -37,6 +39,8 @@ const LISTED = 50;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 /** Step names are shown with their Gherkin keyword when they have one. */
 const KEYWORDS = new Set(['given', 'when', 'then', 'and', 'but']);
+
+const NO_STEPS: readonly Step[] = [];
 
 /** Where the evidence of an entry's check is read from, or null when the entry names no layer that can be read. */
 export function entryDetailQuery(entry: PlaylistEntry) {
@@ -66,20 +70,33 @@ function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
   });
 }
 
-/** The scenario in words: the steps the producer recorded, with the Gherkin keyword where it gave one. */
-function Scenario({ entry, detail }: { entry: PlaylistEntry; detail: CheckDetail | undefined }) {
-  const steps = detail?.check.steps ?? [];
+/** One step of the scenario: in words, with a control to show it in the recording and a mark while it is playing. */
+function ScenarioStep({ step }: { step: Step }) {
+  const playing = useIsPlaying(step);
+  return (
+    <List.Item aria-current={playing ? 'step' : undefined} data-playing={playing || undefined} {...(playing ? { bg: 'blue.0' } : {})}>
+      <Group gap="xs" wrap="wrap">
+        <Text span inherit>
+          {step.kind && KEYWORDS.has(step.kind.toLowerCase()) ? `${step.kind.charAt(0).toUpperCase()}${step.kind.slice(1).toLowerCase()} ` : ''}
+          {step.name}
+          {step.status && step.status !== 'passed' ? ` (${step.status})` : ''}
+        </Text>
+        {playing && <Badge variant="light">Playing now</Badge>}
+        <SeekStep step={step} />
+      </Group>
+    </List.Item>
+  );
+}
+
+/** The scenario in words: the steps the producer recorded for the recording shown, with the Gherkin keyword where it gave one. */
+function Scenario({ entry, detail, steps }: { entry: PlaylistEntry; detail: CheckDetail | undefined; steps: readonly Step[] }) {
   return (
     <Stack gap="xs" component="section" aria-label="Scenario">
       <Title order={3}>{entry.title}</Title>
       {steps.length > 0 && (
         <List type="ordered" spacing="xs" aria-label="Steps">
           {steps.map((step, index) => (
-            <List.Item key={`${step.id ?? step.name}:${index}`}>
-              {step.kind && KEYWORDS.has(step.kind.toLowerCase()) ? `${step.kind.charAt(0).toUpperCase()}${step.kind.slice(1).toLowerCase()} ` : ''}
-              {step.name}
-              {step.status && step.status !== 'passed' ? ` (${step.status})` : ''}
-            </List.Item>
+            <ScenarioStep key={`${step.id ?? step.name}:${index}`} step={step} />
           ))}
         </List>
       )}
@@ -91,6 +108,46 @@ function Scenario({ entry, detail }: { entry: PlaylistEntry; detail: CheckDetail
         </Alert>
       )}
     </Stack>
+  );
+}
+
+/** The one `<video>`: joined to the steps beside it, with the player's own handlers kept. */
+function ClipVideo({
+  movie,
+  videoRef,
+  onLoadedMetadata,
+  onTimeUpdate,
+  children,
+  ...rest
+}: {
+  movie: Attachment;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  onLoadedMetadata: () => void;
+  onTimeUpdate: () => void;
+  children: React.ReactNode;
+  [prop: string]: unknown;
+}) {
+  const moments = useMomentVideo(movie);
+  return (
+    <Box
+      component="video"
+      {...rest}
+      {...moments}
+      ref={(element: HTMLVideoElement | null) => {
+        (videoRef as { current: HTMLVideoElement | null }).current = element;
+        moments?.ref(element);
+      }}
+      onLoadedMetadata={(event: React.SyntheticEvent<HTMLVideoElement>) => {
+        moments?.onLoadedMetadata(event);
+        onLoadedMetadata();
+      }}
+      onTimeUpdate={(event: React.SyntheticEvent<HTMLVideoElement>) => {
+        moments?.onTimeUpdate(event);
+        onTimeUpdate();
+      }}
+    >
+      {children}
+    </Box>
   );
 }
 
@@ -192,6 +249,9 @@ function Clip({
     [attachments]
   );
   const url = movie ? attachmentSource(movie, entry.layer).url : null;
+  // The steps are those of the check or the try that carries this recording, placed by this recording's own timing.
+  const placedIn = useMemo(() => (movie ? [movie] : []), [movie]);
+  const steps = useMemo(() => (detail.data ? stepsOfRecording(detail.data.check, movie ? attachmentIdentity(movie) : undefined) : NO_STEPS), [detail.data, movie]);
 
   useEffect(() => {
     if (video.current) video.current.playbackRate = speed;
@@ -254,10 +314,10 @@ function Clip({
       <Stack gap="xs">
         {focus && <FoundMoment focus={focus} seek={seek} />}
         <ScopeNotice scope={chosen?.scope} name={movie!.name} />
-        <Box
+        <ClipVideo
           key={attempt}
-          component="video"
-          ref={video}
+          movie={movie!}
+          videoRef={video}
           src={url}
           controls
           preload="metadata"
@@ -299,7 +359,7 @@ function Clip({
             const source = attachmentSource(caption, entry.layer).url;
             return source ? <track key={source} kind="captions" src={source} label={caption.description ?? caption.name} /> : null;
           })}
-        </Box>
+        </ClipVideo>
         {movie!.durationMs ? (
           <Text component="div" c="dimmed">
             Length of the recording: {duration(movie!.durationMs)}
@@ -348,15 +408,23 @@ function Clip({
     );
   }
   return (
-    <Stack gap="md" miw={0} aria-label={`Now showing ${entry.title}`} component="section" data-clip={entry.id}>
-      {body}
-      <Facts entry={entry} />
-      <Scenario entry={entry} detail={detail.data} />
-      <Text component="div" c="dimmed">
-        Illustrative recording of one run. Its length and speed are those of the recording, not production latency, and it does not approve the behavior for production.
-      </Text>
-      {developer}
-    </Stack>
+    <MomentPlayback
+      steps={steps}
+      attachments={placedIn}
+      layer={entry.layer}
+      linkSearch={{ test: entry.key, layer: entry.layer, tab: undefined, openRun: undefined, artifact: undefined }}
+    >
+      <Stack gap="md" miw={0} aria-label={`Now showing ${entry.title}`} component="section" data-clip={entry.id}>
+        {body}
+        <Facts entry={entry} />
+        <MomentBar />
+        <Scenario entry={entry} detail={detail.data} steps={steps} />
+        <Text component="div" c="dimmed">
+          Illustrative recording of one run. Its length and speed are those of the recording, not production latency, and it does not approve the behavior for production.
+        </Text>
+        {developer}
+      </Stack>
+    </MomentPlayback>
   );
 }
 

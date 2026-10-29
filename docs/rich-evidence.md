@@ -27,6 +27,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `extensions['atlas.media']` | attachment (video) | Where the check's steps are in the recording, so a click on a step seeks the video. See [Place steps in a recording](#place-steps-in-a-recording). |
 | `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
 | `specPath` | check | The spec a check belongs to (a `.feature`, a test file), relative to the repository. Checks are grouped by it. |
@@ -108,6 +109,44 @@ Every field is optional, and every value except the booleans is an open string.
   `scopes`, and the search box finds the words in them.
 - **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
   dropped, and the attachment, check and layer stay.
+
+## Place steps in a recording
+
+A step says when it started on the check's clock (`offsetMs`, after the check started). A video has its own clock, which
+began when the recorder did, and the two are not assumed to agree: a recorder usually starts before the first step, and a
+paced demo may have delays put into the video that the check never waited for. To let a reviewer click a step and land on
+its moment in the video, say how the clocks relate in the `atlas.media` extension of the video attachment:
+
+```ts
+{
+  name: 'checkout.webm', role: 'video', durationMs: 9000,
+  extensions: {
+    'atlas.media': {
+      checkStartMs: 1200,                                           // the check started 1.2 s into the video
+      pauses: [{ atMs: 900, durationMs: 2000, reason: 'title card' }], // 2 s put into the video before the step at +900 ms
+      marks: [{ step: 'pay', mediaMs: 4100 }]                        // a step whose moment in the video you know exactly
+    }
+  }
+}
+```
+
+Every field is optional and none of it decides a status, a slot or a winner. A step is placed at `checkStartMs` + its
+`offsetMs` + the `durationMs` of every pause whose `atMs` is at or before the step; a mark names the moment outright and
+wins. Anything else is unavailable and said so, never guessed.
+
+- **Without timing, nothing is placed.** A video with no `atlas.media`, no `checkStartMs`, or a step with no `offsetMs` and
+  no mark, is never assumed to start with the check, and a step is never placed from the wording of its name. Selecting
+  such a step says why it cannot be shown, and moves nothing.
+- **Outside the video is not clamped.** A moment before the start, or after `durationMs` (or the length the player reports),
+  is unavailable. A declaration with a field Atlas cannot read (a pause without a duration) is reported and places nothing.
+- **Pacing is not latency.** A video with `pauses`, or with a `scope` of `pacing: 'paced'`, is labelled as paced: the time
+  between its steps includes deliberate pauses and is not application latency, and no measurement is changed by it.
+- **Each try has its own clock.** Put the video and the `atlas.media` of a retry on its `attempts[]` entry, with that
+  try's `steps`. A try is aligned only by its own video, never by the check's or an earlier try's.
+- **Link to a moment.** The viewer copies a link that names the run (`layer`), the exact recording (`clip`, its digest or
+  stored key) and the position (`clipAt`, milliseconds into the video). Opening it selects that recording of that run, even
+  when a newer run exists, and goes to the position; a recording the run does not hold is reported, never replaced.
+- **Older layers.** A layer without `atlas.media` reads exactly as before; the video plays and its steps list as ever.
 
 ## Product latency
 
