@@ -67,6 +67,7 @@ test('a result opens to everything it carries: facts, timeline, retries, annotat
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: {}, specs: { 'lists/add.feature': FEATURE }, node });
   await atlas.sees('1 failed');
   await atlas.click('button', 'Add an item');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('Low contrast on Add');
   const text = atlas.text();
   for (const expected of [

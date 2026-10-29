@@ -69,6 +69,22 @@ export const BackendInfoSchema = …
 
 A backend as the report shows it: where results came from, and whether it could be read.
 
+#### `VideoRefSchema`
+
+```ts
+export const VideoRefSchema = …
+```
+
+One reference to a video held by a layer, check, retry attempt or step, found by the attachment's effective media type.
+
+#### `VideoCountsSchema`
+
+```ts
+export const VideoCountsSchema = …
+```
+
+Video references as counts: how many are referenced, how many distinct recordings can be played, how many cannot.
+
 #### `EvidenceSummarySchema`
 
 ```ts
@@ -185,6 +201,38 @@ export const ChecksResultSchema = …
 
 `POST /api/checks` answered: the layer that was written.
 
+#### `ArtifactTargetSchema`
+
+```ts
+export const ArtifactTargetSchema = …
+```
+
+Which attachment a reviewer's tags belong to: one attachment of one check of one archived layer.
+
+#### `ArtifactTagEditSchema`
+
+```ts
+export const ArtifactTagEditSchema = …
+```
+
+The body of `POST /api/reports/artifact-tags`: tags to add to and to remove from one attachment. At least one tag overall.
+
+#### `ArtifactTagEntrySchema`
+
+```ts
+export const ArtifactTagEntrySchema = …
+```
+
+One recorded edit of an attachment's reviewer tags. Entries are never changed or removed: they are the audit trail.
+
+#### `ArtifactTagsSchema`
+
+```ts
+export const ArtifactTagsSchema = …
+```
+
+`GET /api/reports/artifact-tags`: every recorded edit, oldest first. Fold them with `foldArtifactTags`.
+
 #### `HelloEventSchema`
 
 ```ts
@@ -234,6 +282,16 @@ export const TestCatalogSchema = …
 `GET /api/reports/tests`: every test of the report with a summary, insights and facets. The summary and facets cover
 every test; `tests` is the page of those the query matched.
 
+#### `CatalogHealthSchema`
+
+```ts
+export const CatalogHealthSchema = …
+```
+
+`GET /api/reports/tests/health`: why the report's Specs, domains and counts may disagree. Counts keep the denominators
+apart (spec files, defined specs, specs with an executed test, tests, outlines, examples, observations), `reconciliation`
+walks from one to another, and `findings` name what to fix. It reads the report; it never changes what passed.
+
 #### `TestHistorySchema`
 
 ```ts
@@ -242,13 +300,40 @@ export const TestHistorySchema = …
 
 `GET /api/reports/tests/history`: one test and every result recorded for it (at most 100), newest first.
 
+#### `TestReliabilitySchema`
+
+```ts
+export const TestReliabilitySchema = …
+```
+
+`GET /api/reports/tests/reliability`: how reliable one test is inside a scope, and exactly how that figure was counted.
+The snapshots one run recorded for one producer, environment and parameter set are one independent execution; only
+`passed` and `failed` executions are trials; `notes` say when the sample is too small, pooled, selectively rerun or
+bounded. It reads results and never changes a status. It is not a production failure probability.
+
 #### `ReportRunSchema`
 
 ```ts
 export const ReportRunSchema = …
 ```
 
-A run: the layers that share a run URL (else a branch and commit), with what they recorded.
+A run: the layers that name the same execution (else share a run URL, else a branch and commit), with what they recorded.
+
+#### `QueryFacetValueSchema`
+
+```ts
+export const QueryFacetValueSchema = …
+```
+
+A value of a filter dimension and how many records have it.
+
+#### `QueryFacetsSchema`
+
+```ts
+export const QueryFacetsSchema = …
+```
+
+The facets of a runs or artifacts query: per dimension, its values with disjunctive counts (the list's count if that value were the only one chosen, every other dimension's filter applied).
 
 #### `RunListSchema`
 
@@ -257,6 +342,22 @@ export const RunListSchema = …
 ```
 
 `GET /api/reports/runs`: runs, newest first.
+
+#### `ArtifactResultSchema`
+
+```ts
+export const ArtifactResultSchema = …
+```
+
+One recorded result that carries evidence: where and when it was recorded and what it carries.
+
+#### `ArtifactListSchema`
+
+```ts
+export const ArtifactListSchema = …
+```
+
+`GET /api/reports/artifacts`: recorded results that carry evidence, newest first, with the facets of the query.
 
 #### `RunDetailSchema`
 
@@ -633,6 +734,41 @@ Why a layer's origin is advisory: `modified` (recorded from a checkout with unco
 (origin not captured). Absent on a layer from a clean commit. It never changes a status. A closed vocabulary: it
 changes only with a new `schemaVersion`.
 
+#### `LayerRunSchema`
+
+```ts
+export const LayerRunSchema = …
+```
+
+The execution a layer belongs to, named by the producer: one invocation of a local or manual run, which several
+layers (shards, batches, producers) may share. Presentation and history grouping only: it never takes part in the
+slot a result fills, in which result wins, or in a status. Absent, a run is told by its CI run URL, else `branch@sha`.
+Within one project, layers that carry the same `id` are one run; a later invocation gets another `id`.
+
+#### `LayerRun`
+
+```ts
+export type LayerRun = z.output<typeof LayerRunSchema>;
+```
+
+The execution of a layer, parsed from `LayerRunSchema`.
+
+#### `PRODUCT_LATENCY_KIND`
+
+```ts
+export const PRODUCT_LATENCY_KIND = …
+```
+
+The `kind` of a measurement that is a named, user-visible product latency (see docs/rich-evidence.md#product-latency).
+
+#### `MeasurementBoundarySchema`
+
+```ts
+export const MeasurementBoundarySchema = …
+```
+
+The two ends of a measured interval, named in the producer's words: `{ from: 'submit pressed', to: 'confirmation visible' }`.
+
 #### `MeasurementSchema`
 
 ```ts
@@ -641,6 +777,18 @@ export const MeasurementSchema = …
 
 A number a check measured, such as a latency or a size, with its unit and an optional allowance. A measurement over
 its `limit` is reported and never changes the check's status.
+
+A measurement of `kind` `product-latency` is how quickly the product responded to a user, between two named events.
+It is not the check's duration (which includes setup, waits and pacing) and a number with no `kind` is never read as
+product latency. All the fields after `limit` are optional and describe the measurement; none decides a status.
+
+#### `Measurement`
+
+```ts
+export type Measurement = z.output<typeof MeasurementSchema>;
+```
+
+A measurement as stored in a layer, parsed from `MeasurementSchema`.
 
 #### `ExtensionsSchema`
 
@@ -667,6 +815,29 @@ export const MomentSchema = …
 
 Where in a check something happened: at a step, and/or this long after the check started.
 
+#### `EvidenceScopeSchema`
+
+```ts
+export const EvidenceScopeSchema = …
+```
+
+What a piece of evidence does and does not show, declared by the producer that made it: where it ran, whether its
+data and dependencies were real, whether audio was captured, how it was paced and which assertions the result
+stands on. Every field is optional and a field that is absent is unknown, never assumed live, physical or end to end.
+
+It is a declaration, not a finding: Atlas shows it as the producer's word, apart from the dimensions the producer
+names in `verified` (facts something independent checked). It describes evidence and never decides a status, a slot
+or a winner. The nearest declaration wins as a whole, never field by field: an attachment's `scope`, else its
+attempt's, else its check's, else its part's, else its layer's.
+
+#### `EvidenceScope`
+
+```ts
+export type EvidenceScope = z.output<typeof EvidenceScopeSchema>;
+```
+
+A producer-declared evidence scope as stored in a layer, parsed from `EvidenceScopeSchema`.
+
 #### `AttachmentSchema`
 
 ```ts
@@ -686,6 +857,47 @@ export type Attachment = z.output<typeof AttachmentSchema>;
 ```
 
 An attachment as stored in a layer, parsed from `AttachmentSchema`.
+
+#### `RECORDING_EXPECTATIONS`
+
+```ts
+export const RECORDING_EXPECTATIONS = …
+```
+
+Whether a check is expected to have a screen recording (a video). `required`: the producer expects one, and the layer's
+recording receipt says whether it arrived. `not-applicable`: the check is intentionally unrecorded (an API-only check),
+so it counts as neither a recorded pass nor a missing video. An open string: a reader treats any other value, and its
+absence, as no expectation.
+
+#### `RecordingItemSchema`
+
+```ts
+export const RecordingItemSchema = …
+```
+
+The state of one check's recording in a receipt, in an open vocabulary. Conventions: `uploaded` (the video's bytes are in
+the layer, with a checksum), `referenced` (only a `uri` was given: Atlas cannot vouch for it), `skipped` (the video was
+captured but its bytes were left out, with a reason), `unresolved` (no video was attached at all), `not-applicable`
+(intentionally unrecorded). A reader shows a state it does not know as it is and never counts it as uploaded.
+
+#### `RecordingReceiptSchema`
+
+```ts
+export const RecordingReceiptSchema = …
+```
+
+What a layer's producer published about the recordings it expected: counts and one item per check that expected a
+recording (or declared itself not applicable). Written by `publishChecks` when any check declares a
+`recordingExpectation`; a layer without it says nothing, which a reader reports as Unknown, never Complete. It only
+describes publication: it never changes a check's status, its slot or which result wins.
+
+#### `RecordingReceipt`
+
+```ts
+export type RecordingReceipt = z.output<typeof RecordingReceiptSchema>;
+```
+
+A recording receipt as stored in a layer, parsed from `RecordingReceiptSchema`.
 
 #### `AnnotationSchema`
 
@@ -884,6 +1096,24 @@ export type PublishChecksInput = z.input<typeof PublishChecksSchema>;
 ```
 
 What a caller passes to `publishChecks`: the input type of `PublishChecksSchema`, before defaults.
+
+#### `RecordingCompletenessSchema`
+
+```ts
+export const RecordingCompletenessSchema = …
+```
+
+Recording completeness across the winning results of a report: `complete` (every expected recording was published),
+`incomplete` (at least one is skipped or unresolved), `none-expected` (every layer declared its expectations, and none
+required a recording) or `unknown` (a layer has no receipt, so nothing is claimed). Independent of the checks' outcomes.
+
+#### `RecordingCompleteness`
+
+```ts
+export type RecordingCompleteness = z.output<typeof RecordingCompletenessSchema>;
+```
+
+A parsed `RecordingCompletenessSchema` value.
 
 #### `REPORT_STATUS_SCHEMA_VERSION`
 
@@ -1494,9 +1724,10 @@ export const RunsIndexSchema = …
 Source: `packages/schema/src/server-config.ts`
 
 The schema of `atlas.server.json`, the file that configures `atlas serve` and `atlas dev`: where to listen, which
-folder and further backends hold the data, which bearer tokens may read, publish or administer, and limits. Every
-field has a default, so an empty file is a working server. Unlike the report format, unknown keys are an error, so
-a typo is reported instead of ignored. Flags and environment variables override the file.
+bearer tokens may read, publish or administer, and limits. Where reports are kept is not here: the server stores
+everything in S3-compatible storage named by required `ATLAS_S3_*` environment variables, never in this file.
+Every field has a default. Unlike the report format, unknown keys are an error, so a typo (or a removed `data`,
+`backends` or `write` key) is reported instead of ignored. Flags and environment variables override the file.
 
 See docs/deploying.md
 See docs/server.md
@@ -1517,15 +1748,6 @@ export type ServerRole = z.infer<typeof ServerRoleSchema>;
 
 One of the roles of `ServerRoleSchema`.
 
-#### `ServerBackendSchema`
-
-```ts
-export const ServerBackendSchema = …
-```
-
-A further store the server reads together with its data folder, and optionally writes to: an id, a label and a
-location URL.
-
 #### `ServerTokenSchema`
 
 ```ts
@@ -1541,8 +1763,7 @@ A bearer token: a name for logs, a role, and the token itself or the name of the
 export const ServerConfigSchema = …
 ```
 
-The whole `atlas.server.json`: listening address, data folder, backends and write target, authentication, the
-viewer to serve, which layers take part in the report, refresh and heartbeat intervals, request limits and logging.
+The whole `atlas.server.json`: listening address, authentication, the viewer to serve, which layers take part in the report, refresh and heartbeat intervals, request limits and logging.
 
 #### `ServerConfig`
 
@@ -1566,7 +1787,7 @@ A server configuration as written, before defaults are applied.
 export const ServerEditableSettingsSchema = …
 ```
 
-Storage and report settings editable by an admin. Authentication, listeners and the served site stay deployment-owned. Replaces the editable portion of the file; omitted fields use defaults after restart.
+Report and live-run settings editable by an admin. Storage, authentication, listeners and the served site stay deployment-owned. Replaces the saved portion of the user state; omitted fields use defaults after restart.
 
 #### `ServerSettingsSnapshotSchema`
 
@@ -1574,7 +1795,7 @@ Storage and report settings editable by an admin. Authentication, listeners and 
 export const ServerSettingsSnapshotSchema = …
 ```
 
-The settings API response: persisted editable configuration, active values, concurrency revision and restart/precedence guidance. Authentication token settings are excluded.
+The settings API response: editable configuration saved in the user state in S3, active values, concurrency revision and restart/precedence guidance. Authentication token settings are excluded.
 
 ### Statechart spec schemas
 
@@ -1826,3 +2047,98 @@ export function isStatechartFile(path: string)
 ```
 
 Whether a spec-relative path (using `/`) matches `STATECHART_FILE_PATTERNS`.
+
+### User state schema
+
+Source: `packages/schema/src/user-state.ts`
+
+The one JSON document that holds everything a person using Atlas has chosen, as opposed to what an operator deployed:
+the garbage collection policy and the saved server settings. The server keeps it in S3-compatible object storage
+(`server/state.json` under the configured prefix) and nowhere else: not in a file, a database or the browser. A
+document that does not exist yet means nothing has been chosen; a document that cannot be read is an error, never
+an empty state. Unknown keys are kept, so an older server does not drop what a newer one wrote.
+
+See docs/server.md#user-state-and-garbage-collection
+
+#### `GcPolicySchema`
+
+```ts
+export const GcPolicySchema = …
+```
+
+The garbage collection policy: which report layers the server may delete from S3, and when. Only layers that the
+report has loaded and that no longer decide any result (every check they carry has since been superseded by a newer
+layer) are ever candidates, and the newest `keepLatest` layers are always kept. With `enabled: false` nothing is deleted.
+
+#### `GcPolicy`
+
+```ts
+export type GcPolicy = z.output<typeof GcPolicySchema>;
+```
+
+A garbage collection policy as stored, defaults applied.
+
+#### `GcPolicyInput`
+
+```ts
+export type GcPolicyInput = z.input<typeof GcPolicySchema>;
+```
+
+A garbage collection policy as written, before defaults are applied.
+
+#### `GcRunSchema`
+
+```ts
+export const GcRunSchema = …
+```
+
+What one pass of garbage collection found and did, for one project.
+
+#### `GcRun`
+
+```ts
+export type GcRun = z.output<typeof GcRunSchema>;
+```
+
+One pass of garbage collection, see {@link GcRunSchema}.
+
+#### `UserStateSchema`
+
+```ts
+export const UserStateSchema = …
+```
+
+The user state document stored in S3. Both parts are optional: absent means "never chosen".
+
+#### `UserState`
+
+```ts
+export type UserState = z.output<typeof UserStateSchema>;
+```
+
+The user state document, see {@link UserStateSchema}.
+
+#### `GcSnapshotSchema`
+
+```ts
+export const GcSnapshotSchema = …
+```
+
+`GET /api/settings/gc` and `PUT /api/settings/gc`: the policy as saved in S3 (`null` when none has been saved), the
+revision to send back in `If-Match`, and the result of the last pass this server ran.
+
+#### `GcSnapshot`
+
+```ts
+export type GcSnapshot = z.output<typeof GcSnapshotSchema>;
+```
+
+The garbage collection settings response, see {@link GcSnapshotSchema}.
+
+#### `GcRunResultSchema`
+
+```ts
+export const GcRunResultSchema = …
+```
+
+`POST /api/settings/gc/run`: the passes that ran, one per project.

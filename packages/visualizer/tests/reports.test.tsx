@@ -60,6 +60,9 @@ test('the index says which specs have results, and a spec without evidence says 
   await atlas.sees('No completed test report for this feature yet.');
   // The scenario is still readable, and nothing is shown as passed.
   await atlas.click('button', 'Clear');
+  // Read says what is expected and that nothing ran; Inspect holds the technical record.
+  await atlas.sees('No test reported a result for it.');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('No completed test report for this scenario yet.');
   expect(atlas.text()).toContain('clearing');
   expect(atlas.text()).not.toContain('Passed');
@@ -93,6 +96,7 @@ test('a feature shows each scenario with what was recorded for it, including eac
   expect(atlas.host.querySelector('li[data-status="failed"] p')?.textContent).toBe('Expected tea in the list');
 
   await atlas.click('button', 'Add an item');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.until(() => atlas!.host.querySelector('li[data-open] ol li[data-status="failed"]') !== null, 'the recorded failed step');
   const failed = atlas.host.querySelector('li[data-open] ol li[data-status="failed"]')!;
   expect(failed.textContent).toContain('When adding tea');
@@ -111,6 +115,7 @@ test('results from different backends and branches combine, and switching a newe
   // The newer branch replaced only the check it repeated; the older run still fills the rest.
   expect(atlas.text()).toContain('1 passed');
   await atlas.click('button', 'Add an item');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('Recorded in 2 runs');
   const history = [...atlas.host.querySelectorAll('section[aria-label="Other runs of this check"] li button')].map(
     (row) => row.textContent
@@ -158,6 +163,7 @@ test('the same scenario stays visible on each environment, and a focused layer l
   expect(tea?.textContent).not.toContain('iOS');
 
   await atlas.click('button', 'Add an item');
+  await atlas.click('[role="tab"]', 'Inspect');
   const variants = [...atlas.host.querySelectorAll('[aria-label="Environments"] button')].map((button) => button.textContent);
   expect(variants.some((label) => label?.includes('iOS'))).toBe(true);
   expect(variants.some((label) => label?.includes('Desktop web'))).toBe(true);
@@ -187,6 +193,7 @@ test('a recording opens at its first failure and its address names the moment', 
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: { localStore } });
   await atlas.sees('1 failed');
   await atlas.click('button', 'Add an item');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('Open recording');
   await atlas.click('button', 'Open recording');
   await atlas.sees('Moment 2 of 3');

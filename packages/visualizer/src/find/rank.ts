@@ -1,3 +1,12 @@
+/**
+ * @module Ranked search
+ *
+ * The one matching engine behind every search box: the finder, the test list, the runs list and the results of one run.
+ * It indexes documents (`FindDoc`) by their weighted fields, matches words by stem, everyday synonym, spelling and
+ * the start of a longer word, applies the structured parts of a query (`query.ts`), and says why each document matched.
+ */
+import { parseSearch, passesFilters, type DocFacets, type ParsedSearch } from './query';
+
 /** Everyday words a new person uses for the same action. The first word is the class id. */
 const CLASSES: readonly (readonly string[])[] = [
   ['complete', 'done', 'finish', 'mark', 'check'],
@@ -27,10 +36,15 @@ const TYPE_PHRASES: readonly { readonly notation: string; readonly left: string;
 const TYPE_OF = new Map<string, string>();
 for (const entry of TYPE_WORDS) for (const word of entry.words) TYPE_OF.set(word, entry.notation);
 
-export const FIELD_WEIGHT = { title: 5, steps: 3, description: 2, path: 0.5 } as const;
+/** How much a word counts in each field of a document. */
+export const FIELD_WEIGHT = { title: 5, steps: 3, description: 2, metadata: 1, path: 0.5 } as const;
 
+/** Where in a document a word was found. `metadata` is domain, tags, labels, environments and producers. */
 export type FieldName = keyof typeof FIELD_WEIGHT;
 
+const FIELD_NAMES = Object.keys(FIELD_WEIGHT) as FieldName[];
+
+/** One searchable text of a document and where it comes from. */
 export type FindField = { readonly name: FieldName; readonly text: string };
 
 export type FindGroup = 'Flows' | 'Specs' | 'Runs';
@@ -57,6 +71,7 @@ export type FindTarget = {
   };
 };
 
+/** A searchable thing: a flow, a spec, a scenario, a recorded behavior or a run. */
 export type FindDoc = {
   readonly id: string;
   readonly group: FindGroup;
@@ -69,9 +84,30 @@ export type FindDoc = {
   readonly related: readonly string[];
   readonly target: FindTarget;
   readonly recording: FindTarget | null;
+  /** What structured filters (`status:`, `has:video`…) read. Without it, a document passes no filter. */
+  readonly facets?: DocFacets;
 };
 
-export type Ranked = { readonly doc: FindDoc; readonly score: number; readonly snippet: string };
+/** A matched document, and why it matched. */
+export type Ranked = {
+  readonly doc: FindDoc;
+  readonly score: number;
+  readonly snippet: string;
+  /** Where the query's words were found. */
+  readonly fields?: readonly FieldName[];
+  /** True when a quoted phrase or an identifier was found literally. */
+  readonly exact?: boolean;
+  /** The literal phrases or identifiers found. */
+  readonly literals?: readonly string[];
+  /** True when a word matched only by a close spelling or the start of a longer word. */
+  readonly fuzzy?: boolean;
+  /** True when a distinctive query word is missing: a weaker match, listed below those that explain every word. */
+  readonly partial?: boolean;
+  /** True when it is listed because a matched document relates to it, not because it matched. */
+  readonly related?: boolean;
+  /** True when only the meaning of the query, not its words, brought it here. */
+  readonly semantic?: boolean;
+};
 
 const CLASS_OF = new Map<string, string>();
 for (const members of CLASSES) {
@@ -137,8 +173,9 @@ function damerau(a: string, b: string, limit: number): number {
   return rows[a.length]![b.length]!;
 }
 
-type Posting = { readonly doc: number; readonly weight: number; readonly snippet: string; readonly snippetRank: number };
+type Posting = { readonly doc: number; readonly weight: number; readonly snippet: string; readonly snippetRank: number; readonly fields: number };
 
+/** Documents indexed for matching. Build once with {@link indexCorpus}; query many times. */
 export type FindIndex = {
   readonly docs: readonly FindDoc[];
   readonly postings: ReadonlyMap<string, readonly Posting[]>;
@@ -152,6 +189,7 @@ function snippetRank(name: FieldName): number {
   return 0;
 }
 
+/** Indexes documents by the stems of the words in their fields. */
 export function indexCorpus(docs: readonly FindDoc[]): FindIndex {
   const postings = new Map<string, Posting[]>();
   const best = new Map<string, Posting>();
@@ -170,13 +208,15 @@ export function indexCorpus(docs: readonly FindDoc[]): FindIndex {
         if (stemmed.length >= 4 && !surfaces.has(stemmed)) surfaces.set(stemmed, canonical(stemmed));
         const prior = best.get(term);
         const fromField = rank > 0 ? field.text : '';
-        if (!prior) best.set(term, { doc, weight, snippet: fromField, snippetRank: rank });
-        else if (weight > prior.weight || rank > prior.snippetRank) {
+        const bit = 1 << FIELD_NAMES.indexOf(field.name);
+        if (!prior) best.set(term, { doc, weight, snippet: fromField, snippetRank: rank, fields: bit });
+        else {
           best.set(term, {
             doc,
             weight: Math.max(weight, prior.weight),
             snippet: rank > prior.snippetRank ? fromField : prior.snippet,
-            snippetRank: Math.max(rank, prior.snippetRank)
+            snippetRank: Math.max(rank, prior.snippetRank),
+            fields: prior.fields | bit
           });
         }
       }
@@ -204,6 +244,11 @@ function candidatesFor(piece: string, index: FindIndex): Candidate[] {
   if (piece.length >= 4) {
     const limit = piece.length > 6 ? 2 : 1;
     const consider = (surface: string, term: string) => {
+      if (surface.length > piece.length && surface.startsWith(piece)) {
+        // The start of a longer word, so a word is found while it is still being typed.
+        if ((factors.get(term) ?? 0) < 0.6) factors.set(term, 0.6);
+        return;
+      }
       if (Math.abs(surface.length - piece.length) > limit) return;
       const dist = damerau(piece, surface, limit);
       if (dist <= 0 || dist > limit) return;
@@ -308,9 +353,13 @@ function lineSnippet(text: string, terms: ReadonlySet<string>): string {
   return best.length > 140 ? `${best.slice(0, 137)}…` : best;
 }
 
-type Scored = Ranked & { readonly misses: number };
+type Scored = Ranked & { readonly misses: number; readonly index: number };
 
-function scoreAll(index: FindIndex, query: string): Scored[] {
+/**
+ * Scores every document that holds at least one query word. A word is matched through its candidates (itself, its
+ * everyday synonyms, close spellings, longer words it starts); `allow` leaves documents out before they are scored.
+ */
+function scoreAll(index: FindIndex, query: string, allow?: (docIndex: number) => boolean): Scored[] {
   const pieces: string[] = [];
   const seen = new Set<string>();
   for (const piece of query.toLowerCase().split(/[^a-z0-9]+/)) {
@@ -328,36 +377,61 @@ function scoreAll(index: FindIndex, query: string): Scored[] {
     return { candidates, rare: df * 2 <= total };
   });
   const queryTerms = new Set(queries.flatMap((entry) => entry.candidates.map((candidate) => candidate.term)));
-  return index.docs.map((doc, docIndex) => {
-    let score = 0;
-    let misses = 0;
-    let snippet = '';
-    let snippetRankSeen = 0;
-    for (const entry of queries) {
-      let best = 0;
-      let bestSnippet = '';
-      let bestRank = 0;
-      let hit = false;
-      for (const candidate of entry.candidates) {
-        const posting = index.postings.get(candidate.term)?.find((item) => item.doc === docIndex);
-        if (!posting) continue;
-        hit = true;
-        const value = idf(index.df.get(candidate.term) ?? 0, total) * posting.weight * candidate.factor;
-        if (value > best) best = value;
-        if (posting.snippetRank > bestRank) {
-          bestRank = posting.snippetRank;
-          bestSnippet = posting.snippet;
+  const rareCount = queries.filter((entry) => entry.rare).length;
+  type Acc = { score: number; rareHits: number; snippet: string; snippetRank: number; fields: number; fuzzy: boolean };
+  const acc = new Map<number, Acc>();
+  for (const entry of queries) {
+    const best = new Map<number, { value: number; snippet: string; rank: number; fields: number; factor: number }>();
+    for (const candidate of entry.candidates) {
+      const postings = index.postings.get(candidate.term);
+      if (!postings) continue;
+      const weightOfTerm = idf(index.df.get(candidate.term) ?? 0, total);
+      for (const posting of postings) {
+        if (allow && !allow(posting.doc)) continue;
+        const value = weightOfTerm * posting.weight * candidate.factor;
+        const prior = best.get(posting.doc);
+        if (!prior) best.set(posting.doc, { value, snippet: posting.snippet, rank: posting.snippetRank, fields: posting.fields, factor: candidate.factor });
+        else {
+          if (value > prior.value) {
+            prior.value = value;
+            prior.factor = candidate.factor;
+            prior.fields = posting.fields;
+          }
+          if (posting.snippetRank > prior.rank) {
+            prior.rank = posting.snippetRank;
+            prior.snippet = posting.snippet;
+          }
         }
       }
-      if (hit) score += best;
-      else if (entry.rare) misses++;
-      if (bestRank > snippetRankSeen && bestSnippet) {
-        snippetRankSeen = bestRank;
-        snippet = bestSnippet;
-      }
     }
-    return { doc, score, misses, snippet: lineSnippet(snippet, queryTerms) };
-  });
+    for (const [doc, hit] of best) {
+      const own = acc.get(doc) ?? { score: 0, rareHits: 0, snippet: '', snippetRank: 0, fields: 0, fuzzy: false };
+      own.score += hit.value;
+      if (entry.rare) own.rareHits++;
+      own.fields |= hit.fields;
+      if (hit.factor < 1) own.fuzzy = true;
+      if (hit.rank > own.snippetRank && hit.snippet) {
+        own.snippetRank = hit.rank;
+        own.snippet = hit.snippet;
+      }
+      acc.set(doc, own);
+    }
+  }
+  const out: Scored[] = [];
+  for (const [docIndex, hit] of acc) {
+    if (hit.score <= 0) continue;
+    const fields = FIELD_NAMES.filter((_, at) => (hit.fields & (1 << at)) !== 0);
+    out.push({
+      doc: index.docs[docIndex]!,
+      index: docIndex,
+      score: hit.score,
+      misses: rareCount - hit.rareHits,
+      snippet: lineSnippet(hit.snippet, queryTerms),
+      fields,
+      ...(hit.fuzzy ? { fuzzy: true } : {})
+    });
+  }
+  return out;
 }
 
 /** Journeys first, then failing runs. An empty box stays a short list of stories. */
@@ -367,41 +441,115 @@ export function suggest(docs: readonly FindDoc[], limit = 40): Ranked[] {
   return [...journeys, ...failing].slice(0, limit).map((doc) => ({ doc, score: 0, snippet: '' }));
 }
 
+const textOf = new WeakMap<FindDoc, string>();
+/** Everything a document says, lowercased, for literal (quoted or identifier) matches. */
+function literalText(doc: FindDoc): string {
+  let text = textOf.get(doc);
+  if (text === undefined) {
+    text = [doc.id, doc.title, doc.subtitle, ...doc.fields.map((field) => field.text)].join('\n').toLowerCase();
+    textOf.set(doc, text);
+  }
+  return text;
+}
+
+/** The literal phrases and identifiers of a search that a document contains, or null when it lacks one. */
+function literalsIn(doc: FindDoc, parsed: ParsedSearch): string[] | null {
+  const found: string[] = [];
+  const text = literalText(doc);
+  for (const literal of [...parsed.phrases, ...parsed.identifiers]) {
+    if (!text.includes(literal)) return null;
+    found.push(literal);
+  }
+  return found;
+}
+
+/** How a document matched the words, phrases and identifiers of a search (not its filters). */
+export type TextMatch = Ranked & { readonly order: number; readonly misses: number };
+
 /**
- * Rank documents for a query. A document that misses a rare query word sinks below every
- * document that explains it, so a word that is in almost every row cannot win on its own.
- * Matching a document also lists its `related` rows.
+ * The documents that match the text of a search: its words (every distinctive word found, unless `partial`), and every
+ * quoted phrase and identifier literally. Filters are not applied here; callers apply them with `passesFilters`, so
+ * a count can leave one out. Returns null when the search has no text at all. Hits are best first: exact before
+ * fuzzy, then by score and title.
+ *
+ * With `partial: true` a document that misses a distinctive word is kept, flagged `partial`, after those that do not.
  */
-export function rankIndex(index: FindIndex, query: string, limit = 40): Ranked[] {
-  const { notations, rest } = splitQuery(query);
-  const allows = (doc: FindDoc) => notations.size === 0 || notations.has(notationOf(doc));
-  if (rest.trim().length === 0 || tokens(rest).length === 0) {
+export function matchText(index: FindIndex, parsed: ParsedSearch, options: { readonly partial?: boolean; readonly words?: string; readonly allow?: (doc: FindDoc) => boolean; readonly snippets?: boolean } = {}): TextMatch[] | null {
+  const words = options.words ?? parsed.words;
+  const literal = parsed.phrases.length + parsed.identifiers.length > 0;
+  const hasWords = tokens(words).length > 0;
+  if (!hasWords && !literal) return null;
+  const allow = options.allow;
+  const pass = (docIndex: number) => {
+    const doc = index.docs[docIndex]!;
+    return (!allow || allow(doc)) && (!literal || literalsIn(doc, parsed) !== null);
+  };
+  let hits: TextMatch[];
+  if (hasWords) {
+    hits = [];
+    for (const scored of scoreAll(index, words, pass)) {
+      if (scored.misses > 0 && !options.partial) continue;
+      const literals = literal ? literalsIn(scored.doc, parsed) : [];
+      hits.push({ doc: scored.doc, score: scored.score, snippet: options.snippets === false ? '' : scored.snippet, fields: scored.fields, ...(scored.fuzzy ? { fuzzy: true } : {}), ...(scored.misses > 0 ? { partial: true } : {}), ...(literals?.length ? { exact: true, literals } : {}), order: scored.index, misses: scored.misses });
+    }
+  } else {
+    hits = [];
+    index.docs.forEach((doc, order) => {
+      if (!pass(order)) return;
+      hits.push({ doc, score: 0, snippet: '', exact: true, literals: literalsIn(doc, parsed) ?? [], order, misses: 0 });
+    });
+  }
+  const compare = (a: TextMatch, b: TextMatch) =>
+    a.misses - b.misses ||
+    Number(b.exact === true) - Number(a.exact === true) ||
+    b.score - a.score ||
+    (a.doc.title < b.doc.title ? -1 : a.doc.title > b.doc.title ? 1 : 0);
+  return hits.sort(compare);
+}
+
+/**
+ * Rank documents for a query typed in a search box. A document that misses a distinctive word sinks below every
+ * document that explains it (and is flagged `partial`), so a word that is in almost every row cannot win on its own.
+ * Matching a document also lists its `related` rows. Filters and quoted phrases in the query narrow the result; a
+ * kind word (`gherkin`) keeps only that kind of spec unless `kinds` is false.
+ */
+export function rankIndex(index: FindIndex, query: string, limit = 40, options: { readonly kinds?: boolean } = {}): Ranked[] {
+  const parsed = parseSearch(query);
+  const kinds = options.kinds !== false;
+  const { notations, rest } = kinds ? splitQuery(parsed.words) : { notations: new Set<string>(), rest: parsed.words };
+  const allows = (doc: FindDoc) => (notations.size === 0 || notations.has(notationOf(doc))) && passesFilters(doc.facets, parsed.filters);
+  const matched = matchText(index, parsed, { partial: true, words: rest, allow: allows });
+  if (matched === null) {
+    if (parsed.tokens.length > 0) {
+      return index.docs.filter(allows).slice(0, limit).map((doc) => ({ doc, score: 0, snippet: '' }));
+    }
     if (notations.size === 0) return suggest(index.docs, limit);
     return listOfType(index.docs.filter(allows), limit);
   }
-  const scored = scoreAll(index, rest).filter((entry) => entry.score > 0 && allows(entry.doc));
-  scored.sort((a, b) => a.misses - b.misses || b.score - a.score || (a.doc.title < b.doc.title ? -1 : a.doc.title > b.doc.title ? 1 : 0));
   const byId = new Map(index.docs.map((doc) => [doc.id, doc]));
   const seen = new Set<string>();
   const out: Ranked[] = [];
-  for (const hit of scored) {
+  const own = new Map(matched.map((hit) => [hit.doc.id, hit]));
+  for (const hit of matched) {
     if (out.length >= limit) break;
     if (!seen.has(hit.doc.id)) {
-      out.push({ doc: hit.doc, score: hit.score, snippet: hit.snippet });
+      const { order: _order, misses: _misses, ...ranked } = hit;
+      out.push(ranked);
       seen.add(hit.doc.id);
     }
     for (const id of hit.doc.related) {
       if (out.length >= limit || seen.has(id)) continue;
       const doc = byId.get(id);
       if (!doc || !allows(doc)) continue;
-      const own = scored.find((entry) => entry.doc.id === id);
-      out.push({ doc, score: hit.score, snippet: own?.snippet || hit.snippet });
+      const inherited = own.get(id);
+      out.push({ doc, score: hit.score, snippet: inherited?.snippet || hit.snippet, ...(inherited ? {} : { related: true as const }) });
       seen.add(id);
     }
   }
   return out;
 }
 
+/** Index `docs` and rank them for `query`: see {@link rankIndex}. */
 export function rank(docs: readonly FindDoc[], query: string, limit = 40): Ranked[] {
   return rankIndex(indexCorpus(docs), query, limit);
 }

@@ -19,6 +19,7 @@ import type { LayerSummary, ReportLayer } from './layer-types';
 import { contentTypeOf } from './media-types';
 import type { ObjectStore } from './object-store';
 import { parseWith } from './parse-with';
+import { isVideoAttachment, recordingReceipt } from './recording-receipt';
 import { sha256Hex } from './sigv4';
 
 /** Limits that protect the machine publishing: the largest single attachment, and the most attachment bytes in one layer (they are held in memory while stored). */
@@ -45,7 +46,7 @@ function decodeBase64(text: string): Uint8Array {
  * screenshot attached ten times is stored once), referred to by `bundleKey`. What a producer wrote as `data`,
  * `base64` or a long `text` becomes a reference; a short `text` stays inline; a `uri` is left alone.
  */
-async function materialize(holder: Loose, entries: Map<string, BundleEntry>, limit: number): Promise<Loose> {
+async function materialize(holder: Loose, entries: Map<string, BundleEntry>, limit: number, expectsRecording = holder.recordingExpectation === 'required'): Promise<Loose> {
   const out: Loose = { ...holder };
   if (Array.isArray(out.attachments)) {
     out.attachments = await Promise.all((out.attachments as Loose[]).map(async (given): Promise<Attachment> => {
@@ -55,6 +56,11 @@ async function materialize(holder: Loose, entries: Map<string, BundleEntry>, lim
       let bytes: Uint8Array | null = data ?? (base64 === undefined ? null : decodeBase64(base64));
       if (!bytes && text !== undefined && encoder.encode(text).length > INLINE_TEXT_BYTES) bytes = encoder.encode(text);
       if (!bytes) return { ...(kept as Attachment), ...(text !== undefined ? { bytes: encoder.encode(text).length } : {}) };
+      if (bytes.length > limit && expectsRecording && isVideoAttachment({ ...kept, ...(kept.contentType ? {} : { contentType: contentTypeOf(String(kept.name)) }) })) {
+        // A recording the check was expected to have is reported as left out (and why) instead of failing the whole publish.
+        const { text: _inline, ...rest } = kept;
+        return { ...(rest as Attachment), contentType: (kept.contentType as string | undefined) ?? contentTypeOf(String(kept.name)), bytes: bytes.length, sha256: await sha256Hex(bytes), omitted: 'too-large' };
+      }
       if (bytes.length > limit) throw new Error(`publishChecks: attachment "${String(kept.name)}" is ${bytes.length} bytes, over the limit of ${limit}. Store it elsewhere and attach its uri`);
       const sha256 = await sha256Hex(bytes);
       const contentType = (kept.contentType as string | undefined) ?? contentTypeOf(String(kept.name));
@@ -63,8 +69,8 @@ async function materialize(holder: Loose, entries: Map<string, BundleEntry>, lim
       return { ...(rest as Attachment), contentType, bundleKey: `attachments/${sha256}`, bytes: bytes.length, sha256 };
     }));
   }
-  if (Array.isArray(out.steps)) out.steps = await Promise.all((out.steps as Loose[]).map(step => materialize(step, entries, limit)));
-  if (Array.isArray(out.attempts)) out.attempts = await Promise.all((out.attempts as Loose[]).map(attempt => materialize(attempt, entries, limit)));
+  if (Array.isArray(out.steps)) out.steps = await Promise.all((out.steps as Loose[]).map(step => materialize(step, entries, limit, expectsRecording)));
+  if (Array.isArray(out.attempts)) out.attempts = await Promise.all((out.attempts as Loose[]).map(attempt => materialize(attempt, entries, limit, expectsRecording)));
   return out;
 }
 
@@ -92,6 +98,7 @@ export async function publishChecks(store: ObjectStore, input: PublishChecksInpu
   const entries = new Map<string, BundleEntry>();
   const checks = await Promise.all(args.checks.map(check => materialize(check as Loose, entries, limit)));
   const layerEvidence = await materialize({ attachments: args.attachments }, entries, limit);
+  const recordings = recordingReceipt(checks);
   const total = [...entries.values()].reduce((sum, entry) => sum + entry.bytes.length, 0);
   const totalLimit = options.maxTotalAttachmentBytes ?? 2 * 1024 * 1024 * 1024;
   if (total > totalLimit) throw new Error(`publishChecks: attachments total ${total} bytes, over the limit of ${totalLimit}. Attach the largest by uri, or publish in several layers`);
@@ -113,17 +120,20 @@ export async function publishChecks(store: ObjectStore, input: PublishChecksInpu
     sha: args.sha,
     branch: args.branch,
     runUrl: args.runUrl,
+    ...(args.run ? { run: args.run } : {}),
     ...(environment ? { environment } : {}),
     parameters: Object.fromEntries(Object.entries(parameters).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
     specs: args.specs as LayerSummary['specs'],
     parts: [part],
     source: null,
     recording: null,
+    ...(recordings ? { recordings } : {}),
     ...(args.tags?.length ? { tags: args.tags } : {}),
     ...(args.labels && Object.keys(args.labels).length ? { labels: Object.fromEntries(Object.entries(args.labels).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) } : {}),
     ...(args.links?.length ? { links: args.links } : {}),
     ...((layerEvidence.attachments as Attachment[] | undefined)?.length ? { attachments: layerEvidence.attachments as Attachment[] } : {}),
     ...(args.annotations?.length ? { annotations: args.annotations } : {}),
+    ...(args.scope ? { scope: args.scope } : {}),
     ...(args.extensions && Object.keys(args.extensions).length ? { extensions: args.extensions } : {})
   };
   const bundle = entries.size ? await writeBundle(store, (async function* () { for (const entry of [...entries.values()].sort((a, b) => (a.key < b.key ? -1 : 1))) yield entry; })(), 'layers/blobs/') : {};

@@ -99,8 +99,8 @@ export async function exportEvidence(args: { fetch: (path: string) => Promise<Re
         const copyDetail = async (path: string) => {
           const text = await copy(path);
           if (!text) return;
-          const read = JSON.parse(text) as CheckDetail | { run: CheckDetail['run'] };
-          const keys = new Set([...bundleKeysOf('check' in read ? read.check : {}), ...bundleKeysOf(read.run)]);
+          const read = JSON.parse(text) as CheckDetail | { run: CheckDetail['run']; parts?: CheckDetail['run'][] };
+          const keys = new Set([...bundleKeysOf('check' in read ? read.check : {}), ...bundleKeysOf(read.run), ...('parts' in read ? (read.parts ?? []).flatMap(bundleKeysOf) : [])]);
           await eachLimited([...keys], 4, key => copy(`/layers/${encodeURIComponent(layer.id)}/blobs/${key.split('/').map(encodeURIComponent).join('/')}`).then(() => {}));
         };
         const base = `/evidence/detail/${encodeURIComponent(layer.backend)}/${encodeURIComponent(layer.id)}`;
