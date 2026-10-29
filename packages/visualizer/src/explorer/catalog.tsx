@@ -52,6 +52,8 @@ import { useEvidence } from '../evidence/evidence-context';
 
 /** How many runs the Runs tab lists. */
 export const RUNS_SHOWN = 500;
+/** How many runs are read to search them all (a search must see every run, not only the newest). */
+export const RUNS_SEARCHED = 20_000;
 /** How many recorded results the Artifacts tab lists. */
 export const ARTIFACTS_SHOWN = 200;
 /** The server's catalog is read again at most this often while results keep arriving. */
@@ -284,22 +286,24 @@ export function runsAnswer(list: RunList, filter: ArtifactFilter): RunsAnswer {
 
 /**
  * CI runs, newest first, narrowed by a query (see `artifact-query.ts`). The server filters every run before it pages
- * them, so counts are the whole dataset's; a server that does not know a filter is handled by {@link runsAnswer}.
+ * them, so counts are the whole dataset's; a server that does not know a filter is handled by {@link runsAnswer}. With
+ * `all` every run is read (up to {@link RUNS_SEARCHED}), because a typed search must match the whole history rather than
+ * the newest page of it.
  */
-export function useRunList(enabled = true, filter: ArtifactFilter = {}) {
+export function useRunList(enabled = true, filter: ArtifactFilter = {}, all = false) {
   const catalog = useTestCatalog();
   const query = forRuns(filter);
   const key = filterParams(query).toString();
   return useQuery({
-    queryKey: ['test-runs', catalog.version, key],
+    queryKey: ['test-runs', catalog.version, key, all],
     queryFn: async ({ signal }): Promise<RunsAnswer> => {
       if (catalog.source === 'server') {
         const params = filterParams(query);
-        params.set('limit', String(RUNS_SHOWN));
+        params.set('limit', String(all ? RUNS_SEARCHED : RUNS_SHOWN));
         return runsAnswer(await reportJson<RunList>(`/runs?${params}`, signal), query);
       }
       const history = catalog.model?.history;
-      const list = history ? runList(history, catalog.version, RUNS_SHOWN, query) : { schemaVersion: 1 as const, version: catalog.version, total: 0, runs: [] };
+      const list = history ? runList(history, catalog.version, all ? RUNS_SEARCHED : RUNS_SHOWN, query) : { schemaVersion: 1 as const, version: catalog.version, total: 0, runs: [] };
       return runsAnswer(list, query);
     },
     enabled: enabled && catalog.model !== null,

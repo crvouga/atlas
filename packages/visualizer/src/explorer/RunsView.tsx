@@ -1,5 +1,5 @@
 import { IconAlertTriangle, IconArrowLeft, IconVideo } from '@tabler/icons-react';
-import { Alert, Anchor, Box, Button, Code, Flex, Group, List, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
+import { Alert, Anchor, Badge, Box, Button, Code, Flex, Group, List, NativeSelect, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
 /**
  * @module Runs view
  *
@@ -16,16 +16,22 @@ import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import type { FilterName } from '@crvouga/atlas/reports/artifact-query';
 import { formatMs, type RunResult, type RunSummary } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { behaviorDocs, behaviorId, describeHit, forRuns, resultDoc, runDoc } from '../find/behaviors';
+import { useDocSearch } from '../find/doc-search';
+import { hasFilters, passesFilters, type ParsedSearch, type SearchFilters } from '../find/query';
+import type { FindDoc, Ranked } from '../find/rank';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
-import { useRunDetail, useRunList } from './catalog';
+import { useRunDetail, useRunList, useTestCatalog } from './catalog';
 import { RunArtifacts } from './RunArtifacts';
 import { FilterBar } from './filters';
+import { SearchNotes, TypedFilters } from './search-notes';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { runName } from './parts';
 import { filtered, filterOf, NO_FILTERS } from './search';
 const RUN_ROWS = 50;
+const NO_RESULTS: readonly RunResult[] = [];
 const RESULT_ROWS = 200;
 /** The Runs tab: the run list, or the run opened in it. */
 export function RunsView() {
@@ -151,6 +157,56 @@ function HasVideo({ count, pressed, noun, onToggle }: { count: number; pressed: 
     </Button>
   );
 }
+/** The search box of the Runs tab and of an opened run: one query in the address, so a link reproduces it. */
+function SearchBox({ label, placeholder, parsed, onSearch }: { label: string; placeholder: string; parsed: ParsedSearch; onSearch: (value: string) => void }) {
+  const search = useExplorerSearch();
+  const [draft, setDraft] = useState(search.q ?? '');
+  // The address may change from elsewhere (a link, back, a chip): follow it.
+  useEffect(() => setDraft((current) => (current.trim() === (search.q ?? '').trim() ? current : (search.q ?? ''))), [search.q]);
+  return (
+    <Flex gap="xs" align="center" wrap="wrap">
+      <TextInput
+        type="search"
+        aria-label={label}
+        placeholder={placeholder}
+        value={draft}
+        miw={{ base: '100%', sm: '20rem' }}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          onSearch(event.target.value.trim());
+        }}
+      />
+      <TypedFilters
+        parsed={parsed}
+        query={draft}
+        onChange={(next) => {
+          setDraft(next);
+          onSearch(next);
+        }}
+      />
+    </Flex>
+  );
+}
+/** Why a result is in the list, beside it: exact, or the fields the words were found in. */
+function WhyMatched({ hit }: { hit: Ranked | undefined }) {
+  const why = hit ? describeHit(hit) : '';
+  if (!hit || !why) return null;
+  return (
+    <Text size="xs" c="dimmed" data-why>
+      {hit.exact && (
+        <Badge component="span" color="blue" mr="xs">
+          Exact
+        </Badge>
+      )}
+      {why}
+    </Text>
+  );
+}
+const RUN_SORTS = [
+  { id: 'recent', label: 'Newest' },
+  { id: 'failures', label: 'Most failures' },
+  { id: 'relevance', label: 'Best match' }
+] as const;
 /** What a filter is called when a page says a server could not apply it. */
 const FILTER_WORDS: Partial<Record<FilterName, string>> = { artifactTag: 'tag', type: 'media type', label: 'label', domain: 'domain', spec: 'spec' };
 /** Says which filters the list is not narrowed by, because the server that answered ignored them. */
@@ -167,11 +223,32 @@ function RunTable() {
   const search = useExplorerSearch();
   const go = useExplorerNavigate();
   const video = search.video === true;
-  const filter = useMemo(() => filterOf(search), [search]);
+  const searching = !!search.q;
+  // The structured filters of the address narrow the runs on the server; the words are matched here by the shared search,
+  // over every run, so the Runs tab judges "savde answer" as the finder and the test list do.
+  const filter = useMemo(() => {
+    const { q: _words, ...rest } = filterOf(search);
+    return rest;
+  }, [search]);
   const narrow = filtered(search);
-  const runs = useRunList(true, filter);
+  const runs = useRunList(true, filter, searching);
   const now = useNow();
   const [shown, setShown] = useState(RUN_ROWS);
+  const docs = useMemo(() => (runs.data?.runs ?? []).map((run) => runDoc(run, runLabel(run))), [runs.data]);
+  const found = useDocSearch(docs, search.q);
+  const parsed = useMemo(() => forRuns(found.parsed), [found.parsed]);
+  const sortValue = search.sort === 'failures' ? 'failures' : (search.sort === 'relevance' || !search.sort) && found.hits ? 'relevance' : 'recent';
+  const visible = useMemo(() => {
+    const runsOf = runs.data?.runs ?? [];
+    const order = found.hits ? new Map([...found.hits.keys()].map((id, at) => [id, at] as const)) : null;
+    const kept = runsOf.filter((run, at) => {
+      const doc = docs[at]!;
+      return (!found.hits || found.hits.has(doc.id)) && passesFilters(doc.facets, parsed.filters);
+    });
+    if (sortValue === 'failures') return [...kept].sort((a, b) => b.counts.failed - a.counts.failed || b.endedAtMs - a.endedAtMs);
+    if (sortValue === 'relevance' && order) return [...kept].sort((a, b) => (order.get(`runs:${a.key}`) ?? 0) - (order.get(`runs:${b.key}`) ?? 0));
+    return kept;
+  }, [runs.data, docs, found.hits, parsed.filters, sortValue]);
   if (runs.isPending)
     return (
       <Text role="status" component="div" c="dimmed">
@@ -184,24 +261,60 @@ function RunTable() {
         The runs could not be read. {runs.error.message}
       </Alert>
     );
-  const list = runs.data.runs;
+  const everything = runs.data.runs;
+  const list = visible;
   const withVideo = runs.data.withVideo;
   const noun = narrow ? 'matching' : '';
+  const hasVideoNow = video || parsed.filters.video;
   return (
     <Box aria-label="Runs" component="section" mb="lg">
-      {(narrow || list.length > 0) && <FilterBar facets={runs.data.facets} search={search} tab="runs" extra={withVideo !== undefined || video ? <HasVideo count={withVideo ?? list.length} pressed={video} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} /> : undefined} />}
+      {(narrow || everything.length > 0) && (
+        <FilterBar
+          facets={runs.data.facets}
+          search={search}
+          tab="runs"
+          extra={
+            withVideo !== undefined || video ? (
+              <HasVideo count={withVideo ?? list.length} pressed={hasVideoNow} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} />
+            ) : undefined
+          }
+        />
+      )}
       <NotApplied names={runs.data.notApplied} noun="runs" />
-      {!list.length && !narrow && (
+      {(parsed.tokens.length > 0 || parsed.issues.length > 0 || found.status !== 'idle') && (
+        <>
+          <Flex gap="xs" align="center" wrap="wrap">
+            <TypedFilters parsed={parsed} query={search.q ?? ''} onChange={(next) => go({ q: next || undefined }, { replace: true })} />
+          </Flex>
+          <SearchNotes issues={parsed.issues} semantic={found.status} />
+        </>
+      )}
+      {!everything.length && !narrow && (
         <Text component="div" c="dimmed">
           No runs recorded yet.
         </Text>
       )}
-      {list.length > 0 && (
-        <Text role="status" component="div">
-          {runs.data.total > list.length
-            ? `The newest ${list.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
-            : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
-        </Text>
+      {everything.length > 0 && (
+        <Flex gap="xs" align="center" wrap="wrap" role="status">
+          <Text span inherit>
+            {runs.data.total > everything.length
+              ? `The newest ${everything.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
+              : searching || list.length !== everything.length
+                ? `${list.length.toLocaleString()} of ${plural(everything.length, 'run', 'runs')} ${noun}`.trim()
+                : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
+          </Text>
+          <NativeSelect
+            aria-label="Sort runs"
+            value={sortValue}
+            onChange={(event) => go({ sort: event.target.value === (found.hits ? 'relevance' : 'recent') ? undefined : (event.target.value as 'recent' | 'failures' | 'relevance') })}
+          >
+            {RUN_SORTS.filter((option) => option.id !== 'relevance' || found.hits !== null).map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </Flex>
       )}
       {!list.length && narrow && (
         <Stack gap="xs" align="flex-start" role="status" data-no-match>
@@ -249,6 +362,7 @@ function RunTable() {
                       {run.title}
                     </Text>
                   )}
+                  <WhyMatched hit={found.hits?.get(`runs:${run.key}`)} />
                 </Table.Td>
                 <Table.Td title={run.branch ?? ''} c="dimmed">
                   {run.branch ?? '—'}
@@ -322,20 +436,39 @@ function RunDetailView({ runKey }: { runKey: string }) {
   const detail = useRunDetail(runKey);
   const now = useNow();
   const [status, setStatus] = useState('');
-  const [words, setWords] = useState('');
   const [shown, setShown] = useState(RESULT_ROWS);
-  const results = detail.data?.results ?? [];
-  const filtered = useMemo(() => {
-    const terms = words.toLowerCase().split(/\s+/).filter(Boolean);
-    return results.filter(
-      (result) =>
-        (!status || result.status === status) &&
-        (!video || (videoCounts(result.videos)?.recordings ?? 0) > 0) &&
-        terms.every((term) =>
-          `${result.title}\n${result.specPath ?? ''}\n${result.environment ?? ''}\n${result.producer}`.toLowerCase().includes(term)
-        )
-    );
-  }, [results, status, words, video]);
+  const catalog = useTestCatalog();
+  const model = catalog.model;
+  const results = detail.data?.results ?? NO_RESULTS;
+  // The words are judged against every behavior of the report, as in the test list, so the same words make the same
+  // behaviors eligible; the run's results are then the ones of those behaviors it recorded.
+  const docs = useMemo<readonly FindDoc[]>(() => {
+    if (!search.q) return [];
+    const base = model ? behaviorDocs(model.tests) : new Map<string, FindDoc>();
+    const extra = new Map<string, FindDoc>();
+    for (const result of results) if (!base.has(result.key) && !extra.has(result.key)) extra.set(result.key, resultDoc(result, undefined));
+    return [...base.values(), ...extra.values()];
+  }, [search.q, model, results]);
+  const found = useDocSearch(docs, search.q);
+  const resultDocs = useMemo(() => results.map((result) => resultDoc(result, model?.byKey.get(result.key))), [results, model]);
+  const narrowedResults = useMemo(
+    () =>
+      results.filter(
+        (result, at) =>
+          (!found.hits || found.hits.has(behaviorId(result.key))) &&
+          (!video || (videoCounts(result.videos)?.recordings ?? 0) > 0) &&
+          passesFilters(resultDocs[at]!.facets, { ...found.parsed.filters, status: [] })
+      ),
+    [results, resultDocs, found, video]
+  );
+  const statusFilters = found.parsed.filters.status;
+  const filtered = useMemo(
+    () =>
+      narrowedResults.filter(
+        (result) => (!status || result.status === status) && (!statusFilters.length || statusFilters.some((wanted) => (wanted === 'flaky' ? model?.byKey.get(result.key)?.stats.flaky === true : result.status === wanted)))
+      ),
+    [narrowedResults, status, statusFilters, model]
+  );
   const bySpec = useMemo(() => {
     const groups = new Map<string, RunResult[]>();
     for (const result of filtered.slice(0, shown)) {
@@ -458,14 +591,19 @@ function RunDetailView({ runKey }: { runKey: string }) {
         )}
       </Flex>
       <Flex gap="xs" align="center" wrap="wrap">
-        <TextInput
-          type="search"
-          aria-label="Search this run"
-          placeholder="Search this run…"
-          value={words}
-          onChange={(event) => setWords(event.target.value)}
+        <SearchBox
+          label="Search this run"
+          placeholder='Search this run… or filter: status:failed has:video "exact phrase"'
+          parsed={found.parsed}
+          onSearch={(value) => go({ q: value || undefined }, { replace: true })}
         />
       </Flex>
+      <SearchNotes issues={found.parsed.issues} semantic={found.status} />
+      {(search.q || found.parsed.tokens.length > 0) && (
+        <Text role="status" size="sm" c="dimmed">
+          {filtered.length.toLocaleString()} of {plural(results.length, 'result', 'results')} match
+        </Text>
+      )}
       <Flex role="group" aria-label="Result status" gap="xs" align="center" wrap="wrap">
         {RESULT_FILTERS.map((filter) => (
           <Button
@@ -478,7 +616,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
           >
             {filter.label}{' '}
             <Text span inherit>
-              {filter.id ? results.filter((result) => result.status === filter.id).length : results.length}
+              {filter.id ? narrowedResults.filter((result) => result.status === filter.id).length : narrowedResults.length}
             </Text>
           </Button>
         ))}
@@ -487,7 +625,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
         <Flex gap="xs" align="center" wrap="wrap">
           <HasVideo
             count={results.filter((result) => (videoCounts(result.videos)?.recordings ?? 0) > 0).length}
-            pressed={video}
+            pressed={video || found.parsed.filters.video}
             noun={['result', 'results']}
             onToggle={() => go({ video: video ? undefined : true })}
           />
