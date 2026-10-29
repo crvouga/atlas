@@ -7,43 +7,25 @@
  * capture exists; a backend or layer that could not be read is named, and nothing that depended on it is shown as captured.
  * Pictures are loaded lazily, only for the cards on screen.
  */
-import { IconDownload } from '@tabler/icons-react';
-import type { UiCapture, UiCatalog, UiCatalogState, UiCell, UiImage } from '@crvouga/atlas/reports/ui-catalog';
+import { IconArrowsExchange, IconDownload } from '@tabler/icons-react';
+import type { UiCapture, UiCatalog, UiCatalogState, UiCell } from '@crvouga/atlas/reports/ui-catalog';
 import { UI_COVERAGE, filterUiCatalog, isUiCatalogFiltered } from '@crvouga/atlas/reports/ui-catalog';
-import { Accordion, Alert, Anchor, Badge, Button, Card, Code, Container, Drawer, Group, Image, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Anchor, Badge, Button, Card, Code, Container, Drawer, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
-import { reportAssetUrl } from '../evidence/api';
 import { useEvidence } from '../evidence/evidence-context';
-import { ago, exactTime, plural, safeUri, shortSha, useNow } from '../evidence/format';
+import { ago, exactTime, plural, shortSha, useNow } from '../evidence/format';
 import { EvidenceIncomplete, EvidenceWaiting } from '../evidence/load-state';
 import { StatusMark } from '../evidence/marks';
+import { Picture, imageSource } from './Picture';
+import { UiCatalogCompare } from './UiCatalogCompare';
 import { useUiCatalog } from './provider';
 import { useCatalogNavigate, useCatalogSearch } from './search';
 import { coverageStatus, coverageWord } from './words';
 
 /** How many state cards are drawn before "Show more". */
 const CARDS = 48;
-
-/** Where a browser loads a picture from: its stored file in the layer, else its safe web address. */
-export function imageSource(image: UiImage | null | undefined): string | null {
-  if (!image) return null;
-  return image.path ? reportAssetUrl(image.path) : safeUri(image.uri);
-}
-
-function Picture({ cell, title, height }: { cell: UiCell; title: string; height?: number }) {
-  const image = cell.capture?.image;
-  // A failed capture may carry a picture of what the page showed, for diagnosis; nothing else has one worth showing.
-  const source = cell.coverage === 'captured' || cell.coverage === 'failed' ? imageSource(image) : null;
-  if (source)
-    return <Image src={source} alt={`${title}, ${cell.profile.label}`} loading="lazy" fit="contain" {...(height ? { h: height } : {})} {...(image?.width ? { w: 'auto', maw: '100%' } : {})} />;
-  return (
-    <Text c="dimmed" fz="sm" role="img" aria-label={`${title}, ${cell.profile.label}: no picture`}>
-      {cell.coverage === 'captured' ? (image?.omitted ? `Picture left out (${image.omitted})` : 'Captured without a picture') : coverageWord(cell.coverage)}
-    </Text>
-  );
-}
 
 function CoverageBadge({ cell }: { cell: UiCell }) {
   return (
@@ -266,9 +248,16 @@ export function UiCatalogPage() {
             <Text c="dimmed">Each state of the product&rsquo;s interface, captured once per profile, with where every picture came from.</Text>
           </Stack>
           {catalog && catalog.states.length > 0 && (
-            <Button type="button" leftSection={<IconDownload size={16} aria-hidden="true" />} onClick={() => download(catalog)}>
-              Download the manifest
-            </Button>
+            <Group gap="sm">
+              {!search.compare && (
+                <Button type="button" variant="default" leftSection={<IconArrowsExchange size={16} aria-hidden="true" />} onClick={() => go({ compare: 'commit' })}>
+                  Compare
+                </Button>
+              )}
+              <Button type="button" leftSection={<IconDownload size={16} aria-hidden="true" />} onClick={() => download(catalog)}>
+                Download the manifest
+              </Button>
+            </Group>
           )}
         </Group>
         {evidence.unavailable && (
@@ -296,7 +285,8 @@ export function UiCatalogPage() {
             Reading {plural(evidence.pending, 'more layer', 'more layers')}; states appear here as they arrive.
           </Text>
         )}
-        {catalog && whole && (
+        {catalog && whole && search.compare && <UiCatalogCompare whole={whole} />}
+        {catalog && whole && !search.compare && (
           <>
             <Summary catalog={catalog} narrowed={narrowed} />
             <Surfaces catalog={whole} />

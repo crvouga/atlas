@@ -338,6 +338,14 @@ edit, and the server's time. Nothing about the layer, its results or the report'
 See [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos) for the tag rules. Reviewer tags are
 shown in the viewer's evidence; the tests API (`artifactTag`) searches the producers' tags.
 
+## Reading recordings back
+
+`POST /api/reports/recordings/verification` (publish, `Authorization: Bearer`) reads the stored videos of the newest layers
+back and checks them; `GET` (read) returns the newest result per layer without reading any blob, so the viewer can mark a
+run whose recording was stored and then lost, apart from its test results. The result is in memory only and layers
+that were never read back are absent (unknown, never "fine"). See
+[Is the recording still there?](rich-evidence.md#is-the-recording-still-there) for what is checked and what is not.
+
 ## Review collections
 
 A team can publish a named, curated review of a few behaviors: recordings from several explicit executions, notes on
@@ -517,6 +525,10 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
 | `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
+| `GET /api/reports/recordings/verification` | read | Which stored recordings the server last read back, and which were gone or damaged. |
+| `GET /api/projects/{project}/reports/recordings/verification` | read | Which stored recordings the server last read back, and which were gone or damaged. |
+| `POST /api/reports/recordings/verification` | publish | Read stored recordings back and check them (publish token). |
+| `POST /api/projects/{project}/reports/recordings/verification` | publish | Read stored recordings back and check them (publish token). |
 | `GET /api/reports/review-collections` | read | Review collections: curated sets of recordings, newest first. |
 | `GET /api/projects/{project}/reports/review-collections` | read | Review collections: curated sets of recordings, newest first. |
 | `POST /api/reports/review-collections` | publish | Publish an immutable review collection (or a new revision of one). |

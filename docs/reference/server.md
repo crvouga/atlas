@@ -627,6 +627,45 @@ export function projectServer(options: AtlasServerOptions, create: (options: Atl
 
 Wrap the single-project protocol in project selection. Auth, upload validation and composition stay identical.
 
+### Recording verification routes
+
+Source: `packages/server/src/recording-verification.ts`
+
+`/api/reports/recordings/verification`: whether the videos a run published can still be read back from storage as
+they were published, apart from whether the run's tests passed. A viewer reads the newest result with a read token
+(`GET`, which never touches a blob). A publish token starts a read-back (`POST`), which does read blobs and so is
+bounded: the newest 20 layers unless asked for more, at most 200, one pass at a time. The result is kept in this
+process only (it is derived, not state: a restart means "not verified yet", never "fine"), and only for layers the
+store still holds. It adds nothing to any layer and changes no status, slot or winner. This is the same check as
+`atlas report verify-recordings`, and as that command it checks stored bytes, not browser playback.
+
+See docs/rich-evidence.md#recording-completeness
+
+#### `RecordingVerificationDeps`
+
+```ts
+export type RecordingVerificationDeps = {
+  /** Every backend's store: a layer is read back from the store that holds it. */
+  readonly stores: readonly ObjectStore[];
+  readonly auth: Auth;
+  readonly index: ReportIndex;
+  readonly now: () => number;
+  readonly unauthorized: (verdict: Extract<ReturnType<Auth['check']>, { ok: false }>) => Response;
+};
+```
+
+What the verification routes need from the server around them.
+
+#### `mountRecordingVerification`
+
+```ts
+export function mountRecordingVerification(app: Hono, deps: RecordingVerificationDeps): void
+```
+
+Registers `GET` and `POST /api/reports/recordings/verification` on `app`. The result of the last read-back of each
+layer is held in memory, replaced by a newer one, and served only for layers a store still holds. A layer held by
+two backends keeps the reading with more gaps, so a copy that lost its blobs is never hidden by one that did not.
+
 ### Review collection routes
 
 Source: `packages/server/src/review-collections.ts`

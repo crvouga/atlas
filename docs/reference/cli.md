@@ -2,7 +2,7 @@
 
 > Generated from the usage text each command prints (`atlas <command> --help`) by `bun run docs`. Do not edit.
 
-Add `--format json` (alias `--json`) to `init`, `report publish`, `stream`, `merge`, `doctor` and `status` for a JSON document on standard output (schemas in `@crvouga/atlas/schemas`). Exit codes: `0` it worked, `1` it ran and the answer is no, `2` the command was wrong.
+Add `--format json` (alias `--json`) to `init`, `report publish`, `stream`, `merge`, `doctor`, `status`, every `ui-catalog` command and `critic list`, `setup`, `doctor` and `run` for a JSON document on standard output (schemas in `@crvouga/atlas/schemas`). Exit codes: `0` it worked, `1` it ran and the answer is no, `2` the command was wrong.
 
 ## atlas
 
@@ -22,6 +22,7 @@ atlas — executable statecharts
   atlas init   [--server <url>] [--write]                         integrate this project: detect its suites, print the plan (atlas init --help)
   atlas report publish|stream|status|merge|doctor|policy …       layered evidence for any kind of spec (atlas report --help)
   atlas critic list|setup|doctor|run …                           automated reviewers that mark which UIs need polish (atlas critic --help)
+  atlas ui-catalog plan|publish|status|diff|export …              the UI catalog of captured states (atlas ui-catalog --help)
 
   --workers       path attempts that run at once (default: one per CPU, capped by the driver)
   --seed          only paths that start from this seed ("start" for paths setup starts); repeatable
@@ -172,6 +173,60 @@ atlas report — layered evidence for any kind of spec
   A store may be an Atlas server (https://…): ATLAS_STORE=https://atlas.example.com, with ATLAS_TOKEN.
 
   Exit codes: 0 ok, 1 the report does not pass (or a check failed), 2 the command was wrong.
+```
+
+## atlas ui-catalog
+
+```text
+atlas ui-catalog — a browsable inventory of captured UI states, from any collector
+
+  atlas ui-catalog plan    --states <file.json> --producer <name> [--store <dir|s3://bucket/prefix|https://…>]
+                           [--environment <name>] [--param key=value]... [--shard <label>]
+                           [--branch <b>] [--sha <s>] [--run-url <u>] [--run-id <id>] [--run-title <t>] [--recorded-at <iso|ms>]
+  atlas ui-catalog publish --captures <file.json> --producer <name> [the same flags as plan]
+                           [--attach-root <dir>]... [--max-picture-mb <n>]
+  atlas ui-catalog status  [--store <dir|s3://…|id=url>]... [--backends <module>] [filters] [--branch <name>]...
+                           [--ignore-modified] [--format text|json|markdown]
+  atlas ui-catalog diff    --from <commit> --to <commit> [--store …]... [--backends <module>] [filters]
+                           [--fail-on-change] [--format text|json|markdown]
+  atlas ui-catalog export  --out <file.html> [--store …]... [--backends <module>] [filters]
+                           [--images inline|none] [--max-mb <n>] [--manifest <file.json>] [--title <t>]
+
+  filters (status, diff, export): --q <words> --coverage a,b --profile <key|label>... --area a --route r --cohort c
+                           --flag f --surface s --producer p
+
+  plan      Write one layer of kind ui-plan: the states (and with "inventory": true, the surfaces) that should exist under
+            this profile. Every entry is not-run, so a plan never counts as a pass. The file is {"states":[{"id":…,
+            "title"?,"route"?,"fixture"?,"cohort"?,"area"?,"kind"?,"flags"?,"covers"?,"inventory"?}]} or just that list.
+  publish   Write one layer of kind ui-state: the states one collector or shard captured under this profile. The file is
+            {"states":[{"id":…,"title"?,"status"?:"passed|failed|running|not-run","detail"?,"route"?,"fixture"?,"cohort"?,
+            "area"?,"kind"?,"flags"?,"covers"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?:"file.png"|{"path"|"uri",
+            "width"?,"height"?,"contentType"?}}]}. A picture file is read from beside the file and each --attach-root, never
+            from a hidden file or a link out. A passed state whose picture cannot be read is published as failed, with the
+            reason: a state without its picture is not shown as captured.
+            --environment and each --param key=value are the profile (a viewport, a color scheme, a device): another
+            profile is another result side by side. --shard only describes the layer; it never splits a result.
+            --recorded-at defaults to the modification time of the file, so publishing the same file twice is one layer.
+  status    Read every store and print the catalog's summary. Exit 1 unless the catalog holds a state and there is nothing
+            to attend to: a failed capture, a state a plan expects with nothing captured, a capture still in progress, a
+            backend or layer that could not be read. Without a plan nothing is expected, so nothing is missing.
+            --profile takes a profile's key or its label, as printed by status.
+  diff      Set the catalog recorded at one commit (--from) against another (--to): each state in each profile is paired
+            with itself and is unchanged, changed in coverage, changed in picture (the stored bytes differ), unverified (a
+            side has no content hash), only in --to (added) or only in --from (removed). A commit is the whole id or at
+            least 7 digits of it. Exit 0 unless a store could not be read, or, with --fail-on-change, anything differs.
+  export    Write the catalog as one HTML file with its pictures embedded and its manifest in it: no server, no network.
+            It is the catalog at the moment it was made. --images none leaves the pictures out. --max-mb (default 32) limits
+            the embedded pictures; those past it are listed in the page as left out, and the manifest stays complete.
+            --manifest writes the catalog's JSON manifest too.
+
+  --format json (alias --json)   every subcommand prints one JSON document instead of prose
+                       (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result).
+                       A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
+  A store is a directory, s3://bucket/prefix or an Atlas server (https://…), exactly as for atlas report; select a project
+  with --project <slug> or ATLAS_PROJECT. When no --store is given, ATLAS_STORE is used.
+
+  Exit codes: 0 ok, 1 the answer is no (see each command), 2 the command was wrong.
 ```
 
 ## atlas critic

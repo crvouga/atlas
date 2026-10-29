@@ -81,6 +81,8 @@ export const VideoRefSchema = z.looseObject({
   recording: z.string().optional().describe('What identifies the bytes; references with the same value are one recording. Absent when it cannot be played'),
   available: z.boolean().describe('False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer\'s own bundle does not hold'),
   reason: z.string().optional().describe('Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable'),
+  durationMs: z.number().nonnegative().optional().describe('How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers'),
+  poster: z.string().optional().describe('The bundle key, in the same layer, of the image the producer named as this recording\'s poster: a hint to show before the file is opened. Absent when there is none or the layer\'s bundle does not hold it, and in documents of older servers'),
   scope: EvidenceScopeSchema.optional().describe('What this recording shows as its producer declared it: its own `scope`, else its attempt\'s, check\'s, part\'s or layer\'s. Absent: the scope is unknown, never live, physical or audible')
 });
 
@@ -281,6 +283,46 @@ export const ArtifactTagEntrySchema = z.looseObject({
 export const ArtifactTagsSchema = z.looseObject({
   schemaVersion: z.literal(1),
   entries: z.array(ArtifactTagEntrySchema)
+});
+
+/** One stored video that failed the server's read-back: which check holds it and what is wrong with it. */
+export const StoredRecordingGapSchema = z.looseObject({
+  check: z.string().nullable().describe('The id of the check that holds the video, or null for a video attached to the run or a part'),
+  name: z.string().describe('The attachment\'s name'),
+  bundleKey: z.string().describe('The key the layer names the file by'),
+  problem: z.string().describe('`not-in-bundle`, `blob-missing`, `unreadable`, `size-mismatch`, `checksum-mismatch` or `undecodable`. An open vocabulary: treat an unknown value as a gap'),
+  reason: z.string().describe('A short explanation without secrets or paths')
+});
+
+/** What reading back the stored videos of one layer found. */
+export const LayerRecordingCheckSchema = z.looseObject({
+  layer: z.string().describe('The layer id'),
+  run: z.string().describe('The key of the run the layer belongs to (a `RunSummary.key`)'),
+  verifiedAtMs: z.number().describe('When the server read the videos back, epoch milliseconds'),
+  checked: z.number().int().describe('Videos read back: those that name a bundle key'),
+  ok: z.number().int().describe('Of those, the ones that passed every check'),
+  referenced: z.number().int().describe('Videos given only by address, which Atlas cannot read back and so does not vouch for'),
+  gaps: z.array(StoredRecordingGapSchema).describe('The videos that did not pass. Never a test result: statuses are unchanged')
+});
+
+/**
+ * `GET` and `POST /api/reports/recordings/verification`: the newest read-back the server did of stored videos, per layer.
+ * A layer that was never read back is absent, which means "not verified", never "fine".
+ */
+export const RecordingVerificationSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  layers: z.array(LayerRecordingCheckSchema).describe('Layers the server has read back and still holds, newest first'),
+  notices: z.array(z.string()).describe('Layers the last pass could not read at all: their recordings are unknown, not verified'),
+  verified: z.number().int().optional().describe('POST only: how many layers this pass read back')
+});
+
+/** The document of {@link RecordingVerificationSchema}, as a type. */
+export type RecordingVerification = z.infer<typeof RecordingVerificationSchema>;
+
+/** The body of `POST /api/reports/recordings/verification`. Both fields are optional; an empty body reads back the newest layers. */
+export const RecordingVerifyRequestSchema = z.looseObject({
+  layers: z.array(z.string().regex(/^[0-9a-f]{7,64}$/i)).max(50).optional().describe('Only layers whose id starts with one of these (at least 7 hex digits)'),
+  limit: z.number().int().min(1).max(200).optional().describe('How many of the newest layers to read back. Default 20, at most 200')
 });
 
 /** A source a review collection points at: one recorded result of one archived layer, and optionally one of its recordings. Exact and immutable: a layer never changes. */

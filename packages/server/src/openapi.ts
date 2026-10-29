@@ -15,11 +15,11 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, CatalogEntriesSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, CatalogEntriesSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema, RecordingVerificationSchema, RecordingVerifyRequestSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
-export const API_VERSION = '1.6.0';
+export const API_VERSION = '1.7.0';
 
 /** Who may call an operation: `none` (anyone), or the least role that may (`read` < `critic` < `publish` < `admin`). */
 export type Role = 'none' | 'read' | 'critic' | 'publish' | 'admin';
@@ -67,6 +67,7 @@ const COMPONENTS = {
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
   ReviewCollectionRequest: [ReviewCollectionRequestSchema, 'input'], ReviewCollection: [ReviewCollectionSchema, 'output'], ReviewCollectionList: [ReviewCollectionListSchema, 'output'], ReviewCollectionDetail: [ReviewCollectionDetailSchema, 'output'], ReviewNoteInput: [ReviewNoteInputSchema, 'input'], ReviewNote: [ReviewNoteSchema, 'output'], ReviewManifest: [ReviewManifestSchema, 'output'],
+  RecordingVerification: [RecordingVerificationSchema, 'output'], RecordingVerifyRequest: [RecordingVerifyRequestSchema, 'input'],
   TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], CatalogEntries: [CatalogEntriesSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
@@ -398,6 +399,27 @@ const BASE_OPERATIONS: readonly Operation[] = [
     description: 'Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer\'s tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).',
     body: { description: 'The attachment and the tags to add and remove. At most 20 of each, 64 KiB.', contentType: 'application/json', required: true, schema: ref('ArtifactTagEdit') },
     responses: { '201': json('The recorded entry.', 'ArtifactTagEntry'), '401': UNAUTHORIZED, '403': FORBIDDEN, '413': problem('Request too large.'), '422': problem('Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.') }
+  },
+  {
+    route: 'GET /api/reports/recordings/verification', path: '/api/reports/recordings/verification', operationId: 'getRecordingVerification', tag: 'Report', role: 'read',
+    summary: 'Which stored recordings the server last read back, and which were gone or damaged',
+    description: [
+      'The newest read-back the server did of stored videos, per layer: how many it checked, how many passed and the `gaps` (a blob that is gone, bytes of another size or hash than were published, or a file that does not begin like its container), each naming the check that holds the video. `run` is the key of the run the layer belongs to (a `RunSummary.key`), so a viewer can mark that run\'s recordings as stored-then-unavailable beside its test results.',
+      '',
+      'This route never reads a blob: it returns what a publish token\'s `POST` found earlier. A layer that was never read back is absent, which means "not verified", not "fine"; the result is kept in the server\'s memory only, so a restart empties it. Only layers a store still holds are listed (one removed by garbage collection drops out). No status, slot or winner depends on it. It checks stored bytes, not browser playback. Narrow with `?run=` (a run key) and `?layer=` (an id prefix of at least 7 hex digits, repeatable).'
+    ].join('\n'),
+    parameters: [
+      { name: 'run', in: 'query', description: 'Only layers of this run (a key from `GET /api/reports/runs`).', schema: str },
+      { name: 'layer', in: 'query', description: 'Only layers whose id starts with this prefix. Repeatable or comma-separated.', schema: str }
+    ],
+    responses: { '200': json('The held read-backs.', 'RecordingVerification'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'POST /api/reports/recordings/verification', path: '/api/reports/recordings/verification', operationId: 'verifyRecordings', tag: 'Report', role: 'publish',
+    summary: 'Read stored recordings back and check them (publish token)',
+    description: 'Reads the videos of the newest layers (`limit`, default 20, at most 200; or the layers `layers` names) back from storage and checks that each is still stored, still has the size and SHA-256 published, and still begins like its media type\'s container. This reads blobs, so it needs a publish (or admin) token in a Bearer header; a reader-only token, a browser sign-in box and an anonymous reader are refused. One read-back runs at a time (`409` otherwise). It writes nothing to storage and changes no status. The answer is the same document `GET` returns, with `verified`: how many layers this pass read back.',
+    body: { description: 'Optional `layers` (id prefixes) and `limit`. An empty body reads back the newest layers.', contentType: 'application/json', required: false, schema: ref('RecordingVerifyRequest') },
+    responses: { '200': json('The read-backs now held.', 'RecordingVerification'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('A read-back is already running.'), '413': problem('Request too large.'), '422': problem('Not a verification request.'), '502': problem('A store could not be read.'), '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/review-collections', path: '/api/reports/review-collections', operationId: 'listReviewCollections', tag: 'Report', role: 'read',

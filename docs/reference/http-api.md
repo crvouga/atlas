@@ -694,6 +694,58 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `201` The recorded entry.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.
 
+### Which stored recordings the server last read back, and which were gone or damaged
+
+`GET /api/reports/recordings/verification` · role: read
+
+The newest read-back the server did of stored videos, per layer: how many it checked, how many passed and the `gaps` (a blob that is gone, bytes of another size or hash than were published, or a file that does not begin like its container), each naming the check that holds the video. `run` is the key of the run the layer belongs to (a `RunSummary.key`), so a viewer can mark that run's recordings as stored-then-unavailable beside its test results.
+
+This route never reads a blob: it returns what a publish token's `POST` found earlier. A layer that was never read back is absent, which means "not verified", not "fine"; the result is kept in the server's memory only, so a restart empties it. Only layers a store still holds are listed (one removed by garbage collection drops out). No status, slot or winner depends on it. It checks stored bytes, not browser playback. Narrow with `?run=` (a run key) and `?layer=` (an id prefix of at least 7 hex digits, repeatable).
+
+- `run` (query): Only layers of this run (a key from `GET /api/reports/runs`).
+- `layer` (query): Only layers whose id starts with this prefix. Repeatable or comma-separated.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The held read-backs.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Which stored recordings the server last read back, and which were gone or damaged
+
+`GET /api/projects/{project}/reports/recordings/verification` · role: read
+
+The newest read-back the server did of stored videos, per layer: how many it checked, how many passed and the `gaps` (a blob that is gone, bytes of another size or hash than were published, or a file that does not begin like its container), each naming the check that holds the video. `run` is the key of the run the layer belongs to (a `RunSummary.key`), so a viewer can mark that run's recordings as stored-then-unavailable beside its test results.
+
+This route never reads a blob: it returns what a publish token's `POST` found earlier. A layer that was never read back is absent, which means "not verified", not "fine"; the result is kept in the server's memory only, so a restart empties it. Only layers a store still holds are listed (one removed by garbage collection drops out). No status, slot or winner depends on it. It checks stored bytes, not browser playback. Narrow with `?run=` (a run key) and `?layer=` (an id prefix of at least 7 hex digits, repeatable).
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `run` (query): Only layers of this run (a key from `GET /api/reports/runs`).
+- `layer` (query): Only layers whose id starts with this prefix. Repeatable or comma-separated.
+
+Responses: `200` The held read-backs.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Read stored recordings back and check them (publish token)
+
+`POST /api/reports/recordings/verification` · role: publish
+
+Reads the videos of the newest layers (`limit`, default 20, at most 200; or the layers `layers` names) back from storage and checks that each is still stored, still has the size and SHA-256 published, and still begins like its media type's container. This reads blobs, so it needs a publish (or admin) token in a Bearer header; a reader-only token, a browser sign-in box and an anonymous reader are refused. One read-back runs at a time (`409` otherwise). It writes nothing to storage and changes no status. The answer is the same document `GET` returns, with `verified`: how many layers this pass read back.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The read-backs now held.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` A read-back is already running.; `413` Request too large.; `422` Not a verification request.; `502` A store could not be read.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Read stored recordings back and check them (publish token)
+
+`POST /api/projects/{project}/reports/recordings/verification` · role: publish
+
+Reads the videos of the newest layers (`limit`, default 20, at most 200; or the layers `layers` names) back from storage and checks that each is still stored, still has the size and SHA-256 published, and still begins like its media type's container. This reads blobs, so it needs a publish (or admin) token in a Bearer header; a reader-only token, a browser sign-in box and an anonymous reader are refused. One read-back runs at a time (`409` otherwise). It writes nothing to storage and changes no status. The answer is the same document `GET` returns, with `verified`: how many layers this pass read back.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The read-backs now held.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `409` A read-back is already running.; `413` Request too large.; `422` Not a verification request.; `502` A store could not be read.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
 ### Review collections: curated sets of recordings, newest first
 
 `GET /api/reports/review-collections` · role: read

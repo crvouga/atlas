@@ -96,26 +96,23 @@ export function summarize(combined: CombinedEvidence): ReportSummary {
   };
 }
 
+/** Every layer of some backends, read but not yet composed. */
+export type BackendLayers = {
+  /** Each layer that could be read, with the specs it recorded. A layer several backends hold appears once per backend. */
+  readonly loaded: readonly { readonly evidence: LayerEvidence; readonly specs: readonly SpecEntry[] }[];
+  /** Every backend given, sorted by id, with whether it could be listed. */
+  readonly backends: readonly BackendInfo[];
+  /** What could not be read, sorted and without repeats. */
+  readonly notices: readonly string[];
+};
+
 /**
- * Reads every layer of every backend and lays them over the specs. Layers are the only input:
- * a report is a function of the set of layers, so the order of backends and layers, and how they
- * were split across machines, branches and runs, does not change it.
- *
- * A backend that cannot be read, or a layer that cannot be understood, is named in `notices` and
- * leaves everything else usable; a gate must treat any notice as unknown, never as a pass. A layer held by
- * several backends is one layer. Only an invalid backend `id` (not lowercase letters, digits and hyphens, or
- * repeated) throws, before anything is read. Backends are only read from.
- *
- * When `options.outline` is omitted, the specs are the ones the included layers recorded (the newest
- * recording of each spec path wins), with no commit sha.
- *
- * @example
- * const outline = await loadDirectoryOutline('./specs'); // optional: without it the layers' own specs are used
- * const report = await combineBackends([{ id: 'ci', store: directoryStore('./atlas-reports') }], { outline });
- * report.summary.checks.failed; // number of slots whose winner failed
- * report.notices; // non-empty means something could not be read
+ * Reads every layer of every backend, superseded ones included, without composing them. This is what {@link combineBackends}
+ * starts from; a caller that needs layers a newer layer has replaced (to compare two commits, for example) reads them here.
+ * A backend that cannot be listed, or a layer that cannot be understood, is a notice, never an omission that looks like a pass.
+ * Throws for an invalid or repeated backend `id`, before anything is read.
  */
-export async function combineBackends(backends: readonly BackendInput[], options: CombineOptions = {}): Promise<CombinedReport> {
+export async function readBackendLayers(backends: readonly BackendInput[], options: { readonly concurrency?: number } = {}): Promise<BackendLayers> {
   const seen = new Set<string>();
   for (const backend of backends) {
     if (!BACKEND_ID.test(backend.id) || seen.has(backend.id)) throw new Error(`Invalid report backend id: "${backend.id}". Use unique lowercase letters, digits and hyphens`);
@@ -144,6 +141,30 @@ export async function combineBackends(backends: readonly BackendInput[], options
       notices.push(`${backend.label ?? backend.id}: a layer could not be read, so its outcome is unknown (${error instanceof Error ? error.message : String(error)})`);
     }
   });
+  return { loaded, backends: info.sort((a, b) => (a.id < b.id ? -1 : 1)), notices: [...new Set(notices)].sort() };
+}
+
+/**
+ * Reads every layer of every backend and lays them over the specs. Layers are the only input:
+ * a report is a function of the set of layers, so the order of backends and layers, and how they
+ * were split across machines, branches and runs, does not change it.
+ *
+ * A backend that cannot be read, or a layer that cannot be understood, is named in `notices` and
+ * leaves everything else usable; a gate must treat any notice as unknown, never as a pass. A layer held by
+ * several backends is one layer. Only an invalid backend `id` (not lowercase letters, digits and hyphens, or
+ * repeated) throws, before anything is read. Backends are only read from.
+ *
+ * When `options.outline` is omitted, the specs are the ones the included layers recorded (the newest
+ * recording of each spec path wins), with no commit sha.
+ *
+ * @example
+ * const outline = await loadDirectoryOutline('./specs'); // optional: without it the layers' own specs are used
+ * const report = await combineBackends([{ id: 'ci', store: directoryStore('./atlas-reports') }], { outline });
+ * report.summary.checks.failed; // number of slots whose winner failed
+ * report.notices; // non-empty means something could not be read
+ */
+export async function combineBackends(backends: readonly BackendInput[], options: CombineOptions = {}): Promise<CombinedReport> {
+  const { loaded, backends: info, notices } = await readBackendLayers(backends, options.concurrency === undefined ? {} : { concurrency: options.concurrency });
   const include = options.include;
   const kept = include ? loaded.filter(item => include(item.evidence.layer)) : loaded;
   const layers = kept.map(item => item.evidence);
@@ -153,5 +174,5 @@ export async function combineBackends(backends: readonly BackendInput[], options
   const outline = options.outline ?? { specs: recorded.entries(), sha: null, changedFiles: [] };
   const combined = combineEvidence(outline, layers);
   const headers = distinctHeaders(layers.map(evidence => evidence.layer)).sort((a, b) => b.recordedAtMs - a.recordedAtMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return { combined, layers: headers, backends: info.sort((a, b) => (a.id < b.id ? -1 : 1)), notices: [...new Set(notices)].sort(), summary: summarize(combined) };
+  return { combined, layers: headers, backends: info, notices, summary: summarize(combined) };
 }

@@ -27,6 +27,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `poster` (the `id` of an image in the same list) and `durationMs` | attachment (video) | Shown beside the recording in a watch playlist before anything is opened: the report carries them as the optional `poster` (a bundle key) and `durationMs` of each video reference, so no evidence is read per entry. Neither is ever a latency. |
 | `extensions['atlas.media']` | attachment (video) | Where the check's steps are in the recording, so a click on a step seeks the video. See [Place steps in a recording](#place-steps-in-a-recording). |
 | `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
@@ -502,6 +503,18 @@ two ways without touching a check's result:
   every gap (`not-in-bundle`, `blob-missing`, `unreadable`, `size-mismatch`, `checksum-mismatch`, `undecodable`);
   `--format json` prints the `verify-recordings-result` document. `--layer <id>` and `--limit <n>` narrow the work, since
   it reads blobs. A store that cannot answer is `unreadable`, never verified. Test results are unchanged either way.
+
+- **In the viewer.** A publish token starts the same read-back on the server with
+  `POST /api/reports/recordings/verification` (body optional: `{ "layers": ["<id prefix>"], "limit": 20 }`; the newest
+  20 layers by default, at most 200, one read-back at a time; a reader token, a browser sign-in box or an anonymous
+  caller is refused because it reads blobs). Anyone who can read the report then sees the result with
+  `GET /api/reports/recordings/verification` (which reads no blob): per layer, its run, how many videos were read back, how
+  many passed and each gap. The Runs tab and an opened run show `Recording unavailable: 1 of 3 stored videos failed the
+  read-back (1 file gone from storage)` beside the green outcomes, or `3 stored videos verified`, and a run whose stored
+  videos all failed offers no Watch action. A run whose layers were never read back shows nothing: unknown is not
+  verified. The result lives in the server's memory only, so a restart empties it, and a layer that garbage collection
+  removed drops out. An older server has no such route and the viewer then shows nothing. No status, slot or winner is
+  affected; `capabilities.recordingVerification` in `GET /api/server` says a server offers it.
 
 Both are statements about stored bytes. Atlas does not check that a stored video plays in a given browser (a valid header
 can still have an unsupported codec or be truncated), and acknowledging an upload is not playback. Videos given only by

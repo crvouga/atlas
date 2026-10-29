@@ -1,0 +1,116 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-catalog-publish-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "True: the layer was written. A state whose picture could not be read is published as `failed` and named in `warnings`; it does not fail the command"
+    },
+    "store": {
+      "type": "string",
+      "description": "Where it was written: a folder, `s3://…` or a server URL"
+    },
+    "layer": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The layer id: 64 hex digits, the SHA-256 of its content. Publishing the same input again gives the same id"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ui-state",
+            "ui-plan"
+          ],
+          "description": "`ui-state`: captures (`publish`). `ui-plan`: the expected set (`plan`)"
+        },
+        "producer": {
+          "type": "string"
+        },
+        "environment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The rest of the profile, such as `{ \"viewport\": \"390x844\" }`"
+        },
+        "states": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "States in the layer"
+        },
+        "captured": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "For `publish`: states that were captured (`passed`). Zero for a plan"
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "For `publish`: states recorded as failed, including those whose picture could not be read"
+        },
+        "pictures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Pictures stored in the layer"
+        },
+        "pictureBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "shard": {
+          "description": "The `--shard` label, which describes the layer and never splits its slot",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "producer",
+        "environment",
+        "parameters",
+        "states",
+        "captured",
+        "failed",
+        "pictures",
+        "pictureBytes",
+        "shard"
+      ],
+      "additionalProperties": {}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What was skipped and why, such as a picture file that could not be read. Never fatal"
+    }
+  },
+  "required": [
+    "ok",
+    "store",
+    "layer",
+    "warnings"
+  ],
+  "additionalProperties": {}
+}

@@ -68,6 +68,16 @@ export function playableVideo(entry: Pick<PlaylistEntry, 'videos'>): VideoRef | 
   return entry.videos.find((video) => video.available && video.recording !== undefined);
 }
 
+/**
+ * What the catalog already says about the clip an entry would play, before anything is read or downloaded: the bundle key
+ * of its poster image and its declared length. Each is absent when the producer declared none (or the server predates the
+ * hints); they are hints to recognise a clip, never a reading of the recording and never a latency.
+ */
+export function clipHints(entry: Pick<PlaylistEntry, 'videos'>): { readonly poster?: string; readonly durationMs?: number } {
+  const video = playableVideo(entry);
+  return { ...(video?.poster ? { poster: video.poster } : {}), ...(video?.durationMs ? { durationMs: video.durationMs } : {}) };
+}
+
 /** The recorded results of the Artifacts tab as playlist entries, in their order. */
 export function entriesFromArtifacts(results: readonly ArtifactResult[]): PlaylistEntry[] {
   return results.map((result) => ({

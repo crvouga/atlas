@@ -104,6 +104,37 @@ when Watch is on screen.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
 
+## Behaviors across the project
+
+`/behaviors` (`evidence/behaviors-page.tsx`, **Behaviors** in the spec-type menu) lists every behavior of every Gherkin feature in one
+place, so the question "what does this product promise?" needs no knowledge of which file holds the answer. It adds no source of
+truth: `evidence/behavior-index.ts` reads each feature through the same `featureBehaviors` the feature page uses, so a behavior has the
+same coverage state, revisions and recording in both.
+
+- The list is searched with the shared matcher (`find/`: words, quoted phrases, `status:`, `domain:`, `tag:`, `has:video`), grouped by
+  the domain spec metadata declares ("No domain declared" when it declares none), or ranked best match first when words are typed.
+  A coverage state is a filter with its own count; `demonstrated` is always named. A long list is bounded with *Show more*.
+- Features whose text has not arrived are counted ("3 of 12 read"), and features that cannot be parsed are named, so an empty answer is
+  never taken for "no such behavior" while it is still incomplete.
+- The search words (`q`), the coverage filter (`coverage`), the selection (`behavior`) and the expanded state (`workspace`) are in the
+  address. Selecting shows the Read / Watch / Inspect panel beside the list (below it on narrow screens), and *Read and watch* in the
+  selected-behavior bar is reachable before the list in keyboard order.
+- **Read and watch workspace.** Expanding a behavior replaces the index with a page that uses the width: a two-column
+  `SimpleGrid` (one column below `md`) with *What should happen* (the steps, an outline's example filled in) beside *Recording* (the
+  player, status and provenance, promise and evidence revisions, applicability), the scoped summary below, and Inspect behind a
+  disclosure that reads the technical record only when opened. Keyboard focus moves to the behavior's heading on arrival, and
+  *Previous behavior* / *Next behavior* move through the same search. A recording is labelled illustrative.
+- **Returning** from the workspace restores the search words, the filter and the selection from the address, and the scroll position,
+  the number of rows shown and the focused row from `evidence/behavior-return.ts`, which remembers them for the session against the
+  scope they were taken in and gives them back once, only to that scope. Storage that is unavailable means the list opens at its top.
+- **Scoped summary** (`evidence/scoped-summary.ts`, `scoped-summary-view.tsx`, on Watch and in the workspace) answers three questions
+  apart, for the check in the environment of the recording shown (environments are not pooled; with none named it says they are):
+  the **outcome** of the shown result (`outcomeHeadline`), **reliability** (`reports/reliability`: always with the independent
+  executions it rests on, "Insufficient evidence" below the minimum, first-try success only from recorded tries, the library's
+  warnings) and **performance** (`reports/latency`: only measurements named `product-latency`, percentiles withheld with the reason,
+  budget and breaches). Absent evidence is stated as unknown, never as good; the test's duration is not product latency, and the
+  summary says it describes the checks Atlas holds, not production. The full reliability and latency detail is one link away.
+
 ## Catalog health
 
 The **Catalog health** tab (`explorer/HealthView.tsx`, `?tab=health`; `@crvouga/atlas/reports/catalog-health`) explains why the Specs
@@ -136,6 +167,11 @@ it works without a server. Cards are Mantine `Card`s in a responsive `SimpleGrid
   incomplete. Waiting follows the loading policy below, and layers still arriving are counted.
 - Pictures are `loading="lazy"` and only the cards on screen are fetched. The grid is bounded with *Show more*.
 - The open state shows every profile side by side with the layer, backend, producer, shard, commit and time of each picture.
+- **Compare** (`catalog/UiCatalogCompare.tsx`, `?compare=commit|profile&from&to`) sets two commits or two profiles against each other. Two
+  commits need the layers a newer layer replaced, which the held report no longer has, so `catalog/history.ts` reads the layer list and
+  the rows of the two commits only while the comparison is open (sharing the rows cache). Say what "changed" means (the stored bytes
+  differ, not a pixel measure), never call a one-sided state a regression, and say a layer that could not be read is unknown. The
+  coverage filter does not apply to a comparison.
 
 ## Needs polish
 
@@ -223,7 +259,14 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
   demonstrated. A set longer than the page's limit says it is only the newest results.
 - Only the selected clip is read: the list is the metadata the catalog already sent, the selected result's evidence is read
   when it is selected, and the one `<video>` uses `preload="metadata"`. Opening the playlist downloads no recordings in bulk.
-  Posters and durations of unselected entries are not shown for that reason.
+  An unselected entry still shows a poster and a length when the catalog already carries them: the producer's declared
+  `Attachment.durationMs` and `Attachment.poster` (an image of the same list that the layer's bundle holds) travel as the
+  optional `durationMs` and `poster` of the result's video reference. The poster is an `<img loading="lazy">`, fetched when
+  its row nears the screen; an entry whose producer declared neither shows neither, and nothing is read to find out.
+- The open playlist is in the address (`watch=true`, and `watchClip` for the entry playing), so a link restores it over
+  the same filters, run or collection. Opening it adds a history entry (Back closes it); moving between clips and closing
+  it replace the current one. A `watchClip` the set no longer holds opens the first watchable entry and the address then
+  names that one.
 - One player: selecting another clip replaces it, and the position of the clip left is kept for the session so returning
   resumes there. Previous/next and advancing on end move over the watchable entries; a result with nothing to play is
   selected from the list to read why.
@@ -360,10 +403,11 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
+| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
+| Behaviors | Project-wide behavior index with search, coverage filters and a selected behavior's Read / Watch / Inspect; an expanded read-and-watch workspace with a scoped outcome, reliability and performance summary that restores scope, scroll, selection and focus on return | Container, Grid, SimpleGrid, NavLink, TextInput, Button, Paper, Accordion, Tabs |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |
 | Evidence | Steps, retries, annotations, facts, unknown extensions, safe downloads and previews | List, Badge, Accordion, Code, Image, native media |
 | Recordings | Pictures/video/timeline, actor selection, moments, failure jumps, timing, model-state differences | Tabs, Slider, Button, ScrollArea, Table, Progress |

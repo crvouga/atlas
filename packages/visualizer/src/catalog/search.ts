@@ -2,7 +2,7 @@
  * @module UI catalog address
  *
  * Everything the UI catalog shows is in the address of the `/catalog` route, so a link reproduces the view: the words searched,
- * the filters and the open state. Filters take comma-separated values (a comma or backslash inside a value is written `\,` or
+ * the filters, the open state and an open comparison (`compare`, `from`, `to`). Filters take comma-separated values (a comma or backslash inside a value is written `\,` or
  * `\\`), the same form `GET /api/reports/ui-catalog` takes. Anything unreadable is dropped, never an error.
  */
 import { parseUiCatalogQuery, uiCatalogParams, type UiCatalogQuery } from '@crvouga/atlas/reports/ui-catalog';
@@ -28,8 +28,19 @@ export const CatalogSearchFields = {
   surface: text,
   producer: text,
   /** The open state: a state id. */
-  state: text
+  state: text,
+  /** A comparison is open: `commit` (two commits of the same profiles) or `profile` (two profiles of this report). */
+  compare: text,
+  /** The comparison's before side: a commit id, or a profile key. */
+  from: text,
+  /** The comparison's after side. */
+  to: text,
+  /** `1` shows the pairs that did not change too. */
+  all: text
 };
+
+/** The parts of the address that are not filters of the catalog's states. */
+const NOT_FILTERS = ['state', 'compare', 'from', 'to', 'all'];
 
 /** The address's parts, as the router holds them. */
 export type CatalogSearch = { readonly [K in keyof typeof CatalogSearchFields]?: string | undefined };
@@ -37,7 +48,7 @@ export type CatalogSearch = { readonly [K in keyof typeof CatalogSearchFields]?:
 /** The query an address asks for. */
 export function catalogQueryOf(search: CatalogSearch): UiCatalogQuery {
   const params = new URLSearchParams();
-  for (const [name, value] of Object.entries(search)) if (name !== 'state' && typeof value === 'string') params.set(name, value);
+  for (const [name, value] of Object.entries(search)) if (!NOT_FILTERS.includes(name) && typeof value === 'string') params.set(name, value);
   return parseUiCatalogQuery(params);
 }
 

@@ -233,6 +233,47 @@ export const ArtifactTagsSchema = …
 
 `GET /api/reports/artifact-tags`: every recorded edit, oldest first. Fold them with `foldArtifactTags`.
 
+#### `StoredRecordingGapSchema`
+
+```ts
+export const StoredRecordingGapSchema = …
+```
+
+One stored video that failed the server's read-back: which check holds it and what is wrong with it.
+
+#### `LayerRecordingCheckSchema`
+
+```ts
+export const LayerRecordingCheckSchema = …
+```
+
+What reading back the stored videos of one layer found.
+
+#### `RecordingVerificationSchema`
+
+```ts
+export const RecordingVerificationSchema = …
+```
+
+`GET` and `POST /api/reports/recordings/verification`: the newest read-back the server did of stored videos, per layer.
+A layer that was never read back is absent, which means "not verified", never "fine".
+
+#### `RecordingVerification`
+
+```ts
+export type RecordingVerification = z.infer<typeof RecordingVerificationSchema>;
+```
+
+The document of {@link RecordingVerificationSchema}, as a type.
+
+#### `RecordingVerifyRequestSchema`
+
+```ts
+export const RecordingVerifyRequestSchema = …
+```
+
+The body of `POST /api/reports/recordings/verification`. Both fields are optional; an empty body reads back the newest layers.
+
 #### `ReviewSourceSchema`
 
 ```ts
@@ -551,7 +592,7 @@ export const CatalogEntriesSchema = …
 
 Source: `packages/schema/src/cli-results.ts`
 
-What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, and `atlas critic list`, `setup`, `doctor` and `run`, print on standard output with `--format json` (alias
+What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, and `atlas critic list`, `setup`, `doctor` and `run`, print on standard output with `--format json` (alias
 `--json`), and what any `atlas` command prints on standard error for a command that was wrong: one JSON document,
 so an agent or a script never has to parse prose. (`status` and `policy` already print documents:
 `ReportStatusSchema`, and an IAM policy.) Each is also published as a JSON Schema.
@@ -716,6 +757,46 @@ export const CriticRunResultSchema = …
 ```
 
 What `atlas critic run --format json` prints. A dry run publishes and sends nothing.
+
+#### `UiCatalogPublishResultSchema`
+
+```ts
+export const UiCatalogPublishResultSchema = …
+```
+
+What `atlas ui-catalog plan --format json` and `atlas ui-catalog publish --format json` print: the one layer that was written.
+
+#### `UiCatalogProblemSchema`
+
+```ts
+export const UiCatalogProblemSchema = …
+```
+
+One thing that keeps a UI catalog from being complete and good.
+
+#### `UiCatalogStatusSchema`
+
+```ts
+export const UiCatalogStatusSchema = …
+```
+
+What `atlas ui-catalog status --format json` prints.
+
+#### `UiCatalogDiffResultSchema`
+
+```ts
+export const UiCatalogDiffResultSchema = …
+```
+
+What `atlas ui-catalog diff --format json` prints.
+
+#### `UiCatalogExportResultSchema`
+
+```ts
+export const UiCatalogExportResultSchema = …
+```
+
+What `atlas ui-catalog export --format json` prints.
 
 #### `CLI_RESULTS`
 

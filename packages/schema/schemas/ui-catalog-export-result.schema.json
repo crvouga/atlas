@@ -1,0 +1,83 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-catalog-export-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true
+    },
+    "out": {
+      "type": "string",
+      "description": "The HTML file that was written"
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Its size"
+    },
+    "states": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "cells": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "pictures": {
+      "type": "object",
+      "properties": {
+        "embedded": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "embeddedBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "left": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Pictures not embedded (over the size limit, not stored, not an image, or `--images none`); each is listed on the page with the reason"
+        }
+      },
+      "required": [
+        "embedded",
+        "embeddedBytes",
+        "left"
+      ],
+      "additionalProperties": {}
+    },
+    "manifest": {
+      "description": "The JSON manifest written beside it with `--manifest`, or null",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Backends and layers that could not be read, and pictures left out. The page says so too"
+    }
+  },
+  "required": [
+    "ok",
+    "out",
+    "bytes",
+    "states",
+    "cells",
+    "pictures",
+    "manifest",
+    "warnings"
+  ],
+  "additionalProperties": {}
+}

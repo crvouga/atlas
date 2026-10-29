@@ -11,7 +11,7 @@
 import type { CheckSlot } from '@crvouga/atlas/reports/evidence-view';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 
-import { exampleIndexFor, exampleRows, scenarioLabel, type FeatureScenario } from './gherkin';
+import { exampleIndexFor, exampleRows, scenarioLabel, slotsByScenario, type FeatureModel, type FeatureScenario } from './gherkin';
 
 /** Where a behavior stands, from the most reassuring to the least. */
 export type CoverageState =
@@ -265,4 +265,35 @@ export function coverageCounts(behaviors: readonly Behavior[]): CoverageCounts {
   const counts = Object.fromEntries(COVERAGE_ORDER.map((state) => [state, 0])) as Record<CoverageState, number>;
   for (const behavior of behaviors) counts[behavior.state] += 1;
   return counts;
+}
+
+/** Every behavior of a feature, by scenario, with the ones no scenario claims. */
+export type FeatureBehaviors = {
+  /** The behaviors of each scenario (a background is not one), in the order the file has them. */
+  readonly byScenario: ReadonlyMap<FeatureScenario, readonly Behavior[]>;
+  /** The recorded checks no scenario of the file claims: recorded against the file under a name it does not have now. */
+  readonly leftOver: readonly CheckSlot[];
+  /** Every behavior, claimed or not, in page order; a result no scenario claims is still a behavior that was checked. */
+  readonly all: readonly Behavior[];
+};
+
+/** A scenario that stands for a recorded check no scenario of the file names. */
+function strayScenario(name: string): FeatureScenario {
+  return { keyword: 'Scenario', name, description: '', background: false, tags: [], steps: [], examples: [] };
+}
+
+/**
+ * Reads a whole feature as behaviors: its scenarios (an outline as one per example), each with the recorded checks filed
+ * under it, and the checks no scenario claims. The feature page and the project-wide behavior index both read a feature
+ * through this, so a behavior is the same behavior wherever it is listed. `feature` is null when the file could not be parsed.
+ */
+export function featureBehaviors(feature: FeatureModel | null, slots: readonly CheckSlot[], revisions: RevisionSource): FeatureBehaviors {
+  // A file that cannot be read has no scenarios: every check recorded against it is one nothing claims.
+  const filed = feature ? slotsByScenario(feature, slots) : { byScenario: new Map<string, CheckSlot[]>(), leftOver: [...slots] };
+  const byScenario = new Map<FeatureScenario, Behavior[]>();
+  for (const scenario of feature?.rules.flatMap((rule) => rule.scenarios.filter((each) => !each.background)) ?? []) {
+    byScenario.set(scenario, scenarioBehaviors(scenario, filed.byScenario.get(scenario.name) ?? [], feature!.name, revisions));
+  }
+  const other = filed.leftOver.map((slot) => behaviorOf(strayScenario(slot.title), slot, null, revisions, slot.key));
+  return { byScenario, leftOver: filed.leftOver, all: [...[...byScenario.values()].flat(), ...other] };
 }

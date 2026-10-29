@@ -53,6 +53,7 @@ import type { ResolvedToken } from './config';
 import { EventHub } from './events';
 import { projectServer } from './projects';
 import { mountReviewCollections } from './review-collections';
+import { mountRecordingVerification } from './recording-verification';
 import { readLimited, storeApi } from './store-api';
 
 const gzipAsync = promisify(gzip);
@@ -319,7 +320,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true, catalogEntries: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true, recordingVerification: true, catalogEntries: true }
     });
   });
 
@@ -575,6 +576,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
   });
   // Review collections: immutable, curated references to recorded results, with reviewers' notes kept apart.
   mountReviewCollections(app, { store: tagStore, stores, auth, index, now, maxBytes: limits.json, unauthorized });
+  mountRecordingVerification(app, { stores, auth, index, now, unauthorized });
   app.route('/api/reports', layers);
 
   // Upload: the store protocol, and a simple JSON way in for anything that can make a request.

@@ -14,6 +14,8 @@ import { CatalogSearchFields } from '../catalog/search';
 import { UiCatalogPage } from '../catalog/UiCatalogPage';
 import { CritiquesPage } from '../critiques/CritiquesPage';
 import { CritiqueSearchFields } from '../critiques/search';
+import { COVERAGE_ORDER } from '../evidence/behavior';
+import { BehaviorsPage } from '../evidence/behaviors-page';
 import { SpecPage } from '../evidence/spec-page';
 import { ExplorerSearchFields } from '../explorer/search';
 import { ProductPage } from '../views/ProductPage';
@@ -46,6 +48,21 @@ const SpecSearch = RootSearch.extend({
   evidence: z.enum(['stale']).optional().catch(undefined)
 });
 export type SpecSearch = z.infer<typeof SpecSearch>;
+/**
+ * The project-wide behavior index and its read-and-watch workspace: the search words, the coverage filter, the open behavior
+ * (`behavior`, an id from `evidence/behavior-index.ts`), whether it is expanded into the workspace, and the run and recorded
+ * moment shown. Scope and selection live here so that a link, a reload and the way back from the workspace all reproduce them.
+ */
+const BehaviorsSearch = RootSearch.extend({
+  q: z.string().min(1).optional().catch(undefined),
+  coverage: z.enum(COVERAGE_ORDER as [(typeof COVERAGE_ORDER)[number], ...(typeof COVERAGE_ORDER)[number][]]).optional().catch(undefined),
+  behavior: z.string().min(1).optional().catch(undefined),
+  workspace: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined),
+  layer: z.string().min(1).optional().catch(undefined),
+  clip: z.coerce.string().min(1).optional().catch(undefined),
+  clipAt: z.coerce.number().nonnegative().optional().catch(undefined)
+});
+export type BehaviorsSearch = z.infer<typeof BehaviorsSearch>;
 /** A fresh route tree per router, so a test can run its own viewer beside the page's. */
 function routeTree() {
   const rootRoute = createRootRoute({
@@ -98,6 +115,13 @@ function routeTree() {
     validateSearch: (search) => RootSearch.extend(CatalogSearchFields).parse(search),
     component: UiCatalogPage
   });
+  /** Every behavior of the project in one searchable list, and the dedicated workspace to read and watch one. */
+  const behaviorsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/behaviors',
+    validateSearch: (search) => BehaviorsSearch.parse(search),
+    component: BehaviorsPage
+  });
   /** Needs polish: the opinions of automated reviewers about the captured states, ranked (see `critiques/`). */
   const critiquesRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -105,7 +129,7 @@ function routeTree() {
     validateSearch: (search) => RootSearch.extend(CritiqueSearchFields).parse(search),
     component: CritiquesPage
   });
-  return rootRoute.addChildren([productRoute, chartRoute, specRoute, catalogRoute, critiquesRoute]);
+  return rootRoute.addChildren([productRoute, chartRoute, specRoute, catalogRoute, behaviorsRoute, critiquesRoute]);
 }
 export function createAtlasRouter(history: RouterHistory) {
   return createRouter({ routeTree: routeTree(), history, defaultPreload: false, scrollRestoration: true });

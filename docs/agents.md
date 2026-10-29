@@ -153,7 +153,7 @@ and authentication. Keep synthetic failure checks in a scratch store rather than
 ## What an agent can rely on
 
 **Machine-readable output.** Add `--format json` (alias `--json`) to `atlas init`, `atlas report publish`, `stream`,
-`merge`, `doctor`, `status` and `verify-recordings`, and to `atlas critic list`, `setup`, `doctor` and `run`. Each prints one JSON document on standard output that validates against a published
+`merge`, `doctor`, `status` and `verify-recordings`, to `atlas ui-catalog`, and to `atlas critic list`, `setup`, `doctor` and `run`. Each prints one JSON document on standard output that validates against a published
 JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 
 <!-- generated:json-command-schemas -->
@@ -170,6 +170,11 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas critic setup` | `critic-setup-result` |
 | `atlas critic doctor` | `critic-doctor-result` |
 | `atlas critic run` | `critic-run-result` |
+| `atlas ui-catalog plan` | `ui-catalog-publish-result` |
+| `atlas ui-catalog publish` | `ui-catalog-publish-result` |
+| `atlas ui-catalog status` | `ui-catalog-status` |
+| `atlas ui-catalog diff` | `ui-catalog-diff-result` |
+| `atlas ui-catalog export` | `ui-catalog-export-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 
