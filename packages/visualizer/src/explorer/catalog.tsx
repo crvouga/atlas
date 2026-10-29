@@ -17,12 +17,25 @@ import type { EvidenceStatus } from '@crvouga/atlas/reports/explorer-types';
 import type { LayerEvidence, LayerRows, StatusCounts } from '@crvouga/atlas/reports/evidence-types';
 import type { CheckSlot, EvidenceView } from '@crvouga/atlas/reports/evidence-view';
 import {
+  facetsOf,
+  filterParams,
+  forRuns,
+  matchesFilter,
+  usedFilters,
+  type ArtifactFilter,
+  type FilterName,
+  type QueryFacets
+} from '@crvouga/atlas/reports/artifact-query';
+import {
+  artifactList,
   catalogModel,
+  fieldsOfRun,
   haystackOf,
   runDetail,
   runList,
   testHistory,
   TestHistory,
+  type ArtifactList,
   type CatalogModel,
   type RunDetail,
   type RunList,
@@ -39,6 +52,10 @@ import { useEvidence } from '../evidence/evidence-context';
 
 /** How many runs the Runs tab lists. */
 export const RUNS_SHOWN = 500;
+/** How many runs are read to search them all (a search must see every run, not only the newest). */
+export const RUNS_SEARCHED = 20_000;
+/** How many recorded results the Artifacts tab lists. */
+export const ARTIFACTS_SHOWN = 200;
 /** The server's catalog is read again at most this often while results keep arriving. */
 const SERVER_REREAD_MS = 5_000;
 /** Layers read one after another are folded into the page's catalog at most this often. */
@@ -233,15 +250,97 @@ export function useTestHistory(key: string | undefined) {
   });
 }
 
-/** CI runs, newest first. */
-export function useRunList(enabled = true) {
+/** The runs a query matched, and what this server could not do about it. */
+export type RunsAnswer = RunList & {
+  /** What the viewer's query asks for that the answer does not reflect: filters an older server ignores and the viewer cannot apply itself (tags, types, labels need data it does not send). Say so; never present the list as narrowed by them. */
+  readonly notApplied: readonly FilterName[];
+  /** The values each dimension offers, from the server or worked out from the runs it sent. */
+  readonly facets: QueryFacets;
+};
+
+/** What an older server's run summary can answer by itself: the viewer filters its complete list for these. */
+const ANSWERABLE_HERE: ReadonlySet<FilterName> = new Set(['q', 'environment', 'producer', 'branch', 'sha', 'outcome', 'since', 'until', 'video']);
+
+/**
+ * Makes a server's answer honest about the filters it did not apply (an older server ignores parameters it does not know
+ * and answers with every run). Those the run summary can answer are applied here, to the complete list; the rest are
+ * reported in `notApplied` so the page can say the list is not narrowed by them.
+ */
+export function runsAnswer(list: RunList, filter: ArtifactFilter): RunsAnswer {
+  const asked = usedFilters(forRuns(filter)).filter((name) => name !== 'inherited');
+  // A server that predates `filters` but has `withVideo` already filtered by `video`.
+  const applied = new Set<FilterName>(list.filters ?? (list.withVideo !== undefined ? ['video'] : []));
+  const missing = asked.filter((name) => !applied.has(name));
+  if (!missing.length && list.facets) return { ...list, facets: list.facets, notApplied: [] };
+  const here = missing.filter((name) => ANSWERABLE_HERE.has(name));
+  const sub = Object.fromEntries(here.map((name) => [name, filter[name]])) as ArtifactFilter;
+  const runs = here.length ? list.runs.filter((run) => matchesFilter(fieldsOfRun(run), sub)) : list.runs;
+  return {
+    ...list,
+    total: here.length ? runs.length : list.total,
+    runs,
+    facets: list.facets ?? facetsOf(list.runs.map(fieldsOfRun), sub),
+    notApplied: missing.filter((name) => !ANSWERABLE_HERE.has(name))
+  };
+}
+
+/**
+ * CI runs, newest first, narrowed by a query (see `artifact-query.ts`). The server filters every run before it pages
+ * them, so counts are the whole dataset's; a server that does not know a filter is handled by {@link runsAnswer}. With
+ * `all` every run is read (up to {@link RUNS_SEARCHED}), because a typed search must match the whole history rather than
+ * the newest page of it.
+ */
+export function useRunList(enabled = true, filter: ArtifactFilter = {}, all = false) {
   const catalog = useTestCatalog();
+  const query = forRuns(filter);
+  const key = filterParams(query).toString();
   return useQuery({
-    queryKey: ['test-runs', catalog.version],
-    queryFn: ({ signal }): Promise<RunList> | RunList => {
-      if (catalog.source === 'server') return reportJson<RunList>(`/runs?limit=${RUNS_SHOWN}`, signal);
+    queryKey: ['test-runs', catalog.version, key, all],
+    queryFn: async ({ signal }): Promise<RunsAnswer> => {
+      if (catalog.source === 'server') {
+        const params = filterParams(query);
+        params.set('limit', String(all ? RUNS_SEARCHED : RUNS_SHOWN));
+        return runsAnswer(await reportJson<RunList>(`/runs?${params}`, signal), query);
+      }
       const history = catalog.model?.history;
-      return history ? runList(history, catalog.version, RUNS_SHOWN) : { schemaVersion: 1, version: catalog.version, total: 0, runs: [] };
+      const list = history ? runList(history, catalog.version, all ? RUNS_SEARCHED : RUNS_SHOWN, query) : { schemaVersion: 1 as const, version: catalog.version, total: 0, runs: [] };
+      return runsAnswer(list, query);
+    },
+    enabled: enabled && catalog.model !== null,
+    placeholderData: keepPreviousData,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false
+  });
+}
+
+/** The recorded results that carry evidence and match a query, or `unsupported` when the server has no artifact search. */
+export type ArtifactsAnswer = { readonly unsupported: false; readonly list: ArtifactList } | { readonly unsupported: true };
+
+/**
+ * Recorded results that carry evidence (recordings, screenshots, traces) across the whole history, newest first. A
+ * server without `/artifacts` (an older one) answers `unsupported`, and the page says so instead of showing an empty list.
+ */
+export function useArtifactList(filter: ArtifactFilter, enabled = true) {
+  const catalog = useTestCatalog();
+  const key = filterParams(filter).toString();
+  return useQuery({
+    queryKey: ['test-artifacts', catalog.version, key],
+    queryFn: async ({ signal }): Promise<ArtifactsAnswer> => {
+      if (catalog.source === 'server') {
+        const params = filterParams(filter);
+        params.set('limit', String(ARTIFACTS_SHOWN));
+        try {
+          return { unsupported: false, list: await reportJson<ArtifactList>(`/artifacts?${params}`, signal) };
+        } catch (error) {
+          if (notFound(error)) return { unsupported: true };
+          throw error;
+        }
+      }
+      const model = catalog.model!;
+      const domains = new Map(model.facets.specs.map((spec) => [spec.path, spec.domain]));
+      const history = model.history;
+      if (!history) return { unsupported: true };
+      return { unsupported: false, list: artifactList(history, catalog.version, filter, { limit: ARTIFACTS_SHOWN, domainOf: (path) => domains.get(path) }) };
     },
     enabled: enabled && catalog.model !== null,
     placeholderData: keepPreviousData,

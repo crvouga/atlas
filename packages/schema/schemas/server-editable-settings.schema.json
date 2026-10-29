@@ -3,47 +3,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "data": {
-      "default": "./atlas-data",
-      "description": "The folder that is the default backend and the default write target: layers, specs and runs live here",
-      "type": "string"
-    },
-    "backends": {
-      "default": [],
-      "description": "Further backends, read together with the data folder: S3, another server, a device lab",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-z0-9-]+$",
-            "description": "Lowercase letters, digits and hyphens. Names where a result came from"
-          },
-          "label": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string",
-            "minLength": 1,
-            "description": "A folder, s3://bucket/prefix, r2://, gs://, or another Atlas server (https://…)"
-          },
-          "write": {
-            "description": "Uploads go here instead of the data folder. At most one backend is the write target",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "url"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "write": {
-      "description": "The id of the backend uploads go to. Default: the data folder",
-      "type": "string"
-    },
     "outlineBranch": {
       "description": "Which branch's specs the report is laid over. Default main, then master, then the newest",
       "type": "string"

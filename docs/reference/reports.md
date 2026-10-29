@@ -4,6 +4,460 @@ Layered evidence for any kind of spec: publishing layers, stores (folder, S3, an
 
 > Generated from the doc comments of `packages/reports/src` by `bun run docs`. Do not edit: change the comment next to the code.
 
+### Run and artifact queries
+
+Source: `packages/reports/src/artifact-query.ts`. Import: `@crvouga/atlas/reports/artifact-query`
+
+One shareable query for the runs of a project and for the recorded results that carry evidence (recordings,
+screenshots, traces): by artifact tag, label, media type, feature (domain, spec), environment or device, producer,
+branch, revision, outcome and time. The same rules answer `GET /api/reports/runs`, `GET /api/reports/artifacts`
+and the viewer's Runs and Artifacts views, so a link means the same thing everywhere.
+
+The semantics are fixed, not inferred:
+
+- Across dimensions the filters combine with AND: `artifactTag=demo&type=video&environment=ios` is a demo
+  recording on ios.
+- Within a dimension the values combine with OR: `environment=ios,android` is either.
+- When both `artifactTag` and `type` are asked for, one artifact must be both (a `demo`-tagged video, not a demo-tagged
+  screenshot beside an untagged video) wherever the report says which videos carry which tags; otherwise a result with
+  an artifact of that type and an artifact with that tag matches.
+- Facet counts are disjunctive: the count beside a value is how many records the list would hold if that value were
+  the only choice in its dimension, with every other dimension's filter applied. With a value already chosen, the
+  other values show what choosing them in addition would add, and the chosen one's count is the list's.
+- A filter never changes a status. Evidence that is not recorded is unknown, never a match.
+
+Lists in the address are comma-separated; a comma or backslash inside a value is written `\,` or `\\`
+({@link splitList}, {@link joinList}), so a label such as `note=a,b` survives.
+
+See docs/server.md#reading-the-report-as-an-agent
+
+#### `QueryFacetValue`
+
+```ts
+export type QueryFacetValue = { readonly value: string; readonly count: number };
+```
+
+A value of a dimension and how many records have it.
+
+#### `QUERY_DIMENSIONS`
+
+```ts
+export const QUERY_DIMENSIONS = …
+```
+
+The dimensions a query narrows by, with their address parameters.
+
+#### `QueryDimension`
+
+```ts
+export type QueryDimension = (typeof QUERY_DIMENSIONS)[number];
+```
+
+One of {@link QUERY_DIMENSIONS}.
+
+#### `ArtifactFilter`
+
+```ts
+export type ArtifactFilter = {
+  /** Words (all of them) found in the title, test id, spec, domain, branch, labels, tags, environment or producer; or, for a run, its title. */
+  readonly q?: string;
+  /** Artifact tags (`demo` and `#demo` are the same). */
+  readonly artifactTag?: readonly string[];
+  /** Also match the tags an artifact inherits from its check and run. Default false: the exact artifact query. */
+  readonly inherited?: boolean;
+  /** Media types as roles: `video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer's own role. `video` means a playable recording. */
+  readonly type?: readonly string[];
+  /** `key=value`, or `key` for any value. */
+  readonly label?: readonly string[];
+  /** Environments or devices (`ios`, `desktop-web`). */
+  readonly environment?: readonly string[];
+  readonly producer?: readonly string[];
+  readonly branch?: readonly string[];
+  /** Revisions: a full commit id, or a prefix of at least seven characters. */
+  readonly sha?: readonly string[];
+  /** Statuses (`passed`, `failed`, `running`, `not-run`). A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`. */
+  readonly outcome?: readonly string[];
+  /** The feature domain of a result's spec. Not applicable to runs. */
+  readonly domain?: readonly string[];
+  /** Spec paths. Not applicable to runs. */
+  readonly spec?: readonly string[];
+  /** Only records at or after this time (epoch ms): a result's recording time, a run's end. */
+  readonly since?: number;
+  /** Only records at or before this time (epoch ms). */
+  readonly until?: number;
+  /** Only records with a playable video recording (the same as `type: ['video']`). */
+  readonly video?: boolean;
+};
+```
+
+What a query asks for. Every field is optional; nothing asked is everything. See the module comment for the semantics.
+
+#### `FilterName`
+
+```ts
+export type FilterName = QueryDimension | 'q' | 'inherited' | 'since' | 'until' | 'video';
+```
+
+The filters a query used, as they are named in the address and in `filters` of a response.
+
+#### `FilterFields`
+
+```ts
+export type FilterFields = {
+  /** Lower-cased text a search matches. */
+  readonly text: string;
+  /** The normalized tags of its artifacts. */
+  readonly artifactTags: readonly string[];
+  /** The tags its artifacts inherit from checks and runs, and its own. */
+  readonly tags: readonly string[];
+  /** Distinct media types; `video` only when a recording can be played. */
+  readonly types: readonly string[];
+  /** Artifacts by type and their own tags. Where the report does not say which artifact carries which tag, every artifact of the record is given the record's artifact tags. */
+  readonly media: readonly { readonly type: string; readonly tags: readonly string[] }[];
+  /** `key=value`, sorted and distinct. */
+  readonly labels: readonly string[];
+  readonly environments: readonly string[];
+  readonly producers: readonly string[];
+  readonly branches: readonly string[];
+  readonly shas: readonly string[];
+  readonly outcomes: readonly string[];
+  /** Absent when the dimension does not apply (runs have no domain). */
+  readonly domains?: readonly string[];
+  readonly specs?: readonly string[];
+  readonly at: number;
+};
+```
+
+The values of a record a query looks at: made by {@link fieldsOfRun} or by the artifact search.
+
+#### `QueryFacets`
+
+```ts
+export type QueryFacets = {
+  readonly artifactTags: readonly QueryFacetValue[];
+  readonly types: readonly QueryFacetValue[];
+  /** Values are `key=value`. */
+  readonly labels: readonly QueryFacetValue[];
+  readonly environments: readonly QueryFacetValue[];
+  readonly producers: readonly QueryFacetValue[];
+  readonly branches: readonly QueryFacetValue[];
+  readonly outcomes: readonly QueryFacetValue[];
+  readonly domains?: readonly QueryFacetValue[];
+};
+```
+
+The facets of a query: for each dimension, its values with disjunctive counts (see the module comment).
+
+#### `splitList`
+
+```ts
+export function splitList(raw: string): string[]
+```
+
+Splits a comma-separated list from an address: `a,b` is two values; `\,` is a comma and `\\` a backslash inside a
+value. Values are trimmed and empty ones dropped.
+
+**Example**
+
+```ts
+splitList('demo,release\\,2'); // ['demo', 'release,2']
+```
+
+#### `joinList`
+
+```ts
+export function joinList(list: readonly string[]): string | undefined
+```
+
+Joins values into one address parameter that {@link splitList} reads back; `undefined` when there are none.
+
+#### `parseTime`
+
+```ts
+export function parseTime(raw: string | null | undefined): number | undefined
+```
+
+A time from an address: epoch milliseconds, or a date or date-time Date can read (a date alone is UTC). `undefined` when unreadable.
+
+#### `parseArtifactFilter`
+
+```ts
+export function parseArtifactFilter(params: URLSearchParams): ArtifactFilter
+```
+
+Reads a query from URL search parameters: `q`, `video`, `inherited`, `since`, `until` and the repeatable or
+comma-separated {@link QUERY_DIMENSIONS}. Unreadable values are left out, never an error.
+
+#### `filterParams`
+
+```ts
+export function filterParams(filter: ArtifactFilter): URLSearchParams
+```
+
+A query as URL search parameters, the form {@link parseArtifactFilter} reads back.
+
+#### `usedFilters`
+
+```ts
+export function usedFilters(filter: ArtifactFilter): FilterName[]
+```
+
+Which filters a query uses, by the names an address gives them.
+
+#### `isFiltered`
+
+```ts
+export function isFiltered(filter: ArtifactFilter): boolean
+```
+
+Whether a query narrows anything.
+
+#### `forRuns`
+
+```ts
+export function forRuns(filter: ArtifactFilter): ArtifactFilter
+```
+
+Every filter in `filter` that may be applied to a record with these fields, as the runs query applies them (no domain or spec).
+
+#### `matchesFilter`
+
+```ts
+export function matchesFilter(fields: FilterFields, filter: ArtifactFilter, skip?: QueryDimension): boolean
+```
+
+Whether a record satisfies a query. `skip` leaves one dimension out: what {@link facetsOf} uses to count the values of
+that dimension, and nothing else should need.
+
+#### `facetsOf`
+
+```ts
+export function facetsOf(records: readonly FilterFields[], filter: ArtifactFilter): QueryFacets
+```
+
+The facets of a query over every record: for each dimension, the values the records have and how many records
+would match if that value were chosen in its dimension (see the module comment). A value chosen in the query is
+listed even when nothing has it, with a count of 0, so it can be removed.
+
+#### `outcomeOfCounts`
+
+```ts
+export function outcomeOfCounts(counts: Readonly<Record<string, number>>): string
+```
+
+The outcome of a run from its results by status: `failed`, else `running`, else `passed`, else `not-run`.
+
+#### `labelList`
+
+```ts
+export function labelList(labels: Readonly<Record<string, string>> | undefined): string[]
+```
+
+The `key=value` labels of a record, sorted and distinct.
+
+### Reviewer tags in a store
+
+Source: `packages/reports/src/artifact-tag-store.ts`. Import: `@crvouga/atlas/reports/artifact-tag-store`
+
+Where a reviewer's tags for attachments are kept: one small immutable object per edit under
+`curation/artifact-tags/`, named by time and a random id so editors never overwrite one another, and never changed
+or deleted afterwards. The layers they are about are not touched. The list of edits is the audit trail: who changed
+which tags of which attachment, and when. `foldArtifactTags` turns it into the tags that stand now.
+
+See docs/server.md#tagging-artifacts
+
+#### `ARTIFACT_TAGS_PREFIX`
+
+```ts
+export const ARTIFACT_TAGS_PREFIX = …
+```
+
+The prefix of every recorded edit in a store.
+
+#### `ArtifactTagError`
+
+```ts
+export class ArtifactTagError extends Error
+```
+
+The edit was not acceptable (`status` is the HTTP status to answer).
+
+#### `recordArtifactTags`
+
+```ts
+export async function recordArtifactTags(store: ObjectStore, input: unknown, by: string, atMs: number): Promise<ArtifactTagEntry>
+```
+
+Validates an edit (`ArtifactTagEditSchema`), normalizes its tags and records it as a new object in `store`, by
+`by` at `atMs`. Throws {@link ArtifactTagError} for a body that is not an edit, a tag that is not a tag (empty, or
+over 64 characters) or an edit that changes nothing. Recording the same edit twice records two entries.
+
+#### `readArtifactTagEntries`
+
+```ts
+export async function readArtifactTagEntries(store: ObjectStore): Promise<ArtifactTagEntry[]>
+```
+
+Every recorded edit in `store`, oldest first. An object that cannot be read as an edit is skipped (unknown, never
+guessed at). A store with none gives an empty list. Transport errors throw.
+
+### Artifact tags
+
+Source: `packages/reports/src/artifact-tags.ts`. Import: `@crvouga/atlas/reports/artifact-tags`
+
+The tags of one attachment (a recording, a screenshot, a trace): how a tag is normalized so `demo` and `#demo`
+are the same tag, which tags an attachment shows (its producer's, its reviewers', and those it inherits from its
+check and run), and how a reviewer's edits fold into the tags that stand now. Pure functions, safe in a browser.
+
+Tags describe evidence; they never decide a status, a slot or a winner. A producer writes `tags` on the attachment
+inside an immutable layer. A reviewer's tags live apart, as an append-only list of edits that the server records
+with who made each and when (`artifact-tag-store.ts`); the layer is never rewritten.
+
+See docs/rich-evidence.md#tagging-artifacts-and-demos
+
+#### `MAX_TAG_LENGTH`
+
+```ts
+export const MAX_TAG_LENGTH = …
+```
+
+The longest a normalized tag may be, in characters.
+
+#### `normalizeTag`
+
+```ts
+export function normalizeTag(raw: string): string | null
+```
+
+Normalizes a tag so equal tags compare equal: Unicode NFC, any leading `#` removed, surrounding whitespace
+trimmed, letters lower-cased and each run of whitespace inside turned into one `-`. Every other character is kept,
+so `Smoke`, `#smoke` and ` smoke ` are `smoke`, and `team/payments` or `release=2` stay as they are. Returns
+`null` for a tag that is empty after that (`''`, `'#'`, `'  '`) or longer than {@link MAX_TAG_LENGTH}.
+
+**Example**
+
+```ts
+normalizeTag('#Demo'); // 'demo'
+normalizeTag('release candidate'); // 'release-candidate'
+normalizeTag('#'); // null
+```
+
+#### `normalizeTags`
+
+```ts
+export function normalizeTags(raw: Iterable<string> | undefined): string[]
+```
+
+Normalizes every tag with {@link normalizeTag}, dropping the ones that are not tags and the repeats; the first of each keeps its place.
+
+#### `displayTag`
+
+```ts
+export const displayTag = …
+```
+
+The tag as a person sees it: `#demo`.
+
+#### `artifactRef`
+
+```ts
+export function artifactRef(attachment: Pick<Attachment, 'id' | 'bundleKey' | 'name'>): string
+```
+
+How an edit names an attachment: `id:<id>` when it has an `id`, else `key:<bundleKey>` (its bytes), else
+`name:<name>`. It is stable for a layer, which never changes. Two attachments in one check with the same bytes and
+no `id` share a reference, and so share reviewer tags; give them an `id` to tag them apart.
+
+#### `ArtifactTarget`
+
+```ts
+export type ArtifactTarget = {
+  readonly layer: string;
+  readonly check: string;
+  readonly kind?: string | undefined;
+  readonly artifact: string;
+};
+```
+
+Where a reviewer's tags are about: one attachment of one check of one archived layer.
+
+#### `ArtifactTagEntry`
+
+```ts
+export type ArtifactTagEntry = {
+  readonly id: string;
+  readonly target: ArtifactTarget;
+  readonly add: readonly string[];
+  readonly remove: readonly string[];
+  readonly by: string;
+  readonly atMs: number;
+};
+```
+
+One recorded edit. Entries are never changed or removed.
+
+#### `targetKey`
+
+```ts
+export const targetKey = …
+```
+
+A string that is equal for equal targets (the part `kind` is optional and then does not matter).
+
+#### `ReviewerTag`
+
+```ts
+export type ReviewerTag = { readonly tag: string; readonly by: string; readonly atMs: number };
+```
+
+A tag a reviewer added: who added it last, and when.
+
+#### `foldArtifactTags`
+
+```ts
+export function foldArtifactTags(entries: readonly ArtifactTagEntry[]): Map<string, ReviewerTag[]>
+```
+
+Folds the recorded edits (in any order) into the reviewer tags that stand now, by target (see {@link targetKey}).
+Edits apply oldest first, ties by `id`; a tag added, removed and added again stands, with the time and author of
+the last add. A target whose tags were all removed is absent. Entries that are not understood are ignored.
+
+#### `TagSource`
+
+```ts
+export type TagSource = 'artifact' | 'reviewer' | 'inherited';
+```
+
+Where a shown tag comes from: the attachment's own producer (`artifact`), a reviewer after the upload (`reviewer`), or the check or run around it (`inherited`).
+
+#### `ArtifactTag`
+
+```ts
+export type ArtifactTag = { readonly tag: string; readonly source: TagSource; readonly by?: string; readonly atMs?: number };
+```
+
+One tag an attachment shows, with its source and, for a reviewer's tag, who added it and when.
+
+#### `artifactTagsOf`
+
+```ts
+export function artifactTagsOf(attachment: Pick<Attachment, 'tags'>, options: { readonly reviewer?: readonly ReviewerTag[]; readonly inherited?: Iterable<string> } = {}): ArtifactTag[]
+```
+
+The tags one attachment shows, normalized and without repeats: its producer's own (`artifact`), then the
+reviewers' (`reviewer`), then those of its check and run that it does not have itself (`inherited`). A tag it has
+more than once is shown once, by the first source above.
+
+#### `hasArtifactTag`
+
+```ts
+export function hasArtifactTag(tags: readonly ArtifactTag[], wanted: string, options: { readonly inherited?: boolean } = {}): boolean
+```
+
+Does an attachment match a tag (either spelling)? An exact query (`inherited: false`, the default) matches only the
+tags the attachment has itself, from its producer or a reviewer; an inherited query also matches the tags it
+inherits from its check and run. The two differ for a recording that is untagged under a tagged run.
+
 ### Reading the files attachments name
 
 Source: `packages/reports/src/attachment-files.ts`. Import: `@crvouga/atlas/reports/attachment-files`
@@ -73,7 +527,9 @@ recursively), and hands their bytes over as `data` with a `contentType` guessed 
 attachment gave none.
 
 A file that is missing, not allowed or too large is left out with a warning: evidence that could not be
-found never stops the results from being published. Attachments without a `path` are kept untouched.
+found never stops the results from being published. The exception in kind is a video of a check that declared
+`recordingExpectation: "required"`: it stays as an attachment without bytes whose `omitted` says why (`not-found`,
+`not-allowed`, `too-large`, `over-budget`), so the recording receipt can name the gap. Attachments without a `path` are kept untouched.
 
 - `holder`: A check, step, attempt or any object that may have `attachments`, `steps` and `attempts`.
 
@@ -329,6 +785,227 @@ export async function readBundleIndex(
 ```
 
 Reads and parses the bundle index at `key`; an index that is not there is an empty bundle (`{}`). Invalid JSON throws.
+
+### Catalog health: spec identity, domains and denominators
+
+Source: `packages/reports/src/catalog-health.ts`. Import: `@crvouga/atlas/reports/catalog-health`
+
+Explains why the Specs and the Tests of a report may disagree, and what a producer or an operator can change about it.
+`catalogHealth` reads a `CatalogModel` (the tests of a report and the specs it is laid over) and writes a
+`CatalogHealth` document:
+
+- **Spec identity.** The same promise can reach Atlas under two paths (`checkout/cart.feature` published,
+  `specs/checkout/cart.feature` recorded). Atlas joins two paths only when a declared root mapping (`RootMapping`)
+  relates them, and then shows one logical spec with its original paths. Without a mapping it never merges by a
+  similar title or file name: it reports the pair as ambiguous and names the candidates.
+- **Domains.** A domain is whatever the spec's metadata says. When almost every spec shares one value, often the root
+  folder, the document says so; it never replaces explicit metadata.
+- **Denominators.** Defined specs, specs with an executed test, tests (check identities), examples and per-environment
+  observations are different numbers. `reconciliation` walks from the number the Specs view shows to the number the
+  Tests view groups by, step by step, and `counts.scenarios` tells one outline, its examples and their observations apart.
+- **Fallback identity.** A check whose id is its title has no stable id; renaming it starts a new check. Counted, not
+  guessed at.
+
+It only reads: it never changes a status, a slot or a winner, so it cannot disagree with the report it describes.
+Optional label `outline` on a check names the scenario outline its example belongs to.
+
+See docs/server.md#reading-the-report-as-an-agent
+
+#### `CATALOG_HEALTH_VERSION`
+
+```ts
+export const CATALOG_HEALTH_VERSION = …
+```
+
+The version of the `CatalogHealth` document. Only optional fields are added within it.
+
+#### `HEALTH_ITEM_LIMIT`
+
+```ts
+export const HEALTH_ITEM_LIMIT = …
+```
+
+The most paths listed in one finding; its `count` is always the whole.
+
+#### `RootMapping`
+
+```ts
+export type RootMapping = { readonly from: string; readonly to: string };
+```
+
+Declares that paths under `from` are the same specs as paths under `to`, e.g. `{ from: '', to: 'specs/' }`. Empty `from` matches every path.
+
+#### `HealthItem`
+
+```ts
+export type HealthItem = {
+  readonly path: string;
+  /** Other paths it could be the same promise as, when any; Atlas has not merged them. */
+  readonly candidates?: readonly { readonly path: string; readonly reason: string }[];
+};
+```
+
+One thing worth a look.
+
+#### `HealthCode`
+
+```ts
+export type HealthCode =
+  | 'ambiguous-spec-path'
+  | 'unmatched-spec-path'
+  | 'duplicate-spec-content'
+  | 'duplicate-spec-title'
+  | 'generic-domain'
+  | 'tests-without-spec'
+  | 'no-spec-definitions'
+  | 'fallback-identity'
+  | 'unused-root-mapping'
+  | 'spec-without-execution'
+  | 'historical-only';
+```
+
+Codes of `HealthFinding.code`. The set grows; a reader treats an unknown code as informational.
+
+#### `HealthFinding`
+
+```ts
+export type HealthFinding = {
+  readonly code: HealthCode;
+  /** `warning` is something that makes a count or a filter misleading; `info` explains a number. */
+  readonly severity: 'warning' | 'info';
+  readonly message: string;
+  /** How many paths, specs or tests it affects. */
+  readonly count: number;
+  /** Up to `HEALTH_ITEM_LIMIT` of them. */
+  readonly items: readonly HealthItem[];
+};
+```
+
+A finding: what is inconsistent, how many it affects, and what to change.
+
+#### `SpecAlias`
+
+```ts
+export type SpecAlias = {
+  /** The logical spec's path after mapping. */
+  readonly path: string;
+  /** Every original path it was seen under, sorted. */
+  readonly sources: readonly string[];
+};
+```
+
+A spec that reached Atlas under more than one path and was joined by a declared root mapping.
+
+#### `ReconciliationStep`
+
+```ts
+export type ReconciliationStep = {
+  readonly code: 'merged-by-mapping' | 'defined-without-results' | 'results-without-definition';
+  readonly label: string;
+  /** The change to the running total: negative removes specs, positive adds them. */
+  readonly delta: number;
+};
+```
+
+One step from the Specs count to the Tests count.
+
+#### `CatalogHealth`
+
+```ts
+export type CatalogHealth = {
+  readonly schemaVersion: typeof CATALOG_HEALTH_VERSION;
+  readonly version: string;
+  readonly generatedAtMs: number;
+  /** True when there is no warning. Informational findings do not count. */
+  readonly ok: boolean;
+  readonly counts: {
+    readonly specs: {
+      /** Spec files the report is laid over (before mapping). */
+      readonly files: number;
+      /** Logical specs among them: files joined by a root mapping count once. */
+      readonly defined: number;
+      /** Logical specs, defined or not, with at least one test. */
+      readonly withTests: number;
+      /** Defined logical specs with a test that has a passed or failed result. They are the denominator of execution coverage. */
+      readonly executed: number;
+      /** Defined logical specs with no test that has a passed or failed result: the defined coverage gaps. */
+      readonly withoutExecution: number;
+    };
+    readonly tests: {
+      readonly total: number;
+      readonly withSpec: number;
+      readonly withoutSpec: number;
+      /** Tests whose current status is `passed`. A definition with no test never adds to it. */
+      readonly passed: number;
+      /** Tests the history holds but the report has no current result for. */
+      readonly historicalOnly: number;
+    };
+    readonly scenarios: {
+      /** Outlines: tests sharing the label `outline` count once; a test without it is its own outline. */
+      readonly outlines: number;
+      /** Concrete examples: tests (a check identity), however many environments ran them. */
+      readonly examples: number;
+      /** Current results per producer, environment and parameter set. */
+      readonly observations: number;
+      /** Observations that passed or failed. */
+      readonly executedObservations: number;
+      readonly passedObservations: number;
+    };
+  };
+  …
+```
+
+The `GET /api/reports/tests/health` document.
+
+#### `parseRootMapping`
+
+```ts
+export function parseRootMapping(text: string): RootMapping | null
+```
+
+Parses `from>to` (as `?root=` gives it) into a mapping. Returns null when there is no `>`. Whitespace around each side is trimmed.
+
+#### `parseRootMappings`
+
+```ts
+export function parseRootMappings(params: URLSearchParams): RootMapping[]
+```
+
+Reads the repeatable `root` search parameter: each value `from>to`, several may be comma-separated. Values without `>` are ignored.
+
+#### `canonicalSpecPath`
+
+```ts
+export function canonicalSpecPath(path: string, roots: readonly RootMapping[]): { readonly path: string; readonly mapping: RootMapping | null }
+```
+
+The logical path of a spec path: the path Atlas already normalises (`specPath`), after the first mapping whose `from`
+is a prefix of it (the longest `from` wins). A path already under `to` is left alone. Returns the path and the mapping
+that changed it, if any.
+
+#### `catalogHealth`
+
+```ts
+export function catalogHealth(model: CatalogModel, roots: readonly RootMapping[] = []): CatalogHealth
+```
+
+Diagnoses a report's spec identity, domains and counts. `roots` are the declared path-root mappings. Pure: the same
+model and mappings give the same document, and nothing in it changes what the report says passed.
+
+**Example**
+
+```ts
+const health = catalogHealth(model, [{ from: '', to: 'specs/' }]);
+if (!health.ok) console.log(healthMarkdown(health));
+```
+
+#### `healthMarkdown`
+
+```ts
+export function healthMarkdown(health: CatalogHealth): string
+```
+
+The health document as Markdown, for an agent or a terminal.
 
 ### Catalog search, filter, group and sort
 
@@ -984,6 +1661,8 @@ export type EvidenceHolder = {
   readonly steps?: readonly Step[];
   readonly attempts?: readonly Attempt[];
   readonly extensions?: Readonly<Record<string, unknown>>;
+  /** What its evidence shows, as its producer declared it (see `EvidenceScope`). */
+  readonly scope?: EvidenceScope;
 };
 ```
 
@@ -1001,8 +1680,57 @@ read when someone asks for it. Undefined when there is none.
 
 Several holders (for example a check and its layer) are summed: `attachments` also counts those on steps and
 attempts, `steps` counts only each holder's own top-level steps, tags are de-duplicated, and for a repeated
-label the later holder wins. `roles` are the attachments' roles (or, without one, what their media type or file
-name implies), sorted and distinct.
+label the later holder wins. `artifactTags` are the attachments' own normalized tags and are never inherited. `roles` are the attachments' roles (or, without one, what their media type or file
+name implies), sorted and distinct. `videos` lists every attachment whose effective media type is video, with the
+check, retry attempt or step that holds it (see {@link isVideoAttachment}), each with the scope that applies to it.
+
+#### `summarizeEvidenceIn`
+
+```ts
+export function summarizeEvidenceIn(inherited: EvidenceScope | undefined, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined
+```
+
+Like {@link summarizeEvidence} for the checks of a part: a video that declares no scope, and sits in a holder that
+declares none, takes the scope `inherited` from its part or layer (the nearest declaration of the two, see
+`effectiveScope`). Without `inherited` it is the same as `summarizeEvidence`.
+
+#### `summarizeLayerEvidence`
+
+```ts
+export function summarizeLayerEvidence(...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined
+```
+
+Like {@link summarizeEvidence} for a layer and its parts: the same summary, but a video attached to the layer or a
+part is owned by the `layer`, not by a check.
+
+#### `isVideoAttachment`
+
+```ts
+export function isVideoAttachment(attachment: Pick<Attachment, 'name' | 'role' | 'contentType'>): boolean
+```
+
+Whether an attachment is a video, by its effective media type: the producer's `contentType`, else the one its file
+name implies. A role never decides this on its own (`demo` on a PNG is not a video), except that a `video` role
+settles a file whose type nothing says (`application/octet-stream`).
+
+#### `attachmentIdentity`
+
+```ts
+export function attachmentIdentity(item: Pick<Attachment, 'name' | 'sha256' | 'bundleKey' | 'uri' | 'text'>): string | undefined
+```
+
+What identifies an attachment's bytes: its digest, else its bundle key, address or inline text. Attachments with the
+same identity are the same file however many results reference them. Undefined when it names no bytes at all (it can
+never be opened). This is the `recording` of a {@link VideoRef}.
+
+#### `videoCounts`
+
+```ts
+export function videoCounts(videos: readonly VideoRef[] | undefined): VideoCounts | undefined
+```
+
+Counts references, distinct playable recordings and unplayable references. Undefined when there is no reference, so
+"no video" and "nothing known about video" look the same on the wire.
 
 #### `roleOfType`
 
@@ -1024,6 +1752,8 @@ export type CheckDetail = {
   readonly check: Check;
   /** What the run as a whole carries: its logs, its links, its labels. */
   readonly run: EvidenceHolder;
+  /** The scope the check inherits: its part's declaration, else its layer's. Absent when neither declared one, which is unknown, not live or physical. */
+  readonly inheritedScope?: EvidenceScope;
 };
 ```
 
@@ -1032,7 +1762,7 @@ All of one result's evidence, read when someone opens it.
 #### `checkDetailOf`
 
 ```ts
-export function checkDetailOf(layer: { readonly id: string; readonly parts: readonly { readonly kind: string; readonly checks: readonly Check[] }[] } & EvidenceHolder, checkId: string, kind?: string): CheckDetail | null
+export function checkDetailOf(layer: { readonly id: string; readonly parts: readonly { readonly kind: string; readonly checks: readonly Check[]; readonly scope?: EvidenceScope }[] } & EvidenceHolder, checkId: string, kind?: string): CheckDetail | null
 ```
 
 One result's evidence, from a layer: the first check with id `checkId` (in a part of kind `kind`, when given) plus the layer's own evidence. Null when the layer holds no such check.
@@ -1043,7 +1773,28 @@ One result's evidence, from a layer: the first check with id `checkId` (in a par
 export function runEvidence(layer: EvidenceHolder): EvidenceHolder
 ```
 
-What a layer carries as a whole (its tags, labels, links, attachments, annotations and extensions; not its parts' checks). Absent fields stay absent.
+What a layer carries as a whole (its scope, tags, labels, links, attachments, annotations and extensions; not its parts' checks). Absent fields stay absent.
+
+#### `PartEvidence`
+
+```ts
+export type PartEvidence = EvidenceHolder & {
+  readonly kind: string;
+  readonly id: string;
+  readonly title: string;
+};
+```
+
+What one part of a layer (one kind of report) carries as a whole, named by the part.
+
+#### `partsEvidence`
+
+```ts
+export function partsEvidence(layer: { readonly parts: readonly (EvidenceHolder & { readonly kind: string; readonly id: string; readonly title: string })[] }): PartEvidence[]
+```
+
+The parts of a layer that carry evidence of their own (attachments, links, labels…), each with its name. Parts
+that carry none are left out. A part's files belong to the run, not to any one check.
 
 #### `bundleKeysOf`
 
@@ -1138,6 +1889,156 @@ the next pass; `refresh` does not throw for those.
 
 - `args.backend`: The backend id stamped on live layers.
 
+### Evidence scope
+
+Source: `packages/reports/src/evidence-scope.ts`. Import: `@crvouga/atlas/reports/evidence-scope`
+
+Reads what a producer declared a piece of evidence shows (`EvidenceScope`): which declaration applies to an
+attachment, the short badges a reviewer sees before playing a recording, the facts split into declared and
+independently verified, and the filter tokens (`device:physical`, `audio:recorded`) a query narrows by. Pure
+functions, safe in a browser.
+
+The one rule: what is not declared is unknown. A missing scope, or a missing field, never reads as live, physical,
+audible or end to end, and a filter for a value never matches evidence that did not say it. A scope describes
+evidence; it never decides a status, a slot or a winner.
+
+See docs/rich-evidence.md#evidence-scope
+
+#### `SCOPE_DIMENSIONS`
+
+```ts
+export const SCOPE_DIMENSIONS = …
+```
+
+The fields of a scope that say something about the evidence and that `verified` may name, in the order they are shown.
+
+#### `ScopeDimension`
+
+```ts
+export type ScopeDimension = (typeof SCOPE_DIMENSIONS)[number];
+```
+
+One of {@link SCOPE_DIMENSIONS}.
+
+#### `UNKNOWN_SCOPE`
+
+```ts
+export const UNKNOWN_SCOPE = …
+```
+
+The filter token of a recording that declares no scope at all.
+
+#### `effectiveScope`
+
+```ts
+export function effectiveScope(...candidates: readonly (EvidenceScope | undefined)[]): EvidenceScope | undefined
+```
+
+The declaration that applies to something: the nearest one wins as a whole, never field by field, so a recording
+never shows a limitation or a device that was declared for another source. Pass the candidates nearest first
+(attachment, attempt, check, part, layer); absent ones are skipped. Undefined when none declares a scope.
+
+**Example**
+
+```ts
+effectiveScope(attachment.scope, attempt.scope, check.scope, layer.scope);
+```
+
+#### `scopeKey`
+
+```ts
+export function scopeKey(scope: EvidenceScope | undefined): string
+```
+
+A stable string that is equal for equal declarations (key order never matters), to tell one scope from another.
+
+#### `scopeTokens`
+
+```ts
+export function scopeTokens(scope: EvidenceScope | undefined): string[]
+```
+
+The filter tokens one declaration states, normalized (letter case and spaces never matter): `surface:<value>`,
+`device:<value>`, `data:synthetic` or `data:real`, `dependencies:<value>`, `audio:recorded` or `audio:silent`,
+`pacing:<value>`. A field that is not declared adds no token. No scope at all is the single token
+{@link UNKNOWN_SCOPE}, so a filter can ask for the unknown on purpose; a scope that declares nothing readable is
+also unknown.
+
+#### `matchesScope`
+
+```ts
+export function matchesScope(tokens: readonly string[], wanted: readonly string[]): boolean
+```
+
+Whether one recording's tokens satisfy a filter: every wanted token must be among them. Tokens compare normalized.
+An empty filter matches everything. The token {@link UNKNOWN_SCOPE} matches only a recording with no declared
+fields, so asking for `device:physical` never includes a recording that did not say what it ran on.
+
+#### `ScopeBasis`
+
+```ts
+export type ScopeBasis = 'verified' | 'declared' | 'undeclared';
+```
+
+How a fact is known: `verified` (independently checked), `declared` (the producer's word) or `undeclared` (unknown).
+
+#### `ScopeFact`
+
+```ts
+export type ScopeFact = {
+  readonly dimension: ScopeDimension;
+  /** A name for the dimension: `Device`, `Audio`. */
+  readonly label: string;
+  /** The value as words: `Physical device`, `Silent`, `Not declared`. */
+  readonly value: string;
+  readonly basis: ScopeBasis;
+};
+```
+
+One line of what a scope says: the dimension, a sentence for a person, and how well it is known.
+
+#### `ScopeBadge`
+
+```ts
+export type ScopeBadge = {
+  readonly dimension: ScopeDimension | 'unknown';
+  readonly text: string;
+  readonly basis: ScopeBasis;
+};
+```
+
+A short qualification to show beside a recording: `Device: Simulator`, `Scripted dependencies`, `Silent`.
+
+#### `scopeFacts`
+
+```ts
+export function scopeFacts(scope: EvidenceScope | undefined): ScopeFact[]
+```
+
+Every dimension of a scope with its value and how it is known, in a fixed order, including the ones nobody declared
+(`Not declared`, basis `undeclared`). A dimension is `verified` only when the scope's `verified` names it and it has
+a value; everything else a producer wrote is `declared`. With no scope every dimension is undeclared.
+
+#### `scopeBadges`
+
+```ts
+export function scopeBadges(scope: EvidenceScope | undefined): ScopeBadge[]
+```
+
+The concise badges for a scope: one per declared dimension, in a fixed order (`Surface: Browser`, `Device: Simulator`, `Synthetic
+data`, `Scripted dependencies`, `Silent`, `Paced`). With no declared dimension the one badge `Scope unknown`, so
+a reviewer is told nothing was claimed rather than shown nothing.
+
+#### `scopeCaveats`
+
+```ts
+export function scopeCaveats(scope: EvidenceScope | undefined): string[]
+```
+
+What a reviewer must not read into evidence: a sentence per thing that is not shown. It names the assertions the
+result stands on when there are some (so activity visible beyond them is not verified), and every kind of reality
+that was not declared. Empty only for a scope that declares and verifies everything and lists no limitation.
+
 ### Report evidence types
 
 Source: `packages/reports/src/evidence-types.ts`. Import: `@crvouga/atlas/reports/evidence-types`
@@ -1185,6 +2086,55 @@ export type StatusCounts = Readonly<Record<EvidenceStatus, number>>;
 
 How many results have each status (`passed`, `failed`, `running`, `not-run`).
 
+#### `VideoOwner`
+
+```ts
+export type VideoOwner = 'layer' | 'check' | 'attempt' | 'step';
+```
+
+Who holds a recording: the whole layer (or one of its parts), one check, one retry attempt of a check, or one step.
+
+#### `VideoRef`
+
+```ts
+export type VideoRef = {
+  /** The attachment's name, for a person. */
+  readonly name: string;
+  readonly owner: VideoOwner;
+  /** The try that holds it, when `owner` is `attempt` or the step is inside one. */
+  readonly attempt?: number;
+  /** The name of the step that holds it, when `owner` is `step`. */
+  readonly step?: string;
+  /** The normalized tags of this attachment itself (`demo`), so a query can ask for a tagged video rather than a result that has a video and some tagged file. Absent when it has none (and in documents of older servers). */
+  readonly tags?: readonly string[];
+  /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
+  readonly recording?: string;
+  /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
+  readonly available: boolean;
+  /** What this recording shows, as declared for it: its own `scope`, else its attempt's, check's, part's or layer's. Absent when none declared one: its scope is unknown, not live, physical or audible. */
+  readonly scope?: EvidenceScope;
+};
+```
+
+One reference to a video, found by its effective media type (the producer's `contentType`, else the one the file
+name implies; a `video` role alone counts only when nothing else says what the file is). A reference is not a
+recording: the same bytes referenced from three checks are three references and one recording.
+
+#### `VideoCounts`
+
+```ts
+export type VideoCounts = {
+  /** Every reference to a video, playable or not. */
+  readonly references: number;
+  /** Distinct playable recordings: identical bytes referenced twice are one. */
+  readonly recordings: number;
+  /** References that name no bytes. A report that predates availability metadata has none of these and none of the others. */
+  readonly unavailable: number;
+};
+```
+
+Video availability as counts: references, distinct playable recordings (deduplicated), and references that cannot be played.
+
 #### `EvidenceSummary`
 
 ```ts
@@ -1197,9 +2147,13 @@ export type EvidenceSummary = {
   readonly attempts: number;
   readonly links: number;
   readonly tags: readonly string[];
+  /** The normalized tags of the attachments themselves (`#demo` is `demo`), sorted and distinct. Absent when no attachment is tagged. Unlike `tags` they are never inherited from a check or run. */
+  readonly artifactTags?: readonly string[];
   readonly labels: Readonly<Record<string, string>>;
   /** The distinct roles of its attachments (or what their media types say), to show what kind of evidence there is. */
   readonly roles: readonly string[];
+  /** Its references to videos, wherever they are held (layer, check, attempt, step). Only there when it has any. */
+  readonly videos?: readonly VideoRef[];
 };
 ```
 
@@ -1233,6 +2187,8 @@ export type LayerHeader = {
   readonly parameters: LayerParameters;
   /** `modified`: recorded from a checkout with uncommitted changes; `unknown`: origin not captured; absent: clean. Advisory; never changes a status. */
   readonly freshness?: 'unknown' | 'modified';
+  /** The execution the producer named for it (one local or manual invocation), or absent. Grouping and display only; never part of the slot. */
+  readonly run?: LayerRun;
   /** Where this layer's recorded timelines and captured files are read from, or null when it has none. */
   readonly recording: RecordingAddress | null;
   /** From a spec run that has not been collected into a layer yet. */
@@ -1243,10 +2199,33 @@ export type LayerHeader = {
   readonly execution: string;
   /** What the run as a whole carries: its logs, links and labels. */
   readonly evidence?: EvidenceSummary;
+  /** Counts from the layer's recording receipt: how many expected recordings were published. Absent when the layer declared no expectations: its completeness is unknown, not complete. Never changes a status. */
+  readonly recordings?: RecordingCounts;
 };
 ```
 
 A report layer's origin and totals. Its checks are read separately, once.
+
+#### `RecordingCounts`
+
+```ts
+export type RecordingCounts = {
+  /** Checks that required a recording: `uploaded + referenced + skipped + unresolved`. */
+  readonly expected: number;
+  /** Stored in the layer, with a checksum. */
+  readonly uploaded: number;
+  /** Given only by `uri`: Atlas cannot vouch for it. */
+  readonly referenced: number;
+  /** Captured but left out, with a reason (too large, not allowed…). */
+  readonly skipped: number;
+  /** No video was attached at all. */
+  readonly unresolved: number;
+  /** Intentionally unrecorded checks: neither expected nor missing. */
+  readonly notApplicable: number;
+};
+```
+
+How many recordings a layer expected and what became of them (see `RecordingReceipt`).
 
 #### `LayerRow`
 
@@ -1271,6 +2250,8 @@ export type LayerRow = {
   readonly durationMs: number | null;
   /** What this result carries beyond its outcome. Absent when nothing. */
   readonly evidence?: EvidenceSummary;
+  /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
+  readonly recording?: { readonly state: string; readonly reason?: string };
 };
 ```
 
@@ -1635,7 +2616,7 @@ A number a check recorded. Exceeding `limit` is shown and never fails the check 
 #### `EvidenceExtras`
 
 ```ts
-export type EvidenceExtras = Partial<Pick<import('../../schema/src/layer').Check, 'tags' | 'labels' | 'links' | 'steps' | 'attachments' | 'annotations' | 'attempts' | 'extensions'>>;
+export type EvidenceExtras = Partial<Pick<import('../../schema/src/layer').Check, 'tags' | 'labels' | 'links' | 'steps' | 'attachments' | 'annotations' | 'attempts' | 'extensions' | 'scope'>>;
 ```
 
 What a check may carry beyond its outcome. All optional and open: see docs/extending.md.
@@ -2270,6 +3251,76 @@ export function neighborStepFrame(
 ```
 
 First frame of the next / previous step (skipping same-step frames).
+
+### Layer garbage collection
+
+Source: `packages/reports/src/garbage.ts`. Import: `@crvouga/atlas/reports/garbage`
+
+Applies a garbage collection policy (`GcPolicy`, chosen by a person in the Atlas UI and kept in the user state) to the
+layers in a store. Atlas is otherwise deletion-free, so this is deliberately conservative: a layer is deleted only when
+(1) the caller says the report has read it and every result it carries has been replaced by a newer layer (`eligible`),
+(2) it was recorded longer ago than the policy allows, and (3) it is not among the newest `keepLatest` layers. Deleting
+it therefore cannot change the combined report. Its catalog entry goes first, so nothing visible ever points at a
+missing manifest; its manifest next; then the captured-file blobs that no remaining layer refers to. If any remaining
+layer cannot be read, no blob is deleted: what cannot be read is unknown, never unused. Specs, runs and commit
+inventories are not touched.
+
+See docs/server.md#user-state-and-garbage-collection
+
+#### `GcCandidate`
+
+```ts
+export type GcCandidate = { readonly id: string; readonly catalogKey: string; readonly recordedAtMs: number };
+```
+
+One layer the policy would delete.
+
+#### `GcPlan`
+
+```ts
+export type GcPlan = {
+  /** Layers to delete, oldest first. */
+  readonly candidates: readonly GcCandidate[];
+  /** Layers in the catalog that stay. */
+  readonly kept: number;
+};
+```
+
+What a policy would delete from a store right now.
+
+#### `GcOutcome`
+
+```ts
+export type GcOutcome = { readonly deletedLayers: number; readonly deletedBlobs: number };
+```
+
+The outcome of applying a plan.
+
+#### `planGarbage`
+
+```ts
+export async function planGarbage(store: ObjectStore, input: { readonly policy: GcPolicy; readonly nowMs: number; readonly eligible: ReadonlySet<string> }): Promise<GcPlan>
+```
+
+Decides which layers a policy deletes, without deleting anything. `eligible` is the set of layer ids the caller has
+read and knows no longer decide any result (`ReportIndex.superseded()`); a layer not in it is never a candidate.
+Lists the catalog only. With `policy.enabled === false` the plan is empty.
+
+**Example**
+
+```ts
+const plan = await planGarbage(store, { policy, nowMs: Date.now(), eligible: index.superseded() });
+```
+
+#### `collectGarbage`
+
+```ts
+export async function collectGarbage(store: ObjectStore, plan: GcPlan): Promise<GcOutcome>
+```
+
+Deletes the layers of a plan, then the blobs only they used. Store errors throw after whatever was already deleted;
+running the same plan again finishes the job, because every delete is idempotent and the catalog entry (what
+makes a layer visible) always goes before the content.
 
 ### URL hash routes of the reports viewer
 
@@ -3339,7 +4390,7 @@ Drops each mutable layer whose execution is already archived as an immutable one
 export function layerExecutionKey(layer: LayerSummary): string
 ```
 
-A string equal for the mutable and the archived address of one execution: its producer, sha, time and parts.
+A string equal for the mutable and the archived address of one execution: its producer, sha, time, parts and, when the producer named one, its execution id.
 Object key order is ignored at every depth, including check evidence and extensions; array order is preserved.
 This is an advisory execution identity, not the content digest that addresses an immutable layer in storage.
 
@@ -3479,7 +4530,7 @@ String choices (such as `{ device: 'iphone-15' }`) that make a result its own sl
 #### `LayerExtras`
 
 ```ts
-export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>>;
+export type LayerExtras = Partial<Pick<import('../../schema/src/layer').LayerDocument, 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions' | 'recordings' | 'scope'>>;
 ```
 
 What a layer may carry as a whole. All optional and open: see docs/extending.md.
@@ -3504,6 +4555,8 @@ export type LayerSummary = LayerExtras & {
   readonly environment?: string | null;
   /** Provenance: the CI run that produced the layer, or `null`. Never part of the slot. */
   readonly runUrl: string | null;
+  /** The execution (one invocation of a local or manual run) the layer belongs to, when the producer named one. Grouping and display only; never part of the slot. Absent: the run is told by `runUrl`, else `branch@sha`. */
+  readonly run?: LayerRun;
   /** Free choices that make a result its own slot. The `environment` parameter is read as the environment (see `layerPlace`). */
   readonly parameters: LayerParameters;
   /** The specs the layer was recorded against, with fingerprints of their text. */
@@ -3617,7 +4670,8 @@ Routes, relative to where it is mounted:
   runs of this machine. `cursor` is the previous page's; 409 when it no longer matches the listing (refresh).
   Any `retry` value re-lists backends that were unavailable now instead of after the wait.
 - `GET /evidence/rows/:backend/:id` the checks and spec fingerprints of one layer (`LayerRows`).
-- `GET /evidence/detail/:backend/:id?check=&kind=` the run-level evidence of an immutable layer, or one check's detail.
+- `GET /evidence/detail/:backend/:id?check=&kind=` the run-level evidence of an immutable layer (and, as `parts`, what its
+  parts carry as a whole), or one check's detail.
 - `GET /layers/:id/blobs/*` an attachment of an immutable layer by its bundle key, served by `attachmentResponse`.
 - `GET /layers/:id/*` the recorded `frame.css`, `tests/<test>/report.json` and `tests/<test>/files/<frame>` of a layer.
 - `GET /live/:source/frame.css` and `GET /live/:source/tests/:testId/*` the same for a run still writing (uncached).
@@ -4875,6 +5929,69 @@ export function contentTypeForMedia(media: string): string
 
 The media type for a snapshot media kind (`html`, `png`, `json`, `text`, `bytes`, `video`); an unknown kind is `application/octet-stream`.
 
+### Recording receipts
+
+Source: `packages/reports/src/recording-receipt.ts`. Import: `@crvouga/atlas/reports/recording-receipt`
+
+Answers "did the recordings we expected get published?" apart from "did the tests pass?". `recordingReceipt` reads the
+checks a producer is about to publish (after their files were stored) and describes, per check that declared a
+`recordingExpectation`, whether its video was uploaded, only referenced, left out (with a reason) or never attached.
+`recordingCompleteness` reduces the winning results of a report to the figures `atlas report status` prints. Neither
+reads a clock or the environment, and neither changes a status, a slot or a winner: a receipt describes publication, it
+does not decide a result. A layer with no receipt is Unknown, never Complete.
+
+See docs/rich-evidence.md#recording-completeness
+
+#### `isVideoAttachment`
+
+```ts
+export function isVideoAttachment(attachment: Loose): boolean
+```
+
+Is this attachment a screen recording: a role of `video`, or a `video/*` media type?
+
+#### `recordingReceipt`
+
+```ts
+export function recordingReceipt(checks: readonly Loose[]): RecordingReceipt | undefined
+```
+
+The receipt for the checks of one layer, or `undefined` when no check declares a `recordingExpectation` (the layer then
+claims nothing). Call it with checks whose attachment bytes are already stored (`bundleKey`, `bytes` and `sha256` set).
+
+A `required` check is `uploaded` when any video of it has stored bytes, `referenced` when one has only a `uri`,
+`skipped` when its videos were left out (the attachment's `omitted` is the reason) and `unresolved` when it has no
+video at all. A `not-applicable` check is listed but is neither expected nor missing. Items are sorted by check id so the
+same input is always the same receipt.
+
+#### `RecordingResult`
+
+```ts
+export type RecordingResult = {
+  readonly spec: string | null;
+  readonly check: string;
+  readonly environment: string | null;
+  readonly layer: string;
+  /** Whether the layer the result came from carried a receipt. */
+  readonly hasReceipt: boolean;
+  /** The result's item in that receipt, when its check declared an expectation. */
+  readonly recording?: { readonly state: string; readonly reason?: string };
+};
+```
+
+One result as {@link recordingCompleteness} reads it.
+
+#### `recordingCompleteness`
+
+```ts
+export function recordingCompleteness(results: readonly RecordingResult[]): RecordingCompleteness
+```
+
+Reduces the winning results of a report to its recording completeness. `incomplete` when any expected recording is
+skipped or unresolved; otherwise `unknown` when a contributing layer has no receipt (nothing is claimed for it, and a
+report with no results at all is unknown too); otherwise `complete` when something was expected and `none-expected` when
+nothing was. Gaps are sorted so the output never depends on read order.
+
 ### Remote commit report
 
 Source: `packages/reports/src/remote-report.ts`. Import: `@crvouga/atlas/reports/remote-report`
@@ -5097,6 +6214,7 @@ It reads only immutable layers (`layers/index/…`), which is what makes "read o
 - `json(): { readonly version: string; readonly text: string }` — The report as JSON text: exactly what `JSON.stringify({ ...snapshot(), active: [] })` writes, put together from the text of each layer, which is written once. `active` is what a store without live runs always sends: none.
 - `delta(since: string): { readonly text: string; readonly version: string } | null` — What differs between the report a viewer holds (named by its version) and the current one: the layers that changed in full, and the ids of those that no longer hold a winner. Null when that version is not remembered, and the viewer should ask for the whole report. See `applyEffectiveDelta`.
 - `get history(): TestHistory { return this.#history; }` — Every recorded result of every test and every run, as layers were folded in: what the test catalog, a test's history and the run list are built from. Read-only for callers; `history.rev` changes whenever a layer is taken in.
+- `superseded(): ReadonlySet<string>` — The ids of layers this index has read and that no longer decide any result. Removing one from its store cannot change the report (every slot it filled is held by a newer layer), which is what makes it safe for garbage collection to delete. A layer that failed to load, is hidden by `include`, or still holds a result is not here.
 - `stats()` — For `/readyz` and logs.
 
 ### Test loading state
@@ -5250,6 +6368,8 @@ checks (or none completed), failed checks, running checks, specs without results
 each required environment with no checks (the name is normalised, so `iOS` means `ios`), then every notice of the
 report (an unreadable layer or backend). `failing` lists each failed or running winner, in a fixed order that does
 not depend on read order; diagnostic `performance` checks are left out unless nothing else was recorded.
+`recordings` reports recording completeness of the same results apart from `ok`: an incomplete or unknown
+completeness never changes the gate (use `atlas report publish --require-recordings` to fail on a missing video).
 
 **Example**
 
@@ -5714,7 +6834,7 @@ See docs/server.md#streaming-a-run-as-it-happens
 #### `ReporterIdentity`
 
 ```ts
-export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>;
+export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'run' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'scope' | 'extensions'>;
 ```
 
 What every layer of one stream shares: who is reporting, from where. Whatever `publishChecks` takes, except the checks and the time.
@@ -7142,7 +8262,9 @@ runs that produced them and which tests each one ran.
   always the report's winner (`combineEvidence`), and history only describes how it got there.
 - `testCatalog` turns the report's winners (plus a history, when there is one) into a `TestCatalog`: a summary with
   insights (slowest, flaky, failing), facets to filter by, and the tests that match a `TestQuery`.
-- `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run.
+- `testHistory`, `runList` and `runDetail` answer for one test, every run, and one run. `runList` and `artifactList`
+  narrow by tag, label, media type, environment, branch, outcome and time (see `artifact-query.ts`); `artifactList` finds
+  the recorded results that carry evidence across the whole history, not only the latest winners.
 - `catalogMarkdown`, `historyMarkdown`, `runsMarkdown` and `runMarkdown` say the same in Markdown, for an agent or a
   terminal.
 
@@ -7289,6 +8411,12 @@ export type TestSummary = {
   readonly outcomes: readonly TestOutcome[];
   readonly stats: TestStats;
   readonly tags: readonly string[];
+  /** The normalized tags of the attachments of its current results (`demo`, shown as `#demo`). Never inherited from a check or run; the `tags` above are. Absent in documents of older servers. */
+  readonly artifactTags?: readonly string[];
+  /** The normalized tags its attachments inherit from their check and run (those of the results that have attachments), apart from `artifactTags`. What an inherited artifact query also matches. */
+  readonly inheritedArtifactTags?: readonly string[];
+  /** What each distinct playable recording of its current results declares it shows, as filter tokens (`device:physical`, `audio:silent`; see `scopeTokens`). A recording that declared nothing is `['unknown']`. Absent when it has no playable recording. A query's `scope` must hold for one recording, so evidence from two different devices never combines. */
+  readonly scopeProfiles?: readonly (readonly string[])[];
   readonly labels: Readonly<Record<string, string>>;
   /** What its current results carry: attachments, steps, retries, and the kinds of attachment. */
   readonly evidence: { readonly attachments: number; readonly steps: number; readonly attempts: number; readonly roles: readonly string[] };
@@ -7379,6 +8507,10 @@ export type CatalogFacets = {
   readonly domains: readonly FacetValue[];
   readonly specs: readonly (CatalogSpec & { readonly tests: number; readonly counts: StatusCounts })[];
   readonly tags: readonly FacetValue[];
+  /** The tags of attachments, normalized. Absent in documents of older servers. */
+  readonly artifactTags?: readonly FacetValue[];
+  /** The scope tokens of its recordings (`device:simulator`, `audio:recorded`, `unknown`), with how many tests have a recording that states each. Absent in documents of older servers. */
+  readonly scopes?: readonly FacetValue[];
   readonly branches: readonly FacetValue[];
   readonly labels: Readonly<Record<string, readonly FacetValue[]>>;
 };
@@ -7416,6 +8548,12 @@ export type TestQuery = {
   /** Spec paths (`specs/...`). */
   readonly spec?: readonly string[];
   readonly tag?: readonly string[];
+  /** Only tests with an attachment carrying this tag (`demo` and `#demo` are the same), not counting tags inherited from a check or run: the exact artifact query. `tag` is the inherited one. */
+  readonly artifactTag?: readonly string[];
+  /** With `artifactTag`: also match the tags an attachment inherits from its check and run (a recording without a tag of its own under a run tagged `demo`). Default false: the exact query. */
+  readonly inherited?: boolean;
+  /** Only tests with one playable recording that states every one of these (`device:physical`, `audio:recorded`, `data:synthetic`, `dependencies:live`, `surface:browser`, `pacing:paced`; see `scopeTokens`). Evidence that did not declare a value never matches it; `unknown` matches only a recording that declared no scope. */
+  readonly scope?: readonly string[];
   /** Only tests recorded in this run (a key from `runList`). */
   readonly run?: string;
   readonly sort?: TestSort;
@@ -7464,8 +8602,14 @@ export type TestHistoryDocument = {
 
 ```ts
 export type RunSummary = {
-  /** Stable key: the run URL, or `branch@sha`. */
+  /** Stable key: `run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. */
   readonly key: string;
+  /** The execution id a producer named for it, when it did. Layers that share it are one run, however many uploads they took; another invocation at the same commit has another. */
+  readonly runId?: string;
+  /** The human title the producer gave the execution (the newest layer's). Presentation only: the key, the commit and `freshness` are unaffected. */
+  readonly title?: string;
+  /** `modified` when any of its layers was recorded from a checkout with uncommitted changes, else `unknown` when any origin was not captured; absent when every layer is from a clean commit. Advisory; never changes a status. */
+  readonly freshness?: 'unknown' | 'modified';
   readonly runUrl: string | null;
   readonly branch: string | null;
   readonly sha: string | null;
@@ -7484,10 +8628,33 @@ export type RunSummary = {
   readonly totalDurationMs: number | null;
   /** Up to twenty tests that failed in it. */
   readonly failing: readonly { readonly key: string; readonly title: string; readonly environment: string | null; readonly detail: string }[];
-};
+  /**
+   * Its videos, from the run's layers and from the last result of each test: references, distinct playable recordings
+   * and references that cannot be played. Absent when it has none, and in a report that carries no video information.
+   */
+  readonly videos?: VideoCounts;
+  /**
+   * Files attached to the run itself, in its layers (and their parts), not to any one check: review movies, archives,
+   * summaries. All kinds, videos included. Absent when none, and in a report that carries no such information.
+   */
+  readonly attachments?: number;
+  /** The normalized tags of the attachments of its results and layers, sorted and distinct. Absent when none is tagged. */
+  readonly artifactTags?: readonly string[];
+  /** The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches), sorted and distinct. Absent when none. */
+  …
 ```
 
-A CI run (or any group of layers sharing a run URL, else a branch and commit): when, where, and how its tests went.
+A run: the layers that name the same execution (`run.id`), else share a CI run URL, else a branch and commit. When,
+where, and how its tests went.
+
+#### `RunQuery`
+
+```ts
+export type RunQuery = ArtifactFilter;
+```
+
+What `runList` can be asked: an {@link ArtifactFilter}, of which a run answers every dimension but `domain` and
+`spec`. `video` keeps only runs that have at least one playable video recording; `total` then counts only those.
 
 #### `RunList`
 
@@ -7495,8 +8662,15 @@ A CI run (or any group of layers sharing a run URL, else a branch and commit): w
 export type RunList = {
   readonly schemaVersion: typeof TEST_CATALOG_VERSION;
   readonly version: string;
+  /** Runs that matched, before `limit`. */
   readonly total: number;
   readonly runs: readonly RunSummary[];
+  /** How many of all runs (whatever was asked, before `limit`) have a playable video recording. */
+  readonly withVideo?: number;
+  /** The filters of the query that were applied. A viewer that asked for another knows the server ignored it. */
+  readonly filters?: readonly FilterName[];
+  /** The values each filter dimension offers with counts over every run (see `facetsOf`). */
+  readonly facets?: QueryFacets;
 };
 ```
 
@@ -7517,10 +8691,35 @@ export type RunResult = {
   readonly at: number;
   readonly layer: string;
   readonly detail: string;
+  /** Every video its evidence references, with who holds it (check, retry attempt or step). Absent when there is none. */
+  readonly videos?: readonly VideoRef[];
 };
 ```
 
 One test's last result within one run.
+
+#### `RunLayer`
+
+```ts
+export type RunLayer = {
+  /** The layer's id: 64 hex digits for an archived layer. */
+  readonly id: string;
+  /** The backend it was read from, for `GET /evidence/detail/{backend}/{id}`. */
+  readonly backend: string;
+  readonly producer: string;
+  readonly environment: string | null;
+  readonly recordedAtMs: number;
+  /** How many checks the layer recorded. A layer of zero checks is evidence only: it is not a passing test. */
+  readonly checks: number;
+  /** Files the layer carries as a whole (not those of its checks). */
+  readonly attachments: number;
+  /** Its videos, when it has any. */
+  readonly videos?: VideoCounts;
+};
+```
+
+One layer of a run, as the run's artifact hub names it: who recorded it, how many checks it holds (zero is possible
+and is not a pass) and the files it carries as a whole. Read the files with `GET /evidence/detail/{backend}/{id}`.
 
 #### `RunDetail`
 
@@ -7530,18 +8729,85 @@ export type RunDetail = {
   readonly version: string;
   readonly run: RunSummary;
   readonly results: readonly RunResult[];
+  /** Every layer of the run, oldest first, so its run-level files can be found even in a layer with no checks. Absent from an older server. */
+  readonly layers?: readonly RunLayer[];
 };
 ```
 
 `GET /api/reports/runs/detail`: one run and every result it recorded.
 
+#### `ArtifactResult`
+
+```ts
+export type ArtifactResult = {
+  /** The test's key, as in `TestSummary.key`. */
+  readonly key: string;
+  readonly id: string;
+  readonly title: string;
+  readonly specPath: string | null;
+  /** The domain of its spec, or null when it has none. */
+  readonly domain: string | null;
+  /** When it was recorded, epoch ms. */
+  readonly at: number;
+  readonly status: EvidenceStatus;
+  readonly environment: string | null;
+  readonly producer: string;
+  /** The kind of the part that held it. */
+  readonly kind: string;
+  readonly parameters: Readonly<Record<string, string>>;
+  readonly branch: string | null;
+  readonly sha: string | null;
+  /** The key of its run (see `runKey`). */
+  readonly run: string;
+  readonly runUrl: string | null;
+  /** The id of the layer that recorded it: with `key`, the exact result to open. */
+  readonly layer: string;
+  readonly backend: string;
+  /** Attachments on the result, including those on its steps and attempts. */
+  readonly attachments: number;
+  /** The normalized tags of its attachments. */
+  readonly artifactTags: readonly string[];
+  /** The tags of its check and run, which its attachments inherit. */
+  readonly tags: readonly string[];
+  /** The media types (roles) of its attachments; `video` only for a playable recording. */
+  readonly types: readonly string[];
+  readonly labels: Readonly<Record<string, string>>;
+  readonly videos?: readonly VideoRef[];
+};
+```
+
+One recorded result that carries evidence (an attachment: a recording, a screenshot, a trace), with where and when it
+was recorded: the unit `artifactList` finds. It is a result in the history, not only the report's current winner, so
+a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged.
+
+#### `ArtifactList`
+
+```ts
+export type ArtifactList = {
+  readonly schemaVersion: typeof TEST_CATALOG_VERSION;
+  readonly version: string;
+  /** Results that matched, before `offset` and `limit`. */
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly results: readonly ArtifactResult[];
+  /** The filters of the query that were applied. */
+  readonly filters: readonly FilterName[];
+  /** The values each dimension offers with disjunctive counts over every result that carries evidence. */
+  readonly facets: QueryFacets;
+};
+```
+
+`GET /api/reports/artifacts`: the recorded results that carry evidence and match a query, newest first.
+
 #### `runKey`
 
 ```ts
-export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'>): string
+export function runKey(layer: Pick<LayerHeader, 'runUrl' | 'branch' | 'sha'> & { readonly run?: { readonly id: string } }): string
 ```
 
-The run a layer belongs to: its run URL, else `branch@sha`, else `local`. Layers with the same key are one run.
+The run a layer belongs to: the execution its producer named (`run:<id>`), else its run URL, else `branch@sha`, else
+`local`. Layers with the same key are one run. Only grouping: it is never part of the slot a result fills.
 
 #### `TestHistory`
 
@@ -7564,12 +8830,14 @@ const catalog = testCatalog(catalogModel(layers, { history }));
 
 - `get rev(): number { return this.#rev; }` — Changes each time a layer is added.
 - `get specs(): RecordedSpecs { return this.#specs; }` — The specs the added layers recorded.
+- `tests(): readonly { readonly key: string; readonly id: string; readonly specPath: string | null }[]` — Every test the history holds a result for (keyed as `TestSummary.key`), including tests the report no longer has a current result for.
 - `get layers(): number { return this.#seen.size; }` — How many layers were added.
 - `add(layer: LayerHeader, rows: readonly LayerRow[], specs: readonly SpecEntry[] = [], backend = layer.backend): void` — Takes in one layer: its header, its rows, the specs it recorded and the backend it was read from. A layer id already added is ignored.
 - `of(key: string): readonly TestResultEntry[]` — The recorded results of one test (by `TestSummary.key`), newest first. Empty when none.
 - `get runCount(): number { return this.#runs.size; }` — How many runs it knows of.
 - `runs(): RunSummary[]` — Every run, newest first.
-- `run(key: string): { readonly run: RunSummary; readonly results: RunResult[] } | null` — One run and its results (failed first, then by spec and title), or null.
+- `run(key: string): { readonly run: RunSummary; readonly results: RunResult[]; readonly layers: RunLayer[] } | null` — One run and its results (failed first, then by spec and title), or null.
+- `evidenceResults(): readonly { readonly result: ArtifactResult; readonly fields: FilterFields }[]` — Every recorded result that carries an attachment, newest first, with the values a query looks at. Built once per layer added. The domain is left to the caller (`artifactList`), which may know more specs than the layers recorded.
 - `testsIn(key: string): ReadonlySet<string>` — The keys of the tests one run recorded.
 
 #### `durationStats`
@@ -7616,6 +8884,8 @@ export type CatalogModel = {
   readonly facets: CatalogFacets;
   readonly haystacks: ReadonlyMap<string, string>;
   readonly history: TestHistory | null;
+  /** The specs the report is laid over, sorted by path: the given ones, else those the layers recorded. What `catalogHealth` calls defined. Absent on a model built from a server's catalog document. */
+  readonly specs?: readonly SpecEntry[];
 };
 ```
 
@@ -7663,13 +8933,49 @@ export function testHistory(model: CatalogModel, key: string): TestHistoryDocume
 
 One test and its recorded results, or null when the report has no test with that key.
 
+#### `hasVideo`
+
+```ts
+export function hasVideo(run: Pick<RunSummary, 'videos'>): boolean
+```
+
+Whether a run has at least one playable video recording.
+
 #### `runList`
 
 ```ts
-export function runList(history: TestHistory, version: string, limit = 100): RunList
+export function runList(history: TestHistory, version: string, limit = 100, query: RunQuery = {}): RunList
 ```
 
-Every run the history knows of, newest first, `limit` at most (default 100).
+Every run the history knows of, newest first, `limit` at most (default 100). With `query.video` only the runs that
+have a playable video recording: the filter and `total` apply to every run before `limit`, and nothing is read from
+any recording's bytes. `withVideo` always counts every run that has one.
+
+#### `fieldsOfRun`
+
+```ts
+export function fieldsOfRun(run: RunSummary): FilterFields
+```
+
+What a query looks at in a run: see {@link ArtifactFilter}. A run's outcome is `failed` when any result failed.
+
+#### `artifactList`
+
+```ts
+export function artifactList(history: TestHistory, version: string, query: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList
+```
+
+The recorded results that carry evidence and match a query, newest first, across the whole history (`limit` default
+100). `total` and the facet counts apply to every match before `offset` and `limit`. `domainOf` tells the domain of a
+spec path when the caller knows more than the layers recorded (a server with a spec set); otherwise it is the
+recorded spec's domain, else the folder the path implies.
+
+**Example**
+
+```ts
+const list = artifactList(history, 'v1', { artifactTag: ['demo'], type: ['video'], environment: ['ios'] });
+list.results.map(r => [r.title, r.run, r.sha, r.status]);
+```
 
 #### `runDetail`
 
@@ -7685,7 +8991,7 @@ One run with every result it recorded, or null when no run has that key.
 export function parseTestQuery(params: URLSearchParams): TestQuery
 ```
 
-Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`.
+Reads a `TestQuery` from URL search parameters: `q`, `sort`, `offset`, `limit`, `run`, and repeatable or comma-separated `status`, `environment`, `producer`, `domain`, `spec`, `tag`, `artifactTag`, `scope` (every token must hold for one recording), and `inherited=1`.
 
 #### `formatMs`
 
@@ -7718,6 +9024,14 @@ export function runsMarkdown(list: RunList): string
 ```
 
 The run list as Markdown.
+
+#### `artifactsMarkdown`
+
+```ts
+export function artifactsMarkdown(list: ArtifactList): string
+```
+
+The artifact results as Markdown, for an agent or a terminal.
 
 #### `runMarkdown`
 
