@@ -653,11 +653,9 @@ function Toolbar({
               data-status={(count > 0 && filter.id) || undefined}
               onClick={() => go({ status: filter.id || undefined })}
               variant={pressed ? 'light' : 'subtle'}
+              rightSection={<Text span inherit>{count.toLocaleString()}</Text>}
             >
               {filter.label}{' '}
-              <Text span inherit>
-                {count.toLocaleString()}
-              </Text>
             </Button>
           );
         })}
@@ -672,11 +670,9 @@ function Toolbar({
                 aria-pressed={envs.includes(value)}
                 onClick={() => go({ env: toggled(search.env, value) })}
                 variant={envs.includes(value) ? 'light' : 'subtle'}
+                rightSection={<Text span inherit>{(envCounts.get(value) ?? 0).toLocaleString()}</Text>}
               >
                 {environmentLabel(value)}{' '}
-                <Text span inherit>
-                  {(envCounts.get(value) ?? 0).toLocaleString()}
-                </Text>
               </Button>
             ))}
           </Flex>
@@ -695,11 +691,9 @@ function Toolbar({
           }}
           variant={search.video === true || listing.parsed.filters.video ? 'light' : 'subtle'}
           leftSection={<IconVideo size={16} aria-hidden="true" />}
+          rightSection={<Text span inherit>{listing.withVideo.toLocaleString()}</Text>}
         >
           Has video{' '}
-          <Text span inherit>
-            {listing.withVideo.toLocaleString()}
-          </Text>
         </Button>
         <Button
           type="button"
@@ -708,11 +702,9 @@ function Toolbar({
           onClick={() => go({ evidence: search.evidence ? undefined : 'stale' })}
           variant={search.evidence === 'stale' ? 'light' : 'subtle'}
           leftSection={<IconAlertTriangle size={16} aria-hidden="true" />}
+          rightSection={<Text span inherit>{listing.stale.toLocaleString()}</Text>}
         >
           Stale or unverified{' '}
-          <Text span inherit>
-            {listing.stale.toLocaleString()}
-          </Text>
         </Button>
         {model.facets.producers.length > 1 && (
           <Box component="label">
@@ -798,11 +790,8 @@ function Toolbar({
           }}
         />
         {chips.map((chip) => (
-          <Button key={chip.label} type="button" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light">
+          <Button key={chip.label} type="button" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light" rightSection={<IconX size={16} aria-hidden="true" />}>
             {chip.label}{' '}
-            <Text aria-hidden="true" span inherit>
-              <IconX size={16} aria-hidden="true" />
-            </Text>
           </Button>
         ))}
         {narrowed(search) && (

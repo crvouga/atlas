@@ -151,6 +151,7 @@ export const LayerRowSchema = z.looseObject({
     route: z.string().optional(), fixture: z.string().optional(), cohort: z.string().optional(), area: z.string().optional(),
     kind: z.string().optional().describe('The kind of UI state the producer declared: `screen`, `overlay`, `loading`, `error`, `empty`… Open vocabulary'),
     flags: z.array(z.string()).optional(), covers: z.array(z.string()).optional(),
+    attributes: z.record(z.string(), z.string()).optional().describe('Facts of the producer\'s own, by name. Carried and offered as a filter; they never split a slot or decide a result'),
     inventory: z.boolean().optional().describe('A `ui-plan` entry that names a surface of the product\'s inventory, not a state'),
     screenshot: z.looseObject({
       name: z.string(), bundleKey: z.string().optional(), uri: z.string().optional(), contentType: z.string().optional(),
@@ -817,6 +818,12 @@ export const RunDetailSchema = z.looseObject({
   })).optional().describe('Every layer of the run, oldest first. Absent from an older server')
 });
 
+/**
+ * A word from a vocabulary that may grow. A reader knows the values it lists and treats any other as the cautious one (not
+ * captured, not covered), so a server that adds a value never breaks a client that has not heard of it.
+ */
+const OpenWord = z.string();
+
 /** A state's profile: the client and the choices it was captured under. */
 export const UiProfileSchema = z.looseObject({
   key: z.string().describe('Identifies the profile across layers: the environment and the sorted parameters'),
@@ -835,8 +842,8 @@ export const UiImageSchema = z.looseObject({
 /** One state in one profile. */
 export const UiCellSchema = z.looseObject({
   profile: UiProfileSchema,
-  coverage: z.enum(['captured', 'failed', 'capturing', 'skipped', 'missing']).describe('`captured` only when the winning capture passed. Every other value means there is no picture to trust'),
-  expected: z.enum(['declared', 'undeclared', 'unknown']).describe('`declared`: a plan expects it. `undeclared`: plans exist and none names it. `unknown`: no plan was published, so nothing is known to be unexpected'),
+  coverage: OpenWord.describe('One of `captured`, `failed`, `capturing`, `skipped`, `missing`. `captured` only when the winning capture passed. Every other value, including one a later version adds, means there is no picture to trust'),
+  expected: OpenWord.describe('One of `declared`, `undeclared`, `unknown`; a value this version does not know is `unknown`. `declared`: a plan expects it. `undeclared`: plans exist and none names it. `unknown`: no plan was published, so nothing is known to be unexpected'),
   capture: z.looseObject({
     status: EvidenceStatusSchema, detail: z.string(), durationMs: z.number().nullable(), image: UiImageSchema.nullable(),
     labels: z.record(z.string(), z.string()).describe('What describes the capture without splitting it: a `shard`, a `browser`'),
@@ -871,14 +878,18 @@ export const UiCatalogSchema = z.looseObject({
     route: z.string().nullable(), fixture: z.string().nullable(), cohort: z.string().nullable(), area: z.string().nullable(),
     kind: z.string().nullable().optional().describe('The kind of UI state the producers declared (`screen`, `overlay`, `loading`…), or null. Absent from an older server'),
     flags: z.array(z.string()), covers: z.array(z.string()).describe('The surfaces it covers'), producers: z.array(z.string()),
+    attributes: z.record(z.string(), z.string()).optional().describe('Facts of the producers\' own (`locale`, `brand`…), by name. Absent from an older server, which means none'),
     cells: z.array(UiCellSchema)
   })),
   surfaces: z.array(z.looseObject({
     id: z.string(), inventoried: z.boolean().describe('A `ui-plan` inventory entry names it: the product is known to have it'),
     states: z.number().int().nonnegative(), captured: z.number().int().nonnegative(),
-    status: z.enum(['covered', 'uncaptured', 'uncovered'])
+    status: OpenWord.describe('One of `covered`, `uncaptured`, `uncovered`; any other value is not `covered`')
   })),
-  facets: z.looseObject({ profiles: UiFacetSchema, coverage: UiFacetSchema, areas: UiFacetSchema, routes: UiFacetSchema, cohorts: UiFacetSchema, flags: UiFacetSchema, surfaces: UiFacetSchema, producers: UiFacetSchema }),
+  facets: z.looseObject({
+    profiles: UiFacetSchema, coverage: UiFacetSchema, areas: UiFacetSchema, routes: UiFacetSchema, cohorts: UiFacetSchema, flags: UiFacetSchema, surfaces: UiFacetSchema, producers: UiFacetSchema,
+    attributes: UiFacetSchema.optional().describe('Every `name=value` pair of the states\' attributes, as the `attribute` filter takes it. Absent from an older server')
+  }),
   sources: z.looseObject({ layers: z.number().int().nonnegative(), backends: z.array(BackendInfoSchema), notices: z.array(z.string()) }).describe('What was read. A backend that is unavailable, or a layer that could not be read, is named here; what depended on it is not shown as captured'),
   total: z.number().int().nonnegative().optional().describe('States that matched, before `offset` and `limit`'),
   offset: z.number().int().nonnegative().optional(), limit: z.number().int().nonnegative().optional()

@@ -8,7 +8,7 @@
  * coverage and never compared by picture, a layer that could not be read is named and never taken to be unchanged, and a picture
  * with no content hash is "cannot tell".
  */
-import { filterUiCatalog, type UiCatalog, type UiCatalogQuery } from '@crvouga/atlas/reports/ui-catalog';
+import type { UiCatalog } from '@crvouga/atlas/reports/ui-catalog';
 import { UI_CELL_CHANGES, changedUiEntries, diffUiCatalogs, diffUiProfiles, uiCatalogCommits, type UiCatalogDiff, type UiCellChange, type UiDiffEntry } from '@crvouga/atlas/reports/ui-catalog-diff';
 import { Alert, Anchor, Badge, Button, Card, Code, Group, NativeSelect, SegmentedControl, SimpleGrid, Stack, Switch, Text, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
@@ -20,6 +20,7 @@ import { Picture } from './Picture';
 import { useCommitCatalog, useLayerHeaders } from './history';
 import { useCatalogNavigate, useCatalogSearch } from './search';
 import { coverageWord } from './words';
+import { catalogExpression, catalogTokens, searchCatalog } from './query';
 
 const ENTRIES = 24;
 
@@ -36,9 +37,8 @@ const CHANGE: Readonly<Record<UiCellChange, { label: string; color: string; mean
  * The query a comparison narrows by: the catalog's filters except coverage, because the comparison is about coverage changing, and
  * (when profiles are what is compared) except the profile, because the two sides are the profiles.
  */
-function narrowedBy(query: UiCatalogQuery, mode: 'commit' | 'profile'): UiCatalogQuery {
-  const { coverage: _coverage, profile: _profile, ...rest } = query;
-  return mode === 'profile' ? rest : { ...rest, ...(query.profile ? { profile: query.profile } : {}) };
+function narrowedBy(expression: string, mode: 'commit' | 'profile'): string {
+  return catalogTokens(expression).filter(token => token.field !== 'coverage' && (mode !== 'profile' || token.field !== 'profile')).map(token => token.raw).join(' ');
 }
 
 function Entry({ entry, before, after }: { entry: UiDiffEntry; before: string; after: string }) {
@@ -127,7 +127,7 @@ function Results({ diff, before, after }: { diff: UiCatalogDiff; before: string;
   );
 }
 
-function CommitComparison({ whole, query }: { whole: UiCatalog; query: UiCatalogQuery }) {
+function CommitComparison({ whole, query }: { whole: UiCatalog; query: string }) {
   const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const now = useNow();
@@ -139,7 +139,7 @@ function CommitComparison({ whole, query }: { whole: UiCatalog; query: UiCatalog
   const commits = useMemo(() => uiCatalogCommits(headers), [headers]);
   const from = useCommitCatalog(headers, search.from);
   const to = useCommitCatalog(headers, search.to);
-  const diff = useMemo(() => (from.catalog && to.catalog ? diffUiCatalogs(filterUiCatalog(from.catalog, query), filterUiCatalog(to.catalog, query)) : null), [from.catalog, to.catalog, query]);
+  const diff = useMemo(() => (from.catalog && to.catalog ? diffUiCatalogs(searchCatalog(from.catalog, query).catalog, searchCatalog(to.catalog, query).catalog) : null), [from.catalog, to.catalog, query]);
   const unreadable = [...from.failed, ...to.failed];
   const pending = from.pending + to.pending;
   const options = (value: string | undefined) => (
@@ -208,12 +208,12 @@ function CommitComparison({ whole, query }: { whole: UiCatalog; query: UiCatalog
   );
 }
 
-function ProfileComparison({ whole, query }: { whole: UiCatalog; query: UiCatalogQuery }) {
+function ProfileComparison({ whole, query }: { whole: UiCatalog; query: string }) {
   const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const known = (key: string | undefined) => whole.profiles.some((profile) => profile.key === key);
   const diff = useMemo(
-    () => (search.from && search.to && search.from !== search.to && whole.profiles.some((p) => p.key === search.from) && whole.profiles.some((p) => p.key === search.to) ? diffUiProfiles(filterUiCatalog(whole, query), search.from, search.to) : null),
+    () => (search.from && search.to && search.from !== search.to && whole.profiles.some((p) => p.key === search.from) && whole.profiles.some((p) => p.key === search.to) ? diffUiProfiles(searchCatalog(whole, query).catalog, search.from, search.to) : null),
     [whole, query, search.from, search.to]
   );
   const label = (key: string | undefined) => whole.profiles.find((profile) => profile.key === key)?.label ?? 'a profile';
@@ -251,10 +251,11 @@ function ProfileComparison({ whole, query }: { whole: UiCatalog; query: UiCatalo
 }
 
 /** The comparison of the catalog with itself: its mode (commits or profiles) and both sides are the address. */
-export function UiCatalogCompare({ whole }: { whole: UiCatalog }) {
-  const { search, query } = useCatalogSearch();
+export function UiCatalogCompare({ whole, expression }: { whole: UiCatalog; expression?: string }) {
+  const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const mode = search.compare === 'profile' ? 'profile' : 'commit';
+  const query = expression ?? catalogExpression(search);
   const narrowed = useMemo(() => narrowedBy(query, mode), [query, mode]);
   return (
     <Stack gap="md" component="section" aria-label="Compare">
@@ -275,7 +276,7 @@ export function UiCatalogCompare({ whole }: { whole: UiCatalog }) {
           </Button>
         </Group>
       </Group>
-      {query.coverage?.length || (mode === 'profile' && query.profile?.length) ? (
+      {catalogTokens(query).some(token => token.field === 'coverage' || (mode === 'profile' && token.field === 'profile')) ? (
         <Text c="dimmed" fz="sm">
           {mode === 'profile' ? 'The coverage and profile filters do not apply here: coverage is what is compared, and the profiles are chosen below.' : 'The coverage filter does not apply to a comparison, which is about coverage changing.'} The other filters do.
         </Text>

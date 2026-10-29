@@ -9,10 +9,10 @@
  */
 import { IconArrowsExchange, IconDownload } from '@tabler/icons-react';
 import type { UiCapture, UiCatalog, UiCatalogState, UiCell } from '@crvouga/atlas/reports/ui-catalog';
-import { UI_COVERAGE, filterUiCatalog, isUiCatalogFiltered } from '@crvouga/atlas/reports/ui-catalog';
+import { UI_COVERAGE } from '@crvouga/atlas/reports/ui-catalog';
 import { Accordion, Alert, Anchor, Badge, Button, Card, Code, Container, Drawer, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useEvidence } from '../evidence/evidence-context';
 import { ago, exactTime, plural, shortSha, useNow } from '../evidence/format';
@@ -23,9 +23,13 @@ import { UiCatalogCompare } from './UiCatalogCompare';
 import { useUiCatalog } from './provider';
 import { useCatalogNavigate, useCatalogSearch } from './search';
 import { coverageStatus, coverageWord } from './words';
+import { UiCatalogFilters } from './UiCatalogFilters';
+import { catalogExpression, CLEAR_CATALOG_SEARCH, searchCatalog } from './query';
 
 /** How many state cards are drawn before "Show more". */
 const CARDS = 48;
+/** How many rows of the surface table are drawn before "Show more". */
+const SURFACES = 100;
 
 function CoverageBadge({ cell }: { cell: UiCell }) {
   return (
@@ -114,7 +118,8 @@ function StateDetail({ state, onClose }: { state: UiCatalogState; onClose: () =>
   const now = useNow();
   const facts: [string, string][] = [
     ['Route', state.route ?? ''], ['Fixture', state.fixture ?? ''], ['Cohort', state.cohort ?? ''], ['Area', state.area ?? ''],
-    ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')]
+    ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')],
+    ...Object.entries(state.attributes ?? {})
   ];
   return (
     <Drawer opened onClose={onClose} position="right" size="xl" title={<Title order={2}>{state.title}</Title>} closeButtonProps={{ 'aria-label': 'Close the state' }}>
@@ -183,6 +188,7 @@ function Summary({ catalog, narrowed }: { catalog: UiCatalog; narrowed: boolean 
 }
 
 function Surfaces({ catalog }: { catalog: UiCatalog }) {
+  const [rows, setRows] = useState(SURFACES);
   if (!catalog.surfaces.length) return null;
   const open = catalog.summary.uncoveredSurfaces;
   const inventoried = catalog.surfaces.some((surface) => surface.inventoried);
@@ -204,7 +210,7 @@ function Surfaces({ catalog }: { catalog: UiCatalog }) {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {catalog.surfaces.map((surface) => (
+                {catalog.surfaces.slice(0, rows).map((surface) => (
                   <Table.Tr key={surface.id} data-surface={surface.id}>
                     <Table.Td>
                       <Anchor
@@ -222,6 +228,11 @@ function Surfaces({ catalog }: { catalog: UiCatalog }) {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
+          {catalog.surfaces.length > rows && (
+            <Button type="button" variant="subtle" onClick={() => setRows(rows + SURFACES)}>
+              Show more surfaces ({catalog.surfaces.length - rows} more)
+            </Button>
+          )}
         </Accordion.Panel>
       </Accordion.Item>
     </Accordion>
@@ -232,11 +243,18 @@ function Surfaces({ catalog }: { catalog: UiCatalog }) {
 export function UiCatalogPage() {
   const evidence = useEvidence();
   const whole = useUiCatalog();
-  const { query, search } = useCatalogSearch();
+  const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const [shown, setShown] = useState(CARDS);
-  const catalog = useMemo(() => (whole ? filterUiCatalog(whole, query) : null), [whole, query]);
-  const narrowed = isUiCatalogFiltered(query);
+  const expression = catalogExpression(search);
+  const [pending, setPending] = useState({ expression, text: '' });
+  const draft = pending.expression === expression ? pending.text : '';
+  const setDraft = (text: string, base = expression) => setPending({ expression: base, text });
+  useEffect(() => setShown(CARDS), [expression, draft]);
+  const committed = useMemo(() => whole ? searchCatalog(whole, expression) : null, [whole, expression]);
+  const result = useMemo(() => draft && whole ? searchCatalog(whole, `${expression} ${draft}`) : committed, [whole, expression, draft, committed]);
+  const catalog = result?.catalog;
+  const narrowed = Boolean(expression || draft);
   const unavailable = evidence.backends.filter((backend) => !backend.available);
   const open = catalog && search.state ? whole?.states.find((state) => state.id === search.state) ?? null : null;
   return (
@@ -260,6 +278,7 @@ export function UiCatalogPage() {
             </Group>
           )}
         </Group>
+        {whole && <UiCatalogFilters catalog={whole} expression={expression} draft={draft} onDraft={setDraft} issues={committed?.issues ?? []} />}
         {evidence.unavailable && (
           <Alert role="alert" color="red" title="Recorded results cannot be read">
             <Group gap="sm">
@@ -285,7 +304,7 @@ export function UiCatalogPage() {
             Reading {plural(evidence.pending, 'more layer', 'more layers')}; states appear here as they arrive.
           </Text>
         )}
-        {catalog && whole && search.compare && <UiCatalogCompare whole={whole} />}
+        {catalog && whole && search.compare && <UiCatalogCompare whole={whole} expression={`${expression} ${draft}`} />}
         {catalog && whole && !search.compare && (
           <>
             <Summary catalog={catalog} narrowed={narrowed} />
@@ -298,7 +317,7 @@ export function UiCatalogPage() {
             {whole.states.length > 0 && catalog.states.length === 0 && (
               <Stack gap="xs" align="flex-start" role="status" data-no-match>
                 <Text c="dimmed">Nothing matches these filters.</Text>
-                <Button type="button" variant="light" onClick={() => go({ q: undefined, coverage: undefined, profile: undefined, area: undefined, route: undefined, cohort: undefined, flag: undefined, surface: undefined, producer: undefined })}>
+                <Button type="button" variant="light" onClick={() => { setDraft(''); go(CLEAR_CATALOG_SEARCH); }}>
                   Clear filters
                 </Button>
               </Stack>

@@ -453,7 +453,7 @@ function lenientAttachment(item: unknown): unknown {
 }
 
 function lenientEvidence(holder: Record<string, unknown>, nested: readonly string[] = []): Record<string, unknown> {
-  const out: Record<string, unknown> = lenientScope(holder);
+  const out: Record<string, unknown> = { ...lenientScope(holder) };
   const set = (key: string, value: unknown) => { if (value === undefined) delete out[key]; else out[key] = value; };
   if ('tags' in out) set('tags', lenientList(out.tags, z.string()));
   if ('links' in out) set('links', lenientList(out.links, LinkSchema));
@@ -492,7 +492,8 @@ export type ParsedLayer = { readonly ok: true; readonly layer: LayerDocument } |
  * before `schemaVersion` existed are version 1. A layer of a newer major version is refused by name ("Upgrade
  * @crvouga/atlas to read it") rather than half understood. Evidence the reader cannot read (a malformed attachment,
  * step, annotation, link, tag, label or extension) is dropped and the check keeps its status and place; anything
- * else that fails the schema refuses the whole layer, naming the first problem by its path. Callers treat a refused
+ * else that fails the schema refuses the whole layer, naming the first problem by its path. Does not mutate the input.
+ * Callers treat a refused
  * layer as unknown, never as passed.
  *
  * @see docs/report-contract.md

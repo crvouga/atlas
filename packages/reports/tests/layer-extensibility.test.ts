@@ -11,6 +11,12 @@ const fixture = JSON.parse(readFileSync(path.join(import.meta.dir, 'fixtures', '
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 describe('evidence is open', () => {
+  test('reading evidence preserves the original document and its content-addressed bytes', () => {
+    const doc = clone(fixture);
+    const before = JSON.stringify(doc);
+    expect(parseLayerDocument(doc).ok).toBe(true);
+    expect(JSON.stringify(doc)).toBe(before);
+  });
   test('a layer that carries every kind of evidence parses, and keeps all of it', () => {
     const parsed = parseLayerDocument(fixture);
     expect(parsed.ok).toBe(true);

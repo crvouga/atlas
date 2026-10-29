@@ -13,6 +13,7 @@ type Runtime = {
   url: string;
   settingsUrl?: string;
   storeUrl?: string;
+  s3Url?: string;
   state: 'starting' | 'running';
   control: string;
   token: string;
@@ -24,13 +25,14 @@ const help = `Atlas IDE workspace commands (run from the repository root):
   bun run workspace:run       Start the API, settings and hot-reloading viewer
   bun run workspace:preview   Start the viewer with bundled example evidence
   bun run workspace:status    Print runtime URLs and state as JSON
-  bun run workspace:stop      Stop both owned processes (optional: server or preview), preserving reports
+  bun run workspace:stop      Stop both owned processes (optional: server or preview)
 
 Run/preview accept --port <0-65535>. ATLAS_PORT, then PORT, also select a port.
 Without an explicit port, try 5180 (server) or 5181 (preview), then a free port.
 Each checkout owns .atlas-workspace/. Setup and preview need no IDE CLI or credentials. "run" starts the Atlas server,
-which keeps all reports and user state in S3 only: set the ATLAS_S3_* variables (copy .env.example to .env, which Bun
-loads) or it exits at once and lists every missing one.
+with an isolated Mockingbird S3 emulator and bucket (data lasts until stop). No Docker or credentials needed.
+To use durable S3, set ATLAS_S3_* variables (.env is loaded by Bun). Any supplied S3 variable disables the emulator;
+partial or invalid configuration fails with the server's S3 diagnostic. Direct atlas dev/serve still require S3.
 `;
 
 /** Require the repository's pinned Bun; do not silently replace a user's runtime. */
@@ -141,7 +143,7 @@ export function workspacePort(mode: Mode, value?: string): number {
   return port;
 }
 
-async function app(root: string, mode: Mode, port: number, signal: AbortSignal) {
+async function app(root: string, mode: Mode, port: number, signal: AbortSignal, serverEnv = process.env) {
   const source = path.resolve(import.meta.dir, '..');
   const args =
     mode === 'server'
@@ -169,7 +171,7 @@ async function app(root: string, mode: Mode, port: number, signal: AbortSignal) 
   // Use the existing CLI entry points. Examples remain separate from the node's report store.
   const env =
     mode === 'server'
-      ? process.env
+      ? serverEnv
       : {
           ...process.env,
           INIT_CWD: root,
@@ -231,6 +233,7 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string)
   process.once('SIGINT', abort);
   process.once('SIGTERM', abort);
   let running: Promise<void> | undefined;
+  let storage: Awaited<ReturnType<typeof import('./workspace-s3').workspaceStorage>> | undefined;
   let failure: unknown;
   try {
     const port = workspacePort(mode, portValue);
@@ -254,7 +257,15 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string)
       throw error;
     });
     await chmod(stateFile(root, mode), 0o600);
-    running = app(root, mode, port, controller.signal).catch((error) => {
+    if (mode === 'server') {
+      const { workspaceStorage } = await import('./workspace-s3');
+      storage = await workspaceStorage(process.env);
+      if (storage.url) {
+        runtime.s3Url = storage.url;
+        console.log(`Mockingbird S3: ${storage.url} (isolated local bucket; data is discarded when stopped)`);
+      }
+    }
+    running = app(root, mode, port, controller.signal, storage?.env).catch((error) => {
       failure = error;
       abort();
     });
@@ -290,6 +301,7 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string)
   } finally {
     abort();
     await running;
+    await storage?.stop();
     await control.stop(true);
     process.removeListener('SIGINT', abort);
     process.removeListener('SIGTERM', abort);

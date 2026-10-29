@@ -33,11 +33,8 @@ export function TypedFilters({ parsed, query, onChange }: { parsed: ParsedSearch
       {parsed.tokens.map((token) => {
         const label = filterLabel(token.key, token.value);
         return (
-          <Button key={`typed:${token.text}:${token.value}`} type="button" onClick={() => onChange(withoutToken(query, token))} aria-label={`Remove ${label}`} variant="light">
+          <Button key={`typed:${token.text}:${token.value}`} type="button" onClick={() => onChange(withoutToken(query, token))} aria-label={`Remove ${label}`} variant="light" rightSection={<IconX size={16} aria-hidden="true" />}>
             {label}{' '}
-            <Text aria-hidden="true" span inherit>
-              <IconX size={16} aria-hidden="true" />
-            </Text>
           </Button>
         );
       })}

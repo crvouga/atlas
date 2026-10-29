@@ -131,3 +131,22 @@ test('the catalog page offers the comparison and the comparison goes back', asyn
   await atlas!.until(() => document.querySelector('[role="list"][aria-label="States"]') !== null, 'the catalog');
   node.close();
 });
+
+test('rich term chips narrow both sides of a comparison and survive returning to the catalog', async () => {
+  const store = memoryStore();
+  for (const [sha, recordedAtMs] of [[OLD, 1], [NEW, 2]] as const) {
+    await publishChecks(store, uiStateLayer({ producer: 'capture', sha, recordedAtMs, ...desktop, states: [
+      shot('booking/error', sha, { title: 'Booking unavailable', kind: 'error' }),
+      shot('billing/error', sha, { title: 'Billing unavailable', kind: 'error' })
+    ] }));
+  }
+  const find = encodeURIComponent('appointment error');
+  const node = await open([store], `/catalog?compare=commit&from=${OLD}&to=${NEW}&find=${find}`);
+  await atlas!.until(() => entries()['booking/error'] === 'picture', 'matching changed appointment screen');
+  expect(entries()).toEqual({ 'booking/error': 'picture' });
+  await atlas!.click('button', 'Back to the catalog');
+  await atlas!.until(() => !!document.querySelector('[role="list"][aria-label="States"] [data-state="booking/error"]'), 'filtered catalog');
+  expect(document.querySelector('[role="list"][aria-label="States"] [data-state="billing/error"]')).toBeNull();
+  expect(atlas!.router.state.location.search).toMatchObject({ find: 'appointment error' });
+  node.close();
+});

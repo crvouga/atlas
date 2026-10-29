@@ -127,3 +127,89 @@ test('a project with no UI states says how one is recorded', async () => {
   await open([memoryStore()]);
   await atlas!.sees('No UI states have been recorded yet');
 });
+
+test('attributes a producer declared are filterable from the address and shown with the state, with no change to the viewer for a new name', async () => {
+  const store = memoryStore();
+  await publishChecks(store, uiStateLayer({ producer: 'capture', recordedAtMs: 1, ...light, states: [shot('home', { attributes: { locale: 'de-DE' } }), shot('cart', { attributes: { locale: 'en-US', 'brand-new-dimension': 'x' } }), shot('pay')] }));
+  await open([store], '/catalog?attribute=locale%3Dde-DE');
+  await atlas!.sees('Screen home');
+  expect(cards()).toEqual(['home']);
+  await atlas!.go('/catalog?state=cart');
+  await atlas!.sees('Profiles side by side');
+  expect(atlas!.text()).toContain('brand-new-dimension');
+  expect(atlas!.text()).toContain('en-US');
+});
+
+async function editCatalogSearch(value: string) {
+  const field = document.querySelector<HTMLInputElement>('input[aria-label="Search catalog"]')!;
+  await act(async () => {
+    field.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  return field;
+}
+async function catalogKey(field: HTMLInputElement, key: string) {
+  await act(async () => { field.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true })); });
+}
+
+test('keyboard users combine two chips with AND, discover related wording, edit and remove chips, and restore a shared URL', async () => {
+  const store = memoryStore();
+  await publishChecks(store, uiStateLayer({ producer: 'capture', recordedAtMs: 1, ...light, states: [
+    shot('booking/error', { title: 'Booking unavailable', kind: 'error' }),
+    shot('booking/ready', { title: 'Appointment details', kind: 'screen' }),
+    shot('billing/error', { title: 'Billing unavailable', kind: 'error' })
+  ] }));
+  await open([store]);
+  await atlas!.sees('Booking unavailable');
+  const field = await editCatalogSearch('appontment');
+  await atlas!.until(() => cards().length === 2, 'forgiving live results');
+  await catalogKey(field, 'Enter');
+  await atlas!.until(() => !!document.querySelector('button[aria-label="Remove appontment"]'), 'first chip');
+  await editCatalogSearch('error');
+  await catalogKey(field, 'Enter');
+  await atlas!.until(() => cards().join() === 'booking/error', 'intersection of both chips');
+  expect(atlas!.router.state.location.search).toMatchObject({ find: 'appontment error' });
+  const shared = atlas!.router.history.location.href;
+  await catalogKey(field, 'Backspace');
+  expect(field.value).toBe('error');
+  await catalogKey(field, 'Enter');
+  await atlas!.click('button', 'Remove appontment');
+  await atlas!.until(() => cards().length === 2, 'only error states');
+  await atlas!.go('/catalog');
+  await atlas!.until(() => cards().length === 3, 'all states');
+  await atlas!.go(shared);
+  await atlas!.until(() => cards().join() === 'booking/error', 'shared search restored');
+  expect(document.querySelector('button[aria-label="Remove error"]')).not.toBeNull();
+});
+
+test('keyboard autocomplete selects facets and sorting, Tab commits, Escape dismisses, and invalid filters are explained', async () => {
+  const store = memoryStore();
+  await publishChecks(store, uiStateLayer({ producer: 'capture', recordedAtMs: 1, ...light, states: [
+    shot('a', { title: 'A screen', kind: 'error' }), shot('z', { title: 'Z screen', kind: 'screen' })
+  ] }));
+  await open([store]);
+  await atlas!.sees('A screen');
+  const field = await editCatalogSearch('kind:');
+  expect(field.getAttribute('role')).toBe('combobox');
+  await atlas!.sees('UI state kind');
+  await catalogKey(field, 'ArrowDown'); // The free expression choice.
+  await catalogKey(field, 'ArrowDown'); // First recorded kind, error.
+  expect(field.getAttribute('aria-activedescendant')).toBeTruthy();
+  await catalogKey(field, 'Enter');
+  await atlas!.until(() => cards().join() === 'a', 'selected recorded kind');
+  await atlas!.click('button', 'Clear catalog search');
+  await editCatalogSearch('sort:');
+  await catalogKey(field, 'ArrowDown');
+  await catalogKey(field, 'ArrowDown'); // Best matches.
+  await catalogKey(field, 'ArrowUp'); // Free expression.
+  await catalogKey(field, 'Escape');
+  expect(field.getAttribute('aria-expanded')).toBe('false');
+  await editCatalogSearch('sort:title-desc');
+  await catalogKey(field, 'Tab');
+  await atlas!.until(() => cards().join() === 'z,a', 'descending title sort');
+  await editCatalogSearch('unknown:thing');
+  await catalogKey(field, 'Enter');
+  await atlas!.sees('is not a supported filter');
+  expect(cards()).toEqual(['z', 'a']);
+});
