@@ -87,6 +87,8 @@ export const ExplorerSearchFields = {
   relRevision: z.enum(['any']).optional().catch(undefined),
   /** The reliability's independent executions (its denominator) are open. */
   relOpen: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined),
+  /** Words to find inside the recordings of the Artifacts tab (what was said or shown, from the text producers supplied). Not a filter of the list. */
+  inside: text,
   /** Only the runs, and the results of an opened run, that have a playable video recording. */
   video: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined)
 };
@@ -128,6 +130,7 @@ export type ExplorerSearch = {
   readonly relUntil?: string;
   readonly relRevision?: 'any';
   readonly relOpen?: true;
+  readonly inside?: string;
   readonly video?: true;
 };
 

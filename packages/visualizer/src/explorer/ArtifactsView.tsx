@@ -24,6 +24,7 @@ import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { runName } from './parts';
 import { entriesFromArtifacts } from './playlist-entries';
 import { WatchPlaylist } from './playlist';
+import { RecordingTextSearch } from './RecordingTextSearch';
 import { filtered, filterOf, NO_FILTERS } from './search';
 import { filterParams } from '@crvouga/atlas/reports/artifact-query';
 
@@ -99,6 +100,7 @@ export function ArtifactsView() {
       )}
       {watching && <WatchPlaylist entries={entries} total={list.total} onClose={() => setWatching(false)} />}
       {freezing && <FreezeCollection results={list.results} total={list.total} filterQuery={filterParams(filter).toString()} onClose={() => setFreezing(false)} />}
+      {list.results.length > 0 && <RecordingTextSearch entries={entries} total={list.total} />}
       {list.results.length > 0 && (
         <Table.ScrollContainer minWidth={700}>
           <Table data-artifacts>
