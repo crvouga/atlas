@@ -191,6 +191,10 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
                            [--fail-on-change] [--format text|json|markdown]
   atlas ui-catalog export  --out <file.html> [--store …]... [--backends <module>] [filters]
                            [--images inline|none] [--max-mb <n>] [--manifest <file.json>] [--title <t>]
+  atlas ui-catalog collect --catalog <atlas.catalog.ts> --exec "<command>" [--store https://…] [--shard <name>]
+                           [--where dimension=value]... [--batch-size <n>] [--lease-seconds <n>]
+                           [--max-units <n>] [--max-minutes <n>] [--collection <id>] [--stale-before <iso|ms>]
+                           [--producer <name>] [--attach-root <dir>]... [--max-picture-mb <n>]
 
   filters (status, diff, export): --q <words> --coverage a,b --profile <key|label>... --area a --route r --cohort c
                            --flag f --surface s --producer p
@@ -219,9 +223,21 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
             It is the catalog at the moment it was made. --images none leaves the pictures out. --max-mb (default 32) limits
             the embedded pictures; those past it are listed in the page as left out, and the manifest stays complete.
             --manifest writes the catalog's JSON manifest too.
+  collect   Be one shard of a collection that any number of shards share through an Atlas server: publish the catalog's
+            definition (the default export of --catalog, made with defineCatalog; the same definition is the same
+            version), claim the most urgent work units (failed, then empty, then unknown, then stale), run --exec for each
+            claim, publish its captures and claim again until nothing is left or a bound is reached. --exec runs in a shell
+            with ATLAS_UI_BATCH (a JSON file: {"claimId","units",[…],"states":[{"item","id",…facts,"profile":{…}}]}) and
+            ATLAS_UI_CAPTURES (where it writes {"states":[…]} as publish reads it, each state naming its "item"; pictures
+            beside it). An item it wrote nothing for is failed. --where takes the project's own dimension names and
+            values (repeatable; a dimension given twice takes either value); an unknown one is exit 2. --stale-before
+            also collects captured items recorded before that time, oldest first. On SIGINT or SIGTERM the claim is
+            released, so its units go back to the queue at once. Needs a server: there is no order other shards cannot
+            see. Exit 0 when nothing collected failed, 1 when something did or the server could not be reached.
 
   --format json (alias --json)   every subcommand prints one JSON document instead of prose
-                       (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result).
+                       (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result,
+                       ui-catalog-collect-result).
                        A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   A store is a directory, s3://bucket/prefix or an Atlas server (https://…), exactly as for atlas report; select a project
   with --project <slug> or ATLAS_PROJECT. When no --store is given, ATLAS_STORE is used.

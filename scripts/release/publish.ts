@@ -15,9 +15,9 @@
  * A GitHub 500 while creating a release is retried. It does not abort the other
  * packages, and a tag that already exists is not published again.
  *
- *   bun run release:publish --dry-run   (plan + pack, no side effects)
- *   bun run release:publish             (CI, on main)
- *   bun run release:publish --local     (maintainer bootstrap: your npm login, no provenance)
+ *   bun scripts/release/publish.ts --dry-run   (plan + pack, no side effects)
+ *   bun scripts/release/publish.ts             (CI, on main)
+ *   bun scripts/release/publish.ts --local     (maintainer bootstrap: your npm login, no provenance)
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -60,7 +60,7 @@ const local = argv.includes('--local');
 const inCi = process.env.GITHUB_ACTIONS === 'true';
 
 if (!dryRun && !inCi && !local) {
-  console.error('release:publish: runs in CI. Use --dry-run to preview, or bun run release:seed to bootstrap.');
+  console.error('release:publish: runs in CI. Use --dry-run to preview, or bun scripts/release/seed.ts to bootstrap.');
   process.exit(1);
 }
 
@@ -211,7 +211,7 @@ async function publish(release: Release): Promise<boolean> {
     fail(pkg.name, [
       `npm publish exited ${exitCode}`,
       isNew
-        ? 'Run bun run release:seed with an interactive maintainer login.'
+        ? 'Run bun scripts/release/seed.ts with an interactive maintainer login.'
         : `Check its Trusted Publisher (repo ${REPO}, workflow ${WORKFLOW_FILE}): https://www.npmjs.com/package/${pkg.name}/access`
     ]);
     return false;
@@ -413,6 +413,6 @@ if (githubReleaseGaps > 0) {
 }
 if (trustFailed.size > 0) {
   console.error(`::error::${trustFailed.size} npm Trusted Publisher(s) still missing: ${[...trustFailed].join(', ')}`);
-  console.error('Re-run bun run release:seed; successful package, tag, and trust operations are skipped.');
+  console.error('Re-run bun scripts/release/seed.ts; successful package, tag, and trust operations are skipped.');
 }
 if (failed.size > 0 || trustFailed.size > 0 || githubReleaseGaps > 0) process.exit(1);

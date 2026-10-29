@@ -44,7 +44,7 @@ export function createLiveReporter(identity: LiveIdentity, options: LiveReporter
           headers: { 'content-type': 'application/json', ...(options.project ? { 'x-atlas-project': options.project } : {}), ...(options.token ? { authorization: `Bearer ${options.token}` } : {}) }, body: text });
         const status = response.status;
         const json = response.headers.get('content-type')?.includes('application/json');
-        if (response.ok && !json) { await response.body?.cancel(); throw Object.assign(new Error('Atlas live reporter: the endpoint is not an Atlas server. Start or restart `bun atlas`.'), { permanent: true }); }
+        if (response.ok && !json) { await response.body?.cancel(); throw Object.assign(new Error('Atlas live reporter: the endpoint is not an Atlas server. Start or restart the Atlas server.'), { permanent: true }); }
         if (!response.ok) { await response.body?.cancel(); throw Object.assign(new Error(`Atlas live reporter: HTTP ${status}`), { permanent: status < 500 && status !== 429 }); }
         return await response.json() as { finishedAtMs?: number };
       } catch (caught) {

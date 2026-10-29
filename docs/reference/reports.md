@@ -3883,6 +3883,12 @@ export type HttpStore = ObjectStore & PagedListing & {
   ping(): Promise<{ readonly ok: boolean; readonly ms: number; readonly role?: string; readonly error?: string }>;
   /** The gate, worked out by the server from the layers it holds: the `atlas report status --format json` document. Needs a token that may read. */
   status(query?: URLSearchParams): Promise<unknown>;
+  /**
+   * Any other operation of this server's API (of the selected project), such as `call('POST', '/ui-catalog/claims', { json })`:
+   * the token is sent, a body given as `json` is sent as JSON, and what a retry can fix is retried. A status listed in
+   * `accept` is returned instead of thrown; any other refusal throws an {@link AtlasHttpError} that says what to do.
+   */
+  call(method: string, path: string, init?: { readonly json?: unknown; readonly headers?: Readonly<Record<string, string>>; readonly accept?: readonly number[] }): Promise<Response>;
 };
 ```
 
@@ -10839,10 +10845,11 @@ A run's tests (`HtmlReportBundle`) plus the document title shown for them, for t
 
 Source: `packages/reports/src/ui-catalog-cli.ts`. Import: `@crvouga/atlas/reports/ui-catalog-cli`
 
-`uiCatalogMain` is `atlas ui-catalog plan | publish | status | diff | export`: the UI catalog ({@link ./ui-catalog}) without
+`uiCatalogMain` is `atlas ui-catalog plan | publish | status | diff | export | collect`: the UI catalog ({@link ./ui-catalog}) without
 a script. `plan` and `publish` turn a small JSON file (and the pictures beside it) into the layers of the expected set and of
 the captures; `status` reads every store and says whether the catalog is complete and free of failures; `diff` sets two
-commits against each other; `export` writes the catalog as one HTML file that needs no server. Like `atlas report`, it is
+commits against each other; `export` writes the catalog as one HTML file that needs no server; `collect` is one shard of
+a collection shared through a server's queue ({@link ./ui-catalog-collect}). Like `atlas report`, it is
 written so it can be called from code and tests: it takes its arguments, environment, working directory, clock and git as
 parameters and returns the exit code, every command prints a JSON document with `--format json`, and a command that is wrong
 throws, which `runUiCatalogCommand` turns into a message (or a JSON error) and exit code 2.
@@ -10881,6 +10888,417 @@ export async function runUiCatalogCommand(argv: readonly string[]): Promise<numb
 
 `atlas ui-catalog …` for a terminal: a mistake in the command or a path is a message on stderr and exit code 2, so a CI job can
 tell a broken invocation (2) from a catalog that needs attention (1). With `--format json` the mistake is a JSON document.
+
+### Collecting a UI catalog from a shared queue
+
+Source: `packages/reports/src/ui-catalog-collect.ts`. Import: `@crvouga/atlas/reports/ui-catalog-collect`
+
+`collectCatalog` is one shard of a collection: it publishes the catalog's definition (idempotent: the same definition is
+the same version), claims the most urgent work units from an Atlas server, hands them to the project's collector,
+publishes each capture as an ordinary `ui-state` layer labelled with its claim, renews the claim while the collector works
+and claims again, until the queue is empty or a bound is reached. Any number of shards (local processes, CI jobs, a device
+lab) can run it at once; they coordinate only through the server, so none needs to know how many others there are.
+
+The collector is the project's own (a Playwright page, a device, a script): Atlas never drives the product. When the claim
+is lost (it expired, or the server took it back), the `signal` given to the collector aborts, and what it captured for that
+claim is not published: a shard never publishes work it no longer holds. On a stop (`signal`, a bound) the claim is
+released, so its unfinished units go back to the queue at once instead of waiting for the lease to expire.
+
+There is no mode without a server: a guessed order other shards cannot see would defeat the point.
+
+See docs/ui-catalog.md#collecting-with-a-queue
+
+#### `CollectUnit`
+
+```ts
+export type CollectUnit = UiClaim['units'][number];
+```
+
+One claimed work unit: its key, the tier it was handed out from, and its items (a state in a profile each).
+
+#### `CollectItem`
+
+```ts
+export type CollectItem = CollectUnit['items'][number];
+```
+
+One item of a claimed unit.
+
+#### `CapturedItem`
+
+```ts
+export type CapturedItem = Omit<UiStateCapture, 'id'> & {
+  /** The item's `key`, from the unit. */
+  readonly item: string;
+};
+```
+
+What a collector returns for one item: a capture as `uiStateLayer` takes it, naming the item by its key instead of an id.
+
+#### `CollectOptions`
+
+```ts
+export type CollectOptions = {
+  /** The Atlas server, as `httpStore` opens it, with a token that may publish. */
+  readonly store: HttpStore;
+  /** The definition, as the project wrote it (resolved here) or already resolved. */
+  readonly catalog: CatalogDefinition | { readonly version: string; readonly document: UiCatalogDefinitionDocument };
+  /** This shard: a name for people, and optionally the dimension values it can collect (`{ deployment: 'development' }`). */
+  readonly shard: { readonly id: string; readonly where?: Readonly<Record<string, string | readonly string[]>> };
+  /** Units per claim. Default 25. Small batches keep the priority sharp; large ones keep a warm collector busy. */
+  readonly batchSize?: number;
+  /** The lease of a claim, in seconds; renewed every third of it. Default 120. */
+  readonly leaseSeconds?: number;
+  /** What retry limits are counted in (a CI run id). Default: the definition version. */
+  readonly collection?: string;
+  /** Also collect captured items whose result was recorded before this time, oldest first. */
+  readonly staleBeforeMs?: number;
+  /** Stop claiming after this many units. */
+  readonly maxUnits?: number;
+  /** Stop claiming after this many milliseconds; a claim still held then is released. */
+  readonly maxMs?: number;
+  /** Stop at once: publish what is captured, release the claim. */
+  readonly signal?: AbortSignal;
+  /** The producer of the capture layers. Default `ui-catalog:<name>`, the producer of the plan. */
+  readonly producer?: string;
+  /** Provenance written on every capture layer. */
+  readonly origin?: { readonly sha?: string | null; readonly branch?: string | null; readonly runUrl?: string | null; readonly run?: { readonly id: string; readonly title?: string } };
+  /** Capture one unit. Abort when `signal` aborts: the claim was lost or the shard is stopping. */
+  readonly capture?: (unit: CollectUnit, signal: AbortSignal) => Promise<readonly CapturedItem[]>;
+  /** Capture every unit of a claim at once (one process for a batch). */
+  readonly captureBatch?: (units: readonly CollectUnit[], context: { readonly claimId: string; readonly signal: AbortSignal }) => Promise<readonly CapturedItem[]>;
+  /** Told what happens, for a log line. */
+  readonly onEvent?: (event: CollectEvent) => void;
+  readonly now?: () => number;
+};
+```
+
+How one shard collects. Give `capture` (one unit at a time) or `captureBatch` (a whole claim at once).
+
+#### `CollectEvent`
+
+```ts
+export type CollectEvent =
+  | { readonly type: 'definition'; readonly version: string; readonly created: boolean }
+  | { readonly type: 'claim'; readonly claimId: string; readonly units: number }
+  | { readonly type: 'published'; readonly claimId: string; readonly items: number; readonly failed: number }
+  | { readonly type: 'lost'; readonly claimId: string; readonly units: number }
+  | { readonly type: 'released'; readonly claimId: string; readonly units: number };
+```
+
+What `collectCatalog` tells `onEvent`.
+
+#### `CollectStop`
+
+```ts
+export type CollectStop = 'empty' | 'max-units' | 'max-minutes' | 'signal' | 'unreachable';
+```
+
+Why a shard stopped: the queue had nothing left for it, a bound, a stop signal, or the server stopped answering.
+
+#### `CollectResult`
+
+```ts
+export type CollectResult = {
+  readonly ok: boolean;
+  readonly definition: string;
+  readonly shard: string;
+  readonly stoppedBy: CollectStop;
+  readonly claims: number;
+  readonly units: { readonly claimed: number; readonly collected: number; readonly lost: number; readonly released: number };
+  readonly items: { readonly captured: number; readonly failed: number; readonly other: number };
+  /** Claims the server took back (expired) while this shard held them. Their captures were not published. */
+  readonly lostClaims: readonly string[];
+  readonly layers: number;
+  /** Why the server stopped answering, when `stoppedBy` is `unreachable`. */
+  readonly error?: string;
+};
+```
+
+What one shard did.
+
+#### `publishCatalogDefinition`
+
+```ts
+export async function publishCatalogDefinition(store: HttpStore, catalog: CollectOptions['catalog']): Promise<{ readonly version: string; readonly document: UiCatalogDefinitionDocument; readonly created: boolean }>
+```
+
+Publish a definition to a server: stored once, and written as plan layers so the catalog expects every item. Returns its
+version and whether this call stored it. Throws an `AtlasHttpError` when the server refuses it or cannot be reached.
+
+#### `collectCatalog`
+
+```ts
+export async function collectCatalog(options: CollectOptions): Promise<CollectResult>
+```
+
+Collect a UI catalog as one shard of any number: claim, capture, publish, claim again, until nothing is left for this
+shard or a bound is reached. A capture that throws records every item of its unit as failed with the reason, and the
+collection goes on; an item the collector returned nothing for is failed too. Throws a `CatalogDefinitionError` for a
+`where` naming an unknown dimension or value, and an `AtlasHttpError` when the server cannot be reached or refuses
+the definition, before anything is collected.
+
+**Example**
+
+```ts
+const result = await collectCatalog({
+  store: httpStore({ url: process.env.ATLAS_SERVER_URL!, token: process.env.ATLAS_TOKEN }),
+  catalog, shard: { id: `ci-${process.env.GITHUB_JOB}`, where: { deployment: 'development' } }, batchSize: 25,
+  capture: async (unit, signal) => Promise.all(unit.items.map(async item => ({ item: item.key, ...(await captureUiState(page, { id: item.state.id, ready })) })))
+});
+```
+
+### UI catalog definition
+
+Source: `packages/reports/src/ui-catalog-definition.ts`. Import: `@crvouga/atlas/reports/ui-catalog-definition`
+
+What a UI catalog should contain, declared once by the project that owns it: the **states** (ids and declared facts, as a
+`ui-plan` entry), the **profile matrix** (dimensions the project names, each a set of enum values, minus exclusions) and,
+optionally, how items **group** into the work units a collector captures together. Atlas has no built-in dimension names
+or values: `device`, `scheme` or `tenant` are the project's data, and a dimension value only labels a result.
+
+`defineCatalog` checks the shape of a definition; `resolveCatalog` runs its async parts once (values, states, inventory,
+groups) and returns the stored document with its version, the SHA-256 of its canonical JSON, so every shard that resolves
+the same definition names the same version. `expandCatalog` turns a document into profiles, items and units, refusing what
+would be ambiguous (an exclusion that names an unknown dimension or value, two dimensions that both set the environment or
+set one parameter differently). `catalogPlanLayers` writes the document as ordinary `ui-plan` layers, one per profile, so
+the catalog expects every item without anything new in the layer format.
+
+Every dimension value is also a parameter of the profile, so each combination is its own slot, as for any layer.
+
+See docs/ui-catalog.md#collecting-with-a-queue
+
+#### `Resolvable`
+
+```ts
+export type Resolvable<T> = readonly T[] | (() => readonly T[] | Promise<readonly T[]>);
+```
+
+A list given directly, or produced (once, when the definition is resolved) by a function.
+
+#### `DimensionProfile`
+
+```ts
+export type DimensionProfile = { readonly environment?: string } & { readonly [parameter: string]: string | undefined };
+```
+
+What one value of a dimension contributes to a profile: `environment` sets the client; every other key is a parameter.
+
+#### `CatalogDimension`
+
+```ts
+export type CatalogDimension = {
+  readonly values: Resolvable<string>;
+  /** What a value contributes: an `environment` and any parameters (`viewport`…). Without it, a value contributes only itself. */
+  readonly profile?: (value: string) => DimensionProfile;
+};
+```
+
+A dimension of the profile matrix: its enum values, and optionally what each value contributes to the profile.
+
+#### `CatalogItem`
+
+```ts
+export type CatalogItem = { readonly state: UiStatePlan; readonly profile: Readonly<Record<string, string>>; readonly key: string };
+```
+
+One item, as a `group` function sees it: a state, the dimension values of its profile, and its key.
+
+#### `CatalogDefinition`
+
+```ts
+export type CatalogDefinition = {
+  /** The catalog's name; its plan layers are published as the producer `ui-catalog:<name>`. */
+  readonly name: string;
+  /** The profile matrix. Without it there is one profile, with no environment and no parameters. */
+  readonly matrix?: {
+    readonly dimensions: Readonly<Record<string, CatalogDimension>>;
+    /** Combinations no item is expected for, each a partial match on dimension values. */
+    readonly exclude?: readonly Readonly<Record<string, string>>[];
+  };
+  /** The states to collect, from the project's own discovery. */
+  readonly states: Resolvable<UiStatePlan>;
+  /** Surfaces of the product, for coverage (as `inventory: true` plan entries). */
+  readonly inventory?: Resolvable<{ readonly id: string; readonly title?: string }>;
+  /** What a collector captures together: items with the same key are one work unit. Default: every item alone. */
+  readonly group?: (item: CatalogItem) => string;
+  /** A unit that failed this many times in a row within one collection is no longer handed out in it. Default 3. */
+  readonly maxAttempts?: number;
+  /** Hand out a captured item again once its result is older than this many milliseconds. */
+  readonly staleAfterMs?: number;
+};
+```
+
+A catalog definition as a project writes it (see {@link defineCatalog}).
+
+#### `CatalogDefinitionError`
+
+```ts
+export class CatalogDefinitionError extends Error
+```
+
+A definition that cannot be used, with what is wrong and what was declared.
+
+#### `QueueProfile`
+
+```ts
+export type QueueProfile = {
+  /** The UI catalog profile key (environment and sorted parameters): the same key a catalog cell has. */
+  readonly key: string;
+  readonly values: Readonly<Record<string, string>>;
+  readonly environment: string | null;
+  readonly parameters: Readonly<Record<string, string>>;
+  readonly label: string;
+};
+```
+
+One profile of an expanded matrix.
+
+#### `QueueItem`
+
+```ts
+export type QueueItem = { readonly key: string; readonly state: number; readonly profile: number };
+```
+
+One item: a state in a profile.
+
+#### `QueueUnit`
+
+```ts
+export type QueueUnit = { readonly key: string; readonly items: readonly number[] };
+```
+
+One work unit: the items a shard claims and captures together.
+
+#### `ExpandedCatalog`
+
+```ts
+export type ExpandedCatalog = {
+  readonly version: string;
+  readonly document: UiCatalogDefinitionDocument;
+  readonly profiles: readonly QueueProfile[];
+  readonly items: readonly QueueItem[];
+  readonly units: readonly QueueUnit[];
+  /** The unit of each item key. */
+  readonly unitOf: ReadonlyMap<string, number>;
+};
+```
+
+A definition laid out for the queue: its profiles, items and units. Units are sorted by key, the queue's tie-break.
+
+#### `uiItemKey`
+
+```ts
+export function uiItemKey(stateId: string, profileKey: string): string
+```
+
+The key of one item: a state id in a profile (as {@link QueueProfile.key}). It is how a result is matched to the queue.
+
+#### `canonicalJson`
+
+```ts
+export function canonicalJson(value: unknown): string
+```
+
+JSON with object keys sorted at every depth, so equal values always have the same text.
+
+#### `catalogVersion`
+
+```ts
+export function catalogVersion(document: UiCatalogDefinitionDocument): Promise<string>
+```
+
+The version of a stored definition: the SHA-256 of its canonical JSON, 64 hex digits.
+
+#### `defineCatalog`
+
+```ts
+export function defineCatalog<T extends CatalogDefinition>(definition: T): T
+```
+
+Checks the parts of a definition that need nothing resolved (a name, states and dimension values given as lists or
+functions, `profile` and `group` as functions) and returns it unchanged, for a project's `atlas.catalog.ts`. Throws a
+{@link CatalogDefinitionError} for a definition that could never be resolved.
+
+**Example**
+
+```ts
+export default defineCatalog({
+  name: 'web-app',
+  matrix: {
+    dimensions: {
+      device: { values: ['mobile', 'desktop'], profile: device => ({ environment: `${device}-web`, viewport: device === 'mobile' ? '390x844' : '1440x1000' }) },
+      scheme: { values: ['light', 'dark'] }
+    },
+    exclude: [{ device: 'desktop', scheme: 'dark' }]
+  },
+  states: async () => loadStatesFromMyCollector(),
+  group: item => `${item.state.id}|${item.profile.device}`
+});
+```
+
+#### `resolveCatalog`
+
+```ts
+export async function resolveCatalog(definition: CatalogDefinition): Promise<{ readonly version: string; readonly document: UiCatalogDefinitionDocument }>
+```
+
+Runs a definition's async parts once and returns the document every shard shares, with its version. The resolved values,
+states, inventory and groups are recorded in the document, so a shard that resolves later sees the same matrix. Throws a
+{@link CatalogDefinitionError} naming what is wrong (a repeated state or value, an exclusion naming an unknown dimension
+or value, two dimensions that set one environment or parameter differently in a profile).
+
+#### `expandCatalog`
+
+```ts
+export function expandCatalog(document: UiCatalogDefinitionDocument, version: string): ExpandedCatalog
+```
+
+The profiles, items and units of a stored definition. Profiles are every combination of dimension values in declaration
+order, less the excluded ones; items are every state in every profile, state by state; units are the definition's groups
+(or one per item), sorted by key. Throws a {@link CatalogDefinitionError} for an exclusion that names an unknown dimension
+or value, and for a profile in which two dimensions set the environment, or set one parameter to different values.
+
+#### `parseWhere`
+
+```ts
+export function parseWhere(pairs: readonly string[]): Record<string, string[]>
+```
+
+Reads `--where dimension=value` pairs (repeatable; a dimension given twice takes either value). Throws on a pair without `=`.
+
+#### `checkWhere`
+
+```ts
+export function checkWhere(document: UiCatalogDefinitionDocument, where: Readonly<Record<string, readonly string[]>>, label = '--where'): void
+```
+
+Throws a {@link CatalogDefinitionError} when `where` names a dimension or value the definition does not declare, listing the declared ones. `label` names the filter in the message.
+
+#### `unitMatches`
+
+```ts
+export function unitMatches(expanded: ExpandedCatalog, unit: QueueUnit, where: Readonly<Record<string, readonly string[]>> | undefined): boolean
+```
+
+Whether every item of a unit has, in each dimension `where` names, one of the values it lists.
+
+#### `catalogProducer`
+
+```ts
+export function catalogProducer(document: Pick<UiCatalogDefinitionDocument, 'name'>): string
+```
+
+The producer of a definition's plan layers. Stable across versions, so a newer definition's plan replaces an older one's.
+
+#### `catalogPlanLayers`
+
+```ts
+export function catalogPlanLayers(expanded: ExpandedCatalog, recordedAtMs: number): PublishChecksInput[]
+```
+
+A definition as the input of `publishChecks`: one `ui-plan` layer per profile expecting every state, and, when the
+definition lists an inventory, one more for its surfaces. Publishing them is what makes the catalog expect every item.
 
 ### UI catalog comparison
 
@@ -11523,6 +11941,136 @@ export function uiPlanLayer(input: UiLayerOrigin & { readonly states: readonly U
 The input of `publishChecks` for what is expected: states that should be captured under this profile and, with `inventory`,
 surfaces the product is known to have. Every entry is `not-run`, so a plan never counts as a pass, and it fills a slot of
 its own (kind `ui-plan`), so a capture never erases it and it never hides a capture. Throws when an id repeats.
+
+### UI catalog collection order
+
+Source: `packages/reports/src/ui-catalog-queue.ts`. Import: `@crvouga/atlas/reports/ui-catalog-queue`
+
+The order in which a UI catalog's work units are handed out, as a pure function of a definition ({@link ./ui-catalog-definition})
+and the results the report holds. A unit is as urgent as its most urgent item, and the tiers are, most urgent first:
+
+1. **failed**: the newest result of an item failed (a readiness timeout is a failed capture);
+2. **empty**: expected and never captured, skipped (`not-run`), or claimed by a shard that let its claim end without a result;
+3. **unknown**: no readable result while a backend or a layer could not be read, so it may have one: never called empty;
+4. **stale**: captured, and the result was recorded before the cutoff a claim names; oldest first.
+
+A captured unit newer than the cutoff is **fresh**: it is not due and is never handed out. Ties break by unit key, so
+two servers given the same data produce the same order. A result is matched to an item by state id and catalog profile
+key, the same way a catalog cell is, so the queue and `/catalog` always agree on what an item holds.
+
+See docs/ui-catalog.md#collecting-with-a-queue
+
+#### `UI_CLAIM_LABEL`
+
+```ts
+export const UI_CLAIM_LABEL = …
+```
+
+The check label a collector puts on a capture to say which claim it answers, so the server can close that claim. Provenance only: a label never splits a slot.
+
+#### `UiItemResult`
+
+```ts
+export type UiItemResult = {
+  readonly status: EvidenceStatus;
+  readonly recordedAtMs: number;
+  /** The layer that holds it. */
+  readonly layer: string;
+  /** The claim it answers (its {@link UI_CLAIM_LABEL} label), or null. */
+  readonly claim: string | null;
+};
+```
+
+The newest result of one item.
+
+#### `RankedUnit`
+
+```ts
+export type RankedUnit = {
+  readonly unit: number;
+  readonly tier: 'failed' | 'empty' | 'unknown' | 'captured';
+  /** For a captured unit, when its oldest item was recorded; otherwise 0. */
+  readonly recordedAtMs: number;
+};
+```
+
+A unit's place in the queue. `captured` units are `stale` or `fresh` depending on a claim's cutoff.
+
+#### `latestUiResults`
+
+```ts
+export function latestUiResults(layers: readonly LayerEvidence[]): Map<string, UiItemResult>
+```
+
+The newest `ui-state` result of every item in some layers (the effective report's, normally), keyed by {@link uiItemKey}.
+"Newest" is the report contract's own order (`replaces`), as for a catalog cell, so the queue agrees with `/catalog`.
+
+#### `unitFingerprint`
+
+```ts
+export function unitFingerprint(expanded: ExpandedCatalog, unit: number, results: ReadonlyMap<string, UiItemResult>): string
+```
+
+What a unit's items hold now, as one string: it changes exactly when any of them gets a new result.
+
+#### `RankOptions`
+
+```ts
+export type RankOptions = {
+  /** A backend or layer could not be read: an item with no result is `unknown`, not `empty`. */
+  readonly incomplete?: boolean;
+  /** Units a claim let go of without a result, by unit key, with their {@link unitFingerprint} at the time. A unit whose items got no new result since is `empty`, unless one failed. */
+  readonly abandoned?: ReadonlyMap<string, string>;
+};
+```
+
+What decides the order besides the definition.
+
+#### `rankUnits`
+
+```ts
+export function rankUnits(expanded: ExpandedCatalog, results: ReadonlyMap<string, UiItemResult>, options: RankOptions = {}): RankedUnit[]
+```
+
+Every unit in queue order: failed, empty, unknown, then captured (oldest first); ties by unit key.
+
+#### `tierOf`
+
+```ts
+export function tierOf(ranked: RankedUnit, staleBeforeMs: number | undefined): UiQueueTier
+```
+
+The tier a ranked unit is handed out (or counted) as, given a claim's cutoff.
+
+#### `PickOptions`
+
+```ts
+export type PickOptions = {
+  readonly batchSize: number;
+  readonly staleBeforeMs?: number;
+  readonly where?: Readonly<Record<string, readonly string[]>>;
+  /** Units that may not be handed out now: held by a live claim, or past the retry limit. */
+  readonly skip?: (unit: number) => boolean;
+};
+```
+
+What a batch is picked by.
+
+#### `pickUnits`
+
+```ts
+export function pickUnits(expanded: ExpandedCatalog, ranked: readonly RankedUnit[], options: PickOptions): { readonly unit: number; readonly tier: UiQueueTier }[]
+```
+
+The first `batchSize` units of a queue order that are due, match `where` and are not skipped. Fresh units are never picked.
+
+#### `claimedItem`
+
+```ts
+export function claimedItem(expanded: ExpandedCatalog, index: number)
+```
+
+One item of a unit as a claim carries it: its key, its state with the declared facts, and its profile.
 
 ### UI catalog
 

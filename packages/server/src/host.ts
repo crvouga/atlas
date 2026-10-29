@@ -3,7 +3,7 @@
  *
  * `listen` serves any `(Request) => Promise<Response>` over HTTP: with `Bun.serve` when running on Bun, with a `node:http`
  * bridge (streaming bodies in and out, so server-sent events work) everywhere else. The server's behaviour is the same on
- * both; `bun run release:smoke` proves it under each. Bodies over `maxBodyBytes` are refused by the runtime before the
+ * both; `bun run smoke` proves it under each. Bodies over `maxBodyBytes` are refused by the runtime before the
  * handler sees them.
  */
 

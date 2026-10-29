@@ -50,30 +50,50 @@ The machine-readable index is [llms.txt](llms.txt), and [llms-full.txt](llms-ful
 
 ## Develop in an agent IDE
 
-Superset, super.engineering and Orca lifecycle configuration is checked in. Run `bun run workspace:setup`,
-then use the IDE's Run target or `bun run workspace:run` for the API, settings and hot-reloading viewer.
-Use `bun run workspace:preview` for populated examples, and `bun run workspace:status` for this checkout's
+Superset, super.engineering and Orca lifecycle configuration is checked in. Run `bun run dev --setup`,
+then use the IDE's Run target or `bun run dev` to start services, run the full example workflow, and keep the
+API, settings and hot-reloading viewer available. Use `bun run dev --server` for the server alone,
+`bun run dev --preview` for the separate examples viewer, and `bun run dev --status` for this checkout's
 actual URLs. [Workspace development](docs/workspaces.md) covers ports, cleanup and agent workflows.
+
+The manual package commands are deliberately limited:
+
+| Command | Purpose |
+| --- | --- |
+| `bun run dev` | Develop: start services, populate examples and keep the viewer available. |
+| `bun run check` | Run the complete verification workflow; `--only <group>` selects one gate. |
+| `bun run test` | Run the full test suite. |
+| `bun run build` | Build the publishable package. |
+| `bun run docs` | Generate docs and schemas; `--check` verifies their contracts. |
+| `bun run smoke` | Verify the packed package from a clean Bun/Node consumer. |
+
+Development modes and lifecycle operations are flags on `dev`; there are no parallel development aliases.
+
 
 ## Run this repository's example
 
 For contributors working in an Atlas checkout with dependencies installed (`bun install --frozen-lockfile`).
 Consumer projects install the npm package instead; they do not need to clone or build this repository.
 
-Use two terminals:
+For the complete workflow in one command, run `bun run dev`; it starts the required services automatically.
+The lower-level commands remain available in two terminals:
 
 ```sh
-bun atlas          # starts the project-agnostic Atlas node at http://localhost:5180
-bun example:run    # runs tests and streams results, current steps and progress as they execute
+bun scripts/atlas.mjs          # starts the project-agnostic Atlas node at http://localhost:5180
+bun scripts/examples.ts run    # runs tests and streams results, current steps and progress as they execute
 ```
 
-The server starts independently; it never loads example specs or reports. **It needs S3-compatible storage** (see [Required S3 storage](#required-s3-storage)): copy `.env.example` to `.env` and fill in the `ATLAS_S3_*` variables first, or it exits at once and lists every one that is missing. `bun example:run` publishes the Todo example under `todo-app`. Select a project using the top-right picker, then use the spec dropdown breadcrumbs to navigate. Other projects set `ATLAS_SERVER_URL`, `ATLAS_PROJECT` (for example `checkout-service`) and their publish token. Every uploader talks to the node; storage credentials stay on the server.
+The server starts independently; it never loads example specs or reports. **It needs S3-compatible storage** (see [Required S3 storage](#required-s3-storage)): copy `.env.example` to `.env` and fill in the `ATLAS_S3_*` variables first, or it exits at once and lists every one that is missing. `bun scripts/examples.ts run` publishes the Todo example under `todo-app`. Select a project using the top-right picker, then use the spec dropdown breadcrumbs to navigate. Other projects set `ATLAS_SERVER_URL`, `ATLAS_PROJECT` (for example `checkout-service`) and their publish token. Every uploader talks to the node; storage credentials stay on the server.
 
 Every Gherkin scenario runs, including sharing and renaming. Test reports show running spinners,
 live step logs and a Running status filter. Producers send heartbeats every
 5 seconds. A run becomes interrupted after 30 seconds without a heartbeat, or 15 minutes without progress;
 configure `ATLAS_RUN_TIMEOUT_SECONDS` and `ATLAS_RUN_STALL_SECONDS` (0 disables the progress timeout),
 or edit these settings in the client. An interruption never turns missing outcomes into passes.
+
+The workflow also captures the todo app's [UI catalog](docs/ui-catalog.md): seven states in desktop and mobile
+profiles, including empty lists, sync outages and pending changes. Choose **UI catalog** from the spec-type menu
+to browse the screenshots. The expected inventory, surface coverage and pictures are published automatically.
 
 ## Deploy to Railway without code
 

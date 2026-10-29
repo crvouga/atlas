@@ -50,22 +50,22 @@ This repository runs on [Bun](https://bun.sh). Video clips and WebP thumbnails n
 bun install
 bunx playwright install chromium
 
-bun run example:lint   # pure, reachable, no undocumented dead ends, journeys replay, everything implemented
-bun run example:plan   # 4 journeys + 1 generated path cover all 14 transitions
-bun run example:fast   # run every path quickly
-bun run example:run    # statechart showcase, then the Gherkin features and the Quint model
+bun --cwd examples/todo ../../packages/core/bin/atlas.mjs lint --require-implementations   # pure, reachable, no undocumented dead ends, journeys replay, everything implemented
+bun --cwd examples/todo ../../packages/core/bin/atlas.mjs plan   # 4 journeys + 1 generated path cover all 14 transitions
+bun --cwd examples/todo ../../packages/core/bin/atlas.mjs run --mode fast   # run every path quickly
+bun scripts/examples.ts run    # statechart showcase, then the Gherkin features and the Quint model
 bun test examples      # the same spec against an in-memory model, as a test suite
 
-bun run example:clients      # clients/: one chart across a phone, a desktop and the sync server at once
-bun run example:clients:bun  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
+bun scripts/examples.ts clients      # clients/: one chart across a phone, a desktop and the sync server at once
+ATLAS_DESKTOP=bun bun scripts/examples.ts clients  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
 ```
 
 To run every chart of the example and browse the results, run these in separate terminals; the
 visualizer updates when a run finishes.
 
 ```sh
-bun run atlas:run   # example:clients, then example:run: every chart of the example, in showcase mode
-bun atlas          # the example's specs, chart runs, and layered reports
+bun scripts/examples.ts all   # example:clients, then example:run: every chart of the example, in showcase mode
+bun scripts/atlas.mjs          # the example's specs, chart runs, and layered reports
 ```
 
 Each config writes its own run and the Atlas client shows one run at a time: the latest is the
@@ -74,16 +74,16 @@ single-browser run, and the run across clients is the one before it in the run p
 Gherkin, Quint, DMN, Alloy and OpenSLO documents sit beside the charts. Results compose across
 environments, branches and backends within each project. **Sources** switches report sources on or off.
 
-`bun atlas` runs the singleton Atlas server and the client together at `http://localhost:5180`.
+`bun scripts/atlas.mjs` runs the singleton Atlas server and the client together at `http://localhost:5180`.
 It starts a project-agnostic node with no example data. Select a project using the top-right picker.
-In another terminal run `bun run example:run`: statecharts, Gherkin scenarios and Quint traces stream running checks, completed results and current steps
+In another terminal run `bun scripts/examples.ts run`: statecharts, Gherkin scenarios and Quint traces stream running checks, completed results and current steps
 to project `todo-app` on that server while testing. Producers renew a heartbeat every 5 seconds; 30 seconds of silence
 marks an invocation interrupted. Final specs and recordings upload when their privacy scan completes.
 Tests show inline running indicators and logs without waiting for the whole suite to finish. Report history
 is retained in the server's bucket under `projects/todo-app/`; local run artifacts remain in `atlas-runs` and
 `atlas-reports`. To upload a completed run again without rerunning tests,
-use `bun run example:publish`. Set `ATLAS_SERVER_URL` for a different upload destination (and
-`ATLAS_PUBLISH_TOKEN` when it requires one). Restart `bun atlas` when switching from the older
+use `bun examples/todo/publish.ts`. Set `ATLAS_SERVER_URL` for a different upload destination (and
+`ATLAS_PUBLISH_TOKEN` when it requires one). Restart `bun scripts/atlas.mjs` when switching from the older
 file-based example client; a busy port is an error so publishers cannot silently target another server.
 
 A showcase run ends with:

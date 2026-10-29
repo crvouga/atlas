@@ -9,18 +9,24 @@ Nothing about it is new to the report contract. A state is an ordinary check wit
 layer, and the stream is the one every viewer already holds. This page is the convention that makes those usable as a catalog, the
 decisions behind it, the command line, and what stays in your project.
 
+Developing Atlas itself? `bun run dev` populates the todo example's catalog automatically, alongside its other reports.
+Choose **UI catalog** from the spec-type menu to browse seven states across desktop and mobile profiles, including
+empty, offline and pending-sync states. The collector is
+[`examples/todo/catalog.ts`](https://github.com/crvouga/atlas/blob/main/examples/todo/catalog.ts): it starts its own isolated
+app server, drives the real UI, publishes the expected set and screenshots, and closes its browser and server.
+
 - [How a state is written](#how-a-state-is-written)
 - [What is expected](#what-is-expected)
 - [Publishing from any collector](#publishing-from-any-collector)
 - [The command line](#the-command-line)
 - [Sharding](#sharding)
+- [Collecting with a queue](#collecting-with-a-queue)
 - [Streaming and loading](#streaming-and-loading)
 - [Exploring it](#exploring-it)
 - [Comparing two commits or two profiles](#comparing-two-commits-or-two-profiles)
 - [A single file that needs no server](#a-single-file-that-needs-no-server)
 - [Decisions](#decisions)
 - [What stays in your project, and what Atlas does not do](#what-stays-in-your-project-and-what-atlas-does-not-do)
-- [Collecting with a queue](#collecting-with-a-queue)
 
 ## How a state is written
 
@@ -120,13 +126,13 @@ atlas ui-catalog publish --captures captures.json --producer web-capture --envir
 atlas ui-catalog status                          # exit 1 while anything failed, is missing, is still being captured or could not be read
 atlas ui-catalog diff --from 3f9a2c1 --to 8b41d70 # two commits (the whole id, or at least 7 digits)
 atlas ui-catalog export --out public/catalog.html # one file, no server
+atlas ui-catalog collect --catalog atlas.catalog.ts --exec "node ./collect-batch.mjs" # one shard of a shared queue
 ```
 
 `captures.json` is `{"states":[…]}` (or just the list); a state is `{"id","title"?,"status"?,"detail"?,"route"?,"fixture"?,"cohort"?,"area"?,
 "flags"?,"covers"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?}` with `screenshot` a file name or `{"path"|"uri","width"?,"height"?,"contentType"?}`.
 A misspelled field is refused with its path, not ignored. A picture file is read from beside the file and from each `--attach-root`,
 never from a hidden file or a link out. **A `passed` state whose picture cannot be read is published as `failed`, with the reason**: a
-atlas ui-catalog collect --catalog atlas.catalog.ts --exec "node ./collect-batch.mjs" # one shard of a shared queue
 state without its picture is not shown as captured. `--recorded-at` defaults to the file's modification time, so publishing the same
 file twice is the same layer.
 
@@ -147,12 +153,6 @@ layer ([the contract](report-contract.md#guarantees)), which is what the tests p
   shown as captured, and the other shards' cells are unaffected.
 - Atlas does not need the shard count. Completeness is the plan: a cell is expected because a plan says so.
 
-## Streaming and loading
-
-- **Streaming.** There is no second stream. A viewer holds the report over `/api/events` and reads what changed with
-  `/api/reports/evidence/effective?since=<version>`; the catalog is computed from the report it holds, so a capture appears when
-  its layer arrives, with no reload and no file rebuilt. Events carry metadata only; the picture is fetched when a card is on screen.
-- **Reconnecting.** A viewer that was offline or whose stream dropped reads the delta since the version it holds (or the whole report
 That is all publishing needs. Deciding **what each shard collects next** is the [queue](#collecting-with-a-queue)'s job.
 
 ## Collecting with a queue
@@ -284,6 +284,12 @@ the retry limit, and throughput.
 `atlas ui-catalog status` stays the gate: the plan says what is expected, so a CI job that collected only part of the queue gates on the
 whole catalog, not on its share.
 
+## Streaming and loading
+
+- **Streaming.** There is no second stream. A viewer holds the report over `/api/events` and reads what changed with
+  `/api/reports/evidence/effective?since=<version>`; the catalog is computed from the report it holds, so a capture appears when
+  its layer arrives, with no reload and no file rebuilt. Events carry metadata only; the picture is fetched when a card is on screen.
+- **Reconnecting.** A viewer that was offline or whose stream dropped reads the delta since the version it holds (or the whole report
   when the server no longer remembers it). Cells are keyed by state and profile, so nothing is missing and nothing is duplicated.
 - **No stream.** A viewer without the stream (or a static export) polls, as the rest of the viewer does, and shows everything that exists.
 - **Slow and failing backends.** Each backend is listed and read on its own, so a slow one never holds back the others: their

@@ -52,18 +52,22 @@ or publish a second package.
   installed, is the exception: it imports `@crvouga/atlas/…` like any project that uses Atlas.
 - Keep the package tree-shakeable: no work at import time and no `import './x'` for its side
   effect in library code. `sideEffects` in `package.json` promises this to bundlers, and
-  `bun run release:smoke` checks it with one.
+  `bun run smoke` checks it with one.
 - A new import path goes in both `exports` (the source) and `publishConfig.exports` (the build).
   See [docs/releasing.md](docs/releasing.md#one-package-many-entry-points).
 
 ## Agent IDE workspaces
 
 Read [workspace development](docs/workspaces.md) for Superset, super.engineering and Orca. Shared
-commands are `bun run workspace:setup`, `workspace:run`, `workspace:preview`, `workspace:status`,
-`workspace:stop` and `workspace:check`. Discover the actual URL from status; default ports may be busy.
+commands are `bun run dev` (the only development command), `check`, `test`, `build`, `docs` and `smoke`.
+`dev` starts services, runs the full example workflow and keeps the viewer available. Use its flags
+`--setup`, `--server`, `--preview`, `--status` and `--stop` for the existing lifecycle and development modes.
+Discover the actual URL with `bun run dev --status`; default ports may be busy.
 Keep `.atlas-workspace/` and dependencies private to each checkout. Setup needs no
-credentials and must stay idempotent; `workspace:run` needs the S3 variables of `.env.example`, because the server keeps
-all reports and user state in S3 only. Preserve the three IDE configs when changing lifecycle commands;
+credentials and must stay idempotent; `dev` automatically starts persistent Mockingbird S3 when no
+`ATLAS_S3_*` configuration is set. Explicit external S3 settings retain their validation and failure behavior; the
+standalone server still requires them. Atlas keeps all reports and user state in S3 only; the development emulator
+owns its database under `.atlas-workspace/s3/`. Preserve the three IDE configs when changing lifecycle commands;
 run `bun test scripts/workspace.test.ts`. Use documented IDE CLIs for app-owned configuration. Setup
 must not launch agents, change their permissions or silently install a different Bun version.
 
@@ -91,7 +95,7 @@ contract](docs/report-contract.md#versioning-and-stability) allows.
   and a migration note.
 - `packages/reports/tests/fixtures/layer-v1.json` and `composition-laws.test.ts` guard the contract.
   Never edit the fixture to make a test pass; fix the code.
-- After changing a Zod schema in `packages/schema/src`, run `bun run schemas` and commit the JSON
+- After changing a Zod schema in `packages/schema/src`, run `bun run docs` and commit the JSON
   Schemas: a test fails when they differ.
 - A reader must treat what it cannot read as unknown, never as passed.
 - Evidence (attachments, steps, annotations, attempts, tags, labels, links, `extensions`) is where the format
@@ -129,9 +133,9 @@ colocation: say it once, next to what it describes, and generate everything else
   has a doc comment (summary, parameters, failure behaviour, `@example` on entry points). `bun scripts/docs/coverage.ts`
   lists gaps; a test fails on any. Write the comment when you write the code.
 - Generated, never edited by hand: `docs/reference/*.md` (from those comments, the usage text and the operation table),
-  `packages/server/openapi.json`, `llms.txt`, `llms-full.txt`, the JSON Schemas (`bun run schemas`), and the blocks between
+  `packages/server/openapi.json`, `llms.txt`, `llms-full.txt`, the JSON Schemas (`bun run docs`), and the blocks between
   `<!-- generated:NAME -->` markers in the guides. After changing a comment, a route, a setting, a schema or a command's
-  usage, run `bun run docs` (it also emits JSON Schemas) and commit the result. `bun run docs:check` is the explicit CI gate;
+  usage, run `bun run docs` (it also emits JSON Schemas) and commit the result. `bun run docs --check` is the explicit CI gate;
   it rejects stale or obsolete outputs, missing generation markers, broken links and mismatched executable instructions.
 - A new HTTP route needs an operation in `packages/server/src/openapi.ts` (a test fails if a route is undescribed). A new
   server setting needs a row in `SERVER_SETTINGS` with an example that a test proves. A new command output document needs a
@@ -176,7 +180,7 @@ Every push to `main` is checked and then published by `.github/workflows/ci.yml`
   The version lives in `@crvouga/atlas@<version>` git tags that the release creates.
 - Never add an npm token to the repository or its secrets. CI publishes through npm Trusted
   Publishing, which is pinned to the workflow filename `ci.yml`: do not rename that file.
-- The first publish needs a maintainer to run `bun run release:seed` once. If the Release job says
+- The first publish needs a maintainer to run `bun scripts/release/seed.ts` once. If the Release job says
   so, tell the human; do not try to work around it.
 
 ## Working on `main` safely
@@ -217,16 +221,16 @@ From this repository's root:
 <!-- generated:repository-checks -->
 ```sh
 bun install --frozen-lockfile
-bun run docs:check
-bun run type-check
+bun run docs --check
+bun run check --only types
 bun run test
 bun run build
-bun run release:smoke
+bun run smoke
 ```
 <!-- /generated:repository-checks -->
 
 This check list is generated from CI's `check` job. After any code, configuration, documentation or agent-guidance
-change, run `bun run docs` to regenerate docs and schemas, then `bun run docs:check`. It checks required generation
+change, run `bun run docs` to regenerate docs and schemas, then `bun run docs --check`. It checks required generation
 markers, stale and obsolete outputs, documentation coverage, links, schemas, CLI help and executable agent flows.
 Keep factual tables in generated blocks and annotate runnable walkthroughs for the documentation smoke checks.
 Prose still needs review: when behaviour changes, update its explanation and add a regression that exercises it.
@@ -234,7 +238,7 @@ Prose still needs review: when behaviour changes, update its explanation and add
 `bun run test` is the whole suite: `bun test`, then the viewer's DOM tests
 (`packages/visualizer/tests`), which need a browser-like global scope and so run on their own with a
 preload. Run the checks relevant to what you changed while iterating (`bun test packages/core`,
-`bunx tsc --noEmit -p packages/core`), then run the full set before pushing. `bun run release:smoke`
+`bunx tsc --noEmit -p packages/core`), then run the full set before pushing. `bun run smoke`
 installs the packed tarball into a clean project, imports every entry point under Bun and under
 plain Node, and bundles one to check tree shaking; it is the check that catches a package that works in this
 repository and breaks when installed from npm. Run it after `bun run build` whenever `exports`,

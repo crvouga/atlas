@@ -8,7 +8,7 @@ describe('initialPackageBlocker', () => {
 
   test('a never-published package is blocked in CI and points to interactive seeding', () => {
     const lines = initialPackageBlocker([], ci);
-    expect(lines?.join('\n')).toContain('bun run release:seed');
+    expect(lines?.join('\n')).toContain('bun scripts/release/seed.ts');
   });
 
   test('published packages, local logins and dry runs are never blocked', () => {
@@ -24,13 +24,13 @@ describe('seedSummary', () => {
     expect(lines).toEqual([
       '::error::1 initial npm package(s) need an interactive local seed: new-pkg',
       '::error::1 published package(s) were rejected by npm Trusted Publishing and need their publisher attached by the local seed: untrusted',
-      'Every other package was released. Run bun run release:seed, then retry CI.'
+      'Every other package was released. Run bun scripts/release/seed.ts, then retry CI.'
     ]);
   });
 
   test('does not claim the rest released when something else failed', () => {
     const lines = seedSummary({ needsSeed: ['new-pkg'], needsTrust: [], failed: 2 });
-    expect(lines.at(-1)).toBe('Run bun run release:seed, then retry CI.');
+    expect(lines.at(-1)).toBe('Run bun scripts/release/seed.ts, then retry CI.');
   });
 
   test('says nothing when no package needs the seed', () => {

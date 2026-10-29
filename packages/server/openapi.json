@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Atlas server API",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "summary": "Take in test results from every environment, keep them, and show everyone the combined report, live.",
     "description": "One Atlas node serves multiple projects. Clients select a project using ?project=<slug>, X-Atlas-Project, or /api/projects/<slug>/… . Each project has independent specs, layers, recordings, status, and event streams. Within each project, the newest completed result of every check wins its slot. Unqualified requests address the legacy default project.\n\n**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `critic` < `publish` < `admin`. A `critic` token may read, and publish critiques (layers of automated reviewers) and nothing else. Uploading needs a Bearer token; a browser's HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.\n\n**Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`) with a `detail` that says what to do. `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not valid, `503` still starting (retry after `Retry-After`).\n\n**Compatibility.** Within `/api` the API only grows: optional parameters, optional response fields, new events. Ignore what you do not know.\n\nGuides: `/llms.txt`. Source: https://github.com/crvouga/atlas.",
     "license": {
@@ -31,6 +31,10 @@
     {
       "name": "Upload",
       "description": "The simplest way in: one JSON request."
+    },
+    {
+      "name": "UI catalog queue",
+      "description": "Share out the collection of a UI catalog: publish its definition, claim the most urgent work, renew and release claims, and watch the queue."
     },
     {
       "name": "Store protocol",
@@ -7697,6 +7701,1386 @@
           },
           "401": {
             "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-catalog/definitions/{version}": {
+      "put": {
+        "operationId": "publishUiCatalogDefinition",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Publish a UI catalog definition: its states, profile matrix and work units",
+        "description": "Stores a resolved catalog definition (as `resolveCatalog` from `@crvouga/atlas/reports/ui-catalog-definition` makes it) and publishes it as ordinary `ui-plan` layers, one per profile, under the producer `ui-catalog:<name>`, so the catalog expects every state in every profile. The dimensions and values are the project's own data: Atlas has none built in.\n\nThe version in the path must be the SHA-256 of the canonical JSON of the body (object keys sorted at every depth), so the same definition is the same version wherever it was resolved. Publishing the definition that is already the latest changes nothing (`200`, `created: false`); two shards that publish it at once store it once. Publishing another stored definition makes it the latest again and publishes its plan anew. A definition whose exclusion names an unknown dimension or value, or in which two dimensions set the environment (or one parameter differently) for a profile, is refused with what is wrong.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "version",
+            "in": "path",
+            "description": "The SHA-256 of the canonical JSON of the body: 64 lowercase hex digits.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The resolved definition.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiCatalogDefinition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Already the latest definition: nothing changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "latest": {
+                      "type": "boolean"
+                    },
+                    "profiles": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "integer"
+                    },
+                    "units": {
+                      "type": "integer"
+                    },
+                    "layers": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "created",
+                    "latest",
+                    "profiles",
+                    "items",
+                    "units",
+                    "layers"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Stored, and its plan layers published.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "latest": {
+                      "type": "boolean"
+                    },
+                    "profiles": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "integer"
+                    },
+                    "units": {
+                      "type": "integer"
+                    },
+                    "layers": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "created",
+                    "latest",
+                    "profiles",
+                    "items",
+                    "units",
+                    "layers"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a definition, a version that is not its hash, or a matrix that is ambiguous.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getUiCatalogDefinition",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "A published UI catalog definition",
+        "description": "The resolved definition with that version, as it was published. It never changes, so it may be kept.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "version",
+            "in": "path",
+            "description": "A definition version.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiCatalogDefinition"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/ui-catalog/definitions/{version}": {
+      "put": {
+        "operationId": "publishUiCatalogDefinitionForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Publish a UI catalog definition: its states, profile matrix and work units",
+        "description": "Stores a resolved catalog definition (as `resolveCatalog` from `@crvouga/atlas/reports/ui-catalog-definition` makes it) and publishes it as ordinary `ui-plan` layers, one per profile, under the producer `ui-catalog:<name>`, so the catalog expects every state in every profile. The dimensions and values are the project's own data: Atlas has none built in.\n\nThe version in the path must be the SHA-256 of the canonical JSON of the body (object keys sorted at every depth), so the same definition is the same version wherever it was resolved. Publishing the definition that is already the latest changes nothing (`200`, `created: false`); two shards that publish it at once store it once. Publishing another stored definition makes it the latest again and publishes its plan anew. A definition whose exclusion names an unknown dimension or value, or in which two dimensions set the environment (or one parameter differently) for a profile, is refused with what is wrong.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "version",
+            "in": "path",
+            "description": "The SHA-256 of the canonical JSON of the body: 64 lowercase hex digits.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The resolved definition.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiCatalogDefinition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Already the latest definition: nothing changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "latest": {
+                      "type": "boolean"
+                    },
+                    "profiles": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "integer"
+                    },
+                    "units": {
+                      "type": "integer"
+                    },
+                    "layers": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "created",
+                    "latest",
+                    "profiles",
+                    "items",
+                    "units",
+                    "layers"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Stored, and its plan layers published.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "latest": {
+                      "type": "boolean"
+                    },
+                    "profiles": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "integer"
+                    },
+                    "units": {
+                      "type": "integer"
+                    },
+                    "layers": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "created",
+                    "latest",
+                    "profiles",
+                    "items",
+                    "units",
+                    "layers"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a definition, a version that is not its hash, or a matrix that is ambiguous.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getUiCatalogDefinitionForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "A published UI catalog definition",
+        "description": "The resolved definition with that version, as it was published. It never changes, so it may be kept.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "version",
+            "in": "path",
+            "description": "A definition version.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiCatalogDefinition"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-catalog/claims": {
+      "post": {
+        "operationId": "claimUiCatalogWork",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Claim the most urgent UI catalog work units",
+        "description": "Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.\n\nThe claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Instead of `idempotencyKey` in the body.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Who asks, which definition, how many units, and optionally `where`, `leaseSeconds`, `collection`, `staleBeforeMs`.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The claim.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiClaim"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Nothing is due: the queue is empty for this request."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The claim made with this idempotency key has ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a claim request, or `where` names an unknown dimension or value.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many live claims.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/ui-catalog/claims": {
+      "post": {
+        "operationId": "claimUiCatalogWorkForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Claim the most urgent UI catalog work units",
+        "description": "Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.\n\nThe claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Instead of `idempotencyKey` in the body.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Who asks, which definition, how many units, and optionally `where`, `leaseSeconds`, `collection`, `staleBeforeMs`.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The claim.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiClaim"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Nothing is due: the queue is empty for this request."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The claim made with this idempotency key has ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a claim request, or `where` names an unknown dimension or value.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many live claims.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-catalog/claims/{id}/heartbeat": {
+      "post": {
+        "operationId": "heartbeatUiCatalogClaim",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Renew a claim's lease",
+        "description": "Extends the lease by its length, from the server's time. Only the token that made the claim may renew it. `410` once the claim expired or ended: its unfinished units are back in the queue, so stop collecting them.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The `claimId`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new expiry, and how many units of the claim are done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiresAtMs": {
+                      "type": "number"
+                    },
+                    "done": {
+                      "type": "integer"
+                    },
+                    "units": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "expiresAtMs",
+                    "done",
+                    "units"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The claim expired or ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/ui-catalog/claims/{id}/heartbeat": {
+      "post": {
+        "operationId": "heartbeatUiCatalogClaimForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Renew a claim's lease",
+        "description": "Extends the lease by its length, from the server's time. Only the token that made the claim may renew it. `410` once the claim expired or ended: its unfinished units are back in the queue, so stop collecting them.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The `claimId`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new expiry, and how many units of the claim are done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiresAtMs": {
+                      "type": "number"
+                    },
+                    "done": {
+                      "type": "integer"
+                    },
+                    "units": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "expiresAtMs",
+                    "done",
+                    "units"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The claim expired or ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-catalog/claims/{id}": {
+      "delete": {
+        "operationId": "releaseUiCatalogClaim",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Release a claim",
+        "description": "Ends the claim. Its units without a result go back to the queue at once, as empty; results already published stay. Release on exit (including SIGINT and SIGTERM) so nothing waits for the lease to expire.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The `claimId`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "How many units went back to the queue, and how many were done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "released": {
+                      "type": "integer"
+                    },
+                    "done": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "released",
+                    "done"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The claim already expired or ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/ui-catalog/claims/{id}": {
+      "delete": {
+        "operationId": "releaseUiCatalogClaimForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Release a claim",
+        "description": "Ends the claim. Its units without a result go back to the queue at once, as empty; results already published stay. Release on exit (including SIGINT and SIGTERM) so nothing waits for the lease to expire.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The `claimId`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "How many units went back to the queue, and how many were done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "released": {
+                      "type": "integer"
+                    },
+                    "done": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "released",
+                    "done"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The claim already expired or ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-catalog/queue": {
+      "get": {
+        "operationId": "getUiCatalogQueue",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "What is left to collect, who is collecting it, and how fast",
+        "description": "For the latest published definition (or `definition`): units by tier (`failed`, `empty`, `unknown`, `stale`, `fresh`; a unit held by a live claim is counted in `held`), units that hit the retry limit, units re-queued after a failure, unknown units with the notices that make them unknown, the live claims, every shard seen with whether it is `active` (holds a claim), `idle` or `lost` (its last claim expired), and throughput over the last ten minutes with an estimate of the time to empty.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "definition",
+            "in": "query",
+            "description": "A definition version. Default: the latest published.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiQueueSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/ui-catalog/queue": {
+      "get": {
+        "operationId": "getUiCatalogQueueForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "What is left to collect, who is collecting it, and how fast",
+        "description": "For the latest published definition (or `definition`): units by tier (`failed`, `empty`, `unknown`, `stale`, `fresh`; a unit held by a live claim is counted in `held`), units that hit the retry limit, units re-queued after a failure, unknown units with the notices that make them unknown, the live claims, every shard seen with whether it is `active` (holds a claim), `idle` or `lost` (its last claim expired), and throughput over the last ten minutes with an estimate of the time to empty.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "definition",
+            "in": "query",
+            "description": "A definition version. Default: the latest published.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiQueueSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a version.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29040,6 +30424,759 @@
           "version",
           "run",
           "results"
+        ],
+        "additionalProperties": {}
+      },
+      "UiCatalogDefinition": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The catalog. Its plan layers are published as the producer `ui-catalog:<name>`"
+          },
+          "dimensions": {
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "values": {
+                  "minItems": 1,
+                  "maxItems": 1000,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "environment": {
+                        "description": "The client this value sets (`mobile-web`…). At most one dimension may set it for any profile",
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "parameters": {
+                        "default": {},
+                        "description": "Extra profile parameters this value contributes (`{ \"viewport\": \"390x844\" }`)",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 2048
+                        }
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The profile matrix, in the order the project declared it. Every combination of values is a profile"
+          },
+          "exclude": {
+            "default": [],
+            "description": "Combinations no item is expected for, each a partial match on dimension values",
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          },
+          "states": {
+            "maxItems": 200000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "route": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "fixture": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "cohort": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "area": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "kind": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "flags": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                },
+                "covers": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "inventory": {
+            "default": [],
+            "description": "Surfaces of the product, as `inventory: true` plan entries",
+            "maxItems": 100000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "groups": {
+            "description": "The work unit of every item, state by state and profile by profile. Absent: every item is its own unit",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            }
+          },
+          "options": {
+            "default": {
+              "maxAttempts": 3
+            },
+            "type": "object",
+            "properties": {
+              "maxAttempts": {
+                "default": 3,
+                "description": "A unit whose capture failed this many times in a row within one collection is no longer handed out in it",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "staleAfterMs": {
+                "description": "A captured item is handed out again once its result is older than this. Absent: only when a claim names `staleBeforeMs`",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "name",
+          "dimensions",
+          "states"
+        ],
+        "additionalProperties": false
+      },
+      "UiClaimRequest": {
+        "type": "object",
+        "properties": {
+          "shard": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Who is asking, for people: a machine, a CI job. Shards need not know each other"
+          },
+          "definition": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "The version of a published definition"
+          },
+          "batchSize": {
+            "default": 25,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "where": {
+            "description": "Only units whose every item has one of these values in each named dimension",
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "additionalProperties": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          },
+          "leaseSeconds": {
+            "default": 120,
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 3600
+          },
+          "collection": {
+            "description": "What retry limits are counted in (a CI run id). Default: the definition version",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "staleBeforeMs": {
+            "description": "Hand out captured items whose result was recorded before this time, oldest first",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "idempotencyKey": {
+            "description": "Retrying with the same key returns the same claim, never a second batch",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "shard",
+          "definition"
+        ],
+        "additionalProperties": false
+      },
+      "UiClaim": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "claimId": {
+            "type": "string"
+          },
+          "shard": {
+            "type": "string"
+          },
+          "definition": {
+            "type": "string"
+          },
+          "collection": {
+            "type": "string"
+          },
+          "createdAtMs": {
+            "type": "number"
+          },
+          "expiresAtMs": {
+            "type": "number"
+          },
+          "leaseSeconds": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "failed",
+                    "empty",
+                    "unknown",
+                    "stale",
+                    "fresh"
+                  ]
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16384
+                          },
+                          "title": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "route": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "fixture": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "cohort": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "area": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "kind": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "flags": {
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "covers": {
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "profile": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "description": "As a UI catalog profile key: the environment and the sorted parameters"
+                          },
+                          "values": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "environment": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "parameters": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "values",
+                          "environment",
+                          "parameters"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "state",
+                      "profile"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              },
+              "required": [
+                "key",
+                "tier",
+                "items"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "claimId",
+          "shard",
+          "definition",
+          "collection",
+          "createdAtMs",
+          "expiresAtMs",
+          "leaseSeconds",
+          "units"
+        ],
+        "additionalProperties": {}
+      },
+      "UiQueueSummary": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "definition": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "states": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "profiles": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "units": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "version",
+                  "name",
+                  "states",
+                  "profiles",
+                  "items",
+                  "units"
+                ],
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null until a definition is published"
+          },
+          "tiers": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "failed",
+                "empty",
+                "unknown",
+                "stale",
+                "fresh"
+              ]
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "required": [
+              "failed",
+              "empty",
+              "unknown",
+              "stale",
+              "fresh"
+            ],
+            "description": "Units by tier. A unit held by a claim is counted in `held`, not here"
+          },
+          "held": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "exhausted": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "type": "string"
+                },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "collection": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "unit",
+                "attempts",
+                "collection"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Units that hit the retry limit (at most 100)"
+          },
+          "requeued": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Units that failed, are below the retry limit and are back in the queue"
+          },
+          "unknown": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "At most 50"
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "count",
+              "units",
+              "notices"
+            ],
+            "additionalProperties": {},
+            "description": "Units with no readable result while a backend or layer could not be read: not empty, unknown"
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claimId": {
+                  "type": "string"
+                },
+                "shard": {
+                  "type": "string"
+                },
+                "units": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "done": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "createdAtMs": {
+                  "type": "number"
+                },
+                "expiresAtMs": {
+                  "type": "number"
+                },
+                "ageMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "claimId",
+                "shard",
+                "units",
+                "done",
+                "createdAtMs",
+                "expiresAtMs",
+                "ageMs"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "shards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "shard": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "idle",
+                    "lost"
+                  ]
+                },
+                "claims": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "units": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "done": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "lastSeenAtMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "shard",
+                "status",
+                "claims",
+                "units",
+                "done",
+                "failed",
+                "lastSeenAtMs"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "throughput": {
+            "type": "object",
+            "properties": {
+              "unitsPerMinute": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Units finished per minute over the last ten minutes"
+              },
+              "etaMs": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Due units divided by throughput; null when nothing finished lately"
+              }
+            },
+            "required": [
+              "unitsPerMinute",
+              "etaMs"
+            ],
+            "additionalProperties": {}
+          },
+          "time": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "definition",
+          "tiers",
+          "held",
+          "exhausted",
+          "requeued",
+          "unknown",
+          "claims",
+          "shards",
+          "throughput",
+          "time"
         ],
         "additionalProperties": {}
       },

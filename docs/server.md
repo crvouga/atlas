@@ -547,6 +547,18 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
 | `GET /api/reports/ui-catalog/entries` | read | The UI catalog as a list a critic iterates: captured states with their picture hash and critiques. |
 | `GET /api/projects/{project}/reports/ui-catalog/entries` | read | The UI catalog as a list a critic iterates: captured states with their picture hash and critiques. |
+| `PUT /api/ui-catalog/definitions/{version}` | publish | Publish a UI catalog definition: its states, profile matrix and work units. |
+| `PUT /api/projects/{project}/ui-catalog/definitions/{version}` | publish | Publish a UI catalog definition: its states, profile matrix and work units. |
+| `GET /api/ui-catalog/definitions/{version}` | read | A published UI catalog definition. |
+| `GET /api/projects/{project}/ui-catalog/definitions/{version}` | read | A published UI catalog definition. |
+| `POST /api/ui-catalog/claims` | publish | Claim the most urgent UI catalog work units. |
+| `POST /api/projects/{project}/ui-catalog/claims` | publish | Claim the most urgent UI catalog work units. |
+| `POST /api/ui-catalog/claims/{id}/heartbeat` | publish | Renew a claim's lease. |
+| `POST /api/projects/{project}/ui-catalog/claims/{id}/heartbeat` | publish | Renew a claim's lease. |
+| `DELETE /api/ui-catalog/claims/{id}` | publish | Release a claim. |
+| `DELETE /api/projects/{project}/ui-catalog/claims/{id}` | publish | Release a claim. |
+| `GET /api/ui-catalog/queue` | read | What is left to collect, who is collecting it, and how fast. |
+| `GET /api/projects/{project}/ui-catalog/queue` | read | What is left to collect, who is collecting it, and how fast. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/projects/{project}/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/reports/outline` | read | The specs a report is laid over. |
@@ -671,11 +683,11 @@ The server uses its own receipt clock. By default it interrupts a run after 30 s
 
 Interrupted runs retain completed results and show why the remaining work stopped. Missing outcomes never become passes. The server persists bounded summaries under `server/live/` in its bucket and restores outstanding leases as interrupted after a server restart. S3 server credentials need GetObject/PutObject for that prefix; generate the updated `atlas report policy --role both` policy. Producers still receive no backend credentials. Live `run` events carry bounded snapshots directly into test rows, including step logs and interruption reasons. The legacy `atlas:change` announcement remains available for older clients; its optional `liveRunId` identifies lease updates. Reconnecting viewers re-fetch progress, reports, and specifications. With SSE connected, live progress uses a 60-second safety refresh; without SSE it polls every two seconds. Returning to the tab or coming back online also revalidates reports and progress.
 
-In this repository, use `bun atlas` and `bun example:run` in two terminals. Every example Gherkin scenario executes, including sharing and renaming; `@unrecorded` no longer excludes tests.
+In this repository, use `bun scripts/atlas.mjs` and `bun scripts/examples.ts run` in two terminals. Every example Gherkin scenario executes, including sharing and renaming; `@unrecorded` no longer excludes tests.
 
 ## Multiple projects on one node
 
-Start the node with `atlas server` (or `bun atlas` in this repository). The server builds or finds the Atlas client and serves it with the API from one process. It never imports a consumer or an example. In this repository the node uses port 5180 and the bucket named by your `.env`; `bun example:run` publishes the Todo app to project `todo-app`.
+Start the node with `atlas server` (or `bun scripts/atlas.mjs` in this repository). The server builds or finds the Atlas client and serves it with the API from one process. It never imports a consumer or an example. In this repository the node uses port 5180 and the bucket named by your `.env`; `bun scripts/examples.ts run` publishes the Todo app to project `todo-app`.
 
 Set `ATLAS_PROJECT=todo-app` alongside `ATLAS_SERVER_URL` for native reporters and statechart runs. Report CLI commands accept `--project todo-app` (or `ATLAS_PROJECT`) with an HTTP store. Programmatic HTTP stores, live reporters and native reporter options accept `project: 'todo-app'`. Keep the same slug for the invocation's live progress, final results, spec sets and recordings. Slugs use 1–64 lowercase letters, digits or hyphens, starting and ending with a letter or digit.
 

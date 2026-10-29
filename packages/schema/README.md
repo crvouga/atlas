@@ -21,7 +21,7 @@ The Atlas contract, as Zod schemas and as JSON Schema (draft 2020-12) documents 
 Regenerate the JSON Schemas after changing a Zod schema:
 
 ```sh
-bun run schemas
+bun run docs
 ```
 
 ## Stability

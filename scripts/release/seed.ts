@@ -24,8 +24,8 @@
  * Idempotent: packages, trust, tags and releases that already exist are skipped, so re-run it to
  * finish.
  *
- *   bun run release:seed             (reconcile)
- *   bun run release:seed --dry-run   (plan + pack, print what would change)
+ *   bun scripts/release/seed.ts             (reconcile)
+ *   bun scripts/release/seed.ts --dry-run   (plan + pack, print what would change)
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

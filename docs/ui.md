@@ -470,7 +470,7 @@ it lazily bundles the shared React settings entry once, so API-only servers do n
 
 Run `bunx tsc --noEmit -p packages/visualizer`,
 `bun test --cwd packages/visualizer --preload ./tests/preload.ts tests`,
-`bun test scripts/ui-architecture.test.ts`, `bun run client:build`, then `bun run docs` and `bun run docs:check`.
+`bun test scripts/ui-architecture.test.ts`, `bun packages/core/bin/atlas.mjs client build --no-data`, then `bun run docs` and `bun run docs --check`.
 Before pushing, run the full repository checks from `AGENTS.md`, including package build and consumer smoke
 when dependencies change. DOM tests use the same `AtlasThemeProvider` with Mantine's supported `env="test"`.
 Use semantic/product selectors, not Mantine's private class names. Inspect real desktop and narrow layouts,

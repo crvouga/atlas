@@ -6,7 +6,7 @@ import { renderSchemas } from '../scripts/schemas';
 
 const directory = path.join(import.meta.dir, '..', 'schemas');
 
-test('the JSON Schema files are the ones the Zod schemas emit (run `bun run schemas`)', () => {
+test('the JSON Schema files are the ones the Zod schemas emit (run `bun run docs`)', () => {
   const rendered = renderSchemas();
   expect(readdirSync(directory).sort()).toEqual(Object.keys(rendered).sort());
   for (const [file, text] of Object.entries(rendered)) expect(readFileSync(path.join(directory, file), 'utf8')).toBe(text);

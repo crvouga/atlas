@@ -51,7 +51,7 @@ const GAP_SUMMARY: Record<PublisherGap, string> = {
   missing: `No GitHub Actions publisher for ${REPO} ${WORKFLOW_FILE}. On the access page add one and allow npm publish. Organization crvouga, repository atlas, workflow filename ci.yml, environment empty.`,
   'stage-only': 'GitHub Actions publisher does not allow npm publish (stage only). On the access page, allow npm publish.',
   environment: 'GitHub Actions publisher is limited to an environment. The Release workflow sets none. On the access page, clear Environment and allow npm publish.',
-  'not-published': 'Not on npm yet, so there is no access page until the interactive first publish (bun run release:seed).'
+  'not-published': 'Not on npm yet, so there is no access page until the interactive first publish (bun scripts/release/seed.ts).'
 };
 
 export function accessUrl(name: string): string {
@@ -246,16 +246,16 @@ export function npmAuthToken(): string | { error: string } {
   // The npm login stored by `npm login`. Reading trust settings still needs the
   // security-key prompt that login itself does not complete.
   const token = npmrcToken();
-  if (!token) return { error: 'npm is not logged in. Run npm login, then bun run health.' };
+  if (!token) return { error: 'npm is not logged in. Run npm login, then bun scripts/health/cli.ts.' };
   return token;
 }
 
 const TRUST_UNAUTHORIZED = 'unauthorized';
 
 /** A 401 that did not include a security-key challenge. */
-export const TRUST_LOGIN_ERROR = 'npm rejected the trusted publisher lookup. Run npm login, then bun run health.';
+export const TRUST_LOGIN_ERROR = 'npm rejected the trusted publisher lookup. Run npm login, then bun scripts/health/cli.ts.';
 
-const SECURITY_KEY_AGAIN = 'npm still wants a security key for each package. On the approval page, skip two-factor for a few minutes, then run bun run health again.';
+const SECURITY_KEY_AGAIN = 'npm still wants a security key for each package. On the approval page, skip two-factor for a few minutes, then run bun scripts/health/cli.ts again.';
 
 export function collapseTrustAuth(results: PackageTrust[]): PackageTrust[] | { error: string } {
   if (results.length > 0 && results.every((result) => result.error === TRUST_UNAUTHORIZED)) {
@@ -316,7 +316,7 @@ export type ProjectPackageSet = {
 export async function loadProjectPackageNames(token: string): Promise<ProjectPackageSet | { error: string }> {
   const who = await readRegistryJson('/-/whoami', token);
   if (who.status === 401 || who.status === 403) {
-    return { error: 'npm rejected this login. Run npm login, then bun run health.' };
+    return { error: 'npm rejected this login. Run npm login, then bun scripts/health/cli.ts.' };
   }
   if (who.status !== 200) {
     return { error: `npm returned HTTP ${who.status} for the trusted publisher lookup.` };
@@ -400,7 +400,7 @@ export async function loadPackageTrust(names: string[], token: string, knownStat
     return {
       error:
         who.status === 401 || who.status === 403
-          ? 'npm rejected this login. Run npm login, then bun run health.'
+          ? 'npm rejected this login. Run npm login, then bun scripts/health/cli.ts.'
           : `npm returned HTTP ${who.status} for the trusted publisher lookup.`
     };
   }

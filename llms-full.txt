@@ -187,6 +187,7 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas ui-catalog status` | `ui-catalog-status` |
 | `atlas ui-catalog diff` | `ui-catalog-diff-result` |
 | `atlas ui-catalog export` | `ui-catalog-export-result` |
+| `atlas ui-catalog collect` | `ui-catalog-collect-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 
@@ -274,8 +275,8 @@ The reference is generated from the doc comments next to the code, so it cannot 
 - **Server settings.** The table in [the Atlas server](server.md), from `SERVER_SETTINGS`; a test proves every row.
 - **Guides** (these files) are written by hand, and tests hold their links, and the commands in them that matter, to the code.
 
-`bun run docs` regenerates docs **and JSON Schemas**. `bun run docs -- --check` detects stale, missing and obsolete
-outputs. `bun run docs:check` is the broader CI gate: it also checks documentation coverage, links (including the
+`bun run docs` regenerates docs **and JSON Schemas**. `bun scripts/docs/generate.ts --check` detects stale, missing and obsolete
+outputs. `bun run docs --check` is the broader CI gate: it also checks documentation coverage, links (including the
 generated references), required block markers, real CLI help, every registered JSON command result, the local
 walkthrough, and the commands generated into consumer `AGENTS.md` files against a failing suite and its later fix.
 The packed-package smoke repeats both consumer flows under Bun and Node.
@@ -286,7 +287,7 @@ commands in this repository's `AGENTS.md` come from CI. Add a required block to 
 `scripts/docs/generate.ts` when introducing another factual table; missing, malformed or duplicate markers fail.
 
 In this repository, change the source comment, registry, schema or manifest first, run `bun run docs`, then
-`bun run docs:check`, and commit the generated result with the source change. Hand-written explanations still
+`bun run docs --check`, and commit the generated result with the source change. Hand-written explanations still
 need review and behaviour tests: these checks cannot prove arbitrary prose true. When behaviour changes, update
 its guide and add or extend an executable scenario that proves the explanation.
 
@@ -1536,11 +1537,18 @@ Nothing about it is new to the report contract. A state is an ordinary check wit
 layer, and the stream is the one every viewer already holds. This page is the convention that makes those usable as a catalog, the
 decisions behind it, the command line, and what stays in your project.
 
+Developing Atlas itself? `bun run dev` populates the todo example's catalog automatically, alongside its other reports.
+Choose **UI catalog** from the spec-type menu to browse seven states across desktop and mobile profiles, including
+empty, offline and pending-sync states. The collector is
+[`examples/todo/catalog.ts`](https://github.com/crvouga/atlas/blob/main/examples/todo/catalog.ts): it starts its own isolated
+app server, drives the real UI, publishes the expected set and screenshots, and closes its browser and server.
+
 - [How a state is written](#how-a-state-is-written)
 - [What is expected](#what-is-expected)
 - [Publishing from any collector](#publishing-from-any-collector)
 - [The command line](#the-command-line)
 - [Sharding](#sharding)
+- [Collecting with a queue](#collecting-with-a-queue)
 - [Streaming and loading](#streaming-and-loading)
 - [Exploring it](#exploring-it)
 - [Comparing two commits or two profiles](#comparing-two-commits-or-two-profiles)
@@ -1646,6 +1654,7 @@ atlas ui-catalog publish --captures captures.json --producer web-capture --envir
 atlas ui-catalog status                          # exit 1 while anything failed, is missing, is still being captured or could not be read
 atlas ui-catalog diff --from 3f9a2c1 --to 8b41d70 # two commits (the whole id, or at least 7 digits)
 atlas ui-catalog export --out public/catalog.html # one file, no server
+atlas ui-catalog collect --catalog atlas.catalog.ts --exec "node ./collect-batch.mjs" # one shard of a shared queue
 ```
 
 `captures.json` is `{"states":[…]}` (or just the list); a state is `{"id","title"?,"status"?,"detail"?,"route"?,"fixture"?,"cohort"?,"area"?,
@@ -1672,6 +1681,137 @@ layer ([the contract](report-contract.md#guarantees)), which is what the tests p
   shown as captured, and the other shards' cells are unaffected.
 - Atlas does not need the shard count. Completeness is the plan: a cell is expected because a plan says so.
 
+That is all publishing needs. Deciding **what each shard collects next** is the [queue](#collecting-with-a-queue)'s job.
+
+## Collecting with a queue
+
+Publishing needs no coordination, but deciding what to collect does: a static split (`--shard 3/16`) leaves fast shards idle while a
+slow one holds its slice, a shard that dies leaves a hole, the most urgent item can run last, and two runners that start at once collect
+the same items. An Atlas server can instead hand out the work. The project declares its catalog once; any number of shards (local
+processes, CI matrix jobs, a device lab) run the same command, claim the most urgent work, collect it, publish it and claim again until
+nothing is left. They coordinate only through the server, and a shard can join or leave at any time.
+
+### Define the catalog once
+
+```ts
+// atlas.catalog.ts in your project
+import { defineCatalog } from '@crvouga/atlas/reports/ui-catalog-definition';
+
+export default defineCatalog({
+  name: 'web-app',
+  matrix: {
+    // Dimensions and their values are your data: Atlas has no built-in names (locale, tenant, role… work the same).
+    dimensions: {
+      device: { values: ['mobile', 'desktop'], profile: device => ({ environment: `${device}-web`, viewport: device === 'mobile' ? '390x844' : '1440x1000' }) },
+      scheme: { values: ['light', 'dark'] },
+      deployment: { values: async () => loadDeployments() }
+    },
+    exclude: [{ deployment: 'production', scheme: 'dark' }]
+  },
+  states: async () => loadStatesFromMyCollector(),          // ids and declared facts, as a plan entry
+  group: item => `${item.state.id}|${item.profile.device}`,   // optional: what one capture takes together (here both schemes)
+  inventory: async () => loadSurfaceInventory(),              // optional, as `inventory: true` plan entries
+  maxAttempts: 3,                                             // optional: retry limit per collection
+  staleAfterMs: 7 * 24 * 3_600_000                            // optional: recollect a picture older than a week
+});
+```
+
+- **Every combination of values is a profile**, less the exclusions (a partial match). Every dimension value is a profile parameter, so
+  each combination is its own slot, as for any layer. A dimension's `profile(value)` adds what that value contributes: `environment`
+  (the client) and any other key as a parameter.
+- **Ambiguity is refused, never resolved silently**: an exclusion or `--where` naming a dimension or value the matrix does not declare
+  (the message lists the declared ones), two dimensions that both set `environment` for one profile, or set one parameter to different
+  values. A profile that depends on two dimensions is a combined dimension, or an exclusion.
+- **The definition is resolved once.** `values`, `states`, `inventory` and `group` run when it is published; the stored document
+  records the result, so every shard sees the same matrix. Its version is the SHA-256 of its canonical JSON: the same definition is the
+  same version wherever it is resolved, and publishing it twice stores it once.
+- **Publishing it writes ordinary plan layers**: one `ui-plan` layer per profile, by the producer `ui-catalog:<name>`. Adding a value
+  (`tablet`, `staging`) is a one-line change: every state in the new profiles is expected and not captured yet, and goes straight to the
+  front of the queue; results in the other profiles are untouched.
+
+### One command per shard
+
+```sh
+# Each shard runs the same command, once or on forty machines. --store (or ATLAS_STORE) is the server.
+atlas ui-catalog collect --catalog atlas.catalog.ts --exec "node ./collect-batch.mjs"
+
+# A runner that can only do some profiles narrows what it takes, with your own dimension names.
+atlas ui-catalog collect --catalog atlas.catalog.ts --where deployment=development --where device=mobile --exec "…"
+
+# Bounded, for a CI job with a timeout; --stale-before also recollects pictures older than the run.
+atlas ui-catalog collect --catalog atlas.catalog.ts --max-units 200 --max-minutes 40 --stale-before "$RUN_STARTED_AT" --exec "…"
+```
+
+`collect` publishes the definition, claims a batch, runs `--exec` for it, publishes the captures, and claims again until nothing is left
+for this shard (exit `0`, or `1` when anything it collected failed) or a bound is reached. `--exec` runs in a shell with `ATLAS_UI_BATCH`,
+a JSON file with the claim and its `states` (each with its `item` key, its declared facts and its `profile`), and `ATLAS_UI_CAPTURES`,
+where it writes `{"states":[…]}` in the shape `publish --captures` reads, each state naming its `item`, with pictures beside it. An item
+it wrote nothing for is failed. On SIGINT or SIGTERM the claim is released, so its units go back to the queue at once. The result is the
+`ui-catalog-collect-result` document.
+
+A collector that stays in one process (one browser, one warm environment) uses the library instead:
+
+```ts
+import { collectCatalog } from '@crvouga/atlas/reports/ui-catalog-collect';
+import { httpStore } from '@crvouga/atlas/reports/http-store';
+
+await collectCatalog({
+  store: httpStore({ url: process.env.ATLAS_SERVER_URL!, token: process.env.ATLAS_TOKEN }),
+  catalog, shard: { id: `ci-${process.env.GITHUB_JOB}-${index}`, where: { deployment: 'development' } }, batchSize: 25,
+  capture: async (unit, signal) => Promise.all(unit.items.map(async item => ({ item: item.key, ...(await captureUiState(page, { id: item.state.id, ready })) })))
+});
+```
+
+`signal` aborts when the claim is lost, and what was captured for a lost claim is not published: a shard never publishes work it no
+longer holds. A capture that throws records its items as failed, with the reason, and collection goes on. `captureUiState` stays an
+optional adapter; nothing in the queue imports a collection framework.
+
+### The order work is handed out in
+
+| Tier | A unit is here when |
+| --- | --- |
+| **failed** | the newest result of any of its items failed (a readiness timeout is a failed capture) |
+| **empty** | an item was never captured, was skipped, or the unit was claimed and let go of (expired or released) without a new result |
+| **unknown** | an item has no readable result while a backend or a layer could not be read: it may have one, so it is never called empty |
+| **stale** | every item is captured, and the oldest was recorded before the claim's `staleBeforeMs` (or is older than `staleAfterMs`); oldest first |
+| **fresh** | captured and not due: never handed out |
+
+A unit is as urgent as its most urgent item; ties break by unit key, so two servers given the same data give the same order. The order
+is recomputed as results arrive, so an item that fails mid-run goes back near the head, until it has failed `maxAttempts` times in a row
+within one **collection** (the `--collection` id, by default the `--run-id` or `ATLAS_RUN_ID`, else the definition version): then it is
+no longer handed out in that collection, and shows as failed. Claiming reads an index of the newest result per item, built once per
+report version; it never rebuilds the catalog document or lists layers per request. A test claims from 50 000 items with 100 concurrent
+shards.
+
+### Claims
+
+A claim is a lease on a batch of units held by one shard: renewed by heartbeat (every third of `leaseSeconds`, default 120), closed unit
+by unit as captures labelled with the claim id (`labels["atlas.claim"]`) arrive, released when the shard is done, and given back to the
+queue when it expires. No unit is ever held by two live claims. A shard that publishes after its claim expired and another shard
+re-claimed the unit leaves two layers, and the newest `recordedAtMs` wins the cell, as always. A claim request retried with the same
+idempotency key returns the same claim, never a second batch.
+
+Claims are kept by the server in its store (`server/ui-catalog/queue.json`, in S3 like the rest of its state) and written before a claim
+is answered. After a restart they are restored with their leases; those that lapsed meanwhile expire and their units go back to the
+queue, so no unit is lost and none is held forever. One node serves a project's queue. There is no mode without a server: a guessed
+order that other shards cannot see would defeat the point, so `collect` against a directory or a bucket is refused.
+
+| Endpoint | Role | What it does |
+| --- | --- | --- |
+| `PUT /api/ui-catalog/definitions/{version}` | publish | Store a definition and publish its plan layers |
+| `GET /api/ui-catalog/definitions/{version}` | read | Read it back |
+| `POST /api/ui-catalog/claims` | publish | `{ shard, definition, batchSize?, where?, leaseSeconds?, collection?, staleBeforeMs?, idempotencyKey? }` → a claim, or `204` when nothing is due |
+| `POST /api/ui-catalog/claims/{id}/heartbeat` | publish | Renew the lease; `410` once it expired or ended |
+| `DELETE /api/ui-catalog/claims/{id}` | publish | Release it; units without a result go back as empty |
+| `GET /api/ui-catalog/queue` | read | Units by tier, live claims, shards (active, idle or lost), failures re-queued, units at the retry limit, unknown units and why, throughput and time to empty |
+
+Under `/api/projects/{project}/…` each project has its own queue. `/catalog` shows the queue as a **Collection** panel once a definition
+is published: what is left by tier, what is being collected now and by which shard, shards that are active, idle or lost, units that hit
+the retry limit, and throughput.
+
+`atlas ui-catalog status` stays the gate: the plan says what is expected, so a CI job that collected only part of the queue gates on the
+whole catalog, not on its share.
+
 ## Streaming and loading
 
 - **Streaming.** There is no second stream. A viewer holds the report over `/api/events` and reads what changed with
@@ -1693,7 +1833,10 @@ The viewer's **UI catalog** (`/catalog`, in the menu beside the spec types once 
 state with its picture and a coverage badge per profile, and filters by words, coverage, profile, area, route, cohort, feature flag,
 surface and producer. The address holds the filters and the open state, so a link reproduces the view. Opening a state shows its
 profiles side by side with the declared facts, the failure reason, and for each picture the layer, backend, producer, shard, commit
-and time. *Download the manifest* saves the filtered catalog as JSON.
+and time. A persistent bottom bar holds the previous/next arrows and numbered pagination. They move through all states matching the current filters, including states
+beyond the cards currently shown. Left/Right arrow keys navigate while the detail is focused; Escape closes it and returns
+focus to its opener. Navigation stops at either end, announces the current item and total, and keeps the filters in the address.
+A linked state outside the filters still opens, with an explanation instead of an incorrect position. *Download the manifest* saves the filtered catalog as JSON.
 
 ```sh
 curl "$ATLAS_SERVER_URL/api/reports/ui-catalog?coverage=failed,missing&profile=…"   # JSON; add format=markdown for text
@@ -1762,11 +1905,24 @@ The questions the original proposal left open, and how they are answered here. E
 | The event stream | No new stream or events: the existing `report` event and `?since=` deltas. |
 | Sharding | No shard concept in the format; a shard is any publisher. A `shard` label is provenance. Completeness comes from the plan, so Atlas needs no shard count. |
 | What moves | Reading, composing, the viewer, the document and the API, the publish builders, a Playwright capture adapter. Staying with a product: its state declarations, its inventory, its fixtures and its runner. |
-| Where it lives | `@crvouga/atlas/reports/ui-catalog` (model), `…/ui-catalog-publish` (builders), `…/ui-state` (convention); the viewer's `/catalog`; the server's `/api/reports/ui-catalog`; `@crvouga/atlas/playwright`'s `captureUiState`. |
+| Where it lives | `@crvouga/atlas/reports/ui-catalog` (model), `…/ui-catalog-publish` (builders), `…/ui-state` (convention), `…/ui-catalog-definition`, `…/ui-catalog-queue` and `…/ui-catalog-collect` (the queue); the viewer's `/catalog`; the server's `/api/reports/ui-catalog` and `/api/ui-catalog/…`; `@crvouga/atlas/playwright`'s `captureUiState`. |
 | Exploration capabilities | Search, filters, profile comparison, coverage and surface coverage, failure diagnostics, deep links, manifest export. |
 | Static export | Two ways, neither needs a server. The catalog is computed from the layers a viewer holds, so the static site (`atlas client build`) shows it, without streaming. `atlas ui-catalog export` writes it as one self-contained HTML file with a size budget. |
 | Comparing | Two commits (from the layers recorded at each, because the report keeps only the newest) or two profiles; pictures by content hash, never by a pixel measure; one-sided states are not regressions. |
-| Command line | `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, each with `--format json`. Running a collector is not one: that is the product's. |
+| Command line | `atlas ui-catalog plan`, `publish`, `status`, `diff`, `export` and `collect`, each with `--format json`. The collector `collect` runs is the product's. |
+| Who collects what next | A claimable priority queue on the server ([Collecting with a queue](#collecting-with-a-queue)): a definition with a profile matrix the project declares, claims handed out failed, empty, unknown, then stale first, leases renewed by heartbeat. |
+| Where claims live, and concurrency | In the server process, under one lock, and in one JSON document in its store, written before a claim is answered. Restored after a restart; lapsed claims expire. One node serves a project's queue. |
+| Lease and heartbeat | Per claim, chosen by the shard (`leaseSeconds`, default 120, 10 to 3600), renewed every third of it by `collect`. |
+| Batch size | Chosen by the shard (`--batch-size`, default 25, at most 500). |
+| Grouping | Declared by the definition (`group`, a function resolved into the stored document). A group may span any dimension; `where` takes a unit only when every item matches. |
+| What makes a result stale | Its age only: `staleBeforeMs` on a claim (`--stale-before`), or the definition's `staleAfterMs`. Without either, nothing captured is due, so a queue can be empty. |
+| Retry limits | `maxAttempts` (default 3) failures in a row within a collection, counted when captures labelled with a claim arrive; a pass resets it. A collection is the `--collection` id, by default the run id, else the definition version. No backoff. |
+| Fairness | None beyond `where`: a shard takes the batch it asks for. |
+| A mode without a server | None: `collect` needs a server. |
+| A newer definition mid-collection | Claims name their definition and stay valid until they end; new claims use whichever definition they name. Units with the same key are the same unit across versions, so no unit is held twice. |
+| Run identity | The queue is continuous, with no run boundary. `atlas ui-catalog status` gates the whole catalog. |
+| Dimensions and the slot | Every dimension value is a parameter, so it splits the slot; `environment` is set only through a `profile` function. Colliding parameters are refused; a profile that depends on two dimensions is a combined dimension. |
+| Changing a dimension or removing a state | A new definition version. New profiles are expected and empty; results in old profiles, and of removed states, stay readable as they were and are never handed out. The plan layers of the old version are not withdrawn (a layer cannot be), so the catalog keeps showing what it showed. |
 
 ## What stays in your project, and what Atlas does not do
 
@@ -1781,7 +1937,7 @@ where each now is:
 | 4 | An inventory of the product's surfaces, and reconciliation against it | Reconciliation: `inventory` plan entries and `covers`, the surface coverage table | **The inventory**: the list of surfaces your product has |
 | 5 | A manifest and report builder | `uiCatalog`, the JSON manifest, Markdown, the single HTML file | Nothing |
 | 6 | A viewer: as a single file, as a site, and live | `atlas ui-catalog export`, `atlas client build`, and `/catalog` on `atlas serve` | Nothing |
-| 7 | A command line (list, run, report, publish, watch) | `atlas ui-catalog plan\|publish\|status\|diff\|export`; watching is the live `/catalog` and `atlas report stream` | **Run**: the runner that drives your product to each state |
+| 7 | A command line (list, run, report, publish, watch) | `atlas ui-catalog plan\|publish\|status\|diff\|export\|collect`, the queue that hands out work; watching is the live `/catalog` and `atlas report stream` | **Run**: the collector that drives your product to each state |
 | 8 | A publish step to a hosting platform | Not in Atlas, see below | **The deploy step** of your platform |
 
 What stays is, in one list: the states and profiles to capture, the inventory of surfaces, the fixtures and test data, the runner that
@@ -2347,6 +2503,18 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
 | `GET /api/reports/ui-catalog/entries` | read | The UI catalog as a list a critic iterates: captured states with their picture hash and critiques. |
 | `GET /api/projects/{project}/reports/ui-catalog/entries` | read | The UI catalog as a list a critic iterates: captured states with their picture hash and critiques. |
+| `PUT /api/ui-catalog/definitions/{version}` | publish | Publish a UI catalog definition: its states, profile matrix and work units. |
+| `PUT /api/projects/{project}/ui-catalog/definitions/{version}` | publish | Publish a UI catalog definition: its states, profile matrix and work units. |
+| `GET /api/ui-catalog/definitions/{version}` | read | A published UI catalog definition. |
+| `GET /api/projects/{project}/ui-catalog/definitions/{version}` | read | A published UI catalog definition. |
+| `POST /api/ui-catalog/claims` | publish | Claim the most urgent UI catalog work units. |
+| `POST /api/projects/{project}/ui-catalog/claims` | publish | Claim the most urgent UI catalog work units. |
+| `POST /api/ui-catalog/claims/{id}/heartbeat` | publish | Renew a claim's lease. |
+| `POST /api/projects/{project}/ui-catalog/claims/{id}/heartbeat` | publish | Renew a claim's lease. |
+| `DELETE /api/ui-catalog/claims/{id}` | publish | Release a claim. |
+| `DELETE /api/projects/{project}/ui-catalog/claims/{id}` | publish | Release a claim. |
+| `GET /api/ui-catalog/queue` | read | What is left to collect, who is collecting it, and how fast. |
+| `GET /api/projects/{project}/ui-catalog/queue` | read | What is left to collect, who is collecting it, and how fast. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/projects/{project}/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/reports/outline` | read | The specs a report is laid over. |
@@ -2471,11 +2639,11 @@ The server uses its own receipt clock. By default it interrupts a run after 30 s
 
 Interrupted runs retain completed results and show why the remaining work stopped. Missing outcomes never become passes. The server persists bounded summaries under `server/live/` in its bucket and restores outstanding leases as interrupted after a server restart. S3 server credentials need GetObject/PutObject for that prefix; generate the updated `atlas report policy --role both` policy. Producers still receive no backend credentials. Live `run` events carry bounded snapshots directly into test rows, including step logs and interruption reasons. The legacy `atlas:change` announcement remains available for older clients; its optional `liveRunId` identifies lease updates. Reconnecting viewers re-fetch progress, reports, and specifications. With SSE connected, live progress uses a 60-second safety refresh; without SSE it polls every two seconds. Returning to the tab or coming back online also revalidates reports and progress.
 
-In this repository, use `bun atlas` and `bun example:run` in two terminals. Every example Gherkin scenario executes, including sharing and renaming; `@unrecorded` no longer excludes tests.
+In this repository, use `bun scripts/atlas.mjs` and `bun scripts/examples.ts run` in two terminals. Every example Gherkin scenario executes, including sharing and renaming; `@unrecorded` no longer excludes tests.
 
 ## Multiple projects on one node
 
-Start the node with `atlas server` (or `bun atlas` in this repository). The server builds or finds the Atlas client and serves it with the API from one process. It never imports a consumer or an example. In this repository the node uses port 5180 and the bucket named by your `.env`; `bun example:run` publishes the Todo app to project `todo-app`.
+Start the node with `atlas server` (or `bun scripts/atlas.mjs` in this repository). The server builds or finds the Atlas client and serves it with the API from one process. It never imports a consumer or an example. In this repository the node uses port 5180 and the bucket named by your `.env`; `bun scripts/examples.ts run` publishes the Todo app to project `todo-app`.
 
 Set `ATLAS_PROJECT=todo-app` alongside `ATLAS_SERVER_URL` for native reporters and statechart runs. Report CLI commands accept `--project todo-app` (or `ATLAS_PROJECT`) with an HTTP store. Programmatic HTTP stores, live reporters and native reporter options accept `project: 'todo-app'`. Keep the same slug for the invocation's live progress, final results, spec sets and recordings. Slugs use 1–64 lowercase letters, digits or hyphens, starting and ending with a letter or digit.
 
@@ -4126,22 +4294,22 @@ This repository runs on [Bun](https://bun.sh). Video clips and WebP thumbnails n
 bun install
 bunx playwright install chromium
 
-bun run example:lint   # pure, reachable, no undocumented dead ends, journeys replay, everything implemented
-bun run example:plan   # 4 journeys + 1 generated path cover all 14 transitions
-bun run example:fast   # run every path quickly
-bun run example:run    # statechart showcase, then the Gherkin features and the Quint model
+bun --cwd examples/todo ../../packages/core/bin/atlas.mjs lint --require-implementations   # pure, reachable, no undocumented dead ends, journeys replay, everything implemented
+bun --cwd examples/todo ../../packages/core/bin/atlas.mjs plan   # 4 journeys + 1 generated path cover all 14 transitions
+bun --cwd examples/todo ../../packages/core/bin/atlas.mjs run --mode fast   # run every path quickly
+bun scripts/examples.ts run    # statechart showcase, then the Gherkin features and the Quint model
 bun test examples      # the same spec against an in-memory model, as a test suite
 
-bun run example:clients      # clients/: one chart across a phone, a desktop and the sync server at once
-bun run example:clients:bun  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
+bun scripts/examples.ts clients      # clients/: one chart across a phone, a desktop and the sync server at once
+ATLAS_DESKTOP=bun bun scripts/examples.ts clients  # the same, with the desktop in Bun's WebKit and the phone in Playwright's Chromium
 ```
 
 To run every chart of the example and browse the results, run these in separate terminals; the
 visualizer updates when a run finishes.
 
 ```sh
-bun run atlas:run   # example:clients, then example:run: every chart of the example, in showcase mode
-bun atlas          # the example's specs, chart runs, and layered reports
+bun scripts/examples.ts all   # example:clients, then example:run: every chart of the example, in showcase mode
+bun scripts/atlas.mjs          # the example's specs, chart runs, and layered reports
 ```
 
 Each config writes its own run and the Atlas client shows one run at a time: the latest is the
@@ -4150,16 +4318,16 @@ single-browser run, and the run across clients is the one before it in the run p
 Gherkin, Quint, DMN, Alloy and OpenSLO documents sit beside the charts. Results compose across
 environments, branches and backends within each project. **Sources** switches report sources on or off.
 
-`bun atlas` runs the singleton Atlas server and the client together at `http://localhost:5180`.
+`bun scripts/atlas.mjs` runs the singleton Atlas server and the client together at `http://localhost:5180`.
 It starts a project-agnostic node with no example data. Select a project using the top-right picker.
-In another terminal run `bun run example:run`: statecharts, Gherkin scenarios and Quint traces stream running checks, completed results and current steps
+In another terminal run `bun scripts/examples.ts run`: statecharts, Gherkin scenarios and Quint traces stream running checks, completed results and current steps
 to project `todo-app` on that server while testing. Producers renew a heartbeat every 5 seconds; 30 seconds of silence
 marks an invocation interrupted. Final specs and recordings upload when their privacy scan completes.
 Tests show inline running indicators and logs without waiting for the whole suite to finish. Report history
 is retained in the server's bucket under `projects/todo-app/`; local run artifacts remain in `atlas-runs` and
 `atlas-reports`. To upload a completed run again without rerunning tests,
-use `bun run example:publish`. Set `ATLAS_SERVER_URL` for a different upload destination (and
-`ATLAS_PUBLISH_TOKEN` when it requires one). Restart `bun atlas` when switching from the older
+use `bun examples/todo/publish.ts`. Set `ATLAS_SERVER_URL` for a different upload destination (and
+`ATLAS_PUBLISH_TOKEN` when it requires one). Restart `bun scripts/atlas.mjs` when switching from the older
 file-based example client; a busy port is an error so publishers cannot silently target another server.
 
 A showcase run ends with:
@@ -4723,137 +4891,150 @@ the client at your stores with `reportsHost` ([integrating Atlas](integrating.md
 <doc path="docs/workspaces.md">
 # Atlas in agent IDEs
 
-This guide is for developing **this repository** in Superset, super.engineering or Orca. A consumer
-project should install Atlas from npm and follow [integrating](integrating.md) instead.
+This guide develops **this repository** in Superset, super.engineering or Orca. Consumer projects
+install the npm package and follow [integrating](integrating.md).
 
-## Start from any terminal
+## Six commands
 
-Install the Bun version named by `packageManager` in [package.json](../package.json), then run these
-commands from the repository root. Setup requires no tokens, copied `.env`, Docker or external services.
+All manual package commands have one short name:
 
-```sh
-bun run workspace:setup
-bun run workspace:run
-```
-
-Open the `Atlas server ready:` URL printed in the Run terminal. It serves the real API and hot-reloading
-viewer together; `/admin` opens settings. A fresh node starts empty. Publish real results to the printed
-`ATLAS_STORE` address using the existing [report commands](reference/reports.md).
-
-For UI work with populated specs, statecharts, failures and recordings, run the separate examples target:
-
-```sh
-bun run workspace:preview
-```
-
-This viewer uses `examples/todo/specs` and the existing example-evidence adapter. It does not seed or
-alter the real server's data. It has no server administration interface. Existing example run files are
-shown when present; setup does not run browsers, model checkers or generate recordings. To create fresh
-example recordings, use the existing `example:run` command and [statechart guide](statecharts.md).
-
-## Shared commands
-
-| Command | Behavior |
+| Command | Purpose |
 | --- | --- |
-| `bun run workspace:setup` | Check the pinned Bun and install with `--frozen-lockfile`; safe to repeat. |
-| `bun run workspace:run` | Run the real node and viewer; repeat the frozen install before starting. |
-| `bun run workspace:preview` | Run the populated examples viewer; repeat the same setup first. |
-| `bun run workspace:status` | Print live URLs, mode and readiness as JSON; omit private control credentials. |
-| `bun run workspace:stop` | Stop both targets owned by this checkout; retain all reports. |
-| `bun run workspace:stop server` | Stop only the API/viewer target. `preview` selects only examples. |
-| `bun run workspace:check` | Run documentation, types, tests, package/client builds and consumer smoke. |
+| `bun run dev` | The only development command: start services, populate examples, keep the viewer running. |
+| `bun run check` | Run all checks: documentation contracts, types, tests, package build, viewer build and consumer smoke. |
+| `bun run test` | Run the full Bun suite and the isolated viewer DOM suite. |
+| `bun run build` | Build the publishable package. |
+| `bun run docs` | Regenerate documentation and JSON Schemas; `--check` verifies all documentation contracts. |
+| `bun run smoke` | Install the packed package in a clean consumer and verify Bun, Node, imports, types, tree shaking and CLI flows. |
 
-`run` and `preview` stay in the foreground so the IDE owns their lifetime and displays their output.
-Ctrl+C or an IDE Stop closes the owned server and its child process. Teardown uses a random private
-control capability stored in `.atlas-workspace/`; it never kills a PID from a file or uses `pkill`.
-If the owned development child does not finish after five seconds, only that child is terminated.
-Stopping an unrelated IDE, agent, checkout or application is outside these scripts' scope.
+`bun run check --only docs|types|test|build|client|smoke` selects one verification group. The default stops at
+the first failed group. CI still runs the individual gates explicitly, with release depending on the same checked commit.
+`prepare` is Bun's automatic Husky install hook, not another manual command.
 
-## Workspace isolation and ports
+## Development
 
-The API/viewer tries port 5180, and examples try 5181. If that default is busy, the OS supplies a free
-port. Read `workspace:status` instead of assuming a URL. An explicit `--port`, `ATLAS_PORT`, or `PORT`
-(in that priority order) is strict: conflicts fail and never connect publishers to a different node.
-`--port 0` requests a free port explicitly.
+Install the Bun version named by `packageManager` in [package.json](../package.json), then run:
 
 ```sh
-bun run workspace:run --port 5280
-bun run workspace:status
+bun run dev
 ```
 
-Everything binds to `127.0.0.1`. For remote workspaces, use the IDE's port forwarding. Reports and server
-settings are kept in S3 only, never in the checkout: `workspace:run` needs the required `ATLAS_S3_*` variables
-(copy `.env.example` to `.env`, which Bun loads, or export them) and exits at once, listing every missing one,
-without them. Give each checkout its own bucket or `ATLAS_S3_PREFIX` if their reports must not mix
-(`workspace:setup` and `workspace:preview` need no credentials). Live runtime leases stay in `.atlas-workspace/`.
-Keep that directory private to each worktree. Do not share `node_modules`,
-`.atlas-workspace/` or caches across checkouts with different dependencies. Frozen installs use Bun's
-download cache without linking one worktree's dependency tree to another.
+The same command is the default Run target in every supported agent IDE. It checks dependencies, starts the real
+Atlas API and hot-reloading viewer, starts persistent local S3 when needed, prepares Chromium and a checkout-local
+FFmpeg, and runs the complete example workflow. Multi-client journeys, statecharts, Gherkin and Quint documents,
+recordings and uploads retain their existing sequence; an earlier suite's failure never skips the remaining suites.
+The todo app's UI catalog is also populated: seven real states (welcome, naming, empty, active, offline,
+pending sync and completed), each captured in desktop and mobile profiles. Plans declare the expected set and
+surface coverage; screenshots and their provenance are uploaded with the other reports. **UI catalog** then appears
+in the viewer's spec-type menu. A failed capture remains a named failure and fails population.
+The example drivers start and stop their own application servers on isolated ports.
 
-Two simultaneous starts cannot claim the same target's runtime lease. A hard kill may leave metadata:
-run `workspace:stop` before restarting. It removes a stale lease only when its owner PID is gone; if the
-PID is still alive but the control endpoint cannot authenticate, investigate that owner rather than
-assuming it is safe to stop. No reports or settings are deleted by teardown.
+Open the printed `Atlas server ready:` URL; `/admin` opens settings. The workflow publishes to the discovered URL
+under `todo-app` unless `ATLAS_PROJECT` is set. It never assumes the default Atlas port. Browser and recording
+binaries are downloaded only when absent. Explicit browser/WebDriver configurations keep their existing requirements.
 
-## Superset
+When dev owns the server, `bun run dev --status` reports population as `running`, `complete` or `failed`.
+After population the server stays available for browsing, including when a suite fails, so failed evidence can be
+inspected. A failed workflow exits nonzero when stopped. With an already-running workspace server, dev reuses it,
+populates it and exits without stopping its owner.
 
-[`.superset/config.json`](https://github.com/crvouga/atlas/blob/main/.superset/config.json) wires workspace creation to setup, the Run button
-to the real node/viewer, and teardown to stop. Superset discovers listening ports; the conventional
-ports are labelled in [ports.json](https://github.com/crvouga/atlas/blob/main/.superset/ports.json). Automatically chosen ports still appear
-in its port panel. Use the examples command in a second terminal when needed. Personal lifecycle
-overrides belong in ignored `.superset/config.local.json`.
+The existing development workflows are modes of that same command:
 
-Superset's Run command resolves from the main repository's configuration. Commit the configuration
-and scripts together before expecting another workspace's Run button to discover them. See the
-[official lifecycle guide](https://docs.superset.sh/setup-teardown-scripts) and
-[port management](https://docs.superset.sh/ports).
+| Mode | Behavior |
+| --- | --- |
+| `bun run dev --server` | Start the server without running examples. |
+| `bun run dev --preview` | Start the separate viewer with bundled example evidence; do not alter the real server's data. |
+| `bun run dev --setup` | Perform a frozen install, repairing dependencies if needed. |
+| `bun run dev --status` | Print this checkout's live URLs and population state, excluding private control credentials. |
+| `bun run dev --stop` | Stop owned services, retaining their data. Add `server` or `preview` to stop one target. |
+| `bun run dev --help` | Show modes and usage without starting services. |
 
-## super.engineering
+The preview reads `examples/todo/specs` and the existing example-evidence adapter. Existing recordings appear when
+present; preview and setup do not run browsers, model checkers or generate recordings. Setup never launches agents,
+changes their permissions or installs another Bun version.
 
-[`.super.engineering/config.json`](https://github.com/crvouga/atlas/blob/main/.super.engineering/config.json) defines **Atlas** (default),
-**Viewer examples** and **Checks** in the Run controls. Each server target's Stop command affects only
-that target; deletion stops both. Shared commands expose **Atlas URLs**, **Check Atlas** and a
-**Review Atlas UI** prompt. The prompt uses the current agent's configured provider and does not
-launch a team or change model settings.
+The lower-level workflows remain available through their source files instead of package aliases:
+`bun scripts/examples.ts all` runs both example suites against an existing server; `run` and `clients` select one.
+`bun examples/todo/publish.ts` uploads already-recorded results without rerunning suites. Spec linting, planning and
+fast-mode execution use the existing Atlas CLI, as described in [statecharts](statecharts.md).
+Release and health maintenance use `scripts/release/*.ts` and `scripts/health/cli.ts`; see [releasing](https://github.com/crvouga/atlas/blob/main/docs/releasing.md).
+Viewer fixture generation and data publishing remain `packages/visualizer/scripts/make-fixtures.ts` and
+`packages/visualizer/scripts/publish-data.ts`.
 
-Use the documented CLI to inspect or invoke the same definitions:
+## Ownership, storage and ports
+
+Dev stays in the foreground when it starts a server, so the IDE owns its lifetime. Ctrl+C or Stop closes the owned
+server and active example processes. Teardown uses a random private control capability under `.atlas-workspace/`;
+it never kills a PID read from a file or stops another checkout's services. Reports and saved state survive teardown.
+
+Atlas tries port 5180 and preview tries 5181, then selects a free port if the default is busy. An explicit `--port`,
+`ATLAS_PORT` or `PORT` (in that order) is strict: conflicts fail instead of publishing to another app. `--port 0`
+requests a free port. Discover the actual URLs with status:
+
+```sh
+bun run dev --port 5280
+bun run dev --status
+```
+
+Everything binds to `127.0.0.1`; use IDE port forwarding remotely. Atlas still reads and writes reports and user
+state through S3 only. With no `ATLAS_S3_*` configuration, dev starts
+[Mockingbird S3](https://github.com/crvouga/mockingbird/tree/main/packages/service/s3) on an ephemeral loopback port,
+creates its bucket, and persists the emulator's objects and metadata in `.atlas-workspace/s3/storage.sqlite`
+using Bun's file-backed SQLite (WAL, synchronous commits). Its development credentials are `fixture` / `fixture`,
+and it validates signed S3 requests. No Docker daemon or external storage service is needed.
+
+Status identifies the local endpoint, bucket and data file. Keep `.atlas-workspace/` private to each checkout and
+do not delete it unless you intend to remove local data. Stop and restart preserve reports, attachments and settings.
+Preview starts no S3 service.
+
+For external S3, copy `.env.example` to `.env` (Bun loads it) or export the `ATLAS_S3_*` variables. Any nonempty
+setting selects that configuration. Missing, invalid or unreachable external storage fails visibly; dev never
+silently switches a configured bucket to local storage. Use a separate bucket or `ATLAS_S3_PREFIX` per checkout.
+The standalone `atlas serve` and `atlas dev` CLI commands still require S3 configuration and have no fallback.
+
+Setup records a dependency fingerprint in `node_modules/`. Dev reuses it when Bun, `package.json` and `bun.lock`
+match. Changed manifests or removed dependencies trigger installation; `--setup` always performs a frozen install
+to repair an incomplete tree. Do not share dependencies, `.atlas-workspace/` or caches across checkouts.
+
+Simultaneous starts cannot claim the same target lease. After a hard kill, use `bun run dev --stop` to clear a stale
+lease; it removes one only when the owner PID is gone. An unauthenticated live owner must be investigated, never killed.
+
+## IDE configuration
+
+[`.superset/config.json`](https://github.com/crvouga/atlas/blob/main/.superset/config.json) uses `dev --setup`, `dev`
+and `dev --stop` for setup, Run and teardown. Personal overrides stay in ignored `.superset/config.local.json`.
+Superset resolves Run from the main repository's config: commit scripts and configuration together before expecting
+another workspace to discover them. See its [lifecycle guide](https://docs.superset.sh/setup-teardown-scripts).
+
+[`.super.engineering/config.json`](https://github.com/crvouga/atlas/blob/main/.super.engineering/config.json) presents
+one **Dev** target and the CI targets **Check**, **Test**, **Build**, **Docs** and **Smoke**. Dev is the default;
+Docs runs `docs --check`. Setup and teardown use the same dev modes as the other IDEs. Existing preview, status and
+review workflows remain available through dev flags and [UI conventions](ui.md), without duplicate shortcuts.
+
+Inspect and invoke definitions with the documented CLI:
 
 ```sh
 sc project scripts check --json
-sc project scripts run Atlas --json
+sc project scripts run Dev --json
 sc project scripts status --json
-sc project scripts stop Atlas --json
+sc project scripts stop Dev --json
 ```
 
-Edit shared script configuration with `sc project scripts set ... --scope repo`, and shared commands
-with `sc commands ... --scope shared`. Preserve other entries and unknown configuration keys. See
-[project config and scripts](https://super.engineering/docs/project-config-and-scripts/).
+Edit scripts with `sc project scripts set ... --scope repo` and shared commands with `sc commands ... --scope shared`;
+preserve unknown fields. See [project configuration](https://super.engineering/docs/project-config-and-scripts/).
 
-## Orca
+[`orca.yaml`](https://github.com/crvouga/atlas/blob/main/orca.yaml) keeps `scripts.setup`, `scripts.archive` and
+`setupAgentStartupPolicy: wait-for-setup`. Its first tab is reserved for the agent; the second runs `bun run dev`.
+No unsupported `scripts.run` key is added. Keep Shared + Local or Shared only enabled for repository hooks and approve
+Orca's shared-config trust prompt when offered. These are user-owned settings. Existing workspaces can run the same
+Bun command in a terminal; default tabs apply to new workspaces. See the [Orca reference](https://www.onorca.dev/docs/model/orca-yaml).
 
-[`orca.yaml`](https://github.com/crvouga/atlas/blob/main/orca.yaml) uses the supported `scripts.setup` and `scripts.archive` hooks. Agents
-wait for setup. The first default tab is reserved for the agent; the second starts Atlas. Tab commands
-may start alongside setup, so Run repeats the frozen install before importing application dependencies.
-Orca's normal shared-script trust and setup-policy settings still apply. No `scripts.run` key is
-invented: Orca starts the app through the terminal template.
+## Verification
 
-Keep **Shared + Local** or **Shared only** enabled for repository hooks, and approve the shared config
-in Orca when it offers its trust prompt. These are user-owned controls. For existing workspaces,
-run the shared Bun commands in a terminal; default tabs are created for new workspaces. See the
-[official `orca.yaml` reference](https://www.onorca.dev/docs/model/orca-yaml).
-
-## Agent workflow
-
-Read `AGENTS.md`, then use `workspace:status` to discover this checkout's live app. Run the server for
-API, settings, upload and streaming changes; use examples for populated UI review. Read [UI conventions](ui.md)
-before changing screens. Keep report/schema/permission contracts intact, and report what the browser and
-checks actually verified. Do not launch other agents, change IDE permissions or install global IDE tooling
-as a side effect of setup. `workspace:check` is an on-demand verification target, never a creation hook.
-
-The lifecycle regression suite (`bun test scripts/workspace.test.ts`) checks fresh directories with spaces,
-repeatable setup, strict ports, separate stores, authenticated ownership and independent shutdown.
-Real IDE boot verification additionally needs that IDE installed and available; a passing configuration
-test alone does not prove the IDE started a new workspace.
+Read `AGENTS.md`, discover the live URL with `bun run dev --status`, and use [UI conventions](ui.md) for screen changes.
+The lifecycle suite (`bun test scripts/workspace.test.ts`) checks setup, strict ports, isolated stores, ownership,
+shutdown, population, cancellation and the command/configuration inventory. It does not prove a real IDE created a
+workspace; that additionally requires the corresponding IDE to be installed and available.
 </doc>
 
 <doc path="docs/ui.md">
@@ -5329,7 +5510,7 @@ it lazily bundles the shared React settings entry once, so API-only servers do n
 
 Run `bunx tsc --noEmit -p packages/visualizer`,
 `bun test --cwd packages/visualizer --preload ./tests/preload.ts tests`,
-`bun test scripts/ui-architecture.test.ts`, `bun run client:build`, then `bun run docs` and `bun run docs:check`.
+`bun test scripts/ui-architecture.test.ts`, `bun packages/core/bin/atlas.mjs client build --no-data`, then `bun run docs` and `bun run docs --check`.
 Before pushing, run the full repository checks from `AGENTS.md`, including package build and consumer smoke
 when dependencies change. DOM tests use the same `AtlasThemeProvider` with Mantine's supported `env="test"`.
 Use semantic/product selectors, not Mantine's private class names. Inspect real desktop and narrow layouts,
@@ -5875,6 +6056,10 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
                            [--fail-on-change] [--format text|json|markdown]
   atlas ui-catalog export  --out <file.html> [--store …]... [--backends <module>] [filters]
                            [--images inline|none] [--max-mb <n>] [--manifest <file.json>] [--title <t>]
+  atlas ui-catalog collect --catalog <atlas.catalog.ts> --exec "<command>" [--store https://…] [--shard <name>]
+                           [--where dimension=value]... [--batch-size <n>] [--lease-seconds <n>]
+                           [--max-units <n>] [--max-minutes <n>] [--collection <id>] [--stale-before <iso|ms>]
+                           [--producer <name>] [--attach-root <dir>]... [--max-picture-mb <n>]
 
   filters (status, diff, export): --q <words> --coverage a,b --profile <key|label>... --area a --route r --cohort c
                            --flag f --surface s --producer p
@@ -5903,9 +6088,21 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
             It is the catalog at the moment it was made. --images none leaves the pictures out. --max-mb (default 32) limits
             the embedded pictures; those past it are listed in the page as left out, and the manifest stays complete.
             --manifest writes the catalog's JSON manifest too.
+  collect   Be one shard of a collection that any number of shards share through an Atlas server: publish the catalog's
+            definition (the default export of --catalog, made with defineCatalog; the same definition is the same
+            version), claim the most urgent work units (failed, then empty, then unknown, then stale), run --exec for each
+            claim, publish its captures and claim again until nothing is left or a bound is reached. --exec runs in a shell
+            with ATLAS_UI_BATCH (a JSON file: {"claimId","units",[…],"states":[{"item","id",…facts,"profile":{…}}]}) and
+            ATLAS_UI_CAPTURES (where it writes {"states":[…]} as publish reads it, each state naming its "item"; pictures
+            beside it). An item it wrote nothing for is failed. --where takes the project's own dimension names and
+            values (repeatable; a dimension given twice takes either value); an unknown one is exit 2. --stale-before
+            also collects captured items recorded before that time, oldest first. On SIGINT or SIGTERM the claim is
+            released, so its units go back to the queue at once. Needs a server: there is no order other shards cannot
+            see. Exit 0 when nothing collected failed, 1 when something did or the server could not be reached.
 
   --format json (alias --json)   every subcommand prints one JSON document instead of prose
-                       (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result).
+                       (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result,
+                       ui-catalog-collect-result).
                        A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   A store is a directory, s3://bucket/prefix or an Atlas server (https://…), exactly as for atlas report; select a project
   with --project <slug> or ATLAS_PROJECT. When no --store is given, ATLAS_STORE is used.
@@ -7051,6 +7248,158 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `route` (query): Routes. Comma-separated.
 
 Responses: `200` One page of entries.; `304` Unchanged since the `If-None-Match` ETag.; `400` The cursor is not one this server made.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Publish a UI catalog definition: its states, profile matrix and work units
+
+`PUT /api/ui-catalog/definitions/{version}` · role: publish
+
+Stores a resolved catalog definition (as `resolveCatalog` from `@crvouga/atlas/reports/ui-catalog-definition` makes it) and publishes it as ordinary `ui-plan` layers, one per profile, under the producer `ui-catalog:<name>`, so the catalog expects every state in every profile. The dimensions and values are the project's own data: Atlas has none built in.
+
+The version in the path must be the SHA-256 of the canonical JSON of the body (object keys sorted at every depth), so the same definition is the same version wherever it was resolved. Publishing the definition that is already the latest changes nothing (`200`, `created: false`); two shards that publish it at once store it once. Publishing another stored definition makes it the latest again and publishes its plan anew. A definition whose exclusion names an unknown dimension or value, or in which two dimensions set the environment (or one parameter differently) for a profile, is refused with what is wrong.
+
+- `version` (path, required): The SHA-256 of the canonical JSON of the body: 64 lowercase hex digits.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` Already the latest definition: nothing changed.; `201` Stored, and its plan layers published.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a definition, a version that is not its hash, or a matrix that is ambiguous.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Publish a UI catalog definition: its states, profile matrix and work units
+
+`PUT /api/projects/{project}/ui-catalog/definitions/{version}` · role: publish
+
+Stores a resolved catalog definition (as `resolveCatalog` from `@crvouga/atlas/reports/ui-catalog-definition` makes it) and publishes it as ordinary `ui-plan` layers, one per profile, under the producer `ui-catalog:<name>`, so the catalog expects every state in every profile. The dimensions and values are the project's own data: Atlas has none built in.
+
+The version in the path must be the SHA-256 of the canonical JSON of the body (object keys sorted at every depth), so the same definition is the same version wherever it was resolved. Publishing the definition that is already the latest changes nothing (`200`, `created: false`); two shards that publish it at once store it once. Publishing another stored definition makes it the latest again and publishes its plan anew. A definition whose exclusion names an unknown dimension or value, or in which two dimensions set the environment (or one parameter differently) for a profile, is refused with what is wrong.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `version` (path, required): The SHA-256 of the canonical JSON of the body: 64 lowercase hex digits.
+
+Responses: `200` Already the latest definition: nothing changed.; `201` Stored, and its plan layers published.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a definition, a version that is not its hash, or a matrix that is ambiguous.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### A published UI catalog definition
+
+`GET /api/ui-catalog/definitions/{version}` · role: read
+
+The resolved definition with that version, as it was published. It never changes, so it may be kept.
+
+- `version` (path, required): A definition version.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The definition.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.
+
+### A published UI catalog definition
+
+`GET /api/projects/{project}/ui-catalog/definitions/{version}` · role: read
+
+The resolved definition with that version, as it was published. It never changes, so it may be kept.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `version` (path, required): A definition version.
+
+Responses: `200` The definition.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.
+
+### Claim the most urgent UI catalog work units
+
+`POST /api/ui-catalog/claims` · role: publish
+
+Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.
+
+The claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.
+
+- `Idempotency-Key` (header): Instead of `idempotencyKey` in the body.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The claim.; `204` Nothing is due: the queue is empty for this request.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No definition has that version.; `410` The claim made with this idempotency key has ended.; `422` Not a claim request, or `where` names an unknown dimension or value.; `429` Too many live claims.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Claim the most urgent UI catalog work units
+
+`POST /api/projects/{project}/ui-catalog/claims` · role: publish
+
+Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.
+
+The claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `Idempotency-Key` (header): Instead of `idempotencyKey` in the body.
+
+Responses: `200` The claim.; `204` Nothing is due: the queue is empty for this request.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No definition has that version.; `410` The claim made with this idempotency key has ended.; `422` Not a claim request, or `where` names an unknown dimension or value.; `429` Too many live claims.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Renew a claim's lease
+
+`POST /api/ui-catalog/claims/{id}/heartbeat` · role: publish
+
+Extends the lease by its length, from the server's time. Only the token that made the claim may renew it. `410` once the claim expired or ended: its unfinished units are back in the queue, so stop collecting them.
+
+- `id` (path, required): The `claimId`.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The new expiry, and how many units of the claim are done.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `410` The claim expired or ended.
+
+### Renew a claim's lease
+
+`POST /api/projects/{project}/ui-catalog/claims/{id}/heartbeat` · role: publish
+
+Extends the lease by its length, from the server's time. Only the token that made the claim may renew it. `410` once the claim expired or ended: its unfinished units are back in the queue, so stop collecting them.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The `claimId`.
+
+Responses: `200` The new expiry, and how many units of the claim are done.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `410` The claim expired or ended.
+
+### Release a claim
+
+`DELETE /api/ui-catalog/claims/{id}` · role: publish
+
+Ends the claim. Its units without a result go back to the queue at once, as empty; results already published stay. Release on exit (including SIGINT and SIGTERM) so nothing waits for the lease to expire.
+
+- `id` (path, required): The `claimId`.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` How many units went back to the queue, and how many were done.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `410` The claim already expired or ended.
+
+### Release a claim
+
+`DELETE /api/projects/{project}/ui-catalog/claims/{id}` · role: publish
+
+Ends the claim. Its units without a result go back to the queue at once, as empty; results already published stay. Release on exit (including SIGINT and SIGTERM) so nothing waits for the lease to expire.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The `claimId`.
+
+Responses: `200` How many units went back to the queue, and how many were done.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `410` The claim already expired or ended.
+
+### What is left to collect, who is collecting it, and how fast
+
+`GET /api/ui-catalog/queue` · role: read
+
+For the latest published definition (or `definition`): units by tier (`failed`, `empty`, `unknown`, `stale`, `fresh`; a unit held by a live claim is counted in `held`), units that hit the retry limit, units re-queued after a failure, unknown units with the notices that make them unknown, the live claims, every shard seen with whether it is `active` (holds a claim), `idle` or `lost` (its last claim expired), and throughput over the last ten minutes with an estimate of the time to empty.
+
+- `definition` (query): A definition version. Default: the latest published.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The queue.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### What is left to collect, who is collecting it, and how fast
+
+`GET /api/projects/{project}/ui-catalog/queue` · role: read
+
+For the latest published definition (or `definition`): units by tier (`failed`, `empty`, `unknown`, `stale`, `fresh`; a unit held by a live claim is counted in `held`), units that hit the retry limit, units re-queued after a failure, unknown units with the notices that make them unknown, the live claims, every shard seen with whether it is `active` (holds a claim), `idle` or `lost` (its last claim expired), and throughput over the last ten minutes with an estimate of the time to empty.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `definition` (query): A definition version. Default: the latest published.
+
+Responses: `200` The queue.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
 ### Every test one run recorded
 

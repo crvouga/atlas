@@ -1,65 +1,56 @@
 {
   "setup": [
-    "bun run workspace:setup"
+    "bun run dev --setup"
   ],
   "run": [
     {
-      "name": "Atlas",
+      "name": "Dev",
       "commands": [
-        "bun run workspace:run"
+        "bun run dev"
       ],
       "stop_commands": [
-        "bun run workspace:stop server"
+        "bun run dev --stop server"
       ],
       "default": true
     },
     {
-      "name": "Viewer examples",
+      "name": "Check",
       "commands": [
-        "bun run workspace:preview"
-      ],
-      "stop_commands": [
-        "bun run workspace:stop preview"
+        "bun run check"
       ],
       "default": false
     },
     {
-      "name": "Checks",
+      "name": "Test",
       "commands": [
-        "bun run workspace:check"
+        "bun run test"
+      ],
+      "default": false
+    },
+    {
+      "name": "Build",
+      "commands": [
+        "bun run build"
+      ],
+      "default": false
+    },
+    {
+      "name": "Smoke",
+      "commands": [
+        "bun run smoke"
+      ],
+      "default": false
+    },
+    {
+      "name": "Docs",
+      "commands": [
+        "bun run docs --check"
       ],
       "default": false
     }
   ],
   "teardown": [
-    "bun run workspace:stop"
+    "bun run dev --stop"
   ],
-  "commands": [
-    {
-      "id": "b583ae6e-e6c9-44d7-aaf6-a7bbb449f396",
-      "name": "Atlas URLs",
-      "command": "bun run workspace:status",
-      "dispatch_mode": "inject_current_chat",
-      "view_preference": "default",
-      "provider_preset_key": "none",
-      "auto_submit": true
-    },
-    {
-      "id": "10ad89c7-e31e-4122-854f-c3b59a611214",
-      "name": "Check Atlas",
-      "command": "bun run workspace:check",
-      "dispatch_mode": "inject_current_chat",
-      "view_preference": "default",
-      "provider_preset_key": "none",
-      "auto_submit": true
-    },
-    {
-      "id": "ef60384e-457c-4876-8536-8287945f9bf1",
-      "name": "Review Atlas UI",
-      "command": "Read AGENTS.md and docs/ui.md. Run bun run workspace:status to discover the current worktree URLs. Review changed screens in the IDE browser at desktop and narrow widths, preserve report semantics, and run the relevant UI checks. Report evidence and limitations accurately.",
-      "dispatch_mode": "inject_current_chat",
-      "view_preference": "default",
-      "auto_submit": true
-    }
-  ]
+  "commands": []
 }

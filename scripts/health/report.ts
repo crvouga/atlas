@@ -25,7 +25,7 @@ export type HealthReport = {
 
 export type HealthCheck = {
   id: string;
-  /** One line for `bun run health --help`. */
+  /** One line for `bun scripts/health/cli.ts --help`. */
   summary: string;
   run: () => Promise<HealthReport>;
 };

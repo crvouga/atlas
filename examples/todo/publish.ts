@@ -12,7 +12,7 @@ import { gitOrigin } from './spec-outline';
 export const exampleRoot = path.dirname(fileURLToPath(import.meta.url));
 export const exampleServerUrl = () => process.env.ATLAS_SERVER_URL ?? `http://localhost:${process.env.ATLAS_PORT ?? 5180}`;
 
-/** Publish the local example's specs, completed statechart run, recordings and document layers through one store endpoint. */
+/** Publish the local example's specs, completed statechart run, recordings, document layers and UI catalog through one store endpoint. */
 export async function publishExampleReports(location: string, options: { root?: string; out?: (text: string) => void } = {}): Promise<void> {
   const root = options.root ?? exampleRoot;
   const out = options.out ?? (text => process.stdout.write(text));
