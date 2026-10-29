@@ -95,7 +95,7 @@ function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inheri
       attachments += 1;
       for (const tag of normalizeTags(item.tags)) artifactTags.add(tag);
       roles.add(item.role ?? roleOfType(item.contentType ?? contentTypeOf(item.name)));
-      const video = videoOf(item, by, where, effectiveScope(item.scope, ...scopes), unstored);
+      const video = videoOf(item, by, where, effectiveScope(item.scope, ...scopes), unstored, list);
       if (video) videos.push(video);
     }
   };
@@ -138,13 +138,22 @@ export function attachmentIdentity(item: Pick<Attachment, 'name' | 'sha256' | 'b
   return item.sha256 ? `sha256:${item.sha256}` : item.bundleKey ?? item.uri ?? (item.text === undefined ? undefined : `inline:${item.name}`);
 }
 
-function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }, scope: EvidenceScope | undefined, unstored?: ReadonlySet<string>): VideoRef | undefined {
+/** The bundle key of the image an attachment names as its poster among its siblings, when the layer's bundle holds it. */
+function posterKey(item: Attachment, siblings: readonly Attachment[] | undefined, unstored: ReadonlySet<string> | undefined): string | undefined {
+  if (item.poster === undefined) return undefined;
+  const poster = siblings?.find(other => other !== item && other.id === item.poster);
+  if (!poster?.bundleKey || unstored?.has(poster.bundleKey)) return undefined;
+  return (poster.contentType ?? contentTypeOf(poster.name)).toLowerCase().startsWith('image/') ? poster.bundleKey : undefined;
+}
+
+function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }, scope: EvidenceScope | undefined, unstored?: ReadonlySet<string>, siblings?: readonly Attachment[]): VideoRef | undefined {
   if (!isVideoAttachment(item)) return undefined;
   // A bundle key the layer's bundle does not hold names bytes that are not there: only an address or inline text can still carry them, and the digest of lost bytes identifies nothing playable.
   const lost = item.bundleKey !== undefined && unstored?.has(item.bundleKey) === true;
   const recording = lost ? attachmentIdentity({ name: item.name, uri: item.uri, text: item.text }) : attachmentIdentity(item);
   const tags = normalizeTags(item.tags);
-  return { name: item.name, owner, ...where, ...(tags.length ? { tags } : {}), ...(recording === undefined ? {} : { recording }), available: recording !== undefined, ...(lost && recording === undefined ? { reason: 'not-in-bundle' as const } : {}), ...(scope ? { scope } : {}) };
+  const poster = posterKey(item, siblings, unstored);
+  return { name: item.name, owner, ...where, ...(tags.length ? { tags } : {}), ...(recording === undefined ? {} : { recording }), available: recording !== undefined, ...(lost && recording === undefined ? { reason: 'not-in-bundle' as const } : {}), ...(item.durationMs !== undefined && Number.isFinite(item.durationMs) ? { durationMs: item.durationMs } : {}), ...(poster === undefined ? {} : { poster }), ...(scope ? { scope } : {}) };
 }
 
 /**

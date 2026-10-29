@@ -22,7 +22,7 @@ import { reportAssetUrl, reportJson, ReportsError } from '../evidence/api';
 import { exactTime, plural, shortSha, statusWord } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { formatTimecode, parseTagsField, parseTimecode, sourceSpread } from './collection-model';
-import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
+import { patched, useExplorerNavigate, useExplorerSearch, useWatchAddress } from './navigate';
 import { runName } from './parts';
 import { WatchPlaylist } from './playlist';
 import { entriesFromCollection, RECORDING_STATE_TEXT, recordingState } from './playlist-entries';
@@ -155,7 +155,7 @@ function CollectionPage({ id, revision }: { id: string; revision: number | undef
   const go = useExplorerNavigate();
   const client = useQueryClient();
   const [token, setToken] = usePublishToken();
-  const [watching, setWatching] = useState<string | null | false>(false);
+  const watch = useWatchAddress();
   const detail = useQuery({
     queryKey: ['review-collection', id, revision ?? 'newest'],
     queryFn: ({ signal }) => reportJson<ReviewCollectionDetail>(`/review-collections/detail?id=${encodeURIComponent(id)}${revision ? `&revision=${revision}` : ''}`, signal),
@@ -235,7 +235,7 @@ function CollectionPage({ id, revision }: { id: string; revision: number | undef
         </Text>
       </Alert>
       <Group gap="sm" align="flex-end" wrap="wrap">
-        <Button type="button" variant="filled" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => setWatching(null)} disabled={collection.entries.length === 0}>
+        <Button type="button" variant="filled" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => watch.open()} disabled={collection.entries.length === 0}>
           Watch these {plural(collection.entries.length, 'entry', 'entries')}
         </Button>
         <Button component="a" href={exportHref} download leftSection={<IconDownload size={16} aria-hidden="true" />}>
@@ -244,7 +244,7 @@ function CollectionPage({ id, revision }: { id: string; revision: number | undef
         <TextInput label="Share link" description="Opening it needs the same read access as this report." value={shareLink} readOnly onFocus={(event) => event.currentTarget.select()} miw={280} />
       </Group>
       <TokenField token={token} onChange={setToken} />
-      {watching !== false && <WatchPlaylist title={collection.title} entries={playlist} initial={watching ?? undefined} onClose={() => setWatching(false)} />}
+      {watch.watching && <WatchPlaylist title={collection.title} entries={playlist} initial={watch.clip} onSelect={watch.select} onClose={watch.close} />}
       {notesOf(undefined).length > 0 && (
         <Stack gap="xs" component="section" aria-label="Notes on the collection">
           <Title order={3}>Notes on the collection</Title>
@@ -309,7 +309,7 @@ function CollectionPage({ id, revision }: { id: string; revision: number | undef
                       {RECORDING_STATE_TEXT[state].label}
                     </Text>
                     {state === 'playable' && (
-                      <Button type="button" size="compact-sm" variant="light" leftSection={<IconPlayerPlay size={14} aria-hidden="true" />} onClick={() => setWatching(entry.id)}>
+                      <Button type="button" size="compact-sm" variant="light" leftSection={<IconPlayerPlay size={14} aria-hidden="true" />} onClick={() => watch.open(entry.id)}>
                         Watch entry {index + 1}
                       </Button>
                     )}

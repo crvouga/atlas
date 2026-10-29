@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { parseLayerDocument } from '../../schema/src/layer';
 import { artifactRef, artifactTagsOf, displayTag, foldArtifactTags, hasArtifactTag, normalizeTag, normalizeTags, targetKey, type ArtifactTagEntry } from '../src/artifact-tags';
 import { ArtifactTagError, readArtifactTagEntries, recordArtifactTags } from '../src/artifact-tag-store';
-import { summarizeEvidence } from '../src/evidence-detail';
+import { summarizeEvidence, summarizeStoredEvidence } from '../src/evidence-detail';
 import { publishChecks } from '../src/publish-checks';
 import { ReportIndex } from '../src/report-index';
 import { catalogModel, parseTestQuery, testCatalog, type TestQuery } from '../src/test-catalog';
@@ -129,6 +129,32 @@ describe('in a layer', () => {
     const summary = summarizeEvidence({ tags: ['nightly'], attachments: [{ name: 'a.webm', tags: ['#Demo', 'demo'] }], steps: [{ name: 's', attachments: [{ name: 'b.png', tags: ['shot'] }] }] });
     expect(summary).toMatchObject({ tags: ['nightly'], artifactTags: ['demo', 'shot'], attachments: 2 });
     expect(summarizeEvidence({ attachments: [{ name: 'a.webm' }] })?.artifactTags).toBeUndefined();
+  });
+});
+
+describe('hints to recognise a recording before it is opened', () => {
+  test('a video reference carries its declared length and the bundle key of the image it names as its poster', () => {
+    const summary = summarizeEvidence({
+      attachments: [
+        { name: 'pay.webm', id: 'v', durationMs: 4_000, poster: 'p', bundleKey: 'attachments/v' },
+        { name: 'pay.png', id: 'p', contentType: 'image/png', bundleKey: 'attachments/p' }
+      ]
+    });
+    expect(summary?.videos).toEqual([{ name: 'pay.webm', owner: 'check', recording: 'attachments/v', available: true, durationMs: 4_000, poster: 'attachments/p' }]);
+  });
+
+  test('a hint nobody declared is absent, and a poster that is not an image, is not a sibling or is not stored is left out', () => {
+    const plain = summarizeEvidence({ attachments: [{ name: 'a.webm', bundleKey: 'attachments/a' }] })?.videos?.[0];
+    expect(plain && 'durationMs' in plain).toBe(false);
+    expect(plain && 'poster' in plain).toBe(false);
+    const text = summarizeEvidence({ attachments: [{ name: 'a.webm', poster: 'p' }, { name: 'p.txt', id: 'p', bundleKey: 'attachments/p' }] })?.videos?.[0];
+    expect(text?.poster).toBeUndefined();
+    const stranger = summarizeEvidence({ attachments: [{ name: 'a.webm', poster: 'x' }], steps: [{ name: 's', attachments: [{ name: 'x.png', id: 'x', bundleKey: 'attachments/x' }] }] })?.videos?.[0];
+    expect(stranger?.poster).toBeUndefined();
+    const lost = summarizeStoredEvidence(undefined, new Set(['attachments/p']), { attachments: [{ name: 'a.webm', poster: 'p', bundleKey: 'attachments/a' }, { name: 'p.png', id: 'p', bundleKey: 'attachments/p' }] })?.videos?.[0];
+    expect(lost?.poster).toBeUndefined();
+    // The hints never change what is available.
+    expect(lost?.available).toBe(true);
   });
 });
 

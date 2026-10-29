@@ -240,7 +240,14 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
   demonstrated. A set longer than the page's limit says it is only the newest results.
 - Only the selected clip is read: the list is the metadata the catalog already sent, the selected result's evidence is read
   when it is selected, and the one `<video>` uses `preload="metadata"`. Opening the playlist downloads no recordings in bulk.
-  Posters and durations of unselected entries are not shown for that reason.
+  An unselected entry still shows a poster and a length when the catalog already carries them: the producer's declared
+  `Attachment.durationMs` and `Attachment.poster` (an image of the same list that the layer's bundle holds) travel as the
+  optional `durationMs` and `poster` of the result's video reference. The poster is an `<img loading="lazy">`, fetched when
+  its row nears the screen; an entry whose producer declared neither shows neither, and nothing is read to find out.
+- The open playlist is in the address (`watch=true`, and `watchClip` for the entry playing), so a link restores it over
+  the same filters, run or collection. Opening it adds a history entry (Back closes it); moving between clips and closing
+  it replace the current one. A `watchClip` the set no longer holds opens the first watchable entry and the address then
+  names that one.
 - One player: selecting another clip replaces it, and the position of the clip left is kept for the session so returning
   resumes there. Previous/next and advancing on end move over the watchable entries; a result with nothing to play is
   selected from the list to read why.

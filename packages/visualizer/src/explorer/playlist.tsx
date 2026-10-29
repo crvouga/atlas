@@ -7,7 +7,8 @@
  *
  * Only the clip on screen is read: the list is made of the metadata the catalog already sent, the current result's
  * evidence is read when it is selected, and its video is loaded with `preload="metadata"`, so opening the playlist of a
- * large library downloads no recordings in bulk. There is one `<video>`; selecting another clip replaces it and keeps
+ * large library downloads no recordings in bulk. A row shows a poster (lazily loaded) and a length only when the catalog
+ * already carried them for its clip; none is read to find out. There is one `<video>`; selecting another clip replaces it and keeps
  * the position of the one left, so returning resumes there. A clip that will not load (or whose autoplay the browser
  * blocked) stays in the list and offers Retry, Play and Next. Recordings are always labelled illustrative: playback
  * length and speed are those of the recording, never production latency.
@@ -16,7 +17,7 @@ import { attachmentIdentity, isVideoAttachment, type CheckDetail } from '@crvoug
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
 import type { Attachment, Step } from '@crvouga/atlas/schema';
-import { Alert, Anchor, Badge, Box, Button, Code, Flex, Grid, Group, List, Modal, NativeSelect, Stack, Switch, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Box, Button, Code, Flex, Grid, Group, Image, List, Modal, NativeSelect, Stack, Switch, Text, Title } from '@mantine/core';
 import { IconAlertTriangle, IconPlayerPlay, IconPlayerSkipBack, IconPlayerSkipForward } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -31,7 +32,7 @@ import { duration, exactTime, plural, statusWord } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { patched } from './navigate';
 import { clock, TEXT_KIND_WORD, type RecordingFocus } from './recording-text';
-import { playableVideo, playlistCounts, RECORDING_STATE_TEXT, recordingState, stepFrom, type PlaylistEntry } from './playlist-entries';
+import { clipHints, playableVideo, playlistCounts, RECORDING_STATE_TEXT, recordingState, stepFrom, type PlaylistEntry } from './playlist-entries';
 
 /** Entries listed before "more"; the selected entry is always listed. */
 const LISTED = 50;
@@ -68,6 +69,14 @@ export function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
     staleTime: Number.POSITIVE_INFINITY,
     retry: false
   });
+}
+
+/** The poster the catalog named for a clip, loaded only when its row is near the screen (`loading="lazy"`); a poster that will not load is left out. */
+function Poster({ entry, bundleKey }: { entry: PlaylistEntry; bundleKey: string }) {
+  const [broken, setBroken] = useState(false);
+  const url = attachmentSource({ name: 'poster', bundleKey }, entry.layer).url;
+  if (!url || broken) return null;
+  return <Image src={url} alt="" loading="lazy" decoding="async" w={80} fit="contain" radius="sm" data-poster onError={() => setBroken(true)} />;
 }
 
 /** One step of the scenario: in words, with a control to show it in the recording and a mark while it is playing. */
@@ -269,7 +278,7 @@ function Clip({
   const developer = (
     <Anchor
       renderRoot={(props) => (
-        <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, artifact: undefined, test: entry.key, layer: entry.layer })} resetScroll={false} activeOptions={{ exact: true }} onClick={onClose} />
+        <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, artifact: undefined, watch: undefined, watchClip: undefined, test: entry.key, layer: entry.layer })} resetScroll={false} activeOptions={{ exact: true }} onClick={onClose} />
       )}
     >
       Developer details
@@ -412,7 +421,7 @@ function Clip({
       steps={steps}
       attachments={placedIn}
       layer={entry.layer}
-      linkSearch={{ test: entry.key, layer: entry.layer, tab: undefined, openRun: undefined, artifact: undefined }}
+      linkSearch={{ test: entry.key, layer: entry.layer, tab: undefined, openRun: undefined, artifact: undefined, watch: undefined, watchClip: undefined }}
     >
       <Stack gap="md" miw={0} aria-label={`Now showing ${entry.title}`} component="section" data-clip={entry.id}>
         {body}
@@ -432,9 +441,26 @@ function Clip({
  * The watch session for `entries`: opens as a modal over the explorer. `total` is how many results matched when the list
  * holds only the newest of them, so the session says it is not the whole set. `focus` opens it on one found moment: that
  * result, that attempt's video and, when the time is usable, that time. `initial` is the entry to start on when there is no
- * `focus`, and `title` the heading. Closing it discards positions.
+ * `focus`, and `title` the heading. `onSelect` is told the id of the entry on screen when the session opens and each time it
+ * changes, so the address can name it. Closing it discards positions.
  */
-export function WatchPlaylist({ entries, total, focus, onClose, initial, title = 'Watch recordings' }: { entries: readonly PlaylistEntry[]; total?: number; focus?: RecordingFocus; onClose: () => void; initial?: string; title?: string }) {
+export function WatchPlaylist({
+  entries,
+  total,
+  focus,
+  onClose,
+  onSelect,
+  initial,
+  title = 'Watch recordings'
+}: {
+  entries: readonly PlaylistEntry[];
+  total?: number;
+  focus?: RecordingFocus;
+  onClose: () => void;
+  onSelect?: (id: string) => void;
+  initial?: string;
+  title?: string;
+}) {
   const first = entries.find((entry) => entry.id === initial) ?? entries.find((entry) => recordingState(entry) === 'playable') ?? entries[0];
   const [chosen, setChosen] = useState<string | null>(focus && entries.some((entry) => entry.id === focus.entryId) ? focus.entryId : (first?.id ?? null));
   // Selecting anything else leaves the found moment behind: it describes one video and one time.
@@ -449,6 +475,12 @@ export function WatchPlaylist({ entries, total, focus, onClose, initial, title =
   const active = entries.find((entry) => entry.id === chosen) ?? first ?? null;
   const counts = useMemo(() => playlistCounts(entries), [entries]);
   const activeAt = active ? entries.indexOf(active) : -1;
+  const activeId = active?.id;
+  const selected = useRef(onSelect);
+  selected.current = onSelect;
+  useEffect(() => {
+    if (activeId !== undefined && !focus) selected.current?.(activeId);
+  }, [activeId, focus]);
   const next = stepFrom(entries, active?.id ?? null, 1, repeat);
   const previous = stepFrom(entries, active?.id ?? null, -1, repeat);
   const select = (entry: PlaylistEntry, play: boolean) => {
@@ -524,6 +556,7 @@ export function WatchPlaylist({ entries, total, focus, onClose, initial, title =
                 {listed.map((entry, index) => {
                   const state = recordingState(entry);
                   const here = entry.id === active?.id;
+                  const hints = clipHints(entry);
                   return (
                     <List.Item key={entry.id} data-entry={entry.id} data-status={entry.status} data-recording-state={state}>
                       <Button
@@ -534,11 +567,12 @@ export function WatchPlaylist({ entries, total, focus, onClose, initial, title =
                         py="xs"
                         justify="flex-start"
                         aria-current={here ? 'true' : undefined}
-                        aria-label={`${index + 1}. ${entry.title}, ${statusWord(entry.status)}, ${failedIds.has(entry.id) ? 'could not be loaded' : RECORDING_STATE_TEXT[state].label}`}
+                        aria-label={`${index + 1}. ${entry.title}, ${statusWord(entry.status)}, ${failedIds.has(entry.id) ? 'could not be loaded' : RECORDING_STATE_TEXT[state].label}${hints.durationMs ? `, ${duration(hints.durationMs)} long` : ''}`}
                         onClick={() => select(entry, state === 'playable')}
                       >
                         <Flex component="span" gap="xs" wrap="nowrap" align="flex-start">
                           <StatusMark status={entry.status} size={14} />
+                          {hints.poster && <Poster entry={entry} bundleKey={hints.poster} />}
                           <Flex component="span" direction="column" align="flex-start">
                             <Text span inherit ta="left">
                               {entry.title}
@@ -546,6 +580,7 @@ export function WatchPlaylist({ entries, total, focus, onClose, initial, title =
                             <Text span inherit c="dimmed" size="xs" ta="left">
                               {statusWord(entry.status)} · {environmentLabel(entry.environment)} ·{' '}
                               {failedIds.has(entry.id) ? 'Could not be loaded' : RECORDING_STATE_TEXT[state].label}
+                              {hints.durationMs ? ` · ${duration(hints.durationMs)} recording` : ''}
                             </Text>
                           </Flex>
                         </Flex>

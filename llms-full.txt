@@ -1016,6 +1016,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `poster` (the `id` of an image in the same list) and `durationMs` | attachment (video) | Shown beside the recording in a watch playlist before anything is opened: the report carries them as the optional `poster` (a bundle key) and `durationMs` of each video reference, so no evidence is read per entry. Neither is ever a latency. |
 | `extensions['atlas.media']` | attachment (video) | Where the check's steps are in the recording, so a click on a step seeks the video. See [Place steps in a recording](#place-steps-in-a-recording). |
 | `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
@@ -4696,7 +4697,14 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
   demonstrated. A set longer than the page's limit says it is only the newest results.
 - Only the selected clip is read: the list is the metadata the catalog already sent, the selected result's evidence is read
   when it is selected, and the one `<video>` uses `preload="metadata"`. Opening the playlist downloads no recordings in bulk.
-  Posters and durations of unselected entries are not shown for that reason.
+  An unselected entry still shows a poster and a length when the catalog already carries them: the producer's declared
+  `Attachment.durationMs` and `Attachment.poster` (an image of the same list that the layer's bundle holds) travel as the
+  optional `durationMs` and `poster` of the result's video reference. The poster is an `<img loading="lazy">`, fetched when
+  its row nears the screen; an entry whose producer declared neither shows neither, and nothing is read to find out.
+- The open playlist is in the address (`watch=true`, and `watchClip` for the entry playing), so a link restores it over
+  the same filters, run or collection. Opening it adds a history entry (Back closes it); moving between clips and closing
+  it replace the current one. A `watchClip` the set no longer holds opens the first watchable entry and the address then
+  names that one.
 - One player: selecting another clip replaces it, and the position of the clip left is kept for the session so returning
   resumes there. Previous/next and advancing on end move over the watchable entries; a result with nothing to play is
   selected from the list to read why.

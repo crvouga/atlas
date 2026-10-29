@@ -20,7 +20,7 @@ import { StatusMark } from '../evidence/marks';
 import { useArtifactList } from './catalog';
 import { FreezeCollection } from './collections';
 import { FilterBar } from './filters';
-import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
+import { patched, useExplorerNavigate, useExplorerSearch, useWatchAddress } from './navigate';
 import { runName } from './parts';
 import { entriesFromArtifacts } from './playlist-entries';
 import { WatchPlaylist } from './playlist';
@@ -40,7 +40,7 @@ export function ArtifactsView() {
   const answer = useArtifactList(filter);
   const now = useNow();
   const [shown, setShown] = useState(ARTIFACT_ROWS);
-  const [watching, setWatching] = useState(false);
+  const watch = useWatchAddress();
   const [freezing, setFreezing] = useState(false);
   const entries = useMemo(() => (answer.data && !answer.data.unsupported ? entriesFromArtifacts(answer.data.list.results) : []), [answer.data]);
   if (answer.isPending)
@@ -89,7 +89,7 @@ export function ArtifactsView() {
       )}
       {list.results.length > 0 && (
         <Group my="sm" gap="sm">
-          <Button type="button" variant="filled" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => setWatching(true)}>
+          <Button type="button" variant="filled" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => watch.open()}>
             Watch these {plural(list.results.length, 'result', 'results')}
           </Button>
           {!staticEvidence && (
@@ -99,7 +99,7 @@ export function ArtifactsView() {
           )}
         </Group>
       )}
-      {watching && <WatchPlaylist entries={entries} total={list.total} onClose={() => setWatching(false)} />}
+      {watch.watching && <WatchPlaylist entries={entries} total={list.total} initial={watch.clip} onSelect={watch.select} onClose={watch.close} />}
       {freezing && <FreezeCollection results={list.results} total={list.total} filterQuery={filterParams(filter).toString()} onClose={() => setFreezing(false)} />}
       {list.results.length > 0 && <RecordingTextSearch entries={entries} total={list.total} />}
       {list.results.length > 0 && (
