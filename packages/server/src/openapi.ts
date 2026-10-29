@@ -19,10 +19,10 @@ import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, Heal
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
-export const API_VERSION = '1.5.0';
+export const API_VERSION = '1.6.0';
 
-/** Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`). */
-export type Role = 'none' | 'read' | 'publish' | 'admin';
+/** Who may call an operation: `none` (anyone), or the least role that may (`read` < `critic` < `publish` < `admin`). */
+export type Role = 'none' | 'read' | 'critic' | 'publish' | 'admin';
 
 type JsonSchema = Record<string, unknown>;
 type Param = { readonly name: string; readonly in: 'path' | 'query' | 'header'; readonly description: string; readonly required?: boolean; readonly schema?: JsonSchema; readonly example?: unknown };
@@ -278,7 +278,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
     responses: { '200': { description: 'It exists.' }, '401': UNAUTHORIZED, '404': problem('No such object.') }
   },
   {
-    route: 'PUT /api/store/*', path: '/api/store/{key}', operationId: 'putObject', tag: 'Store protocol', role: 'publish',
+    route: 'PUT /api/store/*', path: '/api/store/{key}', operationId: 'putObject', tag: 'Store protocol', role: 'critic',
     summary: 'Upload an object',
     description: [
       'The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:',
@@ -289,7 +289,9 @@ const BASE_OPERATIONS: readonly Operation[] = [
       '- a **run manifest** must have passed its privacy scan;',
       '- keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.',
       '',
-      'Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser\'s sign-in box is refused.'
+      'Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser\'s sign-in box is refused.',
+      '',
+      'A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.'
     ].join('\n'),
     parameters: [KEY, { name: 'content-type', in: 'header', description: 'Stored with the object and returned when it is read.', schema: str }],
     body: { description: 'The object\'s bytes.', contentType: 'application/octet-stream', schema: { type: 'string', format: 'binary' }, required: true },
@@ -624,6 +626,7 @@ export const NOT_OPERATIONS: ReadonlyMap<string, string> = new Map([
 const SECURITY: Record<Role, readonly Record<string, string[]>[]> = {
   none: [],
   read: [{ bearer: [] }, { basic: [] }],
+  critic: [{ bearer: [] }],
   publish: [{ bearer: [] }],
   admin: [{ bearer: [] }]
 };
@@ -658,7 +661,7 @@ export function openApiDocument(options: { readonly serverUrl?: string } = {}): 
       description: [
         'One Atlas node serves multiple projects. Clients select a project using ?project=<slug>, X-Atlas-Project, or /api/projects/<slug>/… . Each project has independent specs, layers, recordings, status, and event streams. Within each project, the newest completed result of every check wins its slot. Unqualified requests address the legacy default project.',
         '',
-        '**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `publish` < `admin`. Uploading needs a Bearer token; a browser\'s HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.',
+        '**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `critic` < `publish` < `admin`. A `critic` token may read, and publish critiques (layers of automated reviewers) and nothing else. Uploading needs a Bearer token; a browser\'s HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.',
         '',
         '**Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`) with a `detail` that says what to do. `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not valid, `503` still starting (retry after `Retry-After`).',
         '',

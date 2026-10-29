@@ -93,7 +93,7 @@ What it knows lives in its backends (by default a folder on its own disk), so re
 
 Source: `packages/server/src/auth.ts`
 
-Who is asking, and may they. Tokens have a role (`read` < `publish` < `admin`) and are compared in constant time. Reading
+Who is asking, and may they. Tokens have a role (`read` < `critic` < `publish` < `admin`) and are compared in constant time. Reading
 accepts a Bearer token or the browser's sign-in box (any user name, the token as the password); changing anything needs
 the Bearer header, because a browser sends the sign-in box's credentials to any page that asks, which would let another
 site upload with them. A server with no tokens is open, and refuses to listen beyond this machine unless told it may.
@@ -530,10 +530,10 @@ The version of the API described, `major.minor.patch`: the minor grows when an o
 #### `Role`
 
 ```ts
-export type Role = 'none' | 'read' | 'publish' | 'admin';
+export type Role = 'none' | 'read' | 'critic' | 'publish' | 'admin';
 ```
 
-Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`).
+Who may call an operation: `none` (anyone), or the least role that may (`read` < `critic` < `publish` < `admin`).
 
 #### `Operation`
 

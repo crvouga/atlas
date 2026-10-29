@@ -100,7 +100,7 @@ export const SERVER_SETTINGS: readonly ServerSetting[] = [
   { summary: 'How often (seconds) the backends are looked at for layers written by something else', key: 'refreshSeconds', flag: '--refresh <seconds>', env: ['ATLAS_REFRESH_SECONDS'], default: '`10`', example: { value: '30', read: c => c.refreshSeconds, expected: 30 } },
   { summary: 'Let anyone look, not upload', key: 'auth.anonymousRead', flag: '--anonymous-read', env: ['ATLAS_ANONYMOUS_READ'], default: 'no', example: { value: '1', read: c => c.anonymousRead, expected: true } },
   { summary: 'Listen publicly with no tokens (something in front signs people in)', key: 'auth.insecure', flag: '--insecure', env: ['ATLAS_INSECURE'], default: 'no', example: { value: '1', read: c => c.insecure, expected: true } },
-  { summary: 'The admin token (also `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file)', key: 'auth.tokens', flag: null, env: ['ATLAS_TOKEN'], default: 'none: the server is open and listens on this machine only', example: { value: 'admin-token-123456', read: c => c.tokens.map(token => token.role), expected: ['admin'] } },
+  { summary: 'The admin token (also `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file)', key: 'auth.tokens', flag: null, env: ['ATLAS_TOKEN'], default: 'none: the server is open and listens on this machine only', example: { value: 'admin-token-123456', read: c => c.tokens.map(token => token.role), expected: ['admin'] } },
   { summary: 'The configuration file', key: '(the file itself)', flag: '--config <file>', env: ['ATLAS_CONFIG'], default: '`./atlas.server.json` when it exists', example: { value: 'custom.json', read: c => path.basename(c.configFile ?? ''), expected: 'custom.json' } },
   { summary: 'Largest uploaded object in MiB', key: 'limits.maxObjectMiB', flag: null, env: ['ATLAS_MAX_OBJECT_MIB'], default: '`256`', example: { value: '64', read: c => c.limits.maxObjectMiB, expected: 64 } },
   { summary: 'Largest JSON upload in MiB', key: 'limits.maxJsonMiB', flag: null, env: ['ATLAS_MAX_JSON_MIB'], default: '`32`', example: { value: '8', read: c => c.limits.maxJsonMiB, expected: 8 } },
@@ -205,7 +205,7 @@ export function loadServerConfig(argv: readonly string[], env: Env, cwd: string,
     if (!token) throw new ConfigError(`Token "${item.name}" reads ${item.tokenEnv} and it is not set`);
     tokens.push({ name: item.name, role: item.role, token });
   }
-  for (const [variable, role, name] of [['ATLAS_TOKEN', 'admin', 'admin'], ['ATLAS_PUBLISH_TOKEN', 'publish', 'publish'], ['ATLAS_READ_TOKEN', 'read', 'read']] as const) {
+  for (const [variable, role, name] of [['ATLAS_TOKEN', 'admin', 'admin'], ['ATLAS_PUBLISH_TOKEN', 'publish', 'publish'], ['ATLAS_CRITIC_TOKEN', 'critic', 'critic'], ['ATLAS_READ_TOKEN', 'read', 'read']] as const) {
     if (env[variable]) tokens.push({ name, role, token: env[variable]!.trim() });
   }
   for (const item of tokens) if (item.token.length < MIN_TOKEN) throw new ConfigError(`Token "${item.name}" is shorter than ${MIN_TOKEN} characters: use a long random one (openssl rand -hex 24)`);

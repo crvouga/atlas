@@ -46,6 +46,7 @@ export const PACKAGES: Readonly<Record<string, string>> = {
   detox: 'The Detox driver for statechart runs of React Native apps. Import path `@crvouga/atlas/detox`.',
   runners: 'Native reporters that upload to the project server. Import paths `@crvouga/atlas/codecept`, `@crvouga/atlas/mocha`, `@crvouga/atlas/jest`, `@crvouga/atlas/node-test`.',
   vitest: 'Run a statechart plan as Vitest tests. Import path `@crvouga/atlas/vitest`.',
+  critics: 'Automated reviewers of the UI catalog: the critic contract, the runner (caching, retries, rate limits, budgets), credential references and redaction, the `atlas.critique` evidence as layers, calibration and report, warn and gate modes. Import path `@crvouga/atlas/critics`.',
   'playwright-reporter': 'A Playwright Test reporter that streams every test to Atlas with its duration, device labels, steps, retries, videos, screenshots and traces. Import path `@crvouga/atlas/playwright-reporter`.'
 };
 
@@ -60,6 +61,7 @@ export const GUIDES: readonly { readonly file: string; readonly section: string 
   { file: 'docs/deploying.md', section: 'Run and use the server' },
   { file: 'docs/report-contract.md', section: 'Formats and rules' },
   { file: 'docs/extending.md', section: 'Formats and rules' },
+  { file: 'docs/critics.md', section: 'Formats and rules' },
   { file: 'docs/report-backends.md', section: 'Formats and rules' },
   { file: 'docs/statecharts.md', section: 'Formats and rules' },
   { file: 'docs/workspaces.md', section: 'Working with this project' },

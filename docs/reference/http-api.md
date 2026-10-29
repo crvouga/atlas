@@ -414,7 +414,7 @@ Responses: `200` It exists.; `401` No token, or an unknown one. Send `Authorizat
 
 ### Upload an object
 
-`PUT /api/store/{key}` · role: publish
+`PUT /api/store/{key}` · role: critic
 
 The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
 
@@ -425,6 +425,8 @@ The write half of the `ObjectStore` interface. The server checks what it can fro
 - keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
 
 Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.
 
 - `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
 - `content-type` (header): Stored with the object and returned when it is read.
@@ -434,7 +436,7 @@ Responses: `200` Already there with the same bytes.; `201` Stored.; `401` No tok
 
 ### Upload an object
 
-`PUT /api/projects/{project}/store/{key}` · role: publish
+`PUT /api/projects/{project}/store/{key}` · role: critic
 
 The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
 
@@ -445,6 +447,8 @@ The write half of the `ObjectStore` interface. The server checks what it can fro
 - keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
 
 Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 

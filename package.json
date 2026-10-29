@@ -52,6 +52,7 @@
     "./vitest": "./packages/vitest/src/index.ts",
     "./schema": "./packages/schema/src/index.ts",
     "./server": "./packages/server/src/index.ts",
+    "./critics": "./packages/critics/src/index.ts",
     "./reports/*": "./packages/reports/src/*.ts",
     "./schemas/*": "./packages/schema/schemas/*",
     "./openapi.json": "./packages/server/openapi.json",
@@ -120,6 +121,10 @@
         "types": "./dist/server/src/index.d.ts",
         "default": "./dist/server/src/index.js"
       },
+      "./critics": {
+        "types": "./dist/critics/src/index.d.ts",
+        "default": "./dist/critics/src/index.js"
+      },
       "./reports/*": {
         "types": "./dist/reports/src/*.d.ts",
         "default": "./dist/reports/src/*.js"
@@ -187,7 +192,8 @@
     "docs/runners.md",
     "packages/runners/compat",
     "docs/ui.md",
-    "docs/workspaces.md"
+    "docs/workspaces.md",
+    "docs/critics.md"
   ],
   "scripts": {
     "build": "bun scripts/build-package.ts",

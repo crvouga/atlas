@@ -40,10 +40,11 @@
                 "type": "string",
                 "enum": [
                   "read",
+                  "critic",
                   "publish",
                   "admin"
                 ],
-                "description": "`read` may look. `publish` may also upload. `admin` may also remove scratch objects"
+                "description": "`read` may look. `critic` may also publish critiques (layers of producer `critic.*` whose parts are all of kind `critique`). `publish` may also upload. `admin` may also remove scratch objects"
               },
               "token": {
                 "description": "The token. Prefer `tokenEnv`, so the file holds no secret",

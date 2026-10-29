@@ -1,7 +1,7 @@
 /**
  * @module Authentication and roles
  *
- * Who is asking, and may they. Tokens have a role (`read` < `publish` < `admin`) and are compared in constant time. Reading
+ * Who is asking, and may they. Tokens have a role (`read` < `critic` < `publish` < `admin`) and are compared in constant time. Reading
  * accepts a Bearer token or the browser's sign-in box (any user name, the token as the password); changing anything needs
  * the Bearer header, because a browser sends the sign-in box's credentials to any page that asks, which would let another
  * site upload with them. A server with no tokens is open, and refuses to listen beyond this machine unless told it may.
@@ -12,7 +12,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { ServerRole } from '../../schema/src/server-config';
 import type { ResolvedToken } from './config';
 
-const RANK: Readonly<Record<ServerRole, number>> = { read: 1, publish: 2, admin: 3 };
+const RANK: Readonly<Record<ServerRole, number>> = { read: 1, critic: 2, publish: 3, admin: 4 };
 
 /** Who a request is: the token's `name` (never the token), its `role`, and how it was presented (`bearer`, `basic`, or `none` for an open server or an anonymous reader). */
 export type Identity = {
