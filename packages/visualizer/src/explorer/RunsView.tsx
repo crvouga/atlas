@@ -29,7 +29,7 @@ import { entriesFromRun } from './playlist-entries';
 import { WatchPlaylist } from './playlist';
 import { FilterBar } from './filters';
 import { SearchNotes, TypedFilters } from './search-notes';
-import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
+import { patched, useExplorerNavigate, useExplorerSearch, useWatchAddress } from './navigate';
 import { runName } from './parts';
 import { filtered, filterOf, NO_FILTERS } from './search';
 const RUN_ROWS = 50;
@@ -496,7 +496,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
       ),
     [narrowedResults, status, statusFilters, model]
   );
-  const [watching, setWatching] = useState(false);
+  const watch = useWatchAddress();
   const playlist = useMemo(() => entriesFromRun(filtered, detail.data?.layers), [filtered, detail.data]);
   const bySpec = useMemo(() => {
     const groups = new Map<string, RunResult[]>();
@@ -676,11 +676,11 @@ function RunDetailView({ runKey }: { runKey: string }) {
         </Text>
       )}
       {filtered.length > 0 && (
-        <Button type="button" variant="filled" my="sm" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => setWatching(true)}>
+        <Button type="button" variant="filled" my="sm" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => watch.open()}>
           Watch these {plural(filtered.length, 'result', 'results')}
         </Button>
       )}
-      {watching && <WatchPlaylist entries={playlist} onClose={() => setWatching(false)} />}
+      {watch.watching && <WatchPlaylist entries={playlist} initial={watch.clip} onSelect={watch.select} onClose={watch.close} />}
       {bySpec.map(([spec, list]) => (
         <Box key={spec} data-open aria-label={spec || 'No spec'} component="section" mb="lg">
           <Button data-static variant="default" fullWidth h="auto" py="sm" justify="flex-start">
