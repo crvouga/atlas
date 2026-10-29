@@ -1,4 +1,4 @@
-import { Badge, Flex } from '@mantine/core';
+import { Anchor, Badge, Flex } from '@mantine/core';
 import { statusColor } from '../ui/theme';
 /**
  * @module Explorer parts
@@ -11,6 +11,8 @@ import type { TestSummary } from '@crvouga/atlas/reports/test-catalog';
 import { plural } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { currentProject } from '../runtime';
+import { kindOfFile, specFile } from '../spec-kind';
+import { Link } from '@tanstack/react-router';
 import { environmentStatuses } from './groups';
 /** The project's name for its title: `?project=geviti-app` reads "Geviti App". */
 export function projectTitle(): string {
@@ -78,5 +80,21 @@ export function EnvironmentChips({ test }: { test: TestSummary }) {
         </Badge>
       ))}
     </Flex>
+  );
+}
+
+/**
+ * "Read the promise": the written spec of a result, opened on that exact check (its scenario and examples) in the spec's own page,
+ * where Read, Watch and Inspect sit together. It names the check and no run, so it shows the promise as written now; the run a
+ * recording came from stays one click away in the test detail. Nothing is rendered for a result without a spec of a known kind.
+ */
+export function ReadPromise({ specPath, check }: { specPath: string | null; check: string }) {
+  const file = specPath ? specFile(specPath) : null;
+  const kind = file ? kindOfFile(file) : null;
+  if (!file || !kind) return null;
+  return (
+    <Anchor renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ spec: file, check }} />}>
+      Read the promise
+    </Anchor>
   );
 }

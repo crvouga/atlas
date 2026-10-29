@@ -264,6 +264,11 @@ export function Explorer() {
             <Anchor mt="xs" display="inline-block" size="sm" renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'health', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
               Why do these counts differ from the Tests?
             </Anchor>
+            {kinds.some(({ kind }) => kind.id === 'gherkin') && (
+              <Anchor ml="md" mt="xs" display="inline-block" size="sm" renderRoot={(props) => <Link {...props} to="/behaviors" search={{}} />}>
+                Behaviors: read what the project promises, then watch it
+              </Anchor>
+            )}
           </Box>
         )}
         {!model && !evidence.unavailable && (
