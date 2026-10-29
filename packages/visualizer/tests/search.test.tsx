@@ -311,8 +311,8 @@ test('the runs tab searches every run, sorts explicitly, and the opened run sear
   // The run's results use the behaviors' own search.
   await atlas.go(`/?tab=runs&openRun=${encodeURIComponent(RUN(1))}&q=${encodeURIComponent('savde answer')}`);
   await atlas.until(() => document.querySelector('input[aria-label="Search this run"]') !== null, 'the run');
-  await atlas.until(() => document.querySelectorAll('section[aria-label^="Run"] li').length === 1, 'the matching result');
-  expect(document.querySelector('section[aria-label^="Run"] li')?.textContent).toContain('Keep a saved answer');
+  await atlas.until(() => document.querySelectorAll('section[aria-label^="Run"] li[data-status]').length === 1, 'the matching result');
+  expect(document.querySelector('section[aria-label^="Run"] li[data-status]')?.textContent).toContain('Keep a saved answer');
   expect(document.body.textContent).toContain('1 of 2 results match');
   expect(input('Search this run').value).toBe('savde answer');
 });
