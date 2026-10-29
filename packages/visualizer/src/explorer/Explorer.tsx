@@ -44,6 +44,7 @@ import {
 } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { staticEvidence } from '../evidence/api';
 import { useEvidence } from '../evidence/evidence-context';
 import { ago, plural, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
@@ -57,6 +58,7 @@ import { groupTests, tally, type TestGroupView } from './groups';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, EnvironmentChips, projectTitle, runName } from './parts';
 import { ArtifactsView } from './ArtifactsView';
+import { CollectionsView } from './collections';
 import { RunsView } from './RunsView';
 import { SearchNotes, TypedFilters } from './search-notes';
 import { EXPLORER_SORTS, joined, narrowed, queryOf, sortOf, TEST_GROUPS, toggled, values, type ExplorerSearch, type ExplorerSort, type TestGroup } from './search';
@@ -167,7 +169,7 @@ export function Explorer() {
   const model = catalog.model;
   const selected = search.test ? (model?.byKey.get(search.test) ?? null) : null;
   const empty = model !== null && model.tests.length === 0;
-  const split = !!search.test && search.tab !== 'runs' && search.tab !== 'artifacts';
+  const split = !!search.test && search.tab !== 'runs' && search.tab !== 'artifacts' && search.tab !== 'collections';
   return (
     <Container size="xl" py="xl">
       <Box aria-label="Test explorer" component="article" miw={0}>
@@ -178,7 +180,7 @@ export function Explorer() {
           {model && (model.tests.length > 0 || model.summary.runs > 0) && (
             <Tabs
               value={search.tab ?? 'tests'}
-              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' ? value : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined })}
+              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' || value === 'collections' ? value : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined, collection: undefined, rev: undefined })}
             >
               <Tabs.List aria-label="Explorer view">
                 <Tabs.Tab
@@ -202,6 +204,7 @@ export function Explorer() {
                   Runs
                 </Tabs.Tab>
                 <Tabs.Tab value="artifacts">Artifacts</Tabs.Tab>
+                {!staticEvidence && <Tabs.Tab value="collections">Collections</Tabs.Tab>}
               </Tabs.List>
             </Tabs>
           )}
@@ -266,6 +269,8 @@ export function Explorer() {
             <RunsView />
           ) : search.tab === 'artifacts' ? (
             <ArtifactsView />
+          ) : search.tab === 'collections' ? (
+            <CollectionsView />
           ) : empty ? null : (
             <>
               <InsightStrip model={model} scope={listing.scope} search={search} />

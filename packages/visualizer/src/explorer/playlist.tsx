@@ -363,10 +363,11 @@ function Clip({
 /**
  * The watch session for `entries`: opens as a modal over the explorer. `total` is how many results matched when the list
  * holds only the newest of them, so the session says it is not the whole set. `focus` opens it on one found moment: that
- * result, that attempt's video and, when the time is usable, that time. Closing it discards positions.
+ * result, that attempt's video and, when the time is usable, that time. `initial` is the entry to start on when there is no
+ * `focus`, and `title` the heading. Closing it discards positions.
  */
-export function WatchPlaylist({ entries, total, focus, onClose }: { entries: readonly PlaylistEntry[]; total?: number; focus?: RecordingFocus; onClose: () => void }) {
-  const first = entries.find((entry) => recordingState(entry) === 'playable') ?? entries[0];
+export function WatchPlaylist({ entries, total, focus, onClose, initial, title = 'Watch recordings' }: { entries: readonly PlaylistEntry[]; total?: number; focus?: RecordingFocus; onClose: () => void; initial?: string; title?: string }) {
+  const first = entries.find((entry) => entry.id === initial) ?? entries.find((entry) => recordingState(entry) === 'playable') ?? entries[0];
   const [chosen, setChosen] = useState<string | null>(focus && entries.some((entry) => entry.id === focus.entryId) ? focus.entryId : (first?.id ?? null));
   // Selecting anything else leaves the found moment behind: it describes one video and one time.
   const [moment, setMoment] = useState<RecordingFocus | null>(focus ?? null);
@@ -389,7 +390,7 @@ export function WatchPlaylist({ entries, total, focus, onClose }: { entries: rea
   };
   const listed = entries.slice(0, Math.max(shown, activeAt + 1));
   return (
-    <Modal opened onClose={onClose} title="Watch recordings" size="xl" centered>
+    <Modal opened onClose={onClose} title={title} size="xl" centered>
       <Stack gap="md">
         <Text role="status" component="div" data-playlist-summary>
           {plural(entries.length, 'result', 'results')}
