@@ -67,6 +67,26 @@ and component defaults still live only in `ui/theme.tsx`. Quint/Alloy grammar so
 [`ui/grammars/README.md`](../packages/visualizer/src/ui/grammars/README.md). Unknown formats remain plain
 text, and parse failures must leave the source visible. Syntax highlighting never means a spec passed.
 
+## Behaviors: Read, Watch, Inspect
+
+A Gherkin page reads as behaviors: each scenario, or each example row of an outline (never the outline template as an
+extra), is one behavior in one coverage state (`evidence/behavior.ts`). Opening a behavior shows Mantine `Tabs`:
+**Read** (the steps with the example's values filled in), **Watch** (what is expected next to the matched recording,
+its status and provenance) and **Inspect** (the existing check detail: runs, environments, attempts, files). A behavior
+with a playable recording opens on Watch, one in a run in progress on Inspect, otherwise on Read. The video is read only
+when Watch is on screen.
+
+- States stay distinct and none but `demonstrated` is a pass with proof: recording missing, recording of an older spec
+  revision, no recording, API only, failed, running, skipped, parked (tagged `@parked`, `@wip`, `@pending`) and not executed.
+  Counts are in the Coverage section above the source; an empty state is left out except `demonstrated`.
+- The promise's revision (the spec's fingerprint now) and the evidence's revision (the fingerprint the layer recorded)
+  are shown separately. A known difference demotes a recording to "Recording is older" with an alert; a missing
+  fingerprint is "not recorded", never a match.
+- A recording is always labelled illustrative: it shows one run and does not approve a behavior for production.
+  `demo`/`representative` tags only add a "Representative demo" label.
+- The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
+  none are listed under "No domain declared"; the Tests view reports domain problems).
+
 ## Icons and notation marks
 
 Use named imports from `@tabler/icons-react` for all UI glyphs. The icon package supplies SVG paths;
@@ -137,7 +157,7 @@ The narrowly scoped exceptions are:
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
 | Project home | Tests/runs/artifacts tabs, a run's Artifacts (files of its layers, shared recordings, direct links), metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion |
 | Test detail | Current outcomes, statistics, duration graph, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
-| Specs | All six existing kinds, overview/index, Gherkin rules/scenarios/examples, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Table, CodeHighlightTabs, ResultRow |
+| Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |
 | Evidence | Steps, retries, annotations, facts, unknown extensions, safe downloads and previews | List, Badge, Accordion, Code, Image, native media |
 | Recordings | Pictures/video/timeline, actor selection, moments, failure jumps, timing, model-state differences | Tabs, Slider, Button, ScrollArea, Table, Progress |
