@@ -61,8 +61,9 @@ or publish a second package.
 Read [workspace development](docs/workspaces.md) for Superset, super.engineering and Orca. Shared
 commands are `bun run workspace:setup`, `workspace:run`, `workspace:preview`, `workspace:status`,
 `workspace:stop` and `workspace:check`. Discover the actual URL from status; default ports may be busy.
-Keep `.atlas-data/`, `.atlas-workspace/` and dependencies private to each checkout. Setup needs no
-credentials and must stay idempotent. Preserve the three IDE configs when changing lifecycle commands;
+Keep `.atlas-workspace/` and dependencies private to each checkout. Setup needs no
+credentials and must stay idempotent; `workspace:run` needs the S3 variables of `.env.example`, because the server keeps
+all reports and user state in S3 only. Preserve the three IDE configs when changing lifecycle commands;
 run `bun test scripts/workspace.test.ts`. Use documented IDE CLIs for app-owned configuration. Setup
 must not launch agents, change their permissions or silently install a different Bun version.
 
@@ -139,6 +140,16 @@ colocation: say it once, next to what it describes, and generate everything else
   Every command that prints a result supports `--format json`.
 - Guides in `docs/` are written by hand and listed in `scripts/docs/generate.ts` (`GUIDES`) so they reach `llms.txt`; a test
   checks every relative link and anchor.
+
+## The server stores everything in S3, and says so
+
+`atlas serve` and `atlas dev` keep all reports and all user state (the garbage collection policy and saved settings, one
+JSON document at `server/state.json`) in S3-compatible storage and nowhere else. Do not add a local-disk, memory, database
+or browser-storage path for either, and do not give the required `ATLAS_S3_*` variables a default: a missing or invalid
+one must stop the server with the banner of `packages/server/src/storage.ts` (every variable listed, exit 2). A new
+variable goes in `S3_VARIABLES` and `.env.example`. Garbage collection is off until a policy is saved from the UI and
+deletes only superseded layers (`packages/reports/src/garbage.ts`); keep both properties. Server tests run against the
+in-memory S3 in `packages/server/tests/fake-s3.ts`.
 
 ## The S3 store is tested against a real server
 

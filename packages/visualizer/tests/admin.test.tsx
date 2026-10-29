@@ -37,94 +37,138 @@ async function type(id: string, value: string) {
   });
 }
 const revision = 'a'.repeat(64);
-test('admin page loads and saves with Bearer authentication and optimistic concurrency', async () => {
-  const requests: RequestInit[] = [];
-  globalThis.fetch = (async (_, init) => {
-    requests.push(init!);
-    return Response.json({
-      revision,
-      settings: { data: './reports' },
-      active: { data: '/project/reports' },
-      restartRequired: init?.method === 'PUT'
-    });
+const next = 'b'.repeat(64);
+type Call = { url: string; init: RequestInit };
+const policy = { enabled: true, maxAgeDays: 45, keepLatest: 5, intervalHours: 12 };
+/** A server whose settings and policy live behind /api/settings and /api/settings/gc, as in S3. */
+function server(saved: { policy: typeof policy | null; settings?: Record<string, unknown> } = { policy: null }) {
+  const calls: Call[] = [];
+  const state = { ...saved };
+  globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
+    calls.push({ url, init });
+    if (url.startsWith('/api/settings/gc/run'))
+      return Response.json({
+        runs: [{ project: 'default', dryRun: true, at: '2026-10-28T00:00:00Z', candidates: 7, deletedLayers: 0, deletedBlobs: 0, keptLayers: 3 }],
+        policy: state.policy
+      });
+    if (url === '/api/settings/gc') {
+      if (init.method === 'PUT') state.policy = JSON.parse(init.body as string);
+      return Response.json({ revision: init.method === 'PUT' ? next : revision, policy: state.policy, saved: state.policy !== null, lastRuns: [], stateKey: 'server/state.json' });
+    }
+    if (init.method === 'PUT') state.settings = JSON.parse(init.body as string);
+    return Response.json({ revision: init.method === 'PUT' ? next : revision, settings: state.settings ?? {}, active: { refreshSeconds: 17 }, restartRequired: init.method === 'PUT' });
   }) as typeof fetch;
+  return calls;
+}
+async function change(id: string, value: string) {
+  await act(async () => {
+    const select = document.getElementById(id) as HTMLInputElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')!.set!.call(select, value === 'true');
+    select.dispatchEvent(new Event('click', { bubbles: true }));
+  });
+}
+test('admin page loads settings and the policy with Bearer authentication and saves settings with optimistic concurrency', async () => {
+  const calls = server({ policy: null, settings: { refreshSeconds: 20 } });
   await open();
   expect(document.getElementById('configuration')).toBeNull();
   await type('token', 'admin-secret');
   await click('load');
-  expect((document.getElementById('data') as HTMLInputElement).value).toBe('./reports');
-  await type('data', './archive');
+  expect(calls.map((call) => call.url)).toEqual(['/api/settings', '/api/settings/gc']);
+  expect((document.getElementById('refreshSeconds') as HTMLInputElement).value).toBe('20');
+  expect(document.querySelector('label[for="refreshSeconds"]')?.parentElement?.textContent).toContain('Current: 17');
+  await type('refreshSeconds', '25');
   await click('save');
-  expect(requests[1]!.headers).toEqual({
-    authorization: 'Bearer admin-secret',
-    'content-type': 'application/json',
-    'if-match': `"${revision}"`
-  });
-  expect(JSON.parse(requests[1]!.body as string)).toEqual({ data: './archive' });
+  const put = calls.at(-1)!;
+  expect(put.url).toBe('/api/settings');
+  expect(put.init.headers).toEqual({ authorization: 'Bearer admin-secret', 'content-type': 'application/json', 'if-match': `"${revision}"` });
+  expect(JSON.parse(put.init.body as string)).toEqual({ refreshSeconds: 25 });
   expect(document.getElementById('status')!.textContent).toContain('Restart Atlas');
   expect(localStorage.getItem('token')).toBeNull();
   expect(sessionStorage.getItem('token')).toBeNull();
 });
-test('settings form preserves defaults and backend write flags until a destination is chosen', async () => {
-  const saved = { data: './reports', backends: [{ id: 'archive', label: 'Archive', url: 's3://reports/atlas', write: true }] };
-  const writes: unknown[] = [];
-  globalThis.fetch = (async (_, init) => {
-    if (init?.method === 'PUT') writes.push(JSON.parse(init.body as string));
-    return Response.json({
-      revision,
-      settings: init?.body ? JSON.parse(init.body as string) : saved,
-      active: { data: '/env/reports', refreshSeconds: 17, write: 'archive' }
-    });
-  }) as typeof fetch;
+test('the storage section says reports and user state are in S3 and offers no local folder or backend to pick', async () => {
+  server();
   await open();
   await click('load');
-  expect((document.getElementById('refreshSeconds') as HTMLInputElement).value).toBe('');
-  expect(document.querySelector('label[for="refreshSeconds"]')?.parentElement?.textContent).toContain('Current: 17');
-  await type('data', './archive');
-  await click('save');
-  expect(writes[0]).toEqual({ ...saved, data: './archive' });
-  await act(async () => {
-    const select = document.getElementById('write') as HTMLSelectElement;
-    Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!.call(select, 'data');
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  await click('save');
-  expect(writes[1]).toEqual({
-    data: './archive',
-    backends: [{ id: 'archive', label: 'Archive', url: 's3://reports/atlas' }],
-    write: 'data'
-  });
+  const text = document.getElementById('configuration')!.textContent!;
+  expect(text).toContain('S3-compatible');
+  expect(text).toContain('server/state.json');
+  expect(document.getElementById('data')).toBeNull();
+  expect(document.getElementById('write')).toBeNull();
+});
+test('with no policy saved the page says nothing is deleted, and saving one writes it through the API with the revision', async () => {
+  const calls = server();
+  // Browser storage is shared with other test files, so compare against what was there before this page ran.
+  const before = JSON.stringify([{ ...localStorage }, { ...sessionStorage }]);
+  await open();
+  await type('token', 'admin-secret');
+  await click('load');
+  expect(document.getElementById('gc-empty')!.textContent).toContain('Garbage collection is off and nothing is deleted');
+  expect((document.getElementById('gc-enabled') as HTMLInputElement).checked).toBe(false);
+  expect((document.getElementById('gc-preview') as HTMLButtonElement).disabled).toBe(true);
+  await type('gc-maxAgeDays', '45');
+  await type('gc-keepLatest', '5');
+  await type('gc-intervalHours', '12');
+  await change('gc-enabled', 'true');
+  await click('gc-save');
+  const put = calls.at(-1)!;
+  expect(put.url).toBe('/api/settings/gc');
+  expect(put.init.method).toBe('PUT');
+  expect(put.init.headers).toEqual({ authorization: 'Bearer admin-secret', 'content-type': 'application/json', 'if-match': `"${revision}"` });
+  expect(JSON.parse(put.init.body as string)).toEqual(policy);
+  expect(document.getElementById('status')!.textContent).toContain('saved to S3');
+  expect(document.getElementById('gc-empty')).toBeNull();
+  expect(JSON.stringify([{ ...localStorage }, { ...sessionStorage }])).toBe(before);
+});
+test('a saved policy is shown as loaded from S3, and a preview lists what would be deleted without deleting', async () => {
+  const calls = server({ policy });
+  await open();
+  await click('load');
+  expect(document.getElementById('gc-empty')).toBeNull();
+  expect((document.getElementById('gc-maxAgeDays') as HTMLInputElement).value).toBe('45');
+  expect((document.getElementById('gc-enabled') as HTMLInputElement).checked).toBe(true);
+  expect((document.getElementById('gc-preview') as HTMLButtonElement).disabled).toBe(false);
+  await click('gc-preview');
+  expect(calls.at(-1)!.url).toBe('/api/settings/gc/run?dryRun=1');
+  expect(calls.at(-1)!.init.method).toBe('POST');
+  expect(document.getElementById('gc-runs')!.textContent).toContain('Preview (nothing deleted)');
+  expect(document.getElementById('gc-runs')!.textContent).toContain('7');
 });
 test('invalid JSON and stale revisions block saves until corrected or reloaded', async () => {
   let requests = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (url: string) => {
     requests++;
-    return requests === 1
+    if (url === '/api/settings/gc') return Response.json({ revision, policy: null, saved: false, lastRuns: [], stateKey: 'server/state.json' });
+    return requests <= 2
       ? Response.json({ revision, settings: {}, active: {} })
       : Response.json({ detail: 'Reload settings before saving.' }, { status: 409 });
   }) as typeof fetch;
   await open();
   await click('load');
+  expect(requests).toBe(2);
   await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Edit configuration as JSON')!.click());
   await type('settings', '{');
   await click('save');
-  expect(requests).toBe(1);
+  expect(requests).toBe(2);
   expect((document.getElementById('settings') as HTMLTextAreaElement).getAttribute('aria-invalid')).toBe('true');
   await type('settings', '{}');
   await click('save');
-  expect(requests).toBe(2);
+  expect(requests).toBe(3);
   expect(document.getElementById('status')!.getAttribute('role')).toBe('alert');
   expect(document.getElementById('status')!.textContent).toBe('Reload settings before saving.');
   expect((document.getElementById('save') as HTMLButtonElement).disabled).toBe(true);
+  expect((document.getElementById('gc-save') as HTMLButtonElement).disabled).toBe(true);
   await click('save');
-  expect(requests).toBe(2);
+  expect(requests).toBe(3);
 });
 test('load has a busy state while a request is pending and recovers after completion', async () => {
   let finish!: (response: Response) => void;
-  globalThis.fetch = (() =>
-    new Promise((resolve) => {
-      finish = resolve;
-    })) as typeof fetch;
+  globalThis.fetch = ((url: string) =>
+    url === '/api/settings/gc'
+      ? Promise.resolve(Response.json({ revision, policy: null, saved: false, lastRuns: [], stateKey: 'server/state.json' }))
+      : new Promise((resolve) => {
+          finish = resolve;
+        })) as typeof fetch;
   await open();
   await click('load');
   expect(document.getElementById('load')!.getAttribute('data-loading')).not.toBeNull();

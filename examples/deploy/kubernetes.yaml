@@ -1,13 +1,13 @@
-# The Atlas server on Kubernetes (EKS): ONE copy, because it is a singleton for the project. It holds nothing of its own:
-# results are kept in the bucket (ATLAS_WRITE), so a pod that is replaced loses nothing and starts from the bucket.
-# The service account's role needs the `publisher` policy, since uploads are written through it
-# (`atlas report policy --store <url> --role both`).
+# The Atlas server on Kubernetes: ONE copy, because it is a singleton for the project. It holds nothing of its own:
+# all reports and all user state (garbage collection policy, saved settings) are kept in the bucket named by the
+# ATLAS_S3_* variables, so a pod that is replaced loses nothing and starts from the bucket. The credentials are
+# explicit (a Secret): the server does not look for ambient AWS roles. Create the secrets first:
+#   kubectl create secret generic atlas-s3 --from-literal=access-key-id=... --from-literal=secret-access-key=...
+# The account needs list, read, write and delete on the bucket and prefix (`atlas report policy --store <url> --role both`).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: atlas
-  annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/atlas-publisher   # replace
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -30,13 +30,17 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - { name: ATLAS_STORE, value: "project=s3://my-bucket/atlas/my-project" }
-            - { name: ATLAS_WRITE, value: project }
-            - { name: AWS_REGION, value: us-east-1 }
+            # All reports and all user state (garbage collection policy, saved settings) live in this bucket and nowhere
+            # else. These five are required; the server refuses to start, listing each one, if any is missing or invalid.
+            - { name: ATLAS_S3_ENDPOINT, value: "https://s3.us-east-1.amazonaws.com" }
+            - { name: ATLAS_S3_BUCKET, value: my-bucket }
+            - { name: ATLAS_S3_REGION, value: us-east-1 }
+            - { name: ATLAS_S3_PREFIX, value: atlas/my-project }
+            - { name: ATLAS_S3_ACCESS_KEY_ID, valueFrom: { secretKeyRef: { name: atlas-s3, key: access-key-id } } }
+            - { name: ATLAS_S3_SECRET_ACCESS_KEY, valueFrom: { secretKeyRef: { name: atlas-s3, key: secret-access-key } } }
             # Create this secret with long random tokens: CI and laptops upload with `publish`, dashboards read with `read`.
             - { name: ATLAS_PUBLISH_TOKEN, valueFrom: { secretKeyRef: { name: atlas, key: publish } } }
             - { name: ATLAS_READ_TOKEN, valueFrom: { secretKeyRef: { name: atlas, key: read } } }
-            - { name: ATLAS_DATA, value: /tmp/atlas-data }
           readinessProbe: { httpGet: { path: /readyz, port: 8080 }, periodSeconds: 5 }
           livenessProbe: { httpGet: { path: /healthz, port: 8080 }, periodSeconds: 15 }
           resources:

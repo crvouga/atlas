@@ -13,7 +13,7 @@
  * @see docs/agents.md
  */
 import { z } from 'zod/v4';
-import { ReportStatusSchema } from './layer';
+import { RecordingReceiptSchema, ReportStatusSchema } from './layer';
 
 /** What was written for one layer by `atlas report publish`. */
 export const PublishedLayerSchema = z.looseObject({
@@ -27,16 +27,24 @@ export const PublishedLayerSchema = z.looseObject({
   linkedToSpec: z.number().int().nonnegative().describe('Checks that were matched to a spec file. The rest still count, but belong to no spec'),
   freshness: z.enum(['modified', 'unknown']).optional().describe('Set when the checkout had uncommitted changes (`modified`) or no git origin (`unknown`)'),
   attachmentFiles: z.number().int().nonnegative(),
-  attachmentBytes: z.number().int().nonnegative()
+  attachmentBytes: z.number().int().nonnegative(),
+  recordings: RecordingReceiptSchema.optional().describe('Present when a check declared a `recordingExpectation`: what became of each expected video, with sizes and checksums of the stored bytes. It describes publication only; the checks keep their results')
 });
 
 /** What `atlas report publish --format json` prints. */
 export const PublishResultSchema = z.looseObject({
-  ok: z.literal(true),
+  ok: z.boolean().describe('True when the layer was written. False only with `--require-recordings` when an expected recording is not uploaded (the layer was still written; the exit code is then 1)'),
   store: z.string().describe('Where it was written: a folder, `s3://…` or a server URL'),
   layer: PublishedLayerSchema,
   specSet: z.looseObject({ id: z.string(), files: z.number().int().nonnegative(), branch: z.string().nullable() }).optional().describe('Present when `--specs` was given'),
   run: z.looseObject({ id: z.string(), files: z.number().int().nonnegative(), bytes: z.number().int().nonnegative(), alreadyPublished: z.boolean() }).optional().describe('Present with `--upload-run`'),
+  recordings: z.looseObject({
+    strict: z.boolean().describe('Whether `--require-recordings` was given'),
+    complete: z.boolean().describe('True when every expected recording is uploaded or referenced'),
+    expected: z.number().int().nonnegative(),
+    uploaded: z.number().int().nonnegative(),
+    gaps: z.array(z.looseObject({ check: z.string(), state: z.string(), reason: z.string().optional() })).describe('Each expected recording that is skipped or unresolved. Retry after fixing it: publishing again reuses the stored files')
+  }).optional().describe('Present when a check declared a `recordingExpectation`'),
   warnings: z.array(z.string()).describe('What was skipped and why, such as an attachment file that could not be read. Never fatal')
 });
 

@@ -42,8 +42,12 @@ export type AtlasServerOptions = {
   readonly log?: (line: Record<string, unknown>) => void;
   readonly now?: () => number;
   readonly version?: string;
-  /** Admin configuration persistence, supplied by atlas serve. Changes apply on restart. */
+  /** Admin configuration persistence, supplied by atlas serve; kept in S3. Changes apply on restart. */
   readonly settings?: ServerSettings;
+  /** The garbage collection policy, kept in S3 and read from there each time the server collects. Supplied by atlas serve. */
+  readonly gc?: GcSettings;
+  /** How often (ms) the server checks whether a garbage collection pass is due. Default 60 000; for tests. */
+  readonly gcCheckMs?: number;
   /** Extra runtime configuration written into the page. */
   readonly page?: Record<string, unknown>;
 };
@@ -62,6 +66,12 @@ export type AtlasServer = {
   readonly routes: readonly { readonly method: string; readonly path: string }[];
   /** Resolves when the first pass over the backends is done. */
   readonly ready: Promise<void>;
+  /**
+   * Apply a garbage collection policy to this project's upload backend. Deletes only layers the report has read and
+   * that no longer decide any result, older than the policy allows and beyond its `keepLatest`. With `dryRun` it only
+   * counts. Never throws: a failure is the `error` of the returned run.
+   */
+  collectGarbage(policy: GcPolicy, options: { readonly dryRun: boolean; readonly project: string }): Promise<GcRun>;
   /** Stop refreshing and end every live connection. */
   close(): void;
 };
@@ -136,11 +146,13 @@ The authentication of one server: `identify` (who is this), `check` (may they, f
 
 Source: `packages/server/src/config.ts`
 
-Loads how the server runs: `atlas.server.json`, then environment variables, then flags, each overriding the last, checked
-against `ServerConfigSchema` and resolved (paths made absolute, backends named, tokens read). Every mistake is a
-`ConfigError` that says what to change, and a server that would listen beyond this machine with no tokens refuses to
-start. `SERVER_SETTINGS` documents every setting once; the table in docs/server.md is generated from it and a test proves
-each row.
+Loads how the server runs: the settings saved in S3 (the user state), then `atlas.server.json`, then environment
+variables, then flags, each overriding the last, checked against `ServerConfigSchema` and resolved (storage read from
+the required `ATLAS_S3_*` variables, tokens read). Storage is never optional: all reports and user state live in
+S3-compatible object storage, so missing or invalid storage variables are an `S3ConfigError` naming every variable.
+Every other mistake is a `ConfigError` that says what to change, and a server that would listen beyond this machine
+with no tokens refuses to start. `SERVER_SETTINGS` documents every setting once; the table in docs/server.md is
+generated from it and a test proves each row.
 
 See docs/server.md#configuration
 
@@ -152,23 +164,12 @@ export type ResolvedToken = { readonly name: string; readonly role: ServerRole; 
 
 A token as the server holds it: the `name` it is shown under in logs, its `role`, and the secret `token`.
 
-#### `BackendSpec`
-
-```ts
-export type BackendSpec = { readonly id: string; readonly label: string; readonly url: string };
-```
-
-A backend as configured: its `id`, the `label` people see, and the `url` (a folder, `s3://…`, or another server) to open.
-
 #### `ResolvedServerConfig`
 
 ```ts
-export type ResolvedServerConfig = Omit<ServerConfig, 'backends' | 'auth' | 'write'> & {
-  /** The folder that is the default backend, absolute. */
-  readonly data: string;
-  /** Every backend, the data folder first. All are read; uploads go to `writeId`. */
-  readonly backends: readonly BackendSpec[];
-  readonly writeId: string;
+export type ResolvedServerConfig = Omit<ServerConfig, 'auth'> & {
+  /** The S3-compatible storage that holds every report and all user state. Required; there is no other. */
+  readonly s3: S3Config;
   readonly tokens: readonly ResolvedToken[];
   readonly anonymousRead: boolean;
   readonly insecure: boolean;
@@ -241,12 +242,13 @@ The text `atlas serve --help` prints. Also the source of the `atlas serve` secti
 #### `loadServerConfig`
 
 ```ts
-export function loadServerConfig(argv: readonly string[], env: Env, cwd: string, read: (file: string) => string = file => readFileSync(file, 'utf8')): ResolvedServerConfig
+export function loadServerConfig(argv: readonly string[], env: Env, cwd: string, read: (file: string) => string = file => readFileSync(file, 'utf8'), saved: Record<string, unknown> = {}): ResolvedServerConfig
 ```
 
 Read the file named by `--config`/`ATLAS_CONFIG`, or `atlas.server.json` in the folder if there is one, lay the
-environment and then the flags over it, and check the result. Every problem is a {@link ConfigError} that says
-what to change.
+environment and then the flags over it, and check the result. `saved` is the settings kept in S3 (the user state),
+the lowest layer. Every problem is a {@link ConfigError} that says what to change; missing or invalid storage
+variables are an `S3ConfigError` that names all of them, and are checked first.
 
 #### `assertSafeToListen`
 
@@ -365,6 +367,8 @@ Source: `packages/server/src/index.ts`. Import: `@crvouga/atlas/server`
 Everything needed to run the Atlas server from code: `createAtlasServer` (a `fetch` handler with the live report, uploads
 and the viewer), `listen` (serve it over HTTP on Bun or Node), `loadServerConfig` (the file, the environment and the flags
 as one checked configuration), `serveMain` (what `atlas serve` runs), `EventHub`, `createAuth`, and the upload checks.
+`atlas serve` keeps everything in S3: `resolveS3Config` reads the required `ATLAS_S3_*` variables, `userStateStore` the user
+state in the bucket, and `storedSettings` serves the settings page from it.
 
 See docs/server.md
 
@@ -442,28 +446,38 @@ The guide for one server, Markdown. Stable in structure: an agent may read it by
 
 Source: `packages/server/src/main.ts`
 
-Starts the Atlas server from its configuration: opens every backend (creating the data folder), proves the upload
-backend can be written to before listening, finds or builds the client, listens at once (so a liveness probe finds the
-process while a large backend is still being read), and stops cleanly on SIGTERM or SIGINT. `serverOptionsOf` is shared
-with `atlas dev`, so the two run the same server.
+Starts the Atlas server from its configuration. Storage comes first and is not optional: the required `ATLAS_S3_*`
+variables are checked (every problem listed together), the bucket is proven reachable and writable, and the user
+state (garbage collection policy and saved settings) is read from it, all before anything listens. Any failure prints
+a banner naming every variable and exits 2; there is no fallback to a local folder, memory or a database. Then it
+finds or builds the client, listens at once (so a liveness probe finds the process while a large bucket is still being
+read), and stops cleanly on SIGTERM or SIGINT. `serverOptionsOf` is shared with `atlas dev`, so the two run the same server.
 
 See docs/server.md#run-it
 
 #### `ServeIo`
 
 ```ts
-export type ServeIo = { readonly out: (text: string) => void; readonly env?: Env; readonly cwd?: string; readonly signal?: AbortSignal };
+export type ServeIo = { readonly out: (text: string) => void; readonly env?: Env; readonly cwd?: string; readonly signal?: AbortSignal; readonly fetch?: typeof fetch };
 ```
 
-What `serveMain` and `devMain` are given besides arguments: where output goes, and, for tests and embedding, the environment, working directory and an `AbortSignal` that stops the server (otherwise SIGTERM and SIGINT do).
+What `serveMain` and `devMain` are given besides arguments: where output goes, and, for tests and embedding, the environment, working directory, the `fetch` S3 requests are sent with, and an `AbortSignal` that stops the server (otherwise SIGTERM and SIGINT do).
+
+#### `S3_BACKEND_ID`
+
+```ts
+export const S3_BACKEND_ID = …
+```
+
+The id of the one backend: the S3 bucket.
 
 #### `openConfiguredBackends`
 
 ```ts
-export function openConfiguredBackends(config: ResolvedServerConfig, env: Env, cwd: string): (BackendInput & { readonly writable: boolean })[]
+export function openConfiguredBackends(config: ResolvedServerConfig, fetchImpl?: typeof fetch): (BackendInput & { readonly writable: boolean })[]
 ```
 
-Open every backend of a configuration. The data folder is made if it is not there.
+Open the S3 bucket named by a configuration, with exactly the credentials it gives (no ambient AWS lookup). Nothing is contacted yet.
 
 #### `serverOptionsOf`
 
@@ -472,6 +486,15 @@ export function serverOptionsOf(config: ResolvedServerConfig, backends: ReturnTy
 ```
 
 What `createAtlasServer` is given for a configuration: `atlas serve` and `atlas dev` run the same server.
+
+#### `connectStorage`
+
+```ts
+export async function connectStorage(config: ResolvedServerConfig, env: Env, io: Pick<ServeIo, 'fetch'>): Promise<{ readonly backends: ReturnType<typeof openConfiguredBackends>; readonly stored: StoredUserState } | { readonly failure: string }>
+```
+
+Check the storage and read the user state, in that order, with the failure banner for each way it can go wrong.
+Returns the opened backends and the state, or the text to print before exiting 2.
 
 #### `serveMain`
 
@@ -638,8 +661,10 @@ const html = await renderSettingsPage();
 Source: `packages/server/src/settings.ts`
 
 @module Persisted server settings
-The admin UI edits storage and report configuration in atlas.server.json. Changes take effect on restart;
-environment variables and flags keep their documented precedence. Authentication is managed outside this UI.
+The settings page edits two things, and both are kept in the user state document in S3 (`server/state.json`), never on
+the server's disk: the report and live-run settings (applied at the next start, below the configuration file,
+the environment and the flags in precedence) and the garbage collection policy (read by the server each time it
+collects). Storage and authentication are deployment-owned and are not editable here.
 
 #### `SettingsSnapshot`
 
@@ -647,7 +672,7 @@ environment variables and flags keep their documented precedence. Authentication
 export type SettingsSnapshot = { readonly revision: string; readonly settings: Record<string, unknown>; readonly active: Record<string, unknown>; readonly restartRequired: boolean; readonly precedence: string };
 ```
 
-The persisted editable settings, active settings and a revision for optimistic concurrency. Authentication token settings are excluded.
+The saved editable settings, the active settings and a revision for optimistic concurrency. Authentication token settings are excluded.
 
 #### `ServerSettings`
 
@@ -655,22 +680,38 @@ The persisted editable settings, active settings and a revision for optimistic c
 export type ServerSettings = { read(): Promise<SettingsSnapshot>; save(settings: unknown, revision: string): Promise<SettingsSnapshot> };
 ```
 
-Storage for the admin API; saving is serialized and refuses a stale revision.
+Storage for the admin API; saving is serialised and refuses a stale revision.
 
-#### `fileServerSettings`
+#### `GcSettings`
 
 ```ts
-export function fileServerSettings(config: ResolvedServerConfig, argv: readonly string[], env: Readonly<Record<string, string | undefined>>, cwd: string): ServerSettings
+export type GcSettings = {
+  /** The policy in S3 with its revision and the last passes. */
+  read(): Promise<GcSnapshot>;
+  /** Validates and saves a policy; a stale `revision` is refused. */
+  save(policy: unknown, revision: string): Promise<GcSnapshot>;
+  /** The policy in S3 right now, or `null` when none has been saved. Read from S3 every time. */
+  policy(): Promise<GcPolicy | null>;
+  /** Remembers the result of a pass, for `read`. */
+  record(runs: readonly GcRun[]): void;
+};
 ```
 
-Manage the server's configuration file with atomic replacement, preserving authentication and unrelated fields.
-Validates both the file alone and the effective configuration before saving. Never migrates or deletes report data.
-Changes need a server restart; deployment environment variables and flags override the file.
+The garbage collection policy as the admin API and the collector see it.
+
+#### `storedSettings`
+
+```ts
+export function storedSettings(config: ResolvedServerConfig, argv: readonly string[], env: Readonly<Record<string, string | undefined>>, cwd: string, userState: UserStateStore): { settings: ServerSettings; gc: GcSettings }
+```
+
+The settings and garbage collection policy kept in `userState` (S3). Validates a settings change against the
+whole deployment (file, environment and flags) before saving, so what is saved can start. Never moves report data.
 
 **Example**
 
 ```ts
-const settings = fileServerSettings(config, argv, process.env, process.cwd());
+const { settings, gc } = storedSettings(config, argv, process.env, process.cwd(), userStateStore(store));
 ```
 
 ### Finding the client
@@ -713,6 +754,118 @@ export async function findSite(named: string | undefined, cwd: string, log: (tex
 
 The client to serve: the one named, a build beside the project, or one built into the user's cache.
 
+### Required S3 storage configuration
+
+Source: `packages/server/src/storage.ts`
+
+The Atlas server keeps ALL reports and ALL user state (the garbage collection policy and saved settings) in
+S3-compatible object storage, and nowhere else: no local folder, no memory, no database. So the storage settings
+are required, come only from environment variables (they hold secrets), and have no defaults for where or as whom
+to connect. `resolveS3Config` checks every variable in one pass and reports all the problems together;
+`startupFailure` renders them as a banner that cannot be missed. `S3_VARIABLES` is the single description of the
+variables: the banner, `.env.example` and the documentation table are all made from it.
+
+See docs/server.md#required-s3-storage
+
+#### `S3Variable`
+
+```ts
+export type S3Variable = {
+  readonly name: string;
+  readonly required: boolean;
+  /** Shown in the banner and the documentation. Never a real secret. */
+  readonly meaning: string;
+  readonly example: string;
+  /** Secrets are never printed, not even when invalid. */
+  readonly secret?: true;
+  /** Returns what is wrong with a value that is set, or null when it is fine. */
+  readonly check: (value: string) => string | null;
+};
+```
+
+One environment variable of the storage configuration.
+
+#### `S3_VARIABLES`
+
+```ts
+export const S3_VARIABLES: readonly S3Variable[]
+```
+
+Every variable that configures storage, required ones first.
+
+#### `S3Config`
+
+```ts
+export type S3Config = {
+  readonly endpoint: string;
+  readonly bucket: string;
+  readonly region: string;
+  readonly prefix: string;
+  readonly pathStyle: boolean;
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  readonly sessionToken?: string;
+};
+```
+
+The storage settings once checked: everything needed to open the bucket, with credentials spelled out.
+
+#### `S3Finding`
+
+```ts
+export type S3Finding = { readonly variable: S3Variable; readonly status: 'ok' | 'missing' | 'invalid' | 'unset'; readonly problem?: string };
+```
+
+The state of one variable after checking, for the banner.
+
+#### `S3ConfigError`
+
+```ts
+export class S3ConfigError extends Error
+```
+
+The storage configuration could not be used. `findings` has every variable, not only the first problem.
+
+#### `inspectS3Env`
+
+```ts
+export function inspectS3Env(env: Env): readonly S3Finding[]
+```
+
+Looks at every storage variable and returns what each is. Nothing here throws.
+
+#### `resolveS3Config`
+
+```ts
+export function resolveS3Config(env: Env): S3Config
+```
+
+The storage settings from the environment. Throws {@link S3ConfigError}, whose message lists every variable and
+marks each missing or invalid one, when any required variable is absent or any set variable is malformed.
+
+**Example**
+
+```ts
+const s3 = resolveS3Config(process.env);
+```
+
+#### `describeS3`
+
+```ts
+export const describeS3 = …
+```
+
+Where the storage is, without a secret: what the log may say.
+
+#### `startupFailure`
+
+```ts
+export function startupFailure(findings: readonly S3Finding[], reason: string, detail?: string): string
+```
+
+The banner printed when the server cannot start because of storage: why storage is required, then EVERY variable by
+name with what is wrong with it. Values of secrets are never printed.
+
 ### Store protocol routes
 
 Source: `packages/server/src/store-api.ts`
@@ -753,6 +906,75 @@ export function storeApi(options: StoreApiOptions)
 ```
 
 The Hono app of the store protocol, to be mounted at `/api/store`. Reads need role `read`; writes need `publish` through a Bearer token.
+
+### User state in S3
+
+Source: `packages/server/src/user-state.ts`
+
+Reads and writes the user state document (`UserStateSchema`: the garbage collection policy and the saved settings) as
+one JSON object at `server/state.json` in the object store, which in a running server is the S3 bucket. This is the
+only place user state is kept: not a file, not a database, not the browser. A missing object is an empty state
+("nothing chosen yet"); an object that cannot be read or does not match the schema is an error that stops the
+server from starting and is never overwritten, so a transient or corrupt read can never silently reset anyone's choices.
+Saving refuses a stale revision (the SHA-256 of the stored text), serialised within this process. An object store has
+no conditional writes, so two servers saving at the same instant could still race; run one server per bucket.
+
+See docs/server.md#user-state-and-garbage-collection
+
+#### `USER_STATE_KEY`
+
+```ts
+export const USER_STATE_KEY = …
+```
+
+Where the user state lives, relative to the store (the bucket plus `ATLAS_S3_PREFIX`).
+
+#### `StoredUserState`
+
+```ts
+export type StoredUserState = { readonly state: UserState; readonly revision: string; readonly exists: boolean };
+```
+
+The user state as stored: the document, its `revision` and whether the object `exists` yet.
+
+#### `UserStateError`
+
+```ts
+export class UserStateError extends Error {}
+```
+
+Raised when the stored user state cannot be trusted. The message says where it is and what to do.
+
+#### `UserStateStore`
+
+```ts
+export type UserStateStore = {
+  /** Reads the document. Throws {@link UserStateError} when it exists but is unreadable or invalid. */
+  read(): Promise<StoredUserState>;
+  /**
+   * Applies `change` to the stored state and writes the result, if `revision` is still the stored one. Throws a
+   * `UserStateError` starting with "Settings changed" for a stale revision.
+   */
+  update(revision: string, change: (state: UserState) => UserState): Promise<StoredUserState>;
+};
+```
+
+The user state of one server: read it, or change it against the revision that was read.
+
+#### `userStateStore`
+
+```ts
+export function userStateStore(store: ObjectStore): UserStateStore
+```
+
+The user state kept in `store` at {@link USER_STATE_KEY}.
+
+**Example**
+
+```ts
+const userState = userStateStore(s3Backend.store);
+const { state } = await userState.read();
+```
 
 ### Upload validation
 

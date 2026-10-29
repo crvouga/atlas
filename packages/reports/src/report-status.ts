@@ -12,6 +12,7 @@ import { REPORT_STATUS_SCHEMA_VERSION, type ReportStatus } from '../../schema/sr
 import { countResults, type CombinedReport } from './compose';
 import { normalizeEnvironment } from './layer-axes';
 import { isDiagnosticKind, type EvidenceResult } from './layer-merge';
+import { recordingCompleteness } from './recording-receipt';
 
 /** Extra conditions for the gate beyond "all checks pass". */
 export type StatusOptions = {
@@ -33,6 +34,8 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  * each required environment with no checks (the name is normalised, so `iOS` means `ios`), then every notice of the
  * report (an unreadable layer or backend). `failing` lists each failed or running winner, in a fixed order that does
  * not depend on read order; diagnostic `performance` checks are left out unless nothing else was recorded.
+ * `recordings` reports recording completeness of the same results apart from `ok`: an incomplete or unknown
+ * completeness never changes the gate (use `atlas report publish --require-recordings` to fail on a missing video).
  *
  * @example
  * const status = reportStatus(await combineBackends(backends), { requireEnvironments: ['ios'] });
@@ -89,7 +92,12 @@ export function reportStatus(report: CombinedReport, options: StatusOptions = {}
       ...report.combined.specs.map(entry => specOutcome(entry.spec.path, entry.spec.title, entry.spec.kind, entry.results)),
       ...(report.combined.unassigned.length ? [specOutcome(null, 'No spec', 'unassigned', report.combined.unassigned)] : [])
     ],
-    failing
+    failing,
+    // Apart from `ok`: whether the expected videos were published says nothing about whether the checks passed.
+    recordings: recordingCompleteness(outcomes.map(result => ({
+      spec: result.row.specPath, check: result.row.id, environment: result.layer.environment, layer: result.layer.id,
+      hasReceipt: result.layer.recordings !== undefined, ...(result.row.recording ? { recording: result.row.recording } : {})
+    })))
   };
 }
 
@@ -124,6 +132,13 @@ export function formatStatusText(status: ReportStatus): string {
   for (const item of status.failing) {
     const where = [item.environment, item.branch, item.sha?.slice(0, 7)].filter(Boolean).join(' · ');
     lines.push(`✗ ${item.status === 'running' ? '[running] ' : ''}${label(item)}${where ? `  (${where})` : ''}${item.detail ? `\n    ${item.detail.split('\n')[0]}` : ''}`);
+  }
+  const recordings = status.recordings;
+  // Quiet for a report that never mentioned recordings; the JSON says `unknown` explicitly.
+  if (recordings && !(recordings.state === 'unknown' && recordings.expected === 0 && recordings.notApplicable === 0)) {
+    const published = recordings.uploaded + recordings.referenced;
+    lines.push(`· recordings: ${recordings.state} — ${published} of ${recordings.expected} expected published${recordings.notApplicable ? `, ${recordings.notApplicable} not applicable` : ''}${recordings.layersWithoutReceipt ? `, ${recordings.layersWithoutReceipt} layer${recordings.layersWithoutReceipt === 1 ? '' : 's'} unknown` : ''}`);
+    for (const gap of recordings.gaps) lines.push(`  ! recording ${gap.state}: ${label({ spec: gap.spec, check: gap.check })}${gap.reason ? ` (${gap.reason})` : ''}`);
   }
   for (const notice of status.notices) lines.push(`! ${notice}`);
   for (const reason of status.reasons) if (!status.notices.includes(reason)) lines.push(`→ ${reason}`);

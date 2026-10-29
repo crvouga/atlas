@@ -82,6 +82,7 @@ Zod schema as `LayerDocumentSchema` from `@crvouga/atlas/schema`.
 | `environment` | The client checked, or absent. Normalised to a lowercase slug: `iOS` → `ios`, `Desktop Web` → `desktop-web`, `iphone` → `ios`, `mobile browser` → `mobile-web`. Any other name is kept. Part of the slot. |
 | `parameters` | Other string choices that make a result its own slot, such as `{ "device": "iphone-15" }`. A parameter named `environment` is read as the environment. Part of the slot. |
 | `freshness` | `modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Advisory only; see [Statuses](#statuses-and-the-gate). |
+| `run` | Optional `{ id, title?, startedAtMs?, endedAtMs? }`: the execution a local or manual producer names. Layers with the same `id` in one project are one run in the run list, however many shards or batches uploaded them; a later invocation at the same branch and commit gets another `id`. Without it a run is its `runUrl`, else `branch@sha`, as before. `title` is for people. Grouping and display only: it is **never part of the slot**, never decides a winner or a status, and never hides `sha`, `branch` or `freshness`. A `run` a reader cannot read is treated as absent. |
 | `specs` | The specs the layer was recorded against, with a `fingerprint` of their text, so a reader can warn when a spec changed since. Optional. |
 | `parts[].kind` | An open category (`behavior`, `performance`, `accessibility`, …). A new kind needs no change to any reader. Part of the slot. |
 | `parts[].checks[]` | `id` (required, stable), `title`, `status`, `detail`, `specPath`, `measurements`, `durationMs`. |
@@ -210,7 +211,7 @@ are part of the contract:
 | **Partition independence** | Splitting the same layers across any number of backends, machines or branches, with any overlap, gives the same report. This is what makes partial runs on separate nodes safe. |
 | **Idempotence** | A layer present twice, in one backend or several, counts once. Publishing the same checks again writes the same layer. |
 | **Monotonic** | A layer changes only the slots it fills. Adding a layer never changes a result it did not record. |
-| **Deletion-free** | Nothing in the contract removes or rewrites a layer. Retention is the operator's choice. |
+| **Deletion-free** | Nothing in the contract removes or rewrites a layer. Retention is the operator's choice: Atlas deletes only under a garbage collection policy an operator saved in the UI, and then only layers that no longer decide any result ([the server](server.md#user-state-and-garbage-collection)). |
 | **Unknown is not a pass** | A layer that cannot be read, a backend that is down, and a check that is `running` or `not-run` never count as passing. The gate fails closed. |
 | **Aggregation by copying** | Layers are immutable and never share a key with different bytes, so combining stores is copying files (`atlas report merge`, `cp -R`, `rsync`, a CI artifact download). Copying is idempotent and commutative. |
 

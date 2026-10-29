@@ -5,6 +5,8 @@ import type { AtlasView, ItemStatus } from '../data/model';
 import { worstOf } from '../data/model/status';
 import { featureModel, scenarioLabel, slotsByScenario } from '../evidence/gherkin';
 import { kindOfFile, outlinePath, specFile } from '../spec-kind';
+import type { TestSummary } from '@crvouga/atlas/reports/test-catalog';
+import { testFacets, testFields } from './behaviors';
 import type { FindDoc, FindField, FindStatus, FindTarget } from './rank';
 
 export type CorpusChart = { readonly id: string; readonly name: string };
@@ -67,6 +69,8 @@ export type CorpusSource = {
   readonly texts: ReadonlyMap<string, string>;
   /** The project home is the test explorer (no statecharts): a check without a published spec opens there. */
   readonly explorer?: boolean;
+  /** The report's tests by key. A check that is one of them is searched by the same fields and filters as in the test list. */
+  readonly tests?: ReadonlyMap<string, TestSummary>;
 };
 
 function itemStatus(status: ItemStatus): FindStatus {
@@ -130,9 +134,17 @@ function actionsIn(text: string): string[] {
   return [...new Set([...text.matchAll(ACTION)].map((match) => match[1]!))];
 }
 
-function runDoc(slot: CorpusSlot, title: string, kind: string | null, file: string, explorer = false): FindDoc {
+/** A check's fields: those the test list searches, else what the check itself says. */
+function checkFields(slot: CorpusSlot, title: string, file: string, test: TestSummary | undefined): { fields: FindField[]; facets?: FindDoc['facets'] } {
+  if (!test) return { fields: fieldsOf(title, '', slot.detail, file) };
+  const fields = testFields(test);
+  return { fields: title === test.title ? fields : [{ name: 'title', text: title }, ...fields], facets: testFacets(test) };
+}
+
+function runDoc(slot: CorpusSlot, title: string, kind: string | null, file: string, explorer = false, test?: TestSummary): FindDoc {
+  const { fields, facets } = checkFields(slot, title, file, test);
   if (explorer) {
-    return { id: `run:${slot.key}`, group: 'Runs', kind: 'run', title, subtitle: file, fields: fieldsOf(title, '', slot.detail, file), status: slot.status, related: [], target: { to: '/', search: { test: slot.key } }, recording: null };
+    return { id: `run:${slot.key}`, group: 'Runs', kind: 'run', title, subtitle: file, fields, status: slot.status, related: [], target: { to: '/', search: { test: slot.key } }, recording: null, ...(facets ? { facets } : {}) };
   }
   const recording = timelineTarget(kind, file, [slot]);
   return {
@@ -141,12 +153,13 @@ function runDoc(slot: CorpusSlot, title: string, kind: string | null, file: stri
     kind: 'run',
     title,
     subtitle: file,
-    fields: fieldsOf(title, '', slot.detail, file),
+    fields,
     status: slot.status,
     related: [],
     // Enter opens the recording when this check has a timeline.
     target: recording ?? (kind ? specTarget(kind, file, slot.id) : { to: '/' as const, search: {} }),
-    recording
+    recording,
+    ...(facets ? { facets } : {})
   };
 }
 
@@ -231,7 +244,7 @@ export function buildCorpus(source: CorpusSource): FindDoc[] {
     const id = `run:${slot.key}`;
     if (seenRuns.has(id)) return;
     seenRuns.add(id);
-    docs.push(runDoc(slot, title, kind, file, explorer));
+    docs.push(runDoc(slot, title, kind, file, explorer, source.tests?.get(slot.key)));
   };
 
   for (const file of source.files) {
@@ -326,7 +339,7 @@ export function buildCorpus(source: CorpusSource): FindDoc[] {
 }
 
 /** The view and the evidence the page already holds, in the shape `buildCorpus` reads. */
-export function corpusFrom(view: AtlasView | null, files: readonly string[], titleOf: (file: string) => string, evidence: EvidenceView, texts: ReadonlyMap<string, string>): FindDoc[] {
+export function corpusFrom(view: AtlasView | null, files: readonly string[], titleOf: (file: string) => string, evidence: EvidenceView, texts: ReadonlyMap<string, string>, tests?: ReadonlyMap<string, TestSummary>): FindDoc[] {
   const slots: CorpusSlot[] = [];
   const take = (slot: CheckSlot) => {
     slots.push({
@@ -370,6 +383,7 @@ export function corpusFrom(view: AtlasView | null, files: readonly string[], tit
     files: files.map((path) => ({ path, title: titleOf(path) })),
     slots,
     texts,
-    explorer: !files.some(isStatechartFile)
+    explorer: !files.some(isStatechartFile),
+    ...(tests ? { tests } : {})
   });
 }

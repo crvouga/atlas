@@ -1,11 +1,13 @@
-import { Alert, Button, Container, Text, Title } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Alert, Anchor, Button, Container, Group, List, Stack, Text, Title } from '@mantine/core';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { lazy, Suspense } from 'react';
 import { keys, specKey, useAdapter } from '../data/queries';
-import { outlinePath, specFile, specKind } from '../spec-kind';
+import { outlinePath, resolveSpec, similarSpecs, specFile, specKind, type SpecKind } from '../spec-kind';
 import type { SelectCheck } from './check-detail';
 import { useEvidence } from './evidence-context';
+import { isMissing, useStalled } from './load-state';
+import { SpecHeader } from './spec-header';
 import { Overview } from './overview';
 // Each kind of spec has a page with a parser of its own (Gherkin, Quint, DMN); a page loads only the one it shows.
 const DocumentPage = lazy(() => import('./document-page').then((m) => ({ default: m.DocumentPage })));
@@ -27,6 +29,63 @@ function Loading({ children }: { children: React.ReactNode }) {
     </Suspense>
   );
 }
+/** What a spec that cannot be shown still says: where it was looked for, what is recorded for it, and the ways on. */
+function SpecUnavailable({
+  kind,
+  file,
+  missing,
+  detail,
+  retry,
+  run
+}: {
+  kind: SpecKind;
+  file: string;
+  missing: boolean;
+  detail: string;
+  retry: () => void;
+  run: string | undefined;
+}) {
+  const evidence = useEvidence();
+  const listed = evidence.files.filter(kind.accepts);
+  const similar = similarSpecs(file, listed);
+  const entry = evidence.view.specs.get(outlinePath(file));
+  return (
+    <Container component="article" size="xl" w="100%" py="xl">
+      <SpecHeader title={file.split('/').at(-1)!} file={file} kind={kind} entry={entry}>
+        <Alert role={missing ? 'status' : 'alert'} color={missing ? 'orange' : 'red'} my="sm" title={missing ? `This ${kind.one} is not available` : `The ${kind.one} could not be read`}>
+          <Stack gap="sm">
+            <Text component="div">
+              {missing ? `specs/${file} is not in this spec set. ` : ''}
+              {detail}
+              {evidence.filesPending || evidence.filesError ? '' : ` ${listed.length} ${listed.length === 1 ? kind.one : kind.many} are listed.`}
+              {entry && entry.slots.length > 0 ? ' Results recorded against it are shown above.' : ''}
+            </Text>
+            {similar.length > 0 && (
+              <>
+                <Text component="div">Did you mean:</Text>
+                <List listStyleType="none">
+                  {similar.map((candidate) => (
+                    <List.Item key={candidate}>
+                      <Anchor renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run, spec: candidate }} />}>{candidate}</Anchor>
+                    </List.Item>
+                  ))}
+                </List>
+              </>
+            )}
+            <Group gap="sm">
+              <Button type="button" onClick={retry} variant="light">
+                Try again
+              </Button>
+              <Button variant="subtle" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run }} />}>
+                Back to {kind.label}
+              </Button>
+            </Group>
+          </Stack>
+        </Alert>
+      </SpecHeader>
+    </Container>
+  );
+}
 /** One spec tab: its overview, one of its documents, or a recording opened from that document. */
 export function SpecPage() {
   const params = useParams({ from: '/specs/$kind' });
@@ -35,7 +94,8 @@ export function SpecPage() {
   const adapter = useAdapter();
   const evidence = useEvidence();
   const kind = specKind(params.kind);
-  const file = search.spec ? specFile(search.spec) : '';
+  // A link may name a spec by another form of its path (with the folder, in other letter case): the listed one is shown.
+  const file = search.spec ? resolveSpec(specFile(search.spec), evidence.files) : '';
   const readable = kind !== null && file.length > 0 && kind.accepts(file);
   const text = useQuery({
     queryKey: keys.specFile(specKey(adapter), file),
@@ -43,6 +103,12 @@ export function SpecPage() {
     enabled: readable,
     retry: false
   });
+  const stalled = useStalled(text.isLoading, file);
+  const client = useQueryClient();
+  // A read that has not answered is dropped before asking again; asking again beside it would only wait for the same answer.
+  const retryText = () => {
+    void client.cancelQueries({ queryKey: keys.specFile(specKey(adapter), file) }).then(() => text.refetch());
+  };
   if (!kind) {
     return (
       <Container component="article" size="xl" w="100%" py="xl">
@@ -101,24 +167,41 @@ export function SpecPage() {
       </Loading>
     );
   }
-  if (text.isPending)
+  if (text.isPending || (text.isError && evidence.filesPending))
     return (
       <Container component="article" size="xl" w="100%" py="xl">
         <Text role="status" component="div" c="dimmed">
-          Loading the {kind.one}…
+          Loading specs/{file}…
         </Text>
+        {stalled && (
+          <Alert role="status" color="orange" my="sm" title={`Reading the ${kind.one} is taking longer than expected`}>
+            <Group gap="sm">
+              <Text span inherit>
+                specs/{file} has not arrived yet. Recorded results for other specs are not affected.
+              </Text>
+              <Button type="button" onClick={retryText} variant="light">
+                Try again
+              </Button>
+              <Button variant="subtle" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run: search.run }} />}>
+                Back to {kind.label}
+              </Button>
+            </Group>
+          </Alert>
+        )}
       </Container>
     );
   if (text.isError) {
+    const listedElsewhere = !evidence.filesPending && !evidence.filesError && !evidence.files.includes(file);
+    const missing = isMissing(text.error) || listedElsewhere;
     return (
-      <Container component="article" size="xl" w="100%" py="xl">
-        <Alert role="alert" color={'red'} my="sm">
-          The {kind.one} could not be read.{' '}
-          <Button type="button" onClick={() => void text.refetch()} variant="subtle">
-            Try again
-          </Button>
-        </Alert>
-      </Container>
+      <SpecUnavailable
+        kind={kind}
+        file={file}
+        missing={missing}
+        detail={text.error instanceof Error ? text.error.message : ''}
+        retry={retryText}
+        run={search.run}
+      />
     );
   }
   const page = { file, text: text.data, kind, entry, selection: { check: search.check, layer: search.layer }, select };
