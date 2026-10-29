@@ -1,0 +1,97 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/verify-recordings-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "True when no layer has a gap and every layer could be read (otherwise the exit code is 1). Test results are unaffected either way"
+    },
+    "layers": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Layers examined"
+    },
+    "checked": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Videos read back from the store (those that name a bundle key)"
+    },
+    "verified": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Of those, the ones that passed every check"
+    },
+    "referenced": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Videos given only by address, which Atlas holds no bytes for and does not check"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "layer": {
+            "type": "string",
+            "description": "The layer that holds the video"
+          },
+          "check": {
+            "description": "The check that holds it, or null for a video attached to the layer or a part",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "The attachment's name"
+          },
+          "bundleKey": {
+            "type": "string",
+            "description": "Its key in the layer's bundle (`attachments/<sha256>`)"
+          },
+          "problem": {
+            "type": "string",
+            "description": "`not-in-bundle` (the layer names a file its bundle does not list), `blob-missing` (a blob holding it is gone: a 404 when played), `unreadable` (the store could not be read: not proof it is gone), `size-mismatch`, `checksum-mismatch` or `undecodable` (empty, or not the container its media type names). An open vocabulary: treat an unknown problem as a gap"
+          },
+          "reason": {
+            "type": "string",
+            "description": "A short explanation without tokens, paths or payload"
+          }
+        },
+        "required": [
+          "layer",
+          "check",
+          "name",
+          "bundleKey",
+          "problem",
+          "reason"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "Every video that is missing, unreadable, corrupt or not the container it claims. Re-publish the layer's recordings to repair them"
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Layers that could not be read at all: their recordings are unknown, never verified"
+    }
+  },
+  "required": [
+    "ok",
+    "layers",
+    "checked",
+    "verified",
+    "referenced",
+    "gaps",
+    "notices"
+  ],
+  "additionalProperties": {}
+}

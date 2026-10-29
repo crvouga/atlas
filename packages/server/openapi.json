@@ -5858,6 +5858,15 @@
           },
           {
             "required": false,
+            "name": "recordings",
+            "in": "query",
+            "description": "Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
             "name": "q",
             "in": "query",
             "description": "Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.",
@@ -6072,6 +6081,15 @@
             "name": "outcome",
             "in": "query",
             "description": "Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "recordings",
+            "in": "query",
+            "description": "Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.",
             "schema": {
               "type": "string"
             }
@@ -10730,6 +10748,10 @@
                                   "type": "boolean",
                                   "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                                 },
+                                "reason": {
+                                  "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                  "type": "string"
+                                },
                                 "scope": {
                                   "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                                   "type": "object",
@@ -11208,6 +11230,10 @@
                               "available": {
                                 "type": "boolean",
                                 "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                              },
+                              "reason": {
+                                "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                "type": "string"
                               },
                               "scope": {
                                 "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -11723,6 +11749,10 @@
                                   "type": "boolean",
                                   "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                                 },
+                                "reason": {
+                                  "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                  "type": "string"
+                                },
                                 "scope": {
                                   "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                                   "type": "object",
@@ -12201,6 +12231,10 @@
                               "available": {
                                 "type": "boolean",
                                 "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                              },
+                              "reason": {
+                                "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                "type": "string"
                               },
                               "scope": {
                                 "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -15610,6 +15644,10 @@
                             "type": "boolean",
                             "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                           },
+                          "reason": {
+                            "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                            "type": "string"
+                          },
                           "scope": {
                             "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                             "type": "object",
@@ -16103,6 +16141,10 @@
                           "available": {
                             "type": "boolean",
                             "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                          },
+                          "reason": {
+                            "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                            "type": "string"
                           },
                           "scope": {
                             "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -18714,6 +18756,10 @@
                             "type": "boolean",
                             "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                           },
+                          "reason": {
+                            "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                            "type": "string"
+                          },
                           "scope": {
                             "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                             "type": "object",
@@ -19195,6 +19241,10 @@
                               "available": {
                                 "type": "boolean",
                                 "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                              },
+                              "reason": {
+                                "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                "type": "string"
                               },
                               "scope": {
                                 "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -19837,6 +19887,10 @@
                           "available": {
                             "type": "boolean",
                             "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                          },
+                          "reason": {
+                            "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                            "type": "string"
                           },
                           "scope": {
                             "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -21093,6 +21147,10 @@
                                   "type": "boolean",
                                   "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                                 },
+                                "reason": {
+                                  "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                  "type": "string"
+                                },
                                 "scope": {
                                   "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                                   "type": "object",
@@ -22284,6 +22342,10 @@
                                 "type": "boolean",
                                 "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
                               },
+                              "reason": {
+                                "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                "type": "string"
+                              },
                               "scope": {
                                 "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                                 "type": "object",
@@ -22954,6 +23016,10 @@
                           "available": {
                             "type": "boolean",
                             "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                          },
+                          "reason": {
+                            "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                            "type": "string"
                           },
                           "scope": {
                             "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -23984,12 +24050,76 @@
                       "minimum": 0,
                       "maximum": 9007199254740991,
                       "description": "References that name no bytes, or bytes the layer does not hold"
+                    },
+                    "missing": {
+                      "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
                     "references",
                     "recordings",
                     "unavailable"
+                  ],
+                  "additionalProperties": {}
+                },
+                "recordings": {
+                  "description": "Whether the recordings its layers expected were published, apart from its outcomes. Absent when no layer declared an expectation: its completeness is unknown, never complete. Matched by the `recordings` filter",
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "incomplete",
+                        "none-expected",
+                        "unknown"
+                      ],
+                      "description": "`incomplete` when an expected recording was skipped or unresolved; else `unknown` when a layer declared no expectations; else `complete` when something was expected and `none-expected` when nothing was"
+                    },
+                    "expected": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "published": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Of the expected recordings, uploaded or referenced by address"
+                    },
+                    "skipped": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "unresolved": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "notApplicable": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "layersWithoutReceipt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Layers of the run that declared no recording expectations: nothing is claimed for them"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "expected",
+                    "published",
+                    "skipped",
+                    "unresolved",
+                    "notApplicable",
+                    "layersWithoutReceipt"
                   ],
                   "additionalProperties": {}
                 },
@@ -24233,6 +24363,28 @@
                   ],
                   "additionalProperties": {}
                 }
+              },
+              "recordings": {
+                "description": "Only for runs: `complete`, `incomplete`, `none-expected` and `unknown` with how many runs have each. Absent on servers that predate the filter",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
               }
             },
             "required": [
@@ -24443,6 +24595,10 @@
                       "available": {
                         "type": "boolean",
                         "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                      },
+                      "reason": {
+                        "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                        "type": "string"
                       },
                       "scope": {
                         "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -24750,6 +24906,28 @@
               },
               "domains": {
                 "description": "Only for artifacts: runs have no domain",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "recordings": {
+                "description": "Only for runs: `complete`, `incomplete`, `none-expected` and `unknown` with how many runs have each. Absent on servers that predate the filter",
                 "type": "array",
                 "items": {
                   "type": "object",
@@ -25736,12 +25914,76 @@
                     "minimum": 0,
                     "maximum": 9007199254740991,
                     "description": "References that name no bytes, or bytes the layer does not hold"
+                  },
+                  "missing": {
+                    "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
                   "references",
                   "recordings",
                   "unavailable"
+                ],
+                "additionalProperties": {}
+              },
+              "recordings": {
+                "description": "Whether the recordings its layers expected were published, apart from its outcomes. Absent when no layer declared an expectation: its completeness is unknown, never complete. Matched by the `recordings` filter",
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "complete",
+                      "incomplete",
+                      "none-expected",
+                      "unknown"
+                    ],
+                    "description": "`incomplete` when an expected recording was skipped or unresolved; else `unknown` when a layer declared no expectations; else `complete` when something was expected and `none-expected` when nothing was"
+                  },
+                  "expected": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "published": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Of the expected recordings, uploaded or referenced by address"
+                  },
+                  "skipped": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "unresolved": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "notApplicable": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "layersWithoutReceipt": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Layers of the run that declared no recording expectations: nothing is claimed for them"
+                  }
+                },
+                "required": [
+                  "state",
+                  "expected",
+                  "published",
+                  "skipped",
+                  "unresolved",
+                  "notApplicable",
+                  "layersWithoutReceipt"
                 ],
                 "additionalProperties": {}
               },
@@ -25889,6 +26131,10 @@
                       "available": {
                         "type": "boolean",
                         "description": "False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer's own bundle does not hold"
+                      },
+                      "reason": {
+                        "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                        "type": "string"
                       },
                       "scope": {
                         "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
@@ -26091,6 +26337,12 @@
                       "minimum": 0,
                       "maximum": 9007199254740991,
                       "description": "References that name no bytes, or bytes the layer does not hold"
+                    },
+                    "missing": {
+                      "description": "Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none",
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [

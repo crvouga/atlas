@@ -144,7 +144,7 @@ function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number;
   const lost = item.bundleKey !== undefined && unstored?.has(item.bundleKey) === true;
   const recording = lost ? attachmentIdentity({ name: item.name, uri: item.uri, text: item.text }) : attachmentIdentity(item);
   const tags = normalizeTags(item.tags);
-  return { name: item.name, owner, ...where, ...(tags.length ? { tags } : {}), ...(recording === undefined ? {} : { recording }), available: recording !== undefined, ...(scope ? { scope } : {}) };
+  return { name: item.name, owner, ...where, ...(tags.length ? { tags } : {}), ...(recording === undefined ? {} : { recording }), available: recording !== undefined, ...(lost && recording === undefined ? { reason: 'not-in-bundle' as const } : {}), ...(scope ? { scope } : {}) };
 }
 
 /**
@@ -154,12 +154,12 @@ function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number;
 export function videoCounts(videos: readonly VideoRef[] | undefined): VideoCounts | undefined {
   if (!videos?.length) return undefined;
   const distinct = new Set<string>();
-  let unavailable = 0;
+  let unavailable = 0, missing = 0;
   for (const video of videos) {
     if (video.available && video.recording !== undefined) distinct.add(video.recording);
-    else unavailable += 1;
+    else { unavailable += 1; if (video.reason === 'not-in-bundle') missing += 1; }
   }
-  return { references: videos.length, recordings: distinct.size, unavailable };
+  return { references: videos.length, recordings: distinct.size, unavailable, ...(missing ? { missing } : {}) };
 }
 
 /** A role to show when a producer gave none, from the media type: `image`, `video`, `audio`, `snapshot` (text/html), `text` (text, JSON, XML) or `file`. Roles are an open vocabulary; a producer's own role always wins. */

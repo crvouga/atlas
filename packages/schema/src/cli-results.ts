@@ -1,7 +1,7 @@
 /**
  * @module Command results (`--format json`)
  *
- * What `atlas report publish`, `stream`, `merge` and `doctor` print on standard output with `--format json` (alias
+ * What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings` print on standard output with `--format json` (alias
  * `--json`), and what any `atlas` command prints on standard error for a command that was wrong: one JSON document,
  * so an agent or a script never has to parse prose. (`status` and `policy` already print documents:
  * `ReportStatusSchema`, and an IAM policy.) Each is also published as a JSON Schema.
@@ -82,6 +82,31 @@ export const DoctorResultSchema = z.looseObject({
   stores: z.array(z.looseObject({ id: z.string(), checks: z.array(DoctorCheckSchema) }))
 });
 
+/** A published video that could not be read back from the store as published (see `atlas report verify-recordings`). */
+export const RecordingGapSchema = z.looseObject({
+  layer: z.string().describe('The layer that holds the video'),
+  check: z.string().nullable().describe('The check that holds it, or null for a video attached to the layer or a part'),
+  name: z.string().describe('The attachment\'s name'),
+  bundleKey: z.string().describe('Its key in the layer\'s bundle (`attachments/<sha256>`)'),
+  problem: z.string().describe('`not-in-bundle` (the layer names a file its bundle does not list), `blob-missing` (a blob holding it is gone: a 404 when played), `unreadable` (the store could not be read: not proof it is gone), `size-mismatch`, `checksum-mismatch` or `undecodable` (empty, or not the container its media type names). An open vocabulary: treat an unknown problem as a gap'),
+  reason: z.string().describe('A short explanation without tokens, paths or payload')
+});
+
+/**
+ * What `atlas report verify-recordings --format json` prints: whether the videos the layers published can still be read
+ * back from the store as they were published. It describes stored bytes, never playback in a browser, and it never changes
+ * a check\'s result.
+ */
+export const VerifyRecordingsResultSchema = z.looseObject({
+  ok: z.boolean().describe('True when no layer has a gap and every layer could be read (otherwise the exit code is 1). Test results are unaffected either way'),
+  layers: z.number().int().nonnegative().describe('Layers examined'),
+  checked: z.number().int().nonnegative().describe('Videos read back from the store (those that name a bundle key)'),
+  verified: z.number().int().nonnegative().describe('Of those, the ones that passed every check'),
+  referenced: z.number().int().nonnegative().describe('Videos given only by address, which Atlas holds no bytes for and does not check'),
+  gaps: z.array(RecordingGapSchema).describe('Every video that is missing, unreadable, corrupt or not the container it claims. Re-publish the layer\'s recordings to repair them'),
+  notices: z.array(z.string()).describe('Layers that could not be read at all: their recordings are unknown, never verified')
+});
+
 /** What any `atlas` command prints on standard error, with `--format json`, when the command itself was wrong (exit code 2). */
 export const CommandErrorSchema = z.looseObject({
   ok: z.literal(false),
@@ -153,5 +178,6 @@ export const CLI_RESULTS = {
   merge: { command: 'atlas report merge', schemaName: 'merge-result', schema: MergeResultSchema },
   doctor: { command: 'atlas report doctor', schemaName: 'doctor-result', schema: DoctorResultSchema },
   status: { command: 'atlas report status', schemaName: 'report-status', schema: ReportStatusSchema },
+  verifyRecordings: { command: 'atlas report verify-recordings', schemaName: 'verify-recordings-result', schema: VerifyRecordingsResultSchema },
   error: { command: 'a command that was wrong (standard error)', schemaName: 'command-error', schema: CommandErrorSchema }
 } as const;

@@ -172,6 +172,7 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas report merge` | `merge-result` |
 | `atlas report doctor` | `doctor-result` |
 | `atlas report status` | `report-status` |
+| `atlas report verify-recordings` | `verify-recordings-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 
@@ -1196,7 +1197,8 @@ curl "$ATLAS_SERVER_URL/api/reports/artifacts?artifactTag=demo&type=video&domain
 - **Dimensions.** `artifactTag`, `type` (the media type as a role: `video`, `image`, `audio`, `snapshot`, `text`,
   `file`; `video` means a playable recording), `label` (`key=value`, or `key`), `domain` and `spec` (artifacts only),
   `environment` (the device or client), `producer`, `branch`, `sha` (seven or more characters), `outcome` (`passed`,
-  `failed`, `running`, `not-run`), `since` and `until` (epoch milliseconds or an ISO date), and `q` (words).
+  `failed`, `running`, `not-run`), `recordings` (runs only: `complete`, `incomplete`, `none-expected` or `unknown`, see
+  [recording completeness](#recording-completeness)), `since` and `until` (epoch milliseconds or an ISO date), and `q` (words).
 - **Semantics.** Filters combine with AND across dimensions and OR within one (`environment=ios,android`). With both
   `artifactTag` and `type`, one attachment must be both where the report says which video carries which tag: a tagged
   screenshot beside an untagged video is not a tagged video. `inherited=1` also counts the tags an attachment inherits
@@ -1463,10 +1465,36 @@ publish; it never contains a path or a token.
   retry (publishing again reuses the stored files).
 - `atlas report status --format json` has `recordings`: `state` is `complete`, `incomplete`, `none-expected` or
   `unknown`, with counts and each gap. It never changes `ok`. A layer without a receipt is `unknown`, never `complete`.
-- The viewer shows `Recordings 2 of 3: incomplete` beside the run's origin, apart from its green or red outcomes.
+- The viewer shows `Recordings 2 of 3: incomplete` beside the run's origin and in each row of the Runs tab, apart from
+  its green or red outcomes.
+- **Find runs by completeness.** `GET /api/reports/runs?recordings=incomplete` (and the Runs tab's *Recordings* filter,
+  `?tab=runs&recordings=incomplete`) keep the runs whose layers have a skipped or unresolved expected recording. The
+  values are `complete`, `incomplete`, `none-expected` and `unknown`, comma-separated for OR, and they combine with the
+  other filters by AND. A run whose layers declared no expectations is `unknown`, never `complete`, and a run with any
+  layer without a receipt cannot be `complete`. It is answered from the layers' receipts, before the page limit, and
+  never reads a recording; the facet counts say how many runs have each state. It is a property of a run, so the
+  artifacts list does not take it. A server that predates it ignores the parameter and does not name it in `filters`, and
+  the viewer then says the list is not narrowed by it.
 
-This is a statement about publication. Atlas does not check that a stored video plays in a browser, and does not yet
-re-check later that a stored file is still readable.
+### Is the recording still there?
+
+A receipt says a file was published. Whether it is still retrievable later is a separate question, and Atlas answers it
+two ways without touching a check's result:
+
+- **Layer bundle.** A video that names a `bundleKey` the layer's bundle does not list (the file was acknowledged and is
+  gone, or never arrived) is not offered to play. The report marks it `available: false` with `reason: "not-in-bundle"`,
+  the run counts it in `videos.unavailable` and `videos.missing`, and the Runs tab explains that the run stored the file
+  but no longer holds it, which is different from a reference that never named any bytes.
+- **`atlas report verify-recordings`** reads the videos of the stored layers back and checks, for each, that the bundle
+  lists it, that its blob is still in the store, that its size and SHA-256 are the recorded ones, and that it begins like
+  the container its media type names (WebM, MP4, QuickTime, Ogg, AVI). It exits 1 and names the layer and check for
+  every gap (`not-in-bundle`, `blob-missing`, `unreadable`, `size-mismatch`, `checksum-mismatch`, `undecodable`);
+  `--format json` prints the `verify-recordings-result` document. `--layer <id>` and `--limit <n>` narrow the work, since
+  it reads blobs. A store that cannot answer is `unreadable`, never verified. Test results are unchanged either way.
+
+Both are statements about stored bytes. Atlas does not check that a stored video plays in a given browser (a valid header
+can still have an unsupported codec or be truncated), and acknowledging an upload is not playback. Videos given only by
+`uri` are counted as referenced and not checked.
 </doc>
 
 <doc path="docs/ui-catalog.md">
@@ -2058,7 +2086,7 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
 | How reliable one test is in a scope (environment, producer, parameters, branch, commit, spec revision, time window): independent executions, first-try and eventual success, what was left out and why | `GET /api/reports/tests/reliability?key=<key>&environment=phone` |
 | Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
-| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
+| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `recordings` (completeness of the recordings the run's layers expected), `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
 | Recorded results that carry evidence, across the whole history, found by tag, media type, label, feature, environment, branch, revision, outcome and time | `GET /api/reports/artifacts?artifactTag=demo&type=video` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 
@@ -5252,6 +5280,8 @@ atlas report — layered evidence for any kind of spec
                        [--specs <dir>] [--format text|json|markdown]
                        [--require-environments a,b] [--require-all-specs]
                        [--branch <name>]... [--ignore-modified]
+  atlas report verify-recordings [--store <dir|s3://…|id=url>]... [--backends <module>] [--layer <id>]...
+                       [--limit <n>] [--branch <name>]... [--ignore-modified] [--format text|json]
   atlas report merge   [--store …]... [--backends <module>] --into <dir|s3://…>
   atlas report doctor  [--store …]... [--role publisher|reader|both]
   atlas report policy  --store s3://bucket/prefix [--role publisher|reader|both]
@@ -5295,6 +5325,13 @@ atlas report — layered evidence for any kind of spec
             --require-all-specs    fail while any spec has no results
             --branch <name>        only layers recorded on this branch (repeatable)
             --ignore-modified      leave out layers from modified checkouts and unknown origins
+  verify-recordings   Read back the videos the layers published and check they are still there as published: the
+            layer still lists the file, its blob is still stored, its size and SHA-256 are the recorded ones, and it
+            begins like the container its media type names. Exit 1 when any video is missing, unreadable, corrupt or
+            not that container, naming the layer and check; test results are never changed. This checks stored bytes,
+            not playback in a browser. Videos given only by address are counted, not checked.
+            --layer <id>   only the layer whose id starts with this (repeatable; at least 7 digits)
+            --limit <n>    only the newest n layers
   merge     Copy the layers of several stores into one.
   doctor    Check that a store works: credentials, listing, writing, and what it holds.
   policy    Print the least-privilege IAM policy for publishers, readers, or both.
@@ -5303,8 +5340,8 @@ atlas report — layered evidence for any kind of spec
                        { id, label?, store } (or a function returning it): a device lab, anything
                        that implements ObjectStore.
 
-  --format json (alias --json)   publish, stream, merge, doctor and status print one JSON document instead of prose
-                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status). A command
+  --format json (alias --json)   publish, stream, merge, doctor, status and verify-recordings print one JSON document instead of prose
+                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status, verify-recordings-result). A command
                        that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   A store may be an Atlas server (https://…): ATLAS_STORE=https://atlas.example.com, with ATLAS_TOKEN.
 
@@ -6148,6 +6185,7 @@ Every run, newest first: layers grouped by their CI run URL (else branch and com
 - `branch` (query): Branches.
 - `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
 - `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `recordings` (query): Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.
 - `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
 - `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
 - `until` (query): Only records at or before this time (same forms as `since`).
@@ -6176,6 +6214,7 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `branch` (query): Branches.
 - `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
 - `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `recordings` (query): Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.
 - `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
 - `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
 - `until` (query): Only records at or before this time (same forms as `since`).

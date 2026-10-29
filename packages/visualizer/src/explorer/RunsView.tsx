@@ -93,13 +93,37 @@ function ownerText(video: VideoRef): string {
   return 'the test';
 }
 const UNAVAILABLE = 'Listed in the report, but its file was never stored, so it cannot be played.';
-/** The unavailable references of a video summary and why they cannot be watched. */
+const MISSING = 'The run says it stored this file, but its bundle no longer holds it, so it cannot be played.';
+/** The unavailable references of a video summary and why they cannot be watched: never stored, or stored and then gone. */
 function Unavailable({ videos }: { videos: VideoCounts }) {
   if (!videos.unavailable) return null;
+  const missing = Math.min(videos.missing ?? 0, videos.unavailable);
   return (
     <Text component="div" size="xs" c="dimmed" data-video-unavailable>
-      <IconAlertTriangle size={16} aria-hidden="true" /> {plural(videos.unavailable, 'video', 'videos')} unavailable. {UNAVAILABLE}
+      <IconAlertTriangle size={16} aria-hidden="true" /> {plural(videos.unavailable, 'video', 'videos')} unavailable.{' '}
+      {missing > 0 && <Text span inherit data-video-missing>{missing === videos.unavailable ? MISSING : `${plural(missing, 'video', 'videos')}: ${MISSING}`}{' '}</Text>}
+      {missing < videos.unavailable && UNAVAILABLE}
     </Text>
+  );
+}
+/** Words for a run's recording completeness, apart from how its tests went. */
+const COMPLETENESS_WORDS: Record<string, string> = { complete: 'complete', incomplete: 'incomplete', 'none-expected': 'none expected', unknown: 'unknown' };
+/** A run's recording completeness in its row: how many expected recordings were published, said in words and independent of its outcomes. Nothing when its layers declared no expectations (unknown is not shown as complete). */
+function RunRecordings({ run }: { run: RunSummary }) {
+  const recordings = run.recordings;
+  if (!recordings) return null;
+  const word = COMPLETENESS_WORDS[recordings.state] ?? 'unknown';
+  const text = recordings.expected > 0 ? `Recordings ${recordings.published} of ${recordings.expected}: ${word}` : `Recordings: ${word}`;
+  return (
+    <Badge
+      size="sm"
+      variant="light"
+      color={recordings.state === 'incomplete' ? 'orange' : 'gray'}
+      data-recordings={recordings.state}
+      title={recordings.state === 'incomplete' ? 'Some expected recordings were not published. The test outcomes are unaffected.' : undefined}
+    >
+      {text}
+    </Badge>
   );
 }
 /** A run's videos in its row: a link to the recordings, how many references they come from, and what cannot be played. */
@@ -210,7 +234,7 @@ const RUN_SORTS = [
   { id: 'relevance', label: 'Best match' }
 ] as const;
 /** What a filter is called when a page says a server could not apply it. */
-const FILTER_WORDS: Partial<Record<FilterName, string>> = { artifactTag: 'tag', type: 'media type', label: 'label', domain: 'domain', spec: 'spec' };
+const FILTER_WORDS: Partial<Record<FilterName, string>> = { artifactTag: 'tag', type: 'media type', label: 'label', domain: 'domain', spec: 'spec', recordings: 'recording completeness' };
 /** Says which filters the list is not narrowed by, because the server that answered ignored them. */
 export function NotApplied({ names, noun }: { names: readonly FilterName[]; noun: string }) {
   if (!names.length) return null;
@@ -383,6 +407,7 @@ function RunTable() {
                 <Table.Td>{formatMs(run.spanMs)}</Table.Td>
                 <Table.Td>
                   <RunVideos run={run} />
+                  <RunRecordings run={run} />
                 </Table.Td>
                 <Table.Td data-tags>{run.artifactTags?.map((tag) => `#${tag}`).join(' ') || '—'}</Table.Td>
                 <Table.Td>

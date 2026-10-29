@@ -144,7 +144,7 @@ describe('a video whose file the layer does not hold', () => {
       ['gone.webm', false, undefined],
       ['mirrored.webm', true, 'https://x/m.webm'],
     ]);
-    expect(videoCounts(summary!.videos)).toEqual({ references: 3, recordings: 2, unavailable: 1 });
+    expect(videoCounts(summary!.videos)).toEqual({ references: 3, recordings: 2, unavailable: 1, missing: 1 });
     // Without knowing what the layer lacks, the summary is what it always was.
     expect(summarizeStoredEvidence(undefined, undefined, { attachments: [{ name: 'gone.webm', bundleKey: 'attachments/gone' }] })!.videos![0]!.available).toBe(true);
   });
@@ -163,10 +163,10 @@ describe('a video whose file the layer does not hold', () => {
     const list = runList(index.history, 'v', 100, { video: true });
     expect(list.runs.map(run => run.key)).toEqual([RUN(1)]);
     const all = runList(index.history, 'v', 100);
-    expect(all.runs.find(run => run.key === RUN(2))!.videos).toEqual({ references: 2, recordings: 0, unavailable: 2 });
+    expect(all.runs.find(run => run.key === RUN(2))!.videos).toEqual({ references: 2, recordings: 0, unavailable: 2, missing: 2 });
     expect(all.runs.find(run => run.key === RUN(1))!.videos).toEqual({ references: 1, recordings: 1, unavailable: 0 });
     expect(all.withVideo).toBe(1);
     const detail = runDetail(index.history, 'v', RUN(2))!;
-    expect(detail.results[0]!.videos).toEqual([{ name: 'gone.webm', owner: 'check', available: false }]);
+    expect(detail.results[0]!.videos).toEqual([{ name: 'gone.webm', owner: 'check', available: false, reason: 'not-in-bundle' }]);
   });
 });

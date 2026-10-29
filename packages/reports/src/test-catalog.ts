@@ -23,9 +23,10 @@
  * @see docs/server.md#reading-the-report-as-an-agent
  */
 import { displayTag, normalizeTag, normalizeTags } from './artifact-tags';
-import { facetsOf, forRuns, labelList, matchesFilter, outcomeOfCounts, splitList, usedFilters, type ArtifactFilter, type FilterFields, type FilterName, type QueryFacets } from './artifact-query';
+import { facetsOf, forArtifacts, forRuns, labelList, matchesFilter, outcomeOfCounts, splitList, usedFilters, type ArtifactFilter, type FilterFields, type FilterName, type QueryFacets } from './artifact-query';
 import type { EvidenceMeasurement, EvidenceStatus, SpecEntry } from './explorer-types';
-import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
+import type { EvidenceSummary, LayerEvidence, LayerHeader, LayerRow, RecordingCounts, StatusCounts, VideoCounts, VideoRef } from './evidence-types';
+import { runRecordings, type RunRecordings } from './recording-receipt';
 import { videoCounts } from './evidence-detail';
 import { productLatency } from './latency';
 import { matchesScope, scopeTokens, UNKNOWN_SCOPE } from './evidence-scope';
@@ -323,6 +324,11 @@ export type RunSummary = {
    */
   readonly videos?: VideoCounts;
   /**
+   * Whether the recordings its layers expected were published, apart from its outcomes (see `runRecordings`). Absent when
+   * none of its layers declared a recording expectation: its completeness is unknown, never complete. Never changes a status.
+   */
+  readonly recordings?: RunRecordings;
+  /**
    * Files attached to the run itself, in its layers (and their parts), not to any one check: review movies, archives,
    * summaries. All kinds, videos included. Absent when none, and in a report that carries no such information.
    */
@@ -541,6 +547,8 @@ type RunAcc = {
   runId: string | undefined; title: string | undefined; titledAt: number; titledBy: string; freshness: 'unknown' | 'modified' | undefined;
   /** Videos attached to its layers (not to a check). */
   videos: VideoRef[];
+  /** The recording receipt counts of each of its layers, `undefined` for a layer with none. */
+  receipts: (RecordingCounts | undefined)[];
   /** Files attached to its layers (not to a check). */
   attachments: number;
   /** Its layers, in the order they arrived. */
@@ -616,7 +624,7 @@ export class TestHistory {
     const key = runKey(layer);
     let run = this.#runs.get(key);
     if (!run) {
-      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [], attachments: 0, members: [], evidence: { tags: new Set(), artifactTags: new Set(), roles: new Set(), labels: new Set() } };
+      run = { key, runUrl: layer.runUrl, branch: layer.branch, sha: layer.sha, start: layer.recordedAtMs, end: layer.recordedAtMs, firstAt: layer.recordedAtMs, first: layer.id, producers: new Set(), environments: new Set(), layers: 0, runId: layer.run?.id, title: undefined, titledAt: 0, titledBy: '', freshness: undefined, videos: [], receipts: [], attachments: 0, members: [], evidence: { tags: new Set(), artifactTags: new Set(), roles: new Set(), labels: new Set() } };
       this.#runs.set(key, run);
     }
     // A run is told by its first layer (by time, then id), whatever order its layers arrive in.
@@ -642,6 +650,7 @@ export class TestHistory {
     if (layer.environment) run.environments.add(layer.environment);
     run.layers += 1;
     if (layer.evidence?.videos) run.videos.push(...layer.evidence.videos);
+    run.receipts.push(layer.recordings);
     const held = layer.evidence?.attachments ?? 0;
     run.attachments += held;
     const layerVideos = videoCounts(layer.evidence?.videos);
@@ -816,6 +825,7 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
   }
   failed.sort((a, b) => compareText(a.i.slot, b.i.slot) || compareText(a.r.o.place, b.r.o.place) || compareText(a.r.k, b.r.k));
   const video = videoCounts(videos);
+  const recordings = runRecordings(run.receipts);
   const failing = failed.slice(0, 20).map(cell => ({ key: cell.i.slot, title: cell.i.title, environment: cell.r.o.environment, detail: (cell.r.t.split('\n')[0] ?? '').slice(0, 500) }));
   return {
     key: run.key, ...(run.runId ? { runId: run.runId } : {}), ...(run.title ? { title: run.title } : {}), ...(run.freshness ? { freshness: run.freshness } : {}),
@@ -824,6 +834,7 @@ function runSummary(run: RunAcc, cells: readonly RunCell[]): RunSummary {
     producers: [...run.producers].sort(), environments: [...run.environments].sort(),
     layers: run.layers, tests: tests.size, counts, totalDurationMs: measured ? total : null, failing,
     ...(video ? { videos: video } : {}),
+    ...(recordings ? { recordings } : {}),
     ...(run.attachments ? { attachments: run.attachments } : {}),
     ...(carried.artifactTags.size ? { artifactTags: [...carried.artifactTags].sort() } : {}),
     ...(carried.roles.size ? { types: typesOf(carried.roles, (video?.recordings ?? 0) > 0) } : {}),
@@ -1163,7 +1174,7 @@ export function fieldsOfRun(run: RunSummary): FilterFields {
     text: [run.title ?? '', run.key, run.branch ?? '', run.sha ?? '', ...run.producers, ...run.environments, ...artifactTags, ...(run.tags ?? []), ...labels].join('\n').toLowerCase(),
     artifactTags, tags: [...new Set([...(run.tags ?? []), ...artifactTags])], types, media: types.map(type => ({ type, tags: artifactTags })), labels,
     environments: run.environments, producers: run.producers, branches: run.branch ? [run.branch] : [], shas: run.sha ? [run.sha.toLowerCase()] : [],
-    outcomes: [outcomeOfCounts(run.counts)], at: run.endedAtMs,
+    outcomes: [outcomeOfCounts(run.counts)], recordings: [run.recordings?.state ?? 'unknown'], at: run.endedAtMs,
   };
 }
 
@@ -1179,7 +1190,9 @@ export function fieldsOfRun(run: RunSummary): FilterFields {
  * list.results.map(r => [r.title, r.run, r.sha, r.status]);
  * ```
  */
-export function artifactList(history: TestHistory, version: string, query: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList {
+export function artifactList(history: TestHistory, version: string, asked: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList {
+  // Recording completeness is a property of a run: a recorded result is not asked about it.
+  const query = forArtifacts(asked);
   const domains = new Map<string, string | null>();
   const domainOf = (path: string | null): string | null => {
     if (path === null) return null;

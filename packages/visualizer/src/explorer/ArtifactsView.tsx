@@ -26,7 +26,7 @@ import { entriesFromArtifacts } from './playlist-entries';
 import { WatchPlaylist } from './playlist';
 import { RecordingTextSearch } from './RecordingTextSearch';
 import { filtered, filterOf, NO_FILTERS } from './search';
-import { filterParams } from '@crvouga/atlas/reports/artifact-query';
+import { filterParams, forArtifacts } from '@crvouga/atlas/reports/artifact-query';
 
 const ARTIFACT_ROWS = 50;
 
@@ -34,7 +34,8 @@ const ARTIFACT_ROWS = 50;
 export function ArtifactsView() {
   const search = useExplorerSearch();
   const go = useExplorerNavigate();
-  const filter = useMemo(() => filterOf(search), [search]);
+  // Recording completeness belongs to a run, not to a recorded result: the Artifacts tab never asks for it.
+  const filter = useMemo(() => forArtifacts(filterOf(search)), [search]);
   const narrow = filtered(search);
   const answer = useArtifactList(filter);
   const now = useNow();
