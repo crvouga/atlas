@@ -17,6 +17,7 @@ import { CheckDetail } from '../evidence/check-detail';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { useEvidence } from '../evidence/evidence-context';
 import { Origin, StatusMark } from '../evidence/marks';
+import { outcomeHeadline, selectedResult } from '../evidence/outcome';
 import { useTestHistory } from './catalog';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { Badges, runName } from './parts';
@@ -127,7 +128,7 @@ function Scope({ pinned, slot }: { pinned: PinnedResult; slot: CheckSlot | undef
 export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot | undefined }) {
   const now = useNow();
   const history = useTestHistory(test.key);
-  const { layer } = useExplorerSearch();
+  const { layer, source } = useExplorerSearch();
   const go = useExplorerNavigate();
   const pinned = usePinnedResult(layer, test.key);
   const [recording, setRecording] = useState(false);
@@ -135,6 +136,7 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
   const [moment, setMoment] = useState<number | null>(null);
   const [rows, setRows] = useState(HISTORY_ROWS);
   const entries = history.data?.history ?? [];
+  const selected = slot && (!layer || pinned.state === 'ready') ? selectedResult(slot, pinned.state === 'ready' ? pinned.entry : undefined, source) : undefined;
   const stats = test.stats;
   const d = stats.durations;
   if (recording && slot) {
@@ -212,6 +214,9 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           <Text data-status={test.status} span inherit fw={600}>
             {statusWord(test.status)}
           </Text>
+          <Text span inherit c="dimmed">
+            worst current result of {plural(test.outcomes.length, 'source', 'sources')}
+          </Text>
           {stats.flaky && (
             <Text title={stats.flakyReason} span inherit>
               Flaky: {stats.flakyReason}
@@ -219,6 +224,11 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           )}
           <Badges test={test} />
         </Flex>
+        {selected && slot && (
+          <Text component="p" role="status" fw={600} data-outcome-headline>
+            {outcomeHeadline(selected, slot).text}
+          </Text>
+        )}
         {test.spec && <Code c="dimmed">{test.spec!.path}</Code>}
         <Code title="Check id" c="dimmed">
           {test.id}
@@ -432,6 +442,18 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
             layerId={layer}
             {...(pinned.state === 'ready' ? { pinned: pinned.entry, pin: true } : {})}
             reads="steps"
+            headline={false}
+            records={entries.map((entry) => ({
+              layer: entry.layer,
+              kind: entry.kind,
+              status: entry.status,
+              at: entry.at,
+              sha: entry.sha,
+              producer: entry.producer,
+              environment: entry.environment,
+              parameters: entry.parameters
+            }))}
+            {...(layer ? {} : { source, onSource: (next: string | null) => go({ source: next ?? undefined }) })}
             select={(patch) => {
               if (patch.view === 'recording') {
                 setRecordingLayer(patch.layer ?? undefined);

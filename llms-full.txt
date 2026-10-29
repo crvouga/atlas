@@ -2943,6 +2943,23 @@ every kind of evidence and values from the future) and `layer-extensibility.test
 fields survive at every level, malformed evidence is dropped without losing the result, and a reader of the
 first version of the format still reads it all.
 
+### Saying what failed
+
+A failed check or step may declare the expectation it broke under the `atlas.failure` extension, so a reviewer sees
+it before the raw log. Every field is optional, and the declaration never changes the result.
+
+```json
+{
+  "name": "The list includes tea", "kind": "then", "status": "failed",
+  "extensions": { "atlas.failure": { "expected": "tea in the list", "actual": "the list is empty", "attribution": "product" } }
+}
+```
+
+`expected` and `actual` are shown as written. `attribution` is `product`, `test-harness` or `environment`; leave it out
+when you do not know, and the viewer says the cause is unknown. It is never inferred from the message. Whether setup
+failed before the behavior started comes from the failed step's `kind`: `hook`, `setup`, `fixture`, `before`,
+`beforeAll`, `beforeEach` or `given` mean preparation; `when`, `then`, `assertion` or `expect` mean the behavior.
+
 ## Attach evidence
 
 ### From the command line
@@ -3970,6 +3987,20 @@ measurements named `product-latency`; it shows boundaries, group (device, build,
 baseline comparison that lists changes of instrumentation or conditions. Percentiles and product claims that the evidence
 cannot support are shown as `Withheld` with the reason, a partial interval is badged, timeouts count as samples and breaches,
 and a test with no latency says it is unknown, not fast.
+
+## Outcome summary
+
+A test or behavior detail states what the **selected** result says apart from what the other current sources say
+(`evidence/outcome.ts`, `outcome-summary.tsx`). The heading is the selected source's outcome first ("Selected result
+passed; another scoped source failed"), never the combined status; the combined status is labelled as the worst current
+result. Each other current source is one click away, and sources that share an environment are told apart by status,
+time, revision and their place among them. A failure leads with whether the behavior was reached (decided only by the
+recorded step `kind`: a `hook`, `setup`, `fixture`, `before*` or `given` step failing is "Behavior not verified: setup
+failed", `when`, `then`, `assertion` or `expect` is "Expectation not met", anything else is unknown), then the expected
+and observed values and the closest step and video, then the original output. The cause (product, test harness,
+environment) is unknown unless the producer declared it under the `atlas.failure` extension; it is never read from error
+wording. Records of one source whose outcome changed are listed oldest first, and a later pass is never called a fix.
+In the explorer the chosen source is the `source` search parameter (a layer id; unlike `layer` it does not pin a run).
 
 ## Icons and notation marks
 
