@@ -19,8 +19,8 @@ export const TEST_GROUPS = ['spec', 'domain', 'environment', 'status', 'producer
 /** One of {@link TEST_GROUPS}. */
 export type TestGroup = (typeof TEST_GROUPS)[number];
 
-/** The orders the explorer offers: `relevance` (best match first, only with words to match) and those of the catalog. */
-export const EXPLORER_SORTS = ['relevance', ...TEST_SORTS] as const;
+/** The orders the explorer offers: `relevance` (best match first, only with words to match), `evidence` (tests whose evidence is stale or unverified first, worked out in the viewer) and those of the catalog. */
+export const EXPLORER_SORTS = ['relevance', 'evidence', ...TEST_SORTS] as const;
 /** One of {@link EXPLORER_SORTS}. */
 export type ExplorerSort = (typeof EXPLORER_SORTS)[number];
 
@@ -61,6 +61,12 @@ export const ExplorerSearchFields = {
   until: text,
   /** Only the tests a CI run recorded (a `RunSummary.key`). Not `run`, which already names a recorded statechart run. */
   inRun: text,
+  /** `stale`: only tests whose evidence is stale or unverified (not that applies to the current promise and, when one is named, the release). Never a test status. */
+  evidence: z.enum(['stale']).optional().catch(undefined),
+  /** The release evidence is read against: its build, commit and platform (the names a spec page uses). A build such as `90` is read from a typed link as a number: coerced back to its text. */
+  release: text,
+  releaseSha: text,
+  releasePlatform: text,
   group: z.enum(TEST_GROUPS).optional().catch(undefined),
   sort: z.enum(EXPLORER_SORTS).optional().catch(undefined),
   tab: z.enum(['runs', 'artifacts', 'collections', 'compare']).optional().catch(undefined),
@@ -125,6 +131,10 @@ export type ExplorerSearch = {
   readonly since?: string;
   readonly until?: string;
   readonly inRun?: string;
+  readonly evidence?: 'stale';
+  readonly release?: string;
+  readonly releaseSha?: string;
+  readonly releasePlatform?: string;
   readonly group?: TestGroup;
   readonly sort?: ExplorerSort;
   readonly tab?: 'runs' | 'artifacts' | 'collections' | 'compare';
@@ -186,7 +196,7 @@ export function queryOf(search: ExplorerSearch): TestQuery {
     ...(values(search.scope).length ? { scope: values(search.scope) } : {}),
     artifactTag: values(search.artifactTag),
     ...(search.inherited ? { inherited: true } : {}),
-    sort: search.sort === 'relevance' || !search.sort ? 'spec' : search.sort
+    sort: search.sort === 'relevance' || search.sort === 'evidence' || !search.sort ? 'spec' : search.sort
   };
 }
 
@@ -197,7 +207,7 @@ export function explorerSearch(search: Record<string, unknown>): ExplorerSearch 
 
 /** True when any filter or search narrows the list. */
 export function narrowed(search: ExplorerSearch): boolean {
-  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.scope || search.artifactTag || search.inRun || search.video);
+  return !!(search.q || search.status || search.env || search.producer || search.domain || search.spec || search.tag || search.scope || search.artifactTag || search.inRun || search.video || search.evidence);
 }
 
 /** The reliability scope an address asks for, in the shape `reliability` reads: days are the viewer's local days. */

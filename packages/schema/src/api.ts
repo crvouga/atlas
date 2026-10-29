@@ -480,6 +480,8 @@ export const TestResultEntrySchema = z.looseObject({
   backend: z.string(),
   detail: z.string().describe('Why it has its status, at most 500 characters'),
   specRevision: z.string().optional().describe('The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match'),
+  freshness: z.enum(['modified', 'unknown']).optional().describe('`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, on results other than a test\'s current ones, and from an older server. Advisory; never changes a status'),
+  provenance: z.record(z.string(), z.string()).optional().describe('The labels of its layer and check that say what it ran against and who vouches for it: `build`, `platform`, `applies-to`, `applies-to-by`, `published-at`, `enriched-at`. Present on a test\'s current results when it has any, and absent from an older server. Never decides a result'),
   evidence: EvidenceSummarySchema.optional(),
   latency: z.array(MeasurementSchema).optional().describe('Its product-latency measurements (`kind: product-latency`), when it recorded any. Separate from `durationMs`, which is how long the test took')
 });
@@ -488,7 +490,10 @@ const DurationStatsSchema = z.looseObject({
   count: z.number().int().nonnegative(), totalMs: z.number(), avgMs: z.number(), p50Ms: z.number(), p95Ms: z.number(), minMs: z.number(), maxMs: z.number(), lastMs: z.number()
 });
 
-const CatalogSpecSchema = z.looseObject({ path: z.string(), title: z.string(), domain: z.string(), kind: z.string() });
+const CatalogSpecSchema = z.looseObject({
+  path: z.string(), title: z.string(), domain: z.string(), kind: z.string(),
+  fingerprint: z.string().optional().describe('The fingerprint of the spec text now (the promise). Compare it with a result\'s `specRevision`: different means the promise changed after the result was recorded. Absent: unknown, never "the same". Absent from an older server')
+});
 
 /** One test of the catalog: what it is, its current result per environment, and how it has gone over its recorded history. */
 export const TestSummarySchema = z.looseObject({

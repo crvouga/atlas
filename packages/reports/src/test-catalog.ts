@@ -39,6 +39,14 @@ export const TEST_CATALOG_VERSION = 1;
 /** Recorded results kept per test, newest first. Older ones are counted in no statistic. */
 export const HISTORY_PER_TEST = 100;
 
+/**
+ * The open `labels` (see docs/extending.md) that say what a result's evidence ran against and who vouches for it: `build`,
+ * `platform`, `applies-to` (builds or commits it is asserted to still hold for), `applies-to-by` (the policy or person that
+ * asserts it), `published-at` and `enriched-at` (when the evidence was published or enriched, epoch milliseconds or an ISO
+ * date: never when the checks ran). A test's current results carry them as `provenance`.
+ */
+export const APPLICABILITY_LABELS = ['build', 'platform', 'applies-to', 'applies-to-by', 'published-at', 'enriched-at'] as const;
+
 const FAILURE_RANK = { passed: 0, 'not-run': 1, running: 2, failed: 3 } as const;
 
 /** One recorded result of a test: when, where, how it went and how long it took, and the layer and run it came from. */
@@ -67,6 +75,10 @@ export type TestResultEntry = {
   readonly detail: string;
   /** The fingerprint of its spec text the layer recorded, when it recorded one: results with different revisions were recorded against different promises. Absent means not recorded, never "the same". */
   readonly specRevision?: string;
+  /** `modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, and on results other than a test's current ones. Advisory; never changes a status. */
+  readonly freshness?: 'unknown' | 'modified';
+  /** The labels of its layer and check that say what it ran against and who vouches for it: only those named in {@link APPLICABILITY_LABELS}. Present on a test's current results when it has any. Read by the viewer's evidence applicability; never decides a result. */
+  readonly provenance?: Readonly<Record<string, string>>;
   /** What it carried beyond its outcome (attachments, steps, retries, tags, labels), when anything. */
   readonly evidence?: EvidenceSummary;
   /** Its product-latency measurements (`kind: product-latency`), when it recorded any. Separate from `durationMs`, which is how long the test took (setup, waits and pacing included). */
@@ -121,6 +133,8 @@ export type CatalogSpec = {
   /** The group it belongs to: the spec's own domain, else the folder under `specs/`. */
   readonly domain: string;
   readonly kind: string;
+  /** The fingerprint of the spec text now (the promise), when the spec set or a layer recorded one. A result's `specRevision` is compared with it: different means the promise changed after the result was recorded. Absent: unknown, never "the same". */
+  readonly fingerprint?: string;
 };
 
 /** One test: what it is, its current status per environment, and how it has gone. */
@@ -843,6 +857,7 @@ export function catalogSpec(path: string | null, known: (path: string) => SpecEn
     title: entry?.title || (base ? base[0]!.toUpperCase() + base.slice(1) : path),
     domain: entry?.domain || folder,
     kind: entry?.kind || (/\.([^./]+)$/.exec(path)?.[1] ?? 'unknown'),
+    ...(entry?.fingerprint ? { fingerprint: entry.fingerprint } : {}),
   };
 }
 
@@ -889,8 +904,15 @@ function statsOf(history: readonly TestResultEntry[], outcomes: readonly TestOut
   };
 }
 
-function outcomeOf(result: EvidenceResult): TestOutcome {
-  return entryOf(result.layer, result.row, result.layer.backend);
+/** A current result with what the layer recorded about its spec and about what it ran against (see {@link APPLICABILITY_LABELS}). */
+function outcomeOf(result: EvidenceResult, fingerprints: Readonly<Record<string, string>> = {}): TestOutcome {
+  const labels = { ...(result.layer.evidence?.labels ?? {}), ...(result.row.evidence?.labels ?? {}) };
+  const provenance = Object.fromEntries(APPLICABILITY_LABELS.filter(name => typeof labels[name] === 'string').map(name => [name, labels[name]!]));
+  return {
+    ...entryOf(result.layer, result.row, result.layer.backend, fingerprints),
+    ...(result.layer.freshness ? { freshness: result.layer.freshness } : {}),
+    ...(Object.keys(provenance).length ? { provenance } : {}),
+  };
 }
 
 /** Where the catalog's statistics and specs come from. */
@@ -918,8 +940,8 @@ export type CatalogModel = {
   readonly specs?: readonly SpecEntry[];
 };
 
-function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: string) => SpecEntry | undefined): TestSummary {
-  const outcomes = slot.outcomes.map(outcomeOf);
+function summaryOf(slot: CheckSlot, history: TestHistory | null, known: (path: string) => SpecEntry | undefined, fingerprintsOf: (layer: string) => Readonly<Record<string, string>> | undefined): TestSummary {
+  const outcomes = slot.outcomes.map(result => outcomeOf(result, fingerprintsOf(result.layer.id)));
   const tags = new Set<string>();
   const artifactTags = new Set<string>();
   const inheritedTags = new Set<string>();
@@ -1020,7 +1042,8 @@ export function catalogModel(layers: readonly LayerEvidence[], sources: CatalogS
   const known = (path: string) => recorded.get(path);
   const combined = combineEvidence({ specs: [], sha: null, changedFiles: [] }, layers);
   const slots = checkSlots(combined.unassigned);
-  const tests = slots.map(slot => summaryOf(slot, history, known));
+  const fingerprints = new Map(layers.map(entry => [entry.layer.id, entry.fingerprints] as const));
+  const tests = slots.map(slot => summaryOf(slot, history, known, id => fingerprints.get(id)));
   const byKey = new Map(tests.map(test => [test.key, test]));
   const haystacks = new Map(tests.map(test => [test.key, haystackOf(test)]));
   const counts = emptyCounts();

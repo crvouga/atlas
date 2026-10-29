@@ -1,5 +1,5 @@
 import { SpecLogo } from '../components/SpecLogo';
-import { IconVideo, IconX } from '@tabler/icons-react';
+import { IconAlertTriangle, IconVideo, IconX } from '@tabler/icons-react';
 import {
   Accordion,
   Alert,
@@ -44,6 +44,8 @@ import {
 } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { attentionRank, hasRelease, needsAttention, type Assessment, type ReleaseIdentity } from '../evidence/applicability';
+import { ApplicabilityControls, VerdictBadge } from '../evidence/applicability-view';
 import { staticEvidence } from '../evidence/api';
 import { useEvidence } from '../evidence/evidence-context';
 import { ago, plural, useNow } from '../evidence/format';
@@ -53,6 +55,7 @@ import { behaviorDocs, behaviorId, describeHit, testHasVideo } from '../find/beh
 import { useDocSearch } from '../find/doc-search';
 import { hasFilters, passesFilters, withoutToken, type FilterKey, type ParsedSearch } from '../find/query';
 import type { FindDoc, Ranked } from '../find/rank';
+import { assessTests, releaseOf, useExplorerApplicability } from './applicability';
 import { useRunDetail, useTestCatalog } from './catalog';
 import { groupTests, tally, type TestGroupView } from './groups';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
@@ -79,6 +82,7 @@ const GROUP_LABEL: Record<TestGroup, string> = {
 };
 const SORT_LABEL: Record<ExplorerSort, string> = {
   relevance: 'Best match',
+  evidence: 'Stale evidence first',
   spec: 'Spec',
   title: 'Title',
   recent: 'Most recent',
@@ -118,8 +122,12 @@ function useListing(model: CatalogModel | null, search: ExplorerSearch, q: strin
   const list = useMemo(() => [...docs.values()], [docs]);
   const found = useDocSearch(list, q);
   const sort = sortOf(search);
+  const { release: releaseBuild, releaseSha, releasePlatform } = search;
+  const release = useMemo(() => releaseOf({ release: releaseBuild, releaseSha, releasePlatform }), [releaseBuild, releaseSha, releasePlatform]);
+  // Every test's evidence read against its promise and the named release: a reading, never a status.
+  const assessments = useMemo(() => (model ? assessTests(model.tests, release) : null), [model?.tests, release]);
   const listing = useMemo(() => {
-    if (!model) return null;
+    if (!model || !assessments) return null;
     const query: TestQuery = { ...queryOf(search), q: undefined };
     // `has:video` typed in the box and the Has video button are the same filter.
     const operator = { ...found.parsed.filters, video: found.parsed.filters.video || search.video === true };
@@ -128,17 +136,25 @@ function useListing(model: CatalogModel | null, search: ExplorerSearch, q: strin
     const passes = (test: TestSummary, omit: ReadonlySet<FilterKey>) =>
       (!hits || hits.has(behaviorId(test.key))) && (!structured || passesFilters(docs.get(test.key)?.facets, operator, omit));
     let shown = testCatalog(model, { ...query, limit: 20000 }).tests.filter((test) => (!inRun || inRun.has(test.key)) && passes(test, NO_STRUCTURE));
+    const attention = (test: TestSummary) => needsAttention(assessments.get(test.key)!);
+    if (search.evidence === 'stale') shown = shown.filter(attention);
     if (sort === 'relevance' && hits) {
       const order = new Map([...hits.keys()].map((id, at) => [id, at] as const));
       shown = [...shown].sort((a, b) => (order.get(behaviorId(a.key)) ?? 0) - (order.get(behaviorId(b.key)) ?? 0));
     }
+    // Stale evidence first; the order of the spec list is kept among equals.
+    if (sort === 'evidence') shown = [...shown].sort((a, b) => attentionRank(assessments.get(a.key)!) - attentionRank(assessments.get(b.key)!));
     // The strip and the status and environment counts describe what the other filters leave.
     const scope = model.tests.filter((test) => matchesQuery(model, test, { ...query, status: [], environment: [] }, inRun) && passes(test, WITHOUT_STATUS_AND_ENVIRONMENT));
     const byEnvironment = scope.filter((test) => matchesQuery(model, test, { environment: query.environment }) && passes(test, WITHOUT_STATUS));
     const byStatus = scope.filter((test) => matchesQuery(model, test, { status: query.status }) && passes(test, WITHOUT_ENVIRONMENT));
     const videoScope = model.tests.filter((test) => matchesQuery(model, test, query, inRun) && passes(test, WITHOUT_VIDEO));
+    const evidenceScope = model.tests.filter((test) => matchesQuery(model, test, query, inRun) && passes(test, NO_STRUCTURE));
     return {
       shown,
+      assessments,
+      release,
+      stale: evidenceScope.filter(attention).length,
       withVideo: videoScope.filter((test) => docs.get(test.key)?.facets?.video ?? testHasVideo(test)).length,
       scope,
       byEnvironment,
@@ -149,7 +165,7 @@ function useListing(model: CatalogModel | null, search: ExplorerSearch, q: strin
       runPending: !!search.inRun && run.isPending,
       runMissing: !!search.inRun && run.isSuccess && run.data === null
     };
-  }, [model, search, found, docs, sort, inRun, run.isPending, run.isSuccess, run.data]);
+  }, [model, search, found, docs, sort, inRun, assessments, release, run.isPending, run.isSuccess, run.data]);
   return listing;
 }
 /** The project home: the published spec kinds, the insight strip, the toolbar, the grouped list and the open test. */
@@ -294,7 +310,7 @@ export function Explorer() {
                   That run is not in the report any more.
                 </Alert>
               )}
-              <TestList tests={listing.shown} search={search} total={model.tests.length} hits={listing.hits} sort={search.sort ?? (listing.hits ? 'relevance' : 'spec')} />
+              <TestList tests={listing.shown} search={search} total={model.tests.length} hits={listing.hits} sort={search.sort ?? (listing.hits ? 'relevance' : 'spec')} assessments={listing.assessments} release={listing.release} />
             </>
           ))}
       </Box>
@@ -673,6 +689,19 @@ function Toolbar({
             {listing.withVideo.toLocaleString()}
           </Text>
         </Button>
+        <Button
+          type="button"
+          aria-pressed={search.evidence === 'stale'}
+          aria-label={`Stale or unverified evidence: ${plural(listing.stale, 'test', 'tests')}`}
+          onClick={() => go({ evidence: search.evidence ? undefined : 'stale' })}
+          variant={search.evidence === 'stale' ? 'light' : 'subtle'}
+          leftSection={<IconAlertTriangle size={16} aria-hidden="true" />}
+        >
+          Stale or unverified{' '}
+          <Text span inherit>
+            {listing.stale.toLocaleString()}
+          </Text>
+        </Button>
         {model.facets.producers.length > 1 && (
           <Box component="label">
             <VisuallyHidden>Producer</VisuallyHidden>
@@ -781,7 +810,8 @@ function Toolbar({
                 artifactTag: undefined,
                 inherited: undefined,
                 inRun: undefined,
-                video: undefined
+                video: undefined,
+                evidence: undefined
               });
             }}
             variant="subtle"
@@ -791,10 +821,47 @@ function Toolbar({
         )}
       </Flex>
       <SearchNotes issues={listing.parsed.issues} semantic={listing.semantic} />
+      <ReleaseReading />
     </Box>
   );
 }
-function TestList({ tests, search, total, hits, sort }: { tests: readonly TestSummary[]; search: ExplorerSearch; total: number; hits: ReadonlyMap<string, Ranked> | null; sort: ExplorerSort }) {
+/**
+ * Names the release the evidence of the tests is read against (build, commit and platform). Folded away until a release is
+ * named, because most readers only ask whether evidence is stale.
+ */
+function ReleaseReading() {
+  const applicability = useExplorerApplicability();
+  const named = hasRelease(applicability.release) || !!applicability.release.platform;
+  return (
+    <Accordion variant="separated" defaultValue={named ? 'release' : null} mt="sm">
+      <Accordion.Item value="release">
+        <Accordion.Control>Release the evidence is read against</Accordion.Control>
+        <Accordion.Panel>
+          <ApplicabilityControls state={applicability} filter={false} />
+        </Accordion.Panel>
+      </Accordion.Item>
+    </Accordion>
+  );
+}
+function TestList({
+  tests,
+  search,
+  total,
+  hits,
+  sort,
+  assessments,
+  release
+}: {
+  tests: readonly TestSummary[];
+  search: ExplorerSearch;
+  total: number;
+  hits: ReadonlyMap<string, Ranked> | null;
+  sort: ExplorerSort;
+  assessments: ReadonlyMap<string, Assessment>;
+  release: ReleaseIdentity;
+}) {
+  // A reading is shown on every row only when the reader asked about evidence; otherwise only evidence known to be stale.
+  const asked = search.evidence === 'stale' || sort === 'evidence' || hasRelease(release);
   const by = search.group ?? 'spec';
   const groups = useMemo(() => groupTests(tests, by, sort === 'spec'), [tests, by, sort]);
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(new Map());
@@ -857,6 +924,8 @@ function TestList({ tests, search, total, hits, sort }: { tests: readonly TestSu
               open={isOpen(group)}
               selected={search.test}
               hits={hits}
+              assessments={assessments}
+              asked={asked}
               onToggle={() => setOverrides(new Map(overrides).set(`${by}|${group.key}`, !isOpen(group)))}
             />
           </Stack>
@@ -871,6 +940,8 @@ function TestGroupSection({
   open,
   selected,
   hits,
+  assessments,
+  asked,
   onToggle
 }: {
   group: TestGroupView;
@@ -878,6 +949,8 @@ function TestGroupSection({
   open: boolean;
   selected: string | undefined;
   hits: ReadonlyMap<string, Ranked> | null;
+  assessments: ReadonlyMap<string, Assessment>;
+  asked: boolean;
   onToggle: () => void;
 }) {
   const [shown, setShown] = useState(by === 'none' ? 100 : GROUP_ROWS);
@@ -885,7 +958,7 @@ function TestGroupSection({
   const rows = (
     <List spacing="xs" listStyleType="none">
       {group.tests.slice(0, shown).map((test) => (
-        <TestRow key={test.key} test={test} selected={selected === test.key} now={now} hit={hits?.get(behaviorId(test.key))} />
+        <TestRow key={test.key} test={test} selected={selected === test.key} now={now} hit={hits?.get(behaviorId(test.key))} assessment={assessments.get(test.key)} asked={asked} />
       ))}
       {group.tests.length > shown && (
         <List.Item>
@@ -930,7 +1003,21 @@ function TestGroupSection({
     </Box>
   );
 }
-function TestRow({ test, selected, now, hit }: { test: TestSummary; selected: boolean; now: number; hit: Ranked | undefined }) {
+function TestRow({
+  test,
+  selected,
+  now,
+  hit,
+  assessment,
+  asked
+}: {
+  test: TestSummary;
+  selected: boolean;
+  now: number;
+  hit: Ranked | undefined;
+  assessment: Assessment | undefined;
+  asked: boolean;
+}) {
   const why = hit ? describeHit(hit) : '';
   const failure = test.status === 'failed' ? test.outcomes.find((outcome) => outcome.status === 'failed')?.detail.split('\n')[0] : '';
   return (
@@ -959,6 +1046,7 @@ function TestRow({ test, selected, now, hit }: { test: TestSummary; selected: bo
             <Group gap="xs">
               <EnvironmentChips test={test} />
               <Badges test={test} />
+              {assessment && (assessment.verdict === 'stale' || (asked && assessment.verdict !== 'applies')) && <VerdictBadge verdict={assessment.verdict} />}
             </Group>
             {failure && (
               <Text size="xs" c="red.7" lineClamp={2}>

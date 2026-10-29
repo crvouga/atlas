@@ -529,6 +529,10 @@
               "kind": {
                 "type": "string"
               },
+              "fingerprint": {
+                "description": "The fingerprint of the spec text now (the promise). Compare it with a result's `specRevision`: different means the promise changed after the result was recorded. Absent: unknown, never \"the same\". Absent from an older server",
+                "type": "string"
+              },
               "tests": {
                 "type": "integer",
                 "minimum": 0,
@@ -747,6 +751,10 @@
                   },
                   "kind": {
                     "type": "string"
+                  },
+                  "fingerprint": {
+                    "description": "The fingerprint of the spec text now (the promise). Compare it with a result's `specRevision`: different means the promise changed after the result was recorded. Absent: unknown, never \"the same\". Absent from an older server",
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -868,6 +876,24 @@
                 "specRevision": {
                   "description": "The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match",
                   "type": "string"
+                },
+                "freshness": {
+                  "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, on results other than a test's current ones, and from an older server. Advisory; never changes a status",
+                  "type": "string",
+                  "enum": [
+                    "modified",
+                    "unknown"
+                  ]
+                },
+                "provenance": {
+                  "description": "The labels of its layer and check that say what it ran against and who vouches for it: `build`, `platform`, `applies-to`, `applies-to-by`, `published-at`, `enriched-at`. Present on a test's current results when it has any, and absent from an older server. Never decides a result",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
                 },
                 "evidence": {
                   "type": "object",
