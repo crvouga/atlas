@@ -21,8 +21,9 @@ export function projectTitle(): string {
       .join(' ') || 'Project reports'
   );
 }
-/** A run key for a person: its CI run number, or `branch@sha` shortened. */
+/** A run key for a person: the execution id a producer named, its CI run number, or `branch@sha` shortened. */
 export function runName(key: string): string {
+  if (key.startsWith('run:')) return key.slice(4);
   const actions = /\/actions\/runs\/(\d+)/.exec(key);
   if (actions) return `#${actions[1]}`;
   if (/^https?:/.test(key)) return key.replace(/^https?:\/\//, '').slice(0, 40);

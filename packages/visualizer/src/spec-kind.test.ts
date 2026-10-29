@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { fileName, folderOf, kindOfFile, outlinePath, specFile, specKind } from './spec-kind';
+import { fileName, folderOf, kindOfFile, outlinePath, resolveSpec, similarSpecs, specFile, specKind } from './spec-kind';
 
 describe('spec kinds', () => {
   it('gives each notation its own tab and leaves statecharts and notes to the map', () => {
@@ -23,5 +23,18 @@ describe('spec kinds', () => {
     expect(fileName('auth/sign-in.feature')).toBe('sign-in.feature');
     expect(folderOf('auth/sign-in.feature')).toBe('auth');
     expect(folderOf('atlas.yaml')).toBe('');
+  });
+
+  it('reads a link to a spec by any form of its path and finds the listed spec it means', () => {
+    expect(specFile('./auth/sign-in.feature')).toBe('auth/sign-in.feature');
+    expect(specFile('/specs/auth\\sign-in.feature')).toBe('auth/sign-in.feature');
+    const listed = ['auth/sign-in.feature', 'billing/Pay.feature', 'billing/pay-later.feature', 'a/x.feature', 'b/x.feature'];
+    expect(resolveSpec('auth/sign-in.feature', listed)).toBe('auth/sign-in.feature');
+    expect(resolveSpec('Auth/Sign-In.feature', listed)).toBe('auth/sign-in.feature');
+    expect(resolveSpec('sign-in.feature', listed)).toBe('auth/sign-in.feature');
+    // Two candidates, or none, leave the link as written.
+    expect(resolveSpec('x.feature', listed)).toBe('x.feature');
+    expect(resolveSpec('nothing.feature', listed)).toBe('nothing.feature');
+    expect(similarSpecs('other/pay.feature', listed)).toEqual(['billing/Pay.feature']);
   });
 });

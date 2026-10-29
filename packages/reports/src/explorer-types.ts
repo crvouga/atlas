@@ -41,7 +41,7 @@ export type EvidenceMeasurement = {
 };
 
 /** What a check may carry beyond its outcome. All optional and open: see docs/extending.md. */
-export type EvidenceExtras = Partial<Pick<import('../../schema/src/layer').Check, 'tags' | 'labels' | 'links' | 'steps' | 'attachments' | 'annotations' | 'attempts' | 'extensions'>>;
+export type EvidenceExtras = Partial<Pick<import('../../schema/src/layer').Check, 'tags' | 'labels' | 'links' | 'steps' | 'attachments' | 'annotations' | 'attempts' | 'extensions' | 'scope'>>;
 
 /** One check of a part, as recorded. */
 export type EvidenceCheck = EvidenceExtras & {

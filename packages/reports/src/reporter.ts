@@ -18,7 +18,7 @@ import { publishChecks } from './publish-checks';
 type Check = PublishChecksInput['checks'][number];
 
 /** What every layer of one stream shares: who is reporting, from where. Whatever `publishChecks` takes, except the checks and the time. */
-export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'extensions'>;
+export type ReporterIdentity = Pick<PublishChecksInput, 'producer' | 'kind' | 'title' | 'sha' | 'branch' | 'runUrl' | 'run' | 'environment' | 'parameters' | 'freshness' | 'specs' | 'tags' | 'labels' | 'links' | 'attachments' | 'annotations' | 'scope' | 'extensions'>;
 
 /** How a reporter sends: the `store` (a folder, S3, or `httpStore` for a server), how often (`flushMs`, `batchSize`), how hard it tries (`attempts`, `backoffMs`), what it tells (`onError`, `onPublished`), and the clock and sleep for tests. */
 export type ReporterOptions = {
