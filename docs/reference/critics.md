@@ -1,8 +1,210 @@
 # Reference: critics
 
-Automated reviewers of the UI catalog: the critic contract, the runner (caching, retries, rate limits, budgets), credential references and redaction, the `atlas.critique` evidence as layers, calibration and report, warn and gate modes. Import path `@crvouga/atlas/critics`.
+Automated reviewers of the UI catalog: the critic contract, the runner (caching, retries, rate limits, budgets), credential references and redaction, the `atlas.critique` evidence as layers, the catalog client, spooling, calibration and report, warn and gate modes, the `atlas critic` command, and the UIClip and LLM critic adapters. Import paths `@crvouga/atlas/critics`, `@crvouga/atlas/critics/uiclip`, `@crvouga/atlas/critics/llm`.
 
 > Generated from the doc comments of `packages/critics/src` by `bun run docs`. Do not edit: change the comment next to the code.
+
+### The catalog client
+
+Source: `packages/critics/src/catalog-client.ts`
+
+How a critic process reads the UI catalog from an Atlas server: list entries a page at a time with a stable cursor
+(`page`, `entries`), read only what changed since a report version it holds (`since`), follow the server's event stream and
+catch up after every announcement or reconnection without missing an entry or handling one twice (`follow`), and fetch an
+entry's picture by the hash it was stored under, checking the bytes against it (`image`). It needs only `fetch`: no
+browser, no model, no SDK. The token goes in `Authorization: Bearer`, never in a URL, and is never put in an error.
+
+A missed event costs nothing: every wake-up is followed by a `since` read, and a version the server does not remember is
+answered with the whole catalog, which the client de-duplicates by entry key and picture hash.
+
+See docs/critics.md#reading-the-catalog
+
+#### `CatalogClientOptions`
+
+```ts
+export type CatalogClientOptions = {
+  /** The Atlas server, such as `https://atlas.example.com`. */
+  readonly url: string;
+  /** Sent as `Authorization: Bearer`. Never put in the URL, never in an error. */
+  readonly token?: string;
+  /** A project of a shared node. Omit for the default project. */
+  readonly project?: string;
+  /** For tests and special runtimes. Default `fetch`. */
+  readonly fetch?: typeof fetch;
+  /** Retries after the first attempt for network errors, 5xx and 429. Default 3. */
+  readonly retries?: number;
+  /** Waits. Default `setTimeout`. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+};
+```
+
+How to reach a server. `token` is a `critic`, `publish` or `admin` token for reading the catalog; any token that may read works.
+
+#### `CatalogPage`
+
+```ts
+export type CatalogPage = {
+  /** The report version this was read at. */
+  readonly version: string;
+  readonly entries: readonly CatalogEntry[];
+  /** Entries that match, across all pages. */
+  readonly total: number;
+  /** Pass as `cursor` to read the next page; absent on the last. */
+  readonly nextCursor?: string;
+  /** Present when `since` was asked: whether the server remembered that version. When it did not, `entries` is the whole catalog. */
+  readonly since?: { readonly requested: string; readonly honored: boolean };
+  /** Captured cells that could not be offered for judging because no stored picture of a known hash backs them. */
+  readonly unjudgeable: number;
+  /** What the server could not read. */
+  readonly notices: readonly string[];
+};
+```
+
+One page of the catalog as the server answered it.
+
+#### `CatalogRead`
+
+```ts
+export type CatalogRead = {
+  /** The version of the first page. Resume with `since` this: it finds whatever changed while the rest was read. */
+  readonly version: string;
+  readonly entries: readonly CatalogEntry[];
+  readonly unjudgeable: number;
+  readonly notices: readonly string[];
+  /** False when a `since` was asked and the server did not remember it, so `entries` is the whole catalog. */
+  readonly sinceHonored: boolean;
+};
+```
+
+Everything a pass over the catalog saw, and the version to resume from.
+
+#### `CatalogBatch`
+
+```ts
+export type CatalogBatch = {
+  /** The report version this batch brings the follower up to. */
+  readonly version: string;
+  /** Entries not seen before, or whose picture changed; none twice. */
+  readonly entries: readonly CatalogEntry[];
+  /** True for the first batch (the catch-up on connecting), false for what arrived afterwards. */
+  readonly initial: boolean;
+};
+```
+
+Something new in the catalog, as {@link CatalogClient.follow} hands it over.
+
+#### `CatalogClientError`
+
+```ts
+export class CatalogClientError extends Error
+```
+
+An Atlas server refused or could not answer, with what to do about it. Its message never holds a token.
+
+#### `CatalogClient`
+
+```ts
+export type CatalogClient = {
+  /** The server address, with no secrets. */
+  readonly url: string;
+  /** One page of entries for a query (`cursor`, `limit`, `since`, `unjudgedBy`, filters). */
+  page(query?: CatalogEntriesQuery): Promise<CatalogPage>;
+  /** Every page of a query, in key order, each entry once. `query.cursor` is ignored. */
+  read(query?: Omit<CatalogEntriesQuery, 'cursor'>): Promise<CatalogRead>;
+  /** The picture of an entry: its stored bytes, checked against `entry.image.sha256`. Throws if they differ. */
+  image(entry: Pick<CatalogEntry, 'image'>): Promise<Uint8Array>;
+  /**
+   * Catches up with the catalog and then follows it: a batch on connecting (everything, or what changed since `since`), then
+   * a batch each time the server announces a change. A dropped connection is reconnected after a pause, and the next batch
+   * is a `since` read from the version held, so nothing is missed and nothing is handed over twice. Ends when `signal` aborts.
+   */
+  follow(options?: { readonly since?: string; readonly query?: Omit<CatalogEntriesQuery, 'cursor' | 'since'>; readonly signal?: AbortSignal; readonly reconnectMs?: number }): AsyncGenerator<CatalogBatch, void, void>;
+};
+```
+
+A connection to the catalog of one Atlas server.
+
+#### `createCatalogClient`
+
+```ts
+export function createCatalogClient(options: CatalogClientOptions): CatalogClient
+```
+
+A client for the catalog of an Atlas server. Nothing is read until a method is called.
+
+**Example**
+
+```ts
+const catalog = createCatalogClient({ url: 'https://atlas.example.com', token: process.env.ATLAS_CRITIC_TOKEN });
+const { version, entries } = await catalog.read({ unjudgedBy: { name: 'uiclip', version: '1.0.0' } });
+for (const entry of entries) judge(entry, await catalog.image(entry));
+```
+
+### The `atlas critic` command
+
+Source: `packages/critics/src/cli.ts`
+
+`atlas critic list | setup | doctor | run`: run automated reviewers of the UI catalog on this machine and publish what they
+think as critiques. The server stores and shows; it never runs a model and never holds a provider key. `criticMain` takes its
+arguments, environment, working directory, clock and a prompt as parameters and returns the exit code, so it is driven the same
+from a terminal, CI and tests; `runCriticCommand` is the terminal wrapper.
+
+Interactive when there is a terminal: missing choices are asked for, a run that sends images to a third party names the
+destination and asks for confirmation. Without a terminal (or with `--non-interactive`, or `--format json`) nothing is ever asked:
+every choice is a flag, a missing one exits 2 and names the flags, and sending images to a third party needs `--yes`.
+
+Exit codes: 0 it worked, 1 it ran and the answer is no (a critic failed on an entry, a gate was crossed, a check of `doctor`
+found a problem), 2 the command itself was wrong (a missing flag, a gate refused for lack of evidence).
+
+See docs/critics.md#the-atlas-critic-command
+
+#### `CRITIC_USAGE`
+
+```ts
+export const CRITIC_USAGE = …
+```
+
+The text `atlas critic --help` prints. Also the source of the command reference in `docs/reference/cli.md`.
+
+#### `CriticIo`
+
+```ts
+export type CriticIo = {
+  readonly out: (text: string) => void;
+  readonly env?: Env;
+  readonly cwd?: string;
+  readonly clock?: () => number;
+  readonly fetch?: typeof fetch;
+  readonly importModule?: (name: string) => Promise<unknown>;
+  /** Waits between retries of a request to the server. Default `setTimeout`. Tests pass a fake. */
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** Whether a person is at a terminal. Default: standard input and output are terminals. Nothing is asked when this is false. */
+  readonly interactive?: boolean;
+  /** Asks a question and returns the answer. Default: a line from standard input. */
+  readonly ask?: (question: string) => Promise<string>;
+};
+```
+
+What `criticMain` is given besides arguments: where output goes, and, for tests and embedding, the environment, working directory, clock, `fetch`, module loading and a prompt.
+
+#### `criticMain`
+
+```ts
+export async function criticMain(argv: readonly string[], io: CriticIo): Promise<number>
+```
+
+`atlas critic …`. Returns the exit code: 0 worked, 1 the answer is no. Throws on a mistake in the command (a missing flag, a
+gate refused, a configuration that holds a credential), which {@link runCriticCommand} reports and turns into exit code 2.
+
+- `argv`: the arguments after `critic`.
+
+#### `runCriticCommand`
+
+```ts
+export async function runCriticCommand(argv: readonly string[], io: Partial<CriticIo> = {}): Promise<number>
+```
+
+`atlas critic …` for a terminal: a mistake in the command is a message on stderr (a JSON document with `--format json`) and exit code 2.
 
 ### The critic contract
 
@@ -649,6 +851,163 @@ An explicit `thresholds` entry replaces the calibrated threshold of its state ki
 
 - `args.thresholds`: thresholds by state kind that replace the calibrated ones.
 
+### The LLM critic (`@crvouga/atlas/critics/llm`)
+
+Source: `packages/critics/src/llm.ts`. Import: `@crvouga/atlas/critics/llm`
+
+A critic that asks a vision-capable language model to review a screenshot against a rubric and answer with structured
+findings. It is provider-agnostic: a provider is a small adapter (`LlmProvider.complete`) with declared capabilities, so
+a developer brings their own model and account. `openAiCompatibleProvider` speaks the widely implemented chat-completions
+protocol with plain `fetch` (hosted services and local servers alike), so there is no SDK to install; any other provider is a
+few lines.
+
+The rubric is recorded only as a hash. The credential is passed in by the caller (resolved from a reference at run time),
+sent only in the `Authorization` header, and never written to a result, a log or an error: the runner redacts what it records.
+A provider's rate limit becomes a `RateLimitedError` carrying its `Retry-After`, an answer that is not the asked-for structure
+becomes `invalid-output` and no score is invented, and the images' destination is declared before a run.
+
+See docs/critics.md#the-llm-critic-and-bringing-your-own-ai
+
+#### `LlmRequest`
+
+```ts
+export type LlmRequest = {
+  readonly model: string;
+  readonly system: string;
+  readonly prompt: string;
+  readonly image: Uint8Array;
+  /** The image's media type, from its bytes (`image/png`, `image/jpeg`, `image/webp`, `image/gif`). */
+  readonly imageMediaType: string;
+  readonly temperature: number;
+  readonly maxTokens: number;
+  /** Aborted on timeout or cancellation: pass it to the network call. */
+  readonly signal: AbortSignal;
+};
+```
+
+What a critic asks a provider.
+
+#### `LlmAnswer`
+
+```ts
+export type LlmAnswer = {
+  readonly text: string;
+  readonly usage?: { readonly inputTokens?: number; readonly outputTokens?: number; readonly latencyMs?: number };
+};
+```
+
+What a provider answers: the model's text, and what it cost when the provider says.
+
+#### `LlmProvider`
+
+```ts
+export type LlmProvider = {
+  /** Short and stable: `openai-compatible`, `local`. Recorded as the model's provider. */
+  readonly name: string;
+  /** Where images are sent: a host name. A run that sends images to a third party needs explicit confirmation. */
+  readonly sendsImagesTo: string;
+  /** What it accepts. */
+  readonly capabilities: { readonly images: true; readonly maxImageBytes?: number };
+  complete(request: LlmRequest): Promise<LlmAnswer>;
+};
+```
+
+A model provider. `complete` should throw `RateLimitedError` (with `Retry-After`) when rate limited and any `CriticError` otherwise.
+
+#### `DEFAULT_RUBRIC`
+
+```ts
+export const DEFAULT_RUBRIC = …
+```
+
+The rubric used when a project gives none.
+
+#### `ANSWER_INSTRUCTIONS`
+
+```ts
+export const ANSWER_INSTRUCTIONS = …
+```
+
+The instructions that make the model answer in the structure {@link parseLlmAnswer} reads.
+
+#### `parseLlmAnswer`
+
+```ts
+export function parseLlmAnswer(text: string): CriticAnswer
+```
+
+Reads a model's text into a critic's answer. Accepts the JSON object bare or inside a code fence. Throws `InvalidOutputError`,
+with the first problem and never the model's text, when it is not JSON or is not the asked-for structure, so no score is invented.
+
+#### `imageMediaType`
+
+```ts
+export function imageMediaType(image: Uint8Array): string
+```
+
+The media type of image bytes, from their first bytes. Throws for something that is not a PNG, JPEG, WebP or GIF.
+
+#### `LlmCriticOptions`
+
+```ts
+export type LlmCriticOptions = {
+  readonly provider: LlmProvider;
+  /** The model id the provider knows. Part of the critique's identity. */
+  readonly model: string;
+  /** The critic's name and the producer suffix. Default `vision-llm`. */
+  readonly name?: string;
+  /** Of the critic's own logic and prompt. Change it when the rubric's meaning changes. Default `1.0.0`. */
+  readonly version?: string;
+  /** What to look for. Recorded as a hash, never as text. Default {@link DEFAULT_RUBRIC}. */
+  readonly rubric?: string;
+  /** Default 0: as deterministic as the model allows. */
+  readonly temperature?: number;
+  /** The most the model may answer with. Default 1024. */
+  readonly maxTokens?: number;
+};
+```
+
+Options of {@link createLlmCritic}.
+
+#### `createLlmCritic`
+
+```ts
+export function createLlmCritic(options: LlmCriticOptions): Critic
+```
+
+The LLM critic. It sends each image to the provider with the rubric and reads the structured answer into a verdict and findings.
+
+**Example**
+
+```ts
+const critic = createLlmCritic({ model: 'my-vision-model', provider: openAiCompatibleProvider({ baseUrl: 'https://llm.example.com/v1', apiKey }) });
+```
+
+#### `retryAfterMs`
+
+```ts
+export function retryAfterMs(header: string | null, now = Date.now()): number | undefined
+```
+
+Reads a `Retry-After` header (seconds or an HTTP date) as milliseconds.
+
+#### `openAiCompatibleProvider`
+
+```ts
+export function openAiCompatibleProvider(options: { readonly baseUrl: string; readonly apiKey?: string; readonly fetch?: typeof fetch; readonly maxImageBytes?: number }): LlmProvider
+```
+
+A provider for any server that implements the chat-completions protocol (`POST {baseUrl}/chat/completions` with image content),
+hosted or local. The key is sent as a Bearer token and nowhere else. A 429 becomes `RateLimitedError` with its `Retry-After`; other
+failures become `CriticError('error')` with the status and never the response body. Images go to `baseUrl`'s host, which is what
+`sendsImagesTo` says.
+
+- `options.baseUrl`: for example `https://llm.example.com/v1`. Plain `http` is allowed only for a loopback address.
+
+- `options.apiKey`: the credential, resolved by the caller from a reference. Optional for a local server.
+
+- `options.fetch`: for tests.
+
 ### Publishing critiques
 
 Source: `packages/critics/src/publish.ts`
@@ -674,6 +1033,146 @@ built here and is checked so that a change cannot make it happen quietly.
 - `args`: see {@link critiqueLayer}.
 
 - `options`: attachment limits, as for `publishChecks`.
+
+### Configured critics
+
+Source: `packages/critics/src/registry.ts`
+
+Reads the critics a project configured (`atlas.critics.json`) and builds them: the built-in UIClip critic, the LLM
+critic over a provider, or a critic of the project's own (a module whose default export is a `defineCritic` result). The
+configuration names a credential by reference (`env:NAME`, `file:PATH`) and never contains one, so it can be committed;
+a configuration with a literal credential is refused before anything is built. Credentials are resolved when a critic is
+built for a run and never stored.
+
+Every built critic can say what is wrong with it (`inspect`) so `atlas critic doctor` reports each problem on its own
+with how to fix it, and how to provision itself (`setup`).
+
+See docs/critics.md#configuring-critics
+
+#### `CriticConfigSchema`
+
+```ts
+export const CriticConfigSchema = …
+```
+
+The configuration of one critic. `type` chooses what it is.
+
+#### `CriticsConfigSchema`
+
+```ts
+export const CriticsConfigSchema = …
+```
+
+The configuration file: which server, and the critics by name.
+
+#### `CriticsConfig`
+
+```ts
+export type CriticsConfig = z.output<typeof CriticsConfigSchema>;
+```
+
+The configuration file as read.
+
+#### `CriticConfig`
+
+```ts
+export type CriticConfig = z.output<typeof CriticConfigSchema>;
+```
+
+The configuration of one critic.
+
+#### `LoadedConfig`
+
+```ts
+export type LoadedConfig = { readonly config: CriticsConfig; readonly file: string | null; readonly directory: string };
+```
+
+A configuration and where it came from; `file` is null when there is none, and every critic is then absent.
+
+#### `CONFIG_FILE`
+
+```ts
+export const CONFIG_FILE = …
+```
+
+The name of the configuration file a project commits.
+
+#### `loadCriticsConfig`
+
+```ts
+export async function loadCriticsConfig(cwd: string, file?: string): Promise<LoadedConfig>
+```
+
+Reads the critics configuration. With no `file`, `atlas.critics.json` in `cwd`, which may be absent (no critics are then
+configured). A file that was named and is missing, is not JSON, contains a literal credential, or has the wrong shape is an error that
+says where and never repeats a credential.
+
+#### `Inspection`
+
+```ts
+export type Inspection = {
+  /** For example `model-file`, `credential`, `provider`, `module`. */
+  readonly aspect: string;
+  readonly status: 'ok' | 'warning' | 'problem';
+  readonly detail: string;
+  readonly fix?: string;
+};
+```
+
+What a critic's `inspect` found about one aspect: fine, a warning, or a problem with how to fix it.
+
+#### `SetupReport`
+
+```ts
+export type SetupReport = { readonly ok: true; readonly details: readonly string[] };
+```
+
+What `setup` did for a critic.
+
+#### `BuiltCritic`
+
+```ts
+export type BuiltCritic = {
+  readonly name: string;
+  readonly type: CriticConfig['type'];
+  readonly critic: Critic;
+  /** The credentials this critic holds, for redaction. */
+  readonly secrets: readonly string[];
+  /** Finds what is wrong before a run, one finding per aspect. Never calls the model. */
+  inspect(): Promise<Inspection[]>;
+  /** Provisions what the critic needs (a verified checkpoint) or checks its credentials. */
+  setup(): Promise<SetupReport>;
+  /** Opens what a run needs (a model session) so a problem is found before any image is judged. */
+  ready(): Promise<void>;
+};
+```
+
+A critic built from configuration, with what a command needs around it.
+
+#### `RegistryIo`
+
+```ts
+export type RegistryIo = {
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly fetch?: typeof fetch;
+  readonly importModule?: (name: string) => Promise<unknown>;
+};
+```
+
+What building a critic may use besides the file system: the environment, `fetch` and module loading. Tests pass fakes.
+
+#### `buildCritic`
+
+```ts
+export async function buildCritic(loaded: LoadedConfig, name: string, io: RegistryIo = {}): Promise<BuiltCritic>
+```
+
+Builds the critic `name` of a configuration. Throws, naming the problem, for a name that is not configured, a credential
+reference that cannot be resolved, or a module that cannot be loaded.
+
+- `loaded`: the configuration and its directory.
+
+- `name`: the critic's name in the configuration.
 
 ### The critic runner
 
@@ -838,3 +1337,217 @@ export function criticScopeViolation(layer: { readonly producer?: unknown; reado
 
 The rule a layer breaks for a critic-scoped credential, or `null` when it is within scope. The message says which rule
 and what was found, so the critic can fix it.
+
+### Spooling unsent critiques
+
+Source: `packages/critics/src/spool.ts`
+
+A critic that has finished judging must not lose its work because the server went away. `spoolingStore` wraps the store
+a run publishes to: when the server cannot be reached (a network error, a 5xx, a rate limit that did not clear) the
+objects of the layer are written to a local directory instead of failing, and the next invocation sends them with
+`flushSpool`, byte for byte what was written, in the order they were written. A layer is content-addressed and the store
+protocol is idempotent, so sending one that did arrive is harmless and nothing is duplicated. A refusal (401, 403, 409,
+413, 422) is not spooled: it will not pass by waiting, and the caller must hear it.
+
+What is spooled is only what would have been published (a layer, its files and its catalog entry): never a credential.
+
+See docs/critics.md#when-the-server-goes-away
+
+#### `SpoolingStore`
+
+```ts
+export type SpoolingStore = ObjectStore & {
+  /** How many objects this store has written to the spool since it was made. */
+  readonly spooled: () => number;
+};
+```
+
+A store that spools what it cannot send.
+
+#### `pendingInSpool`
+
+```ts
+export async function pendingInSpool(dir: string): Promise<number>
+```
+
+How many objects wait in a spool directory.
+
+#### `spoolingStore`
+
+```ts
+export function spoolingStore(inner: ObjectStore, dir: string): SpoolingStore
+```
+
+Wraps `inner` so that a `put` that cannot reach the server is written to `dir` instead of throwing. After the first such
+failure the rest of the run goes straight to the spool (it does not wait through every retry again), and `head` answers
+"not there". Reads are not spooled. A refusal from the server still throws.
+
+- `inner`: the store a run publishes to.
+
+- `dir`: the spool directory; created when first needed.
+
+#### `SpoolFlush`
+
+```ts
+export type SpoolFlush = {
+  /** Objects sent and removed from the spool. */
+  readonly sent: number;
+  /** Objects still waiting (the server is still away, or refused one). */
+  readonly remaining: number;
+  /** Why sending stopped, with no credential in it; absent when everything was sent. */
+  readonly error?: string;
+};
+```
+
+What {@link flushSpool} did.
+
+#### `flushSpool`
+
+```ts
+export async function flushSpool(inner: ObjectStore, dir: string): Promise<SpoolFlush>
+```
+
+Sends what an earlier run could not, in the order it was written, and removes each object once the server has it. Stops at the
+first failure and leaves the rest, so the order a layer needs (its files, then the layer, then its catalog entry) is kept. A
+spool that is empty or missing is not an error.
+
+### The UIClip critic (`@crvouga/atlas/critics/uiclip`)
+
+Source: `packages/critics/src/uiclip.ts`. Import: `@crvouga/atlas/critics/uiclip`
+
+A model-based critic: UIClip scores how well a screenshot looks, as one number. This module is the adapter around it, and
+it needs nothing installed to import: the model runs in an ONNX Runtime session that is loaded only when a run starts
+(`loadOnnxRuntime`, which needs the optional `onnxruntime-node` and `sharp` and names the one that is missing), and a test
+or another runtime passes its own `UiclipRuntime`. The checkpoint is provisioned only by an explicit `setupUiclip`, which
+verifies it against a pinned SHA-256 and refuses a file that does not match; inference never downloads anything and
+refuses a checkpoint that does not match. The critic sends images nowhere: it runs on this machine.
+
+A single global score cannot say what to fix, and on real recordings it ranks ordinary loading overlays as poor, so
+a UIClip score is report-only evidence read against the scores of the same state kind (see `relativeVerdict`), never an
+absolute gate.
+
+See docs/critics.md#the-built-in-uiclip-critic
+
+#### `UICLIP_VERSION`
+
+```ts
+export const UICLIP_VERSION = …
+```
+
+The version of this adapter's own logic, recorded in every critique. The checkpoint is part of the identity too (through `model.id`).
+
+#### `UiclipCheckpoint`
+
+```ts
+export type UiclipCheckpoint = {
+  /** The file on disk. */
+  readonly path: string;
+  /** Lowercase hex SHA-256 the file must have. Required: an unpinned checkpoint is refused. */
+  readonly sha256: string;
+  /** Where `setupUiclip` may download it from when the file is missing. Never used by inference. */
+  readonly url?: string;
+};
+```
+
+A pinned checkpoint: where it lives on disk, the SHA-256 it must have, and, optionally, where `setupUiclip` may fetch it from.
+
+#### `UiclipRuntime`
+
+```ts
+export type UiclipRuntime = {
+  /** The score for the image bytes; higher is better. Must be finite and deterministic for the same bytes. */
+  score(image: Uint8Array, signal: AbortSignal): Promise<number>;
+  /** Frees the session. */
+  close?(): Promise<void>;
+};
+```
+
+Something that scores one image: the model behind the critic.
+
+#### `MissingDependencyError`
+
+```ts
+export class MissingDependencyError extends Error
+```
+
+Thrown when an optional dependency a runtime needs is not installed. The message names it and says how to install it.
+
+#### `verifyCheckpoint`
+
+```ts
+export async function verifyCheckpoint(checkpoint: Pick<UiclipCheckpoint, 'path' | 'sha256'>): Promise<string>
+```
+
+Checks a file against a pinned SHA-256. Returns the hash it has. Throws when the file is missing or its hash differs, naming
+both hashes, so a corrupted or swapped model is an error and never silently used.
+
+#### `UiclipSetup`
+
+```ts
+export type UiclipSetup = {
+  /** The file that was verified. */
+  readonly path: string;
+  /** Its SHA-256, equal to the pin. */
+  readonly sha256: string;
+  /** True when it was fetched now; false when it was already there. */
+  readonly downloaded: boolean;
+};
+```
+
+What {@link setupUiclip} did.
+
+#### `setupUiclip`
+
+```ts
+export async function setupUiclip(checkpoint: UiclipCheckpoint, options: { readonly fetch?: typeof fetch; readonly signal?: AbortSignal } = {}): Promise<UiclipSetup>
+```
+
+Provisions the checkpoint: uses the file when it is there, else downloads it from `checkpoint.url` (to a temporary file, hashing as
+it arrives), and in both cases verifies the pinned SHA-256. A download whose hash differs is deleted and is an error; an
+existing file whose hash differs is an error and is left alone. This is the only place anything is downloaded.
+
+- `checkpoint`: the pinned checkpoint.
+
+- `options.fetch`: for tests; default `fetch`.
+
+- `options.signal`: cancels the download.
+
+#### `UiclipModules`
+
+```ts
+export type UiclipModules = { readonly importModule?: (name: string) => Promise<unknown> };
+```
+
+The modules a runtime imports, so a test can replace them.
+
+#### `loadOnnxRuntime`
+
+```ts
+export async function loadOnnxRuntime(checkpoint: Pick<UiclipCheckpoint, 'path' | 'sha256'>, modules: UiclipModules = {}): Promise<UiclipRuntime>
+```
+
+Opens an ONNX Runtime session on a verified checkpoint and scores images with it: the image is resized to 224 by 224 and
+normalised as CLIP does, and the first output's first value is the score. The checkpoint's hash is verified first and a
+mismatch is an error. Needs the optional `onnxruntime-node` and `sharp`; the error names the missing one. Nothing is
+downloaded. The graph and score head are those of the checkpoint you pinned; this has not been validated against any particular
+checkpoint, so measure it on your own examples (`calibrate`) before reading its scores.
+
+#### `createUiclipCritic`
+
+```ts
+export function createUiclipCritic(options: { readonly checkpoint: Pick<UiclipCheckpoint, 'path' | 'sha256'>; readonly runtime?: UiclipRuntime | (() => Promise<UiclipRuntime>); readonly name?: string; readonly modules?: UiclipModules }): Critic & { ready(): Promise<void> }
+```
+
+The UIClip critic: judges each image with a runtime and reports the score and nothing else (a score is a valid critique; it
+has no findings). Deterministic for a deterministic runtime. Its identity includes the checkpoint hash, so a different
+checkpoint is judged again. The runtime is created once, on the first image.
+
+- `options.checkpoint`: the pinned checkpoint. Its hash is the model id.
+
+- `options.runtime`: a runtime, or a function that makes one. Default: {@link loadOnnxRuntime} on the checkpoint.
+
+**Example**
+
+```ts
+const critic = createUiclipCritic({ checkpoint: { path: '.atlas/uiclip.onnx', sha256 }, runtime: { score: async () => 0.5 } });
+```

@@ -137,6 +137,20 @@ it works without a server. Cards are Mantine `Card`s in a responsive `SimpleGrid
 - Pictures are `loading="lazy"` and only the cards on screen are fetched. The grid is bounded with *Show more*.
 - The open state shows every profile side by side with the layer, backend, producer, shard, commit and time of each picture.
 
+## Needs polish
+
+`/critiques` (`critiques/`, in the spec-type menu once a critic has recorded an opinion) ranks the captured UI states one critic
+judged, lowest first ([the guide](critics.md#the-viewer-needs-polish)). It is computed in the page from the layers the viewer already
+holds (`critiques/ranking.ts`), so a critique appears as its layer arrives.
+
+- A critique is an opinion: no `StatusMark`, no passed or failed words, never in a test count. Use a Mantine `Badge` with the
+  label the critic gave (an open string), the severity as text, and never a color alone.
+- A state judged at an earlier picture, or that the critic could not judge, is listed in its own table with the reason and is not
+  ranked. Unknown categories and severities are shown as written.
+- The critic and the state kind are `NativeSelect`s whose values are the address (`critic`, `kind`, `entry`); the open entry is a
+  `Drawer` with the findings in a `Table` and the provenance in an `Accordion`.
+- Pictures are `loading="lazy"`. Waiting, an unavailable backend and incomplete layers are named as on the UI catalog.
+
 ## Reliability
 
 An open test shows its reliability (`explorer/Reliability.tsx`, worked out by `reports/reliability` from the history the page

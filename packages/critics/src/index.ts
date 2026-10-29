@@ -11,13 +11,16 @@
  *
  * @see docs/critics.md
  */
+export * from './catalog-client';
 export * from './contract';
 export * from './credentials';
 export * from './critique';
 export * from './judging';
 export * from './publish';
+export * from './registry';
 export * from './runner';
 export * from './scope';
+export * from './spool';
 export {
   CRITIC_PRODUCER_PREFIX, CRITIQUE_EXTENSION, CRITIQUE_PART_KIND, CRITIQUE_SCHEMA_VERSION, CritiqueSchema,
   type Critique, type CritiqueFinding

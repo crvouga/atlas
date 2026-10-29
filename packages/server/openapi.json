@@ -7008,6 +7008,328 @@
         }
       }
     },
+    "/api/reports/ui-catalog/entries": {
+      "get": {
+        "operationId": "getUiCatalogEntries",
+        "tags": [
+          "Report"
+        ],
+        "summary": "The UI catalog as a list a critic iterates: captured states with their picture hash and critiques",
+        "description": "The captured states of the UI catalog, one entry per state per profile that has a picture stored in its layer, in key order, for a process that reviews them (a critic: see the critics guide). Page with `limit` and the opaque `cursor` of the previous page (`nextCursor`): the cursor names the last key, so each entry is seen exactly once and in the same order. An entry carries `image.sha256` (the hash a critique is anchored to) and `image.path` (fetch the bytes from `/api/reports` + path, through the same safe attachment path as every file), its `state` kind, and `critiques`: those already made, newest first, each marked `current` or `earlier-image`. Keep the `version` of the first page; later ask `since=<that version>` to read only the entries whose layer was added or changed since. A `since` the server does not remember is answered with the whole catalog and `since.honored: false`. `unjudgedBy=<critic>@<version>` keeps entries with no current critique with a verdict from that critic (a failed critique is not a judgement). To be told that something changed, hold `/api/events`: a `report` event carries the new version; then read `since`. A critic-role token may read this.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many entries per page (default 100, at most 1000).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "required": false,
+            "name": "cursor",
+            "in": "query",
+            "description": "The `nextCursor` of the previous page. Anything else is `400`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "since",
+            "in": "query",
+            "description": "A report version (`version` of an earlier answer): only entries whose layer was added or changed since. An unknown version is answered with everything.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "unjudgedBy",
+            "in": "query",
+            "description": "`name` or `name@version` of a critic: only entries it has no current verdict for.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "q",
+            "in": "query",
+            "description": "Words that must all appear in an entry's key, title, route or area.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "area",
+            "in": "query",
+            "description": "Areas. Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "profile",
+            "in": "query",
+            "description": "Profile keys, as listed in `profile.key`. Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "state",
+            "in": "query",
+            "description": "State kinds: `screen`, `overlay`, `loading`, `error`, `empty`, `unknown`… Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "route",
+            "in": "query",
+            "description": "Routes. Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of entries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogEntries"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "400": {
+            "description": "The cursor is not one this server made.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/ui-catalog/entries": {
+      "get": {
+        "operationId": "getUiCatalogEntriesForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "The UI catalog as a list a critic iterates: captured states with their picture hash and critiques",
+        "description": "The captured states of the UI catalog, one entry per state per profile that has a picture stored in its layer, in key order, for a process that reviews them (a critic: see the critics guide). Page with `limit` and the opaque `cursor` of the previous page (`nextCursor`): the cursor names the last key, so each entry is seen exactly once and in the same order. An entry carries `image.sha256` (the hash a critique is anchored to) and `image.path` (fetch the bytes from `/api/reports` + path, through the same safe attachment path as every file), its `state` kind, and `critiques`: those already made, newest first, each marked `current` or `earlier-image`. Keep the `version` of the first page; later ask `since=<that version>` to read only the entries whose layer was added or changed since. A `since` the server does not remember is answered with the whole catalog and `since.honored: false`. `unjudgedBy=<critic>@<version>` keeps entries with no current critique with a verdict from that critic (a failed critique is not a judgement). To be told that something changed, hold `/api/events`: a `report` event carries the new version; then read `since`. A critic-role token may read this.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many entries per page (default 100, at most 1000).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "required": false,
+            "name": "cursor",
+            "in": "query",
+            "description": "The `nextCursor` of the previous page. Anything else is `400`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "since",
+            "in": "query",
+            "description": "A report version (`version` of an earlier answer): only entries whose layer was added or changed since. An unknown version is answered with everything.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "unjudgedBy",
+            "in": "query",
+            "description": "`name` or `name@version` of a critic: only entries it has no current verdict for.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "q",
+            "in": "query",
+            "description": "Words that must all appear in an entry's key, title, route or area.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "area",
+            "in": "query",
+            "description": "Areas. Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "profile",
+            "in": "query",
+            "description": "Profile keys, as listed in `profile.key`. Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "state",
+            "in": "query",
+            "description": "State kinds: `screen`, `overlay`, `loading`, `error`, `empty`, `unknown`… Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "route",
+            "in": "query",
+            "description": "Routes. Comma-separated.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of entries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogEntries"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "400": {
+            "description": "The cursor is not one this server made.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/runs/detail": {
       "get": {
         "operationId": "getReportRun",
@@ -10886,6 +11208,10 @@
                           "area": {
                             "type": "string"
                           },
+                          "kind": {
+                            "description": "The kind of UI state the producer declared: `screen`, `overlay`, `loading`, `error`, `empty`… Open vocabulary",
+                            "type": "string"
+                          },
                           "flags": {
                             "type": "array",
                             "items": {
@@ -10941,6 +11267,259 @@
                             "additionalProperties": {}
                           }
                         },
+                        "additionalProperties": {}
+                      },
+                      "critique": {
+                        "description": "Only for a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer. An opinion, never a result: it does not decide `status`, a slot or the gate. See the critics guide",
+                        "type": "object",
+                        "properties": {
+                          "schema": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "The version of this extension. 1"
+                          },
+                          "subject": {
+                            "type": "object",
+                            "properties": {
+                              "entryKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The catalog entry that was judged"
+                              },
+                              "imageSha256": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The hash of the exact image bytes that were judged. When the entry's image changes, this critique judged an earlier image"
+                              },
+                              "state": {
+                                "description": "The kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`…",
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "entryKey",
+                              "imageSha256"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "critic": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Of the critic's own logic. A newer version replaces an older one"
+                              },
+                              "kind": {
+                                "description": "Open vocabulary: `model`, `llm`, `ml`, `heuristic`…",
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "model": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "parameters": {
+                            "description": "Everything else that explains the result: temperature, seed, the SHA-256 of the rubric",
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "verdict": {
+                            "type": "object",
+                            "properties": {
+                              "score": {
+                                "description": "A finite number. `scale` says what it means",
+                                "type": "number"
+                              },
+                              "scale": {
+                                "description": "For example `0..1, higher is better`",
+                                "type": "string"
+                              },
+                              "label": {
+                                "description": "Open vocabulary, conventionally `ok` or `needs-polish`",
+                                "type": "string"
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "relative": {
+                                "type": "object",
+                                "properties": {
+                                  "stateKind": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "The kind of UI state the score is relative to: `screen`, `overlay`, `loading`, `error`, `empty`…"
+                                  },
+                                  "percentile": {
+                                    "description": "Where the score falls among the project's scores of the same state kind, 0..100, higher is better",
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 100
+                                  },
+                                  "sampleSize": {
+                                    "description": "How many scores of that state kind the percentile is over",
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "previousScore": {
+                                    "description": "The same entry's score for its previous image, from the same critic",
+                                    "type": "number"
+                                  },
+                                  "delta": {
+                                    "description": "`score` minus `previousScore`",
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "stateKind"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
+                            "additionalProperties": {}
+                          },
+                          "findings": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "description": "Stable within the critique, so a reviewer can mark this finding valid or not",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "category": {
+                                  "description": "Open vocabulary: `spacing`, `contrast`, `alignment`, `overflow`, `hierarchy`…",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "severity": {
+                                  "description": "Open vocabulary, conventionally `info`, `minor`, `major`",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "region": {
+                                  "type": "object",
+                                  "properties": {
+                                    "unit": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "description": "`px` (pixels of the stored image) or `normalized` (0..1 of its width and height). Open vocabulary"
+                                    },
+                                    "x": {
+                                      "type": "number"
+                                    },
+                                    "y": {
+                                      "type": "number"
+                                    },
+                                    "w": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "h": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "unit",
+                                    "x",
+                                    "y",
+                                    "w",
+                                    "h"
+                                  ],
+                                  "additionalProperties": {}
+                                },
+                                "rationale": {
+                                  "type": "string"
+                                },
+                                "suggestion": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "failure": {
+                            "type": "object",
+                            "properties": {
+                              "reason": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "reason"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "usage": {
+                            "type": "object",
+                            "properties": {
+                              "inputTokens": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "outputTokens": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "latencyMs": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "costUsd": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": [
+                          "schema",
+                          "subject",
+                          "critic"
+                        ],
                         "additionalProperties": {}
                       },
                       "recording": {
@@ -11887,6 +12466,10 @@
                           "area": {
                             "type": "string"
                           },
+                          "kind": {
+                            "description": "The kind of UI state the producer declared: `screen`, `overlay`, `loading`, `error`, `empty`… Open vocabulary",
+                            "type": "string"
+                          },
                           "flags": {
                             "type": "array",
                             "items": {
@@ -11942,6 +12525,259 @@
                             "additionalProperties": {}
                           }
                         },
+                        "additionalProperties": {}
+                      },
+                      "critique": {
+                        "description": "Only for a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer. An opinion, never a result: it does not decide `status`, a slot or the gate. See the critics guide",
+                        "type": "object",
+                        "properties": {
+                          "schema": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "The version of this extension. 1"
+                          },
+                          "subject": {
+                            "type": "object",
+                            "properties": {
+                              "entryKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The catalog entry that was judged"
+                              },
+                              "imageSha256": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The hash of the exact image bytes that were judged. When the entry's image changes, this critique judged an earlier image"
+                              },
+                              "state": {
+                                "description": "The kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`…",
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "entryKey",
+                              "imageSha256"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "critic": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Of the critic's own logic. A newer version replaces an older one"
+                              },
+                              "kind": {
+                                "description": "Open vocabulary: `model`, `llm`, `ml`, `heuristic`…",
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "model": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "parameters": {
+                            "description": "Everything else that explains the result: temperature, seed, the SHA-256 of the rubric",
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "verdict": {
+                            "type": "object",
+                            "properties": {
+                              "score": {
+                                "description": "A finite number. `scale` says what it means",
+                                "type": "number"
+                              },
+                              "scale": {
+                                "description": "For example `0..1, higher is better`",
+                                "type": "string"
+                              },
+                              "label": {
+                                "description": "Open vocabulary, conventionally `ok` or `needs-polish`",
+                                "type": "string"
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "relative": {
+                                "type": "object",
+                                "properties": {
+                                  "stateKind": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "The kind of UI state the score is relative to: `screen`, `overlay`, `loading`, `error`, `empty`…"
+                                  },
+                                  "percentile": {
+                                    "description": "Where the score falls among the project's scores of the same state kind, 0..100, higher is better",
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 100
+                                  },
+                                  "sampleSize": {
+                                    "description": "How many scores of that state kind the percentile is over",
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "previousScore": {
+                                    "description": "The same entry's score for its previous image, from the same critic",
+                                    "type": "number"
+                                  },
+                                  "delta": {
+                                    "description": "`score` minus `previousScore`",
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "stateKind"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
+                            "additionalProperties": {}
+                          },
+                          "findings": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "description": "Stable within the critique, so a reviewer can mark this finding valid or not",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "category": {
+                                  "description": "Open vocabulary: `spacing`, `contrast`, `alignment`, `overflow`, `hierarchy`…",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "severity": {
+                                  "description": "Open vocabulary, conventionally `info`, `minor`, `major`",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "region": {
+                                  "type": "object",
+                                  "properties": {
+                                    "unit": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "description": "`px` (pixels of the stored image) or `normalized` (0..1 of its width and height). Open vocabulary"
+                                    },
+                                    "x": {
+                                      "type": "number"
+                                    },
+                                    "y": {
+                                      "type": "number"
+                                    },
+                                    "w": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "h": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "unit",
+                                    "x",
+                                    "y",
+                                    "w",
+                                    "h"
+                                  ],
+                                  "additionalProperties": {}
+                                },
+                                "rationale": {
+                                  "type": "string"
+                                },
+                                "suggestion": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "failure": {
+                            "type": "object",
+                            "properties": {
+                              "reason": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "reason"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "usage": {
+                            "type": "object",
+                            "properties": {
+                              "inputTokens": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "outputTokens": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "latencyMs": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "costUsd": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": [
+                          "schema",
+                          "subject",
+                          "critic"
+                        ],
                         "additionalProperties": {}
                       },
                       "recording": {
@@ -16280,6 +17116,10 @@
                     "area": {
                       "type": "string"
                     },
+                    "kind": {
+                      "description": "The kind of UI state the producer declared: `screen`, `overlay`, `loading`, `error`, `empty`… Open vocabulary",
+                      "type": "string"
+                    },
                     "flags": {
                       "type": "array",
                       "items": {
@@ -16335,6 +17175,259 @@
                       "additionalProperties": {}
                     }
                   },
+                  "additionalProperties": {}
+                },
+                "critique": {
+                  "description": "Only for a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer. An opinion, never a result: it does not decide `status`, a slot or the gate. See the critics guide",
+                  "type": "object",
+                  "properties": {
+                    "schema": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "The version of this extension. 1"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "entryKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "The catalog entry that was judged"
+                        },
+                        "imageSha256": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "The hash of the exact image bytes that were judged. When the entry's image changes, this critique judged an earlier image"
+                        },
+                        "state": {
+                          "description": "The kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`…",
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "entryKey",
+                        "imageSha256"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "critic": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Of the critic's own logic. A newer version replaces an older one"
+                        },
+                        "kind": {
+                          "description": "Open vocabulary: `model`, `llm`, `ml`, `heuristic`…",
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "model": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "provider": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "parameters": {
+                      "description": "Everything else that explains the result: temperature, seed, the SHA-256 of the rubric",
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "verdict": {
+                      "type": "object",
+                      "properties": {
+                        "score": {
+                          "description": "A finite number. `scale` says what it means",
+                          "type": "number"
+                        },
+                        "scale": {
+                          "description": "For example `0..1, higher is better`",
+                          "type": "string"
+                        },
+                        "label": {
+                          "description": "Open vocabulary, conventionally `ok` or `needs-polish`",
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "relative": {
+                          "type": "object",
+                          "properties": {
+                            "stateKind": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "The kind of UI state the score is relative to: `screen`, `overlay`, `loading`, `error`, `empty`…"
+                            },
+                            "percentile": {
+                              "description": "Where the score falls among the project's scores of the same state kind, 0..100, higher is better",
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "sampleSize": {
+                              "description": "How many scores of that state kind the percentile is over",
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "previousScore": {
+                              "description": "The same entry's score for its previous image, from the same critic",
+                              "type": "number"
+                            },
+                            "delta": {
+                              "description": "`score` minus `previousScore`",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "stateKind"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "additionalProperties": {}
+                    },
+                    "findings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "description": "Stable within the critique, so a reviewer can mark this finding valid or not",
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "category": {
+                            "description": "Open vocabulary: `spacing`, `contrast`, `alignment`, `overflow`, `hierarchy`…",
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "severity": {
+                            "description": "Open vocabulary, conventionally `info`, `minor`, `major`",
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "confidence": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "region": {
+                            "type": "object",
+                            "properties": {
+                              "unit": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "`px` (pixels of the stored image) or `normalized` (0..1 of its width and height). Open vocabulary"
+                              },
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              },
+                              "w": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "h": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "unit",
+                              "x",
+                              "y",
+                              "w",
+                              "h"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "suggestion": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "failure": {
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "reason"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "inputTokens": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "outputTokens": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "latencyMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "costUsd": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "schema",
+                    "subject",
+                    "critic"
+                  ],
                   "additionalProperties": {}
                 },
                 "recording": {
@@ -25136,6 +26229,13 @@
                     "null"
                   ]
                 },
+                "kind": {
+                  "description": "The kind of UI state the producers declared (`screen`, `overlay`, `loading`…), or null. Absent from an older server",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "flags": {
                   "type": "array",
                   "items": {
@@ -25748,6 +26848,569 @@
           "states",
           "surfaces",
           "facets",
+          "sources"
+        ],
+        "additionalProperties": {}
+      },
+      "CatalogEntries": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "type": "string",
+            "description": "The report version this page was read at. Keep the first page's: reading `since` it later finds whatever changed while the rest was read"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "Stable identity, unique in the catalog: the state id, then `@` and the profile when it has one. A critique names it as `subject.entryKey`"
+                },
+                "stateId": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "route": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "area": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "description": "The kind of UI state the producers declared: `screen`, `overlay`, `loading`, `error`, `empty`… or `unknown` when none did. Open vocabulary"
+                },
+                "profile": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "description": "Identifies the profile across layers: the environment and the sorted parameters"
+                    },
+                    "environment": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "For a person: the client and each parameter's value"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "environment",
+                    "parameters",
+                    "label"
+                  ],
+                  "additionalProperties": {}
+                },
+                "image": {
+                  "type": "object",
+                  "properties": {
+                    "sha256": {
+                      "type": "string",
+                      "description": "The hash of the exact stored bytes. A critique is anchored to it"
+                    },
+                    "path": {
+                      "type": "string",
+                      "description": "Where the bytes are, relative to the reports API root (`/api/reports`): `/layers/<layer>/blobs/attachments/<sha256>`. Served by the safe attachment path"
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "width": {
+                      "type": "number"
+                    },
+                    "height": {
+                      "type": "number"
+                    },
+                    "bytes": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "sha256",
+                    "path"
+                  ],
+                  "additionalProperties": {}
+                },
+                "origin": {
+                  "type": "object",
+                  "properties": {
+                    "layer": {
+                      "type": "string"
+                    },
+                    "backend": {
+                      "type": "string"
+                    },
+                    "producer": {
+                      "type": "string"
+                    },
+                    "recordedAtMs": {
+                      "type": "number"
+                    },
+                    "sha": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "branch": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "runUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "freshness": {
+                      "type": "string",
+                      "enum": [
+                        "unknown",
+                        "modified"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "layer",
+                    "backend",
+                    "producer",
+                    "recordedAtMs",
+                    "sha",
+                    "branch",
+                    "runUrl"
+                  ],
+                  "additionalProperties": {}
+                },
+                "critiques": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "layer": {
+                        "type": "string"
+                      },
+                      "producer": {
+                        "type": "string"
+                      },
+                      "recordedAtMs": {
+                        "type": "number"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ],
+                        "description": "Whether the critic ran, never what it thought"
+                      },
+                      "currency": {
+                        "type": "string",
+                        "enum": [
+                          "current",
+                          "earlier-image"
+                        ],
+                        "description": "`earlier-image`: the picture changed since, so the entry counts as not yet judged by that critic"
+                      },
+                      "critique": {
+                        "type": "object",
+                        "properties": {
+                          "schema": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "The version of this extension. 1"
+                          },
+                          "subject": {
+                            "type": "object",
+                            "properties": {
+                              "entryKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The catalog entry that was judged"
+                              },
+                              "imageSha256": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The hash of the exact image bytes that were judged. When the entry's image changes, this critique judged an earlier image"
+                              },
+                              "state": {
+                                "description": "The kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`…",
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "entryKey",
+                              "imageSha256"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "critic": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Of the critic's own logic. A newer version replaces an older one"
+                              },
+                              "kind": {
+                                "description": "Open vocabulary: `model`, `llm`, `ml`, `heuristic`…",
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "model": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "parameters": {
+                            "description": "Everything else that explains the result: temperature, seed, the SHA-256 of the rubric",
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "verdict": {
+                            "type": "object",
+                            "properties": {
+                              "score": {
+                                "description": "A finite number. `scale` says what it means",
+                                "type": "number"
+                              },
+                              "scale": {
+                                "description": "For example `0..1, higher is better`",
+                                "type": "string"
+                              },
+                              "label": {
+                                "description": "Open vocabulary, conventionally `ok` or `needs-polish`",
+                                "type": "string"
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "relative": {
+                                "type": "object",
+                                "properties": {
+                                  "stateKind": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "The kind of UI state the score is relative to: `screen`, `overlay`, `loading`, `error`, `empty`…"
+                                  },
+                                  "percentile": {
+                                    "description": "Where the score falls among the project's scores of the same state kind, 0..100, higher is better",
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 100
+                                  },
+                                  "sampleSize": {
+                                    "description": "How many scores of that state kind the percentile is over",
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "previousScore": {
+                                    "description": "The same entry's score for its previous image, from the same critic",
+                                    "type": "number"
+                                  },
+                                  "delta": {
+                                    "description": "`score` minus `previousScore`",
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "stateKind"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
+                            "additionalProperties": {}
+                          },
+                          "findings": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "description": "Stable within the critique, so a reviewer can mark this finding valid or not",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "category": {
+                                  "description": "Open vocabulary: `spacing`, `contrast`, `alignment`, `overflow`, `hierarchy`…",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "severity": {
+                                  "description": "Open vocabulary, conventionally `info`, `minor`, `major`",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "region": {
+                                  "type": "object",
+                                  "properties": {
+                                    "unit": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "description": "`px` (pixels of the stored image) or `normalized` (0..1 of its width and height). Open vocabulary"
+                                    },
+                                    "x": {
+                                      "type": "number"
+                                    },
+                                    "y": {
+                                      "type": "number"
+                                    },
+                                    "w": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "h": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "unit",
+                                    "x",
+                                    "y",
+                                    "w",
+                                    "h"
+                                  ],
+                                  "additionalProperties": {}
+                                },
+                                "rationale": {
+                                  "type": "string"
+                                },
+                                "suggestion": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "failure": {
+                            "type": "object",
+                            "properties": {
+                              "reason": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "reason"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          "usage": {
+                            "type": "object",
+                            "properties": {
+                              "inputTokens": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "outputTokens": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "latencyMs": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "costUsd": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": [
+                          "schema",
+                          "subject",
+                          "critic"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "layer",
+                      "producer",
+                      "recordedAtMs",
+                      "status",
+                      "currency",
+                      "critique"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  "description": "The critiques of this entry that win their slot, newest first. Opinions: they never decide a result"
+                }
+              },
+              "required": [
+                "key",
+                "stateId",
+                "title",
+                "route",
+                "area",
+                "state",
+                "profile",
+                "image",
+                "origin",
+                "critiques"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Entries that match the query, across all pages"
+          },
+          "nextCursor": {
+            "description": "Pass as `cursor` to read the next page. Absent on the last page",
+            "type": "string"
+          },
+          "since": {
+            "description": "Present when `since` was asked",
+            "type": "object",
+            "properties": {
+              "requested": {
+                "type": "string"
+              },
+              "honored": {
+                "type": "boolean",
+                "description": "False when the server does not remember that version: the answer is then the whole catalog"
+              }
+            },
+            "required": [
+              "requested",
+              "honored"
+            ],
+            "additionalProperties": {}
+          },
+          "unjudgeable": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Captured cells that are not entries because no stored picture of a known hash backs them (given only by address, left out, or not archived yet)"
+          },
+          "sources": {
+            "type": "object",
+            "properties": {
+              "backends": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "live": {
+                      "type": "boolean",
+                      "description": "Always false on a server"
+                    },
+                    "available": {
+                      "type": "boolean",
+                      "description": "False when the backend could not be read; its results are then unknown, never passed"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "live",
+                    "available"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "backends",
+              "notices"
+            ],
+            "additionalProperties": {},
+            "description": "What could not be read; what depended on it is not offered"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "version",
+          "entries",
+          "total",
+          "unjudgeable",
           "sources"
         ],
         "additionalProperties": {}

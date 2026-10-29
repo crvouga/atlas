@@ -101,6 +101,8 @@ export type UiCatalogState = {
   readonly fixture: string | null;
   readonly cohort: string | null;
   readonly area: string | null;
+  /** The kind of UI state the producers declared (`screen`, `overlay`, `loading`…), or null when none did. */
+  readonly kind: string | null;
   readonly flags: readonly string[];
   /** The surfaces it covers. */
   readonly covers: readonly string[];
@@ -292,7 +294,7 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
     });
     catalogStates.push({
       id, title: ordered[0]?.row.title ?? id,
-      route: scalar(result => result.row.state?.route), fixture: scalar(result => result.row.state?.fixture), cohort: scalar(result => result.row.state?.cohort), area: scalar(result => result.row.state?.area),
+      route: scalar(result => result.row.state?.route), fixture: scalar(result => result.row.state?.fixture), cohort: scalar(result => result.row.state?.cohort), area: scalar(result => result.row.state?.area), kind: scalar(result => result.row.state?.kind),
       flags: union(result => result.row.state?.flags), covers: union(result => result.row.state?.covers),
       producers: [...new Set(ordered.map(result => result.layer.producer))].sort(compare), cells
     });

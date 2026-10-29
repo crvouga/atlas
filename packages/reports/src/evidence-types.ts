@@ -11,6 +11,7 @@
 import type { EvidenceMeasurement, EvidenceStatus } from './explorer-types';
 import type { EvidenceScope, LayerRun } from '../../schema/src/layer';
 import type { LayerParameters } from './layer-types';
+import type { Critique } from '../../schema/src/critique';
 import type { UiStateFact } from './ui-state';
 
 /** Where a recorded test's timeline and captured files are read from. */
@@ -178,6 +179,8 @@ export type LayerRow = {
   readonly evidence?: EvidenceSummary;
   /** For a check of a `ui-state` or `ui-plan` part: its picture and declared facts, so a catalog is listed without another request (see `ui-state.ts`). Absent for every other kind. */
   readonly state?: UiStateFact;
+  /** For a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer (see `critique-row.ts`). An opinion, never a result: it does not decide `status`, a slot or the gate. Absent for every other kind, and for an extension that cannot be read. */
+  readonly critique?: Critique;
   /** What became of this check's expected recording: `uploaded`, `referenced`, `skipped`, `unresolved` or `not-applicable`, with a reason when it is not uploaded. Absent when the check declared no expectation. Independent of `status`. */
   readonly recording?: { readonly state: string; readonly reason?: string };
 };

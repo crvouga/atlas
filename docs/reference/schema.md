@@ -531,11 +531,27 @@ export const UiCatalogSchema = …
 `GET /api/reports/ui-catalog`: the UI catalog, computed from the winning results of the `ui-state` and `ui-plan` parts
 of every layer. States are in id order and cells in profile order, so the same layers always give the same document.
 
+#### `CatalogEntrySchema`
+
+```ts
+export const CatalogEntrySchema = …
+```
+
+An entry of the catalog as a critic reads it: one captured state in one profile, with the hash of its stored picture and the critiques already made of it.
+
+#### `CatalogEntriesSchema`
+
+```ts
+export const CatalogEntriesSchema = …
+```
+
+`GET /api/reports/ui-catalog/entries`: the UI catalog as a flat, cursor-paged list of captured states for a critic.
+
 ### Command results (`--format json`)
 
 Source: `packages/schema/src/cli-results.ts`
 
-What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings` print on standard output with `--format json` (alias
+What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, and `atlas critic list`, `setup`, `doctor` and `run`, print on standard output with `--format json` (alias
 `--json`), and what any `atlas` command prints on standard error for a command that was wrong: one JSON document,
 so an agent or a script never has to parse prose. (`status` and `policy` already print documents:
 `ReportStatusSchema`, and an IAM policy.) Each is also published as a JSON Schema.
@@ -644,6 +660,62 @@ export const InitPlanSchema = …
 
 What `atlas init --format json` prints: everything found about the project, and everything it would change.
 Without `--write` nothing is changed. With `--write`, the files are written and `written` says which.
+
+#### `CriticListEntrySchema`
+
+```ts
+export const CriticListEntrySchema = …
+```
+
+One critic as `atlas critic list` shows it.
+
+#### `CriticListResultSchema`
+
+```ts
+export const CriticListResultSchema = …
+```
+
+What `atlas critic list --format json` prints.
+
+#### `CriticSetupResultSchema`
+
+```ts
+export const CriticSetupResultSchema = …
+```
+
+What `atlas critic setup --format json` prints.
+
+#### `CriticDoctorCheckSchema`
+
+```ts
+export const CriticDoctorCheckSchema = …
+```
+
+One thing `atlas critic doctor` checked.
+
+#### `CriticDoctorResultSchema`
+
+```ts
+export const CriticDoctorResultSchema = …
+```
+
+What `atlas critic doctor --format json` prints.
+
+#### `CriticRunCriticSchema`
+
+```ts
+export const CriticRunCriticSchema = …
+```
+
+What `atlas critic run` did for one critic.
+
+#### `CriticRunResultSchema`
+
+```ts
+export const CriticRunResultSchema = …
+```
+
+What `atlas critic run --format json` prints. A dry run publishes and sends nothing.
 
 #### `CLI_RESULTS`
 

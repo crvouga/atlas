@@ -53,6 +53,8 @@
     "./schema": "./packages/schema/src/index.ts",
     "./server": "./packages/server/src/index.ts",
     "./critics": "./packages/critics/src/index.ts",
+    "./critics/uiclip": "./packages/critics/src/uiclip.ts",
+    "./critics/llm": "./packages/critics/src/llm.ts",
     "./reports/*": "./packages/reports/src/*.ts",
     "./schemas/*": "./packages/schema/schemas/*",
     "./openapi.json": "./packages/server/openapi.json",
@@ -124,6 +126,14 @@
       "./critics": {
         "types": "./dist/critics/src/index.d.ts",
         "default": "./dist/critics/src/index.js"
+      },
+      "./critics/uiclip": {
+        "types": "./dist/critics/src/uiclip.d.ts",
+        "default": "./dist/critics/src/uiclip.js"
+      },
+      "./critics/llm": {
+        "types": "./dist/critics/src/llm.d.ts",
+        "default": "./dist/critics/src/llm.js"
       },
       "./reports/*": {
         "types": "./dist/reports/src/*.d.ts",

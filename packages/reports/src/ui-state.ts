@@ -56,6 +56,8 @@ export type UiStateFacts = {
   readonly covers?: readonly string[];
   /** A grouping a person navigates by (`checkout`). */
   readonly area?: string;
+  /** The kind of UI state: `screen`, `overlay`, `loading`, `error`, `empty`, or any other word. Open vocabulary. Critics judge a state against others of its kind, so declare it; when it is absent the kind is unknown. */
+  readonly kind?: string;
   /** On a `ui-plan` check only: this entry is a surface of the product's inventory, not a state. Nothing is captured for it. */
   readonly inventory?: boolean;
 };
@@ -104,10 +106,10 @@ export function uiStateFacts(check: Pick<Check, 'extensions'>): UiStateFacts {
   const raw = check.extensions?.[UI_STATE_EXTENSION];
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
   const given = raw as Record<string, unknown>;
-  const route = text(given.route), fixture = text(given.fixture), cohort = text(given.cohort), area = text(given.area);
+  const route = text(given.route), fixture = text(given.fixture), cohort = text(given.cohort), area = text(given.area), kind = text(given.kind);
   const flags = list(given.flags), covers = list(given.covers);
   return {
-    ...(route ? { route } : {}), ...(fixture ? { fixture } : {}), ...(cohort ? { cohort } : {}), ...(area ? { area } : {}),
+    ...(route ? { route } : {}), ...(fixture ? { fixture } : {}), ...(cohort ? { cohort } : {}), ...(area ? { area } : {}), ...(kind ? { kind } : {}),
     ...(flags ? { flags } : {}), ...(covers ? { covers } : {}),
     ...(given.inventory === true ? { inventory: true } : {})
   };

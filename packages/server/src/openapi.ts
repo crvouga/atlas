@@ -15,7 +15,7 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, CatalogEntriesSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
@@ -67,7 +67,7 @@ const COMPONENTS = {
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
   ReviewCollectionRequest: [ReviewCollectionRequestSchema, 'input'], ReviewCollection: [ReviewCollectionSchema, 'output'], ReviewCollectionList: [ReviewCollectionListSchema, 'output'], ReviewCollectionDetail: [ReviewCollectionDetailSchema, 'output'], ReviewNoteInput: [ReviewNoteInputSchema, 'input'], ReviewNote: [ReviewNoteSchema, 'output'], ReviewManifest: [ReviewManifestSchema, 'output'],
-  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], CatalogEntries: [CatalogEntriesSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -512,6 +512,23 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The catalog.', 'UiCatalog'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/ui-catalog/entries', path: '/api/reports/ui-catalog/entries', operationId: 'getUiCatalogEntries', tag: 'Report', role: 'read',
+    summary: 'The UI catalog as a list a critic iterates: captured states with their picture hash and critiques',
+    description: 'The captured states of the UI catalog, one entry per state per profile that has a picture stored in its layer, in key order, for a process that reviews them (a critic: see the critics guide). Page with `limit` and the opaque `cursor` of the previous page (`nextCursor`): the cursor names the last key, so each entry is seen exactly once and in the same order. An entry carries `image.sha256` (the hash a critique is anchored to) and `image.path` (fetch the bytes from `/api/reports` + path, through the same safe attachment path as every file), its `state` kind, and `critiques`: those already made, newest first, each marked `current` or `earlier-image`. Keep the `version` of the first page; later ask `since=<that version>` to read only the entries whose layer was added or changed since. A `since` the server does not remember is answered with the whole catalog and `since.honored: false`. `unjudgedBy=<critic>@<version>` keeps entries with no current critique with a verdict from that critic (a failed critique is not a judgement). To be told that something changed, hold `/api/events`: a `report` event carries the new version; then read `since`. A critic-role token may read this.',
+    parameters: [
+      { name: 'limit', in: 'query', description: 'At most this many entries per page (default 100, at most 1000).', schema: { type: 'integer', minimum: 1, maximum: 1000 } },
+      { name: 'cursor', in: 'query', description: 'The `nextCursor` of the previous page. Anything else is `400`.', schema: str },
+      { name: 'since', in: 'query', description: 'A report version (`version` of an earlier answer): only entries whose layer was added or changed since. An unknown version is answered with everything.', schema: str },
+      { name: 'unjudgedBy', in: 'query', description: '`name` or `name@version` of a critic: only entries it has no current verdict for.', schema: str },
+      { name: 'q', in: 'query', description: 'Words that must all appear in an entry\'s key, title, route or area.', schema: str },
+      { name: 'area', in: 'query', description: 'Areas. Comma-separated.', schema: str },
+      { name: 'profile', in: 'query', description: 'Profile keys, as listed in `profile.key`. Comma-separated.', schema: str },
+      { name: 'state', in: 'query', description: 'State kinds: `screen`, `overlay`, `loading`, `error`, `empty`, `unknown`… Comma-separated.', schema: str },
+      { name: 'route', in: 'query', description: 'Routes. Comma-separated.', schema: str }
+    ],
+    responses: { '200': json('One page of entries.', 'CatalogEntries'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('The cursor is not one this server made.'), '401': UNAUTHORIZED, '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',

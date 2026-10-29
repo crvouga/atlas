@@ -1,0 +1,74 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/critic-doctor-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "False when any check is a `problem` (the exit code is then 1)"
+    },
+    "server": {
+      "description": "The server that was checked, with no secrets",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "role": {
+      "description": "What the token may do: `read`, `critic`, `publish` or `admin`; null when the server could not be asked",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "open": {
+      "description": "True when the server has no tokens, so every caller is an administrator; null when unknown",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "`server`, `token`, `scope`, `catalog`, `spool`, or `<critic>:<aspect>` such as `uiclip:model-file`"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warning",
+              "problem"
+            ],
+            "description": "`problem` makes the exit code 1; `warning` does not"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "fix": {
+            "description": "What to change, when the status is not `ok`",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "detail"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "server",
+    "role",
+    "open",
+    "checks"
+  ],
+  "additionalProperties": {}
+}

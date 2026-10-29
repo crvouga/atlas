@@ -80,8 +80,8 @@ function common(origin: UiLayerOrigin, kind: string, title: string) {
 }
 
 function facts(source: UiStateFacts): UiStateFacts {
-  const { route, fixture, cohort, area, flags, covers, inventory } = source;
-  return { ...(route ? { route } : {}), ...(fixture ? { fixture } : {}), ...(cohort ? { cohort } : {}), ...(area ? { area } : {}), ...(flags?.length ? { flags } : {}), ...(covers?.length ? { covers } : {}), ...(inventory ? { inventory } : {}) };
+  const { route, fixture, cohort, area, kind, flags, covers, inventory } = source;
+  return { ...(route ? { route } : {}), ...(fixture ? { fixture } : {}), ...(cohort ? { cohort } : {}), ...(area ? { area } : {}), ...(kind ? { kind } : {}), ...(flags?.length ? { flags } : {}), ...(covers?.length ? { covers } : {}), ...(inventory ? { inventory } : {}) };
 }
 
 /**

@@ -35,6 +35,7 @@ import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
 import { catalogHealth, healthMarkdown, parseRootMapping, parseRootMappings, type RootMapping } from '../../reports/src/catalog-health';
 import { parseArtifactFilter } from '../../reports/src/artifact-query';
 import { filterUiCatalog, pageUiCatalog, parseUiCatalogQuery, uiCatalog, uiCatalogMarkdown } from '../../reports/src/ui-catalog';
+import { catalogEntries, pageCatalogEntries, parseCatalogEntriesQuery, CATALOG_ENTRIES_VERSION, type CatalogEntrySet } from '../../reports/src/ui-catalog-entries';
 import { parseReliabilityScope, reliability, reliabilityMarkdown } from '../../reports/src/reliability';
 import { artifactList, artifactsMarkdown, catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
 import { llmsTxt } from './llms';
@@ -318,7 +319,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true, catalogEntries: true }
     });
   });
 
@@ -434,6 +435,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     }
     return model.value;
   };
+  let entriesModel: { version: string; value: CatalogEntrySet } | undefined;
   let uiModel: { version: string; value: ReturnType<typeof uiCatalog> } | undefined;
   const wantsMarkdown = (c: Context) => {
     const format = c.req.query('format');
@@ -521,6 +523,24 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const whole = uiModel.value;
     const document = () => pageUiCatalog(filterUiCatalog(whole, parseUiCatalogQuery(search)), { limit: number('limit', 200), offset: number('offset', 0) });
     return answer(c, snapshot.version, document, () => uiCatalogMarkdown(document()), `ui-catalog|${search.toString()}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/ui-catalog/entries', async c => {
+    if (!index.ready) return notReady(c);
+    const snapshot = index.snapshot();
+    const search = new URL(c.req.url).searchParams;
+    const query = parseCatalogEntriesQuery(search);
+    // Entries are a function of the report, so they are listed once per version and narrowed per question.
+    if (entriesModel?.version !== snapshot.version) entriesModel = { version: snapshot.version, value: catalogEntries(snapshot.layers) };
+    const whole = entriesModel.value;
+    const changed = query.since === undefined ? null : index.changedSince(query.since);
+    let page: ReturnType<typeof pageCatalogEntries>;
+    try { page = pageCatalogEntries(whole.entries, query, changed); } catch (error) { return problemResponse(400, error instanceof Error ? error.message : 'Bad cursor.'); }
+    const document = () => ({
+      schemaVersion: CATALOG_ENTRIES_VERSION, version: snapshot.version, ...page,
+      ...(query.since === undefined ? {} : { since: { requested: query.since, honored: changed !== null } }),
+      unjudgeable: whole.unjudgeable, sources: { backends: snapshot.backends, notices: snapshot.notices }
+    });
+    return answer(c, snapshot.version, document, () => `${page.entries.map(entry => `- ${entry.key} (${entry.state}): ${entry.title}`).join('\n')}\n`, `ui-entries|${search.toString()}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/runs/detail', async c => {
     if (!index.ready) return notReady(c);

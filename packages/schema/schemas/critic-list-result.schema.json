@@ -1,0 +1,90 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/critic-list-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true
+    },
+    "config": {
+      "description": "The configuration file that was read, or null when there is none",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "critics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name in the configuration; also the producer suffix (`critic.<name>`)"
+          },
+          "type": {
+            "type": "string",
+            "description": "`uiclip`, `llm`, `module`, or `not-configured` for a built-in critic that has no configuration yet"
+          },
+          "kind": {
+            "description": "`model`, `llm`, `heuristic`… as the critic says; null when it is not configured",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "needs-setup",
+              "misconfigured",
+              "not-configured"
+            ],
+            "description": "`needs-setup`: run `atlas critic setup <name>`. `misconfigured`: the configuration or a credential reference cannot be used (see `detail`)"
+          },
+          "sendsImagesTo": {
+            "description": "Where images are sent: a host, or null when they never leave this machine. A run that sends images to a third party needs confirmation",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "description": "Why it is not ready, and what to do. Never holds a credential",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "kind",
+          "version",
+          "status",
+          "sendsImagesTo",
+          "model"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "config",
+    "critics"
+  ],
+  "additionalProperties": {}
+}

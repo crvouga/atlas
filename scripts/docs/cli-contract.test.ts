@@ -4,7 +4,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { httpStore } from '../../packages/reports/src/http-store';
+import { publishChecks } from '../../packages/reports/src/publish-checks';
+import { uiStateLayer } from '../../packages/reports/src/ui-catalog-publish';
+import { memoryStore } from '../../packages/reports/tests/memory-store';
 import { CLI_RESULTS } from '../../packages/schema/src/cli-results';
+import { createAtlasServer } from '../../packages/server/src/app';
+import { listen } from '../../packages/server/src/host';
 import { REPO } from './coverage';
 import { CLI_HELP } from './generate';
 
@@ -21,6 +27,14 @@ for (const help of CLI_HELP) {
 
 test('every documented JSON result validates against the same registry that publishes its schema', async () => {
   const cwd = await mkdtemp(path.join(tmpdir(), 'atlas-json-contract-'));
+  // A server to read the catalog from, with one captured state to judge, and a critic of the project's own.
+  const server = createAtlasServer({ backends: [{ id: 'data', store: memoryStore() }], write: 'data', refreshMs: 60_000 });
+  const http = await listen(server.fetch, { port: 0, host: '127.0.0.1', maxBodyBytes: 16 * 1024 * 1024 });
+  await server.ready;
+  const serverUrl = `http://127.0.0.1:${http.port}`;
+  await publishChecks(httpStore({ url: serverUrl }), uiStateLayer({ producer: 'capture', recordedAtMs: 1, environment: 'desktop-web', states: [{ id: 'home', screenshot: { data: new TextEncoder().encode('png:home') } }] }));
+  await writeFile(path.join(cwd, 'atlas.critics.json'), JSON.stringify({ critics: { contrast: { type: 'module', module: 'contrast.mjs' } } }));
+  await writeFile(path.join(cwd, 'contrast.mjs'), "export default { name: 'contrast', version: '1.0.0', kind: 'heuristic', describe: () => ({ sendsImagesTo: null, needsSetup: false }), evaluate: async () => ({ verdict: { score: 0.5 } }) };\n");
   const scenarios: Record<keyof typeof CLI_RESULTS, { args: string[]; code: number; stdin?: string }> = {
     init: { args: ['init'], code: 0 },
     publish: { args: ['report', 'publish', '--checks', 'checks.json'], code: 0 },
@@ -29,6 +43,10 @@ test('every documented JSON result validates against the same registry that publ
     doctor: { args: ['report', 'doctor'], code: 0 },
     status: { args: ['report', 'status'], code: 0 },
     verifyRecordings: { args: ['report', 'verify-recordings'], code: 0 },
+    criticList: { args: ['critic', 'list'], code: 0 },
+    criticSetup: { args: ['critic', 'setup', 'contrast'], code: 0 },
+    criticDoctor: { args: ['critic', 'doctor', '--server', serverUrl], code: 0 },
+    criticRun: { args: ['critic', 'run', '--critic', 'contrast', '--all', '--server', serverUrl], code: 0 },
     error: { args: ['report', 'publish'], code: 2 }
   };
   try {
@@ -44,5 +62,5 @@ test('every documented JSON result validates against the same registry that publ
       expect(contract.schema.safeParse(JSON.parse(name === 'error' ? err : out)).success, contract.schemaName).toBe(true);
       if (name === 'error') expect(out).toBe('');
     }
-  } finally { await rm(cwd, { recursive: true, force: true }); }
+  } finally { server.close(); await http.close(200); await rm(cwd, { recursive: true, force: true }); }
 }, 30_000);

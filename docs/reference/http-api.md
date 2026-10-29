@@ -974,6 +974,46 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
+### The UI catalog as a list a critic iterates: captured states with their picture hash and critiques
+
+`GET /api/reports/ui-catalog/entries` · role: read
+
+The captured states of the UI catalog, one entry per state per profile that has a picture stored in its layer, in key order, for a process that reviews them (a critic: see the critics guide). Page with `limit` and the opaque `cursor` of the previous page (`nextCursor`): the cursor names the last key, so each entry is seen exactly once and in the same order. An entry carries `image.sha256` (the hash a critique is anchored to) and `image.path` (fetch the bytes from `/api/reports` + path, through the same safe attachment path as every file), its `state` kind, and `critiques`: those already made, newest first, each marked `current` or `earlier-image`. Keep the `version` of the first page; later ask `since=<that version>` to read only the entries whose layer was added or changed since. A `since` the server does not remember is answered with the whole catalog and `since.honored: false`. `unjudgedBy=<critic>@<version>` keeps entries with no current critique with a verdict from that critic (a failed critique is not a judgement). To be told that something changed, hold `/api/events`: a `report` event carries the new version; then read `since`. A critic-role token may read this.
+
+- `limit` (query): At most this many entries per page (default 100, at most 1000).
+- `cursor` (query): The `nextCursor` of the previous page. Anything else is `400`.
+- `since` (query): A report version (`version` of an earlier answer): only entries whose layer was added or changed since. An unknown version is answered with everything.
+- `unjudgedBy` (query): `name` or `name@version` of a critic: only entries it has no current verdict for.
+- `q` (query): Words that must all appear in an entry's key, title, route or area.
+- `area` (query): Areas. Comma-separated.
+- `profile` (query): Profile keys, as listed in `profile.key`. Comma-separated.
+- `state` (query): State kinds: `screen`, `overlay`, `loading`, `error`, `empty`, `unknown`… Comma-separated.
+- `route` (query): Routes. Comma-separated.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` One page of entries.; `304` Unchanged since the `If-None-Match` ETag.; `400` The cursor is not one this server made.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The UI catalog as a list a critic iterates: captured states with their picture hash and critiques
+
+`GET /api/projects/{project}/reports/ui-catalog/entries` · role: read
+
+The captured states of the UI catalog, one entry per state per profile that has a picture stored in its layer, in key order, for a process that reviews them (a critic: see the critics guide). Page with `limit` and the opaque `cursor` of the previous page (`nextCursor`): the cursor names the last key, so each entry is seen exactly once and in the same order. An entry carries `image.sha256` (the hash a critique is anchored to) and `image.path` (fetch the bytes from `/api/reports` + path, through the same safe attachment path as every file), its `state` kind, and `critiques`: those already made, newest first, each marked `current` or `earlier-image`. Keep the `version` of the first page; later ask `since=<that version>` to read only the entries whose layer was added or changed since. A `since` the server does not remember is answered with the whole catalog and `since.honored: false`. `unjudgedBy=<critic>@<version>` keeps entries with no current critique with a verdict from that critic (a failed critique is not a judgement). To be told that something changed, hold `/api/events`: a `report` event carries the new version; then read `since`. A critic-role token may read this.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `limit` (query): At most this many entries per page (default 100, at most 1000).
+- `cursor` (query): The `nextCursor` of the previous page. Anything else is `400`.
+- `since` (query): A report version (`version` of an earlier answer): only entries whose layer was added or changed since. An unknown version is answered with everything.
+- `unjudgedBy` (query): `name` or `name@version` of a critic: only entries it has no current verdict for.
+- `q` (query): Words that must all appear in an entry's key, title, route or area.
+- `area` (query): Areas. Comma-separated.
+- `profile` (query): Profile keys, as listed in `profile.key`. Comma-separated.
+- `state` (query): State kinds: `screen`, `overlay`, `loading`, `error`, `empty`, `unknown`… Comma-separated.
+- `route` (query): Routes. Comma-separated.
+
+Responses: `200` One page of entries.; `304` Unchanged since the `If-None-Match` ETag.; `400` The cursor is not one this server made.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
 ### Every test one run recorded
 
 `GET /api/reports/runs/detail` · role: read
