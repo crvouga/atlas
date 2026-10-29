@@ -31,6 +31,8 @@ export type AtlasServerOptions = {
   /** The built viewer. Without it, only the API is served. */
   readonly site?: string;
   readonly outlineBranch?: string;
+  /** Root mappings `from>to` the catalog health report always applies (the `catalog.roots` setting), beside any `root` a request adds. */
+  readonly catalogRoots?: readonly string[];
   readonly include?: (layer: LayerHeader) => boolean;
   readonly refreshMs?: number;
   readonly limits?: { readonly maxObjectMiB?: number; readonly maxJsonMiB?: number; readonly maxStreams?: number };

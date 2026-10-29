@@ -65,6 +65,7 @@ export function serverOptionsOf(config: ResolvedServerConfig, backends: ReturnTy
     backends, write: S3_BACKEND_ID,
     tokens: config.tokens, anonymousRead: config.anonymousRead,
     ...(config.outlineBranch ? { outlineBranch: config.outlineBranch } : {}), ...(include ? { include } : {}),
+    ...(config.catalog.roots.length ? { catalogRoots: config.catalog.roots } : {}),
     runTimeoutMs: config.runTimeoutSeconds * 1000, runStallMs: config.runStallSeconds * 1000, refreshMs: config.refreshSeconds * 1000, limits: config.limits, heartbeatMs: config.heartbeatSeconds * 1000,
     ...(config.log && log ? { log } : {})
   };

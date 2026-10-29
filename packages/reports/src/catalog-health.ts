@@ -17,6 +17,10 @@
  * - **Fallback identity.** A check whose id is its title has no stable id; renaming it starts a new check. Counted, not
  *   guessed at.
  *
+ * - **Declared ids.** A producer may say what a check is with the labels `behavior-id` (the promise) and `example-id`
+ *   (one example of an outline). Atlas counts them and names ids that sit on more than one check; it does not join the
+ *   checks, because a check is still its spec path and id.
+ *
  * It only reads: it never changes a status, a slot or a winner, so it cannot disagree with the report it describes.
  * Optional label `outline` on a check names the scenario outline its example belongs to.
  *
@@ -38,8 +42,17 @@ const CANDIDATE_LIMIT = 5;
 /** Folder names that say where a spec lives, not what it is about. A domain with one of these names is likely a root folder. */
 const GENERIC_DOMAINS = new Set(['specs', 'spec', 'product', 'features', 'feature', 'tests', 'test', 'e2e', 'src', 'app', 'docs', 'overview', 'root', 'default']);
 
-/** Declares that paths under `from` are the same specs as paths under `to`, e.g. `{ from: '', to: 'specs/' }`. Empty `from` matches every path. */
-export type RootMapping = { readonly from: string; readonly to: string };
+/** The label a producer puts on a check to give its behavior (the promise) an id that outlives renames and moves. */
+export const BEHAVIOR_ID_LABEL = 'behavior-id';
+
+/** The label a producer puts on a check to give one example of a scenario outline an id of its own. */
+export const EXAMPLE_ID_LABEL = 'example-id';
+
+/**
+ * Declares that paths under `from` are the same specs as paths under `to`, e.g. `{ from: '', to: 'specs/' }`. Empty `from`
+ * matches every path. `source` says where it was declared (the server's configuration or the request); it changes nothing.
+ */
+export type RootMapping = { readonly from: string; readonly to: string; readonly source?: 'configuration' | 'request' };
 
 /** One thing worth a look. */
 export type HealthItem = {
@@ -59,6 +72,7 @@ export type HealthCode =
   | 'no-spec-definitions'
   | 'fallback-identity'
   | 'unused-root-mapping'
+  | 'declared-id-split'
   | 'spec-without-execution'
   | 'historical-only';
 
@@ -146,10 +160,14 @@ export type CatalogHealth = {
     readonly checks: number;
     /** Checks whose id equals their title: no stable id was given. */
     readonly fallbackIdentity: number;
+    /** Checks that declare a `behavior-id` label. Optional: absent from documents written before it existed. */
+    readonly declaredBehaviorIds?: number;
+    /** Checks that declare an `example-id` label. */
+    readonly declaredExampleIds?: number;
     readonly basis: string;
   };
   readonly domains: readonly { readonly name: string; readonly specs: number }[];
-  readonly roots: readonly { readonly from: string; readonly to: string; readonly matched: number }[];
+  readonly roots: readonly { readonly from: string; readonly to: string; readonly matched: number; readonly source?: 'configuration' | 'request' }[];
   readonly aliases: readonly SpecAlias[];
   readonly findings: readonly HealthFinding[];
 };
@@ -308,6 +326,16 @@ export function catalogHealth(model: CatalogModel, roots: readonly RootMapping[]
   const fallback = model.tests.filter(test => test.id === test.title);
   if (fallback.length) findings.push(finding('fallback-identity', 'info', 'These checks use their title as their id. A check is its spec path and id, so renaming one starts a new check and splits its history. Have the producer send a stable `id`.', fallback.map(test => ({ path: test.id })), fallback.length));
 
+  const split: HealthItem[] = [];
+  for (const label of [BEHAVIOR_ID_LABEL, EXAMPLE_ID_LABEL]) {
+    const byId = new Map<string, TestSummary[]>();
+    for (const test of model.tests) { const id = test.labels[label]; if (id) byId.set(id, [...(byId.get(id) ?? []), test]); }
+    for (const [id, tests] of [...byId].sort(([a], [b]) => byText(a, b))) {
+      if (tests.length > 1) split.push({ path: `${label}=${id}`, candidates: tests.map(test => test.specPath ? `${test.specPath}  ${test.id}` : test.id).sort(byText).slice(0, CANDIDATE_LIMIT).map(path => ({ path, reason: `same ${label}` })) });
+    }
+  }
+  if (split.length) findings.push(finding('declared-id-split', 'info', 'These declared ids sit on more than one check: the promise was renamed or moved, or two checks claim it. Atlas keeps the checks apart (a check is its spec path and id), so their histories are separate.', split));
+
   const unused = ordered.filter(mapping => !matched.get(mapping)?.size);
   if (unused.length) findings.push(finding('unused-root-mapping', 'warning', 'These root mappings matched no spec path. Check `from` against the paths in the report.', unused.map(mapping => ({ path: `${mapping.from}>${mapping.to}` }))));
 
@@ -353,10 +381,12 @@ export function catalogHealth(model: CatalogModel, roots: readonly RootMapping[]
     identity: {
       checks: model.tests.length,
       fallbackIdentity: fallback.length,
-      basis: 'A check is its spec path and its id. A check whose producer sent no id is known by its title, so a rename is a new check; a spec is known by its path, joined to another only by a declared root mapping.'
+      declaredBehaviorIds: model.tests.filter(test => test.labels[BEHAVIOR_ID_LABEL]).length,
+      declaredExampleIds: model.tests.filter(test => test.labels[EXAMPLE_ID_LABEL]).length,
+      basis: 'A check is its spec path and its id. A check whose producer sent no id is known by its title, so a rename is a new check; a spec is known by its path, joined to another only by a declared root mapping. The labels behavior-id and example-id are counted and checked for ids shared by several checks; they do not change which check a result belongs to.'
     },
     domains,
-    roots: ordered.map(mapping => ({ from: mapping.from, to: mapping.to, matched: matched.get(mapping)?.size ?? 0 })),
+    roots: ordered.map(mapping => ({ from: mapping.from, to: mapping.to, matched: matched.get(mapping)?.size ?? 0, ...(mapping.source ? { source: mapping.source } : {}) })),
     aliases,
     findings
   };

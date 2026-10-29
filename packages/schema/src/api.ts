@@ -588,9 +588,15 @@ export const CatalogHealthSchema = z.looseObject({
     testsWithoutSpec: nonneg,
     explanation: z.array(z.string())
   }),
-  identity: z.looseObject({ checks: nonneg, fallbackIdentity: nonneg.describe('Checks whose id equals their title'), basis: z.string() }),
+  identity: z.looseObject({
+    checks: nonneg,
+    fallbackIdentity: nonneg.describe('Checks whose id equals their title'),
+    declaredBehaviorIds: nonneg.optional().describe('Checks that declare a `behavior-id` label'),
+    declaredExampleIds: nonneg.optional().describe('Checks that declare an `example-id` label'),
+    basis: z.string()
+  }),
   domains: z.array(z.looseObject({ name: z.string(), specs: nonneg })).describe('Specs per domain, most first'),
-  roots: z.array(z.looseObject({ from: z.string(), to: z.string(), matched: nonneg.describe('Distinct paths the mapping changed') })),
+  roots: z.array(z.looseObject({ from: z.string(), to: z.string(), matched: nonneg.describe('Distinct paths the mapping changed'), source: z.enum(['configuration', 'request']).optional().describe('Where it was declared: the server\'s `catalog.roots` setting or this request\'s `root` parameter') })),
   aliases: z.array(z.looseObject({ path: z.string(), sources: z.array(z.string()) })).describe('Logical specs seen under more than one original path, joined by a root mapping'),
   findings: z.array(z.looseObject({
     code: z.string().describe('An open set: treat a code you do not know as informational'),

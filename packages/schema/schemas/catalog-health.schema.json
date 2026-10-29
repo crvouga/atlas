@@ -229,6 +229,18 @@
           "maximum": 9007199254740991,
           "description": "Checks whose id equals their title"
         },
+        "declaredBehaviorIds": {
+          "description": "Checks that declare a `behavior-id` label",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "declaredExampleIds": {
+          "description": "Checks that declare an `example-id` label",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
         "basis": {
           "type": "string"
         }
@@ -278,6 +290,14 @@
             "minimum": 0,
             "maximum": 9007199254740991,
             "description": "Distinct paths the mapping changed"
+          },
+          "source": {
+            "description": "Where it was declared: the server's `catalog.roots` setting or this request's `root` parameter",
+            "type": "string",
+            "enum": [
+              "configuration",
+              "request"
+            ]
           }
         },
         "required": [

@@ -806,6 +806,10 @@ Explains why the Specs and the Tests of a report may disagree, and what a produc
 - **Fallback identity.** A check whose id is its title has no stable id; renaming it starts a new check. Counted, not
   guessed at.
 
+- **Declared ids.** A producer may say what a check is with the labels `behavior-id` (the promise) and `example-id`
+  (one example of an outline). Atlas counts them and names ids that sit on more than one check; it does not join the
+  checks, because a check is still its spec path and id.
+
 It only reads: it never changes a status, a slot or a winner, so it cannot disagree with the report it describes.
 Optional label `outline` on a check names the scenario outline its example belongs to.
 
@@ -827,13 +831,30 @@ export const HEALTH_ITEM_LIMIT = …
 
 The most paths listed in one finding; its `count` is always the whole.
 
+#### `BEHAVIOR_ID_LABEL`
+
+```ts
+export const BEHAVIOR_ID_LABEL = …
+```
+
+The label a producer puts on a check to give its behavior (the promise) an id that outlives renames and moves.
+
+#### `EXAMPLE_ID_LABEL`
+
+```ts
+export const EXAMPLE_ID_LABEL = …
+```
+
+The label a producer puts on a check to give one example of a scenario outline an id of its own.
+
 #### `RootMapping`
 
 ```ts
-export type RootMapping = { readonly from: string; readonly to: string };
+export type RootMapping = { readonly from: string; readonly to: string; readonly source?: 'configuration' | 'request' };
 ```
 
-Declares that paths under `from` are the same specs as paths under `to`, e.g. `{ from: '', to: 'specs/' }`. Empty `from` matches every path.
+Declares that paths under `from` are the same specs as paths under `to`, e.g. `{ from: '', to: 'specs/' }`. Empty `from`
+matches every path. `source` says where it was declared (the server's configuration or the request); it changes nothing.
 
 #### `HealthItem`
 
@@ -860,6 +881,7 @@ export type HealthCode =
   | 'no-spec-definitions'
   | 'fallback-identity'
   | 'unused-root-mapping'
+  | 'declared-id-split'
   | 'spec-without-execution'
   | 'historical-only';
 ```

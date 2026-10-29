@@ -224,11 +224,11 @@ describe('GET /api/reports/runs?video=true', () => {
 
 describe('GET /api/reports/tests/health', () => {
   /** Results published under `checkout/cart.feature` while the specs are recorded under `specs/`. */
-  async function drifted() {
+  async function drifted(catalogRoots?: readonly string[]) {
     const store = memoryStore();
     const specs = [{ path: 'specs/checkout/cart.feature', domain: 'checkout', kind: 'feature', title: 'Cart' }];
     await publishChecks(store, { producer: 'gherkin-web', environment: 'desktop-web', recordedAtMs: 1_000, specs, checks: [{ id: 'add', title: 'add', status: 'passed', specPath: 'checkout/cart.feature' }] });
-    const node = createNode({ stores: [{ id: 'main', label: 'Main', store }], refreshMs: 60_000 });
+    const node = createNode({ stores: [{ id: 'main', label: 'Main', store }], refreshMs: 60_000, ...(catalogRoots ? { catalogRoots } : {}) });
     nodes.push(node);
     await node.ready;
     return node;
@@ -244,6 +244,18 @@ describe('GET /api/reports/tests/health', () => {
     expect(after.findings.map(item => item.code)).not.toContain('ambiguous-spec-path');
     expect(after.aliases).toEqual([{ path: 'specs/checkout/cart.feature', sources: ['checkout/cart.feature', 'specs/checkout/cart.feature'] }]);
     expect(after.counts.specs).toMatchObject({ files: 1, defined: 1, withTests: 1, executed: 1, withoutExecution: 0 });
+  });
+
+  test('a configured root mapping applies to every request and says where it came from; a request may add one', async () => {
+    const node = await drifted(['>specs/']);
+    const configured = CatalogHealthSchema.parse(await (await get(node, '/api/reports/tests/health')).json());
+    expect(configured.findings.map(item => item.code)).not.toContain('ambiguous-spec-path');
+    expect(configured.aliases.map(alias => alias.path)).toEqual(['specs/checkout/cart.feature']);
+    expect(configured.roots).toEqual([{ from: '', to: 'specs/', matched: 1, source: 'configuration' }]);
+    // The same mapping asked for again is not counted twice; another one is added as a request mapping (longest `from` first).
+    const both = CatalogHealthSchema.parse(await (await get(node, `/api/reports/tests/health?root=${encodeURIComponent('>specs/')}&root=${encodeURIComponent('x/>y/')}`)).json());
+    expect(both.roots.map(root => [root.from, root.to, root.source])).toEqual([['x/', 'y/', 'request'], ['', 'specs/', 'configuration']]);
+    expect(both.findings.find(item => item.code === 'unused-root-mapping')!.items).toEqual([{ path: 'x/>y/' }]);
   });
 
   test('answers Markdown and is revalidated by ETag', async () => {
