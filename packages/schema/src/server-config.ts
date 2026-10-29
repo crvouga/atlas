@@ -55,6 +55,11 @@ export const ServerConfigSchema = z.strictObject({
       ignoreModified: z.boolean().optional().describe('Leave out layers from modified checkouts and unknown origins')
     })
     .default({}),
+  catalog: z
+    .strictObject({
+      roots: z.array(z.string().refine((value) => value.includes('>'), { message: 'Write a root mapping as from>to, e.g. ">specs/" (paths under `from` are the same specs as paths under `to`)' })).default([]).describe('Root mappings `from>to` that relate spec paths a producer publishes to the paths the specs are recorded under (an empty `from` matches every path). The catalog health report applies them to every request, beside any `root` the request adds')
+    })
+    .default({ roots: [] }),
   refreshSeconds: z.number().min(1).default(10).describe('How often the backends are looked at for layers written by something other than this server'),
   limits: z
     .strictObject({

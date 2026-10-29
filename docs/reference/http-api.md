@@ -550,9 +550,9 @@ Diagnoses the report's metadata, so a domain filter or a coverage percentage can
 
 `counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.
 
-Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.
+Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.
 
-- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.
+- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.
 - `format` (query): `markdown` for a Markdown report instead of JSON.
 - `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
@@ -566,12 +566,12 @@ Diagnoses the report's metadata, so a domain filter or a coverage percentage can
 
 `counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.
 
-Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.
+Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
 - `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
-- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.
+- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.
 - `format` (query): `markdown` for a Markdown report instead of JSON.
 
 Responses: `200` The diagnostics.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.

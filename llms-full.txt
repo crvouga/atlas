@@ -1878,6 +1878,7 @@ is said in words and the server does not start. The file has a published
 | Whose specs the report is laid over | `outlineBranch` | `--outline-branch <branch>` | `ATLAS_OUTLINE_BRANCH` | `main`, then `master`, then the newest |
 | Only layers recorded on these branches take part | `include.branches` | `--branch <name>` (repeatable) | `ATLAS_ONLY_BRANCH` | all |
 | Leave out layers from modified checkouts and unknown origins | `include.ignoreModified` | `--ignore-modified` | `ATLAS_IGNORE_MODIFIED` | no |
+| Root mappings `from>to` that join spec paths a producer publishes to the paths the specs are recorded under, for the catalog health report (comma-separated; an empty `from` matches every path) | `catalog.roots` |  | `ATLAS_CATALOG_ROOTS` | none |
 | How often (seconds) the backends are looked at for layers written by something else | `refreshSeconds` | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
 | Let anyone look, not upload | `auth.anonymousRead` | `--anonymous-read` | `ATLAS_ANONYMOUS_READ` | no |
 | Listen publicly with no tokens (something in front signs people in) | `auth.insecure` | `--insecure` | `ATLAS_INSECURE` | no |
@@ -2118,8 +2119,16 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
   the Tests total. Two spec paths are one logical spec only when a mapping says so
   (`?root=<from>><to>`, for example `?root=%3Especs/` to put `checkout/cart.feature` under `specs/`); similar paths
   are reported as ambiguous and never merged, and a similar title is never an identity. Give a check the label
-  `outline` to say which scenario outline an example belongs to. A domain shared by nearly every spec is flagged, but
-  explicit domain metadata always stays authoritative. The document only reads: it changes no status.
+  `outline` to say which scenario outline an example belongs to, and `behavior-id` / `example-id` to give a behavior
+  or one example a stable id of your own: Atlas counts them and names an id that sits on more than one check (a
+  rename or a move), but a check is still its spec path and id, so nothing is joined by them. A domain shared by nearly
+  every spec is flagged, but explicit domain metadata always stays authoritative. The document only reads: it changes
+  no status.
+- Mappings that should always apply are a setting, not a query parameter: `catalog.roots` in `atlas.server.json` (a list
+  of `from>to`) or `ATLAS_CATALOG_ROOTS` (comma-separated; it replaces the file's list). The health document applies
+  them, then adds the request's `?root=`, and says in `roots[].source` which is which. A mapping with no `>` stops the
+  server starting. The viewer's **Catalog health** tab shows the same document, and its mapping form (the `root`
+  address parameter) tries further mappings without changing the server.
 - The server keeps the newest 100 results of every test (progress reported as `running` is not history) and every run's last result per test, in memory, as layers
   arrive; it is rebuilt from the layers on restart. History never changes a result.
 - Without a published spec set, tests are grouped under the specs their layers recorded (`specs[]`: path, domain,
@@ -3223,7 +3232,7 @@ carry any of these. Every one is optional.
 | `annotations[]` | Notes about the result: a warning, a deprecation, an accessibility finding, a coverage figure. |
 | `attempts[]` | Every try, when the check was retried. |
 | `tags[]` | Free labels to filter by: `smoke`, `payments`. |
-| `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. The viewer reads `build`, `platform`, `applies-to` and `applies-to-by` to tell whether evidence applies to a release (see [the viewer conventions](ui.md#behaviors-read-watch-inspect)). |
+| `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. The viewer reads `build`, `platform`, `applies-to` and `applies-to-by` to tell whether evidence applies to a release, and `published-at` and `enriched-at` (epoch milliseconds or an ISO date) to show when it was published or enriched apart from when the checks ran (see [the viewer conventions](ui.md#behaviors-read-watch-inspect)). `behavior-id` and `example-id` declare a stable id for the behavior and for one example of an outline, and `outline` names the outline; the [catalog health](server.md#reading-the-report-as-an-agent) report counts them and names an id shared by several checks. They never change which check a result belongs to. |
 | `scope{}` | What the evidence does and does not show: surface, device kind, synthetic data, scripted dependencies, audio, pacing, what was asserted and its limits. Unknown when absent. See [Evidence scope](rich-evidence.md#evidence-scope). |
 | `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
@@ -4538,10 +4547,37 @@ when Watch is on screen.
   what they know with labels: `build`, `platform`, and `applies-to` with `applies-to-by` (the policy that asserts the
   evidence still holds for those builds; without it the assertion is refused). The "Stale or unverified" filter
   (`evidence=stale`) lists every behavior whose evidence does not apply, including those with none.
+- The test explorer makes the same reading of every test from the catalog (`explorer/applicability.ts`): the catalog
+  carries the spec's fingerprint now (`spec.fingerprint`) and, on each current result, `specRevision`, `freshness` and
+  `provenance` (the labels above), all optional. The same address names (`release`, `releaseSha`, `releasePlatform`,
+  `evidence=stale`) give the "Stale or unverified" button, the "Stale evidence first" sort, a verdict badge on rows
+  (stale always; unknown or none when a release is named or evidence is filtered or sorted), and the summary in test
+  detail. Layers carry no publication time, because a layer's id is the digest of its content and a time of upload in
+  it would make a retried publish a different layer: a producer that knows states `published-at` and `enriched-at`
+  labels, shown apart from "Checks ran", which alone is the age.
 - A recording is always labelled illustrative: it shows one run and does not approve a behavior for production.
   `demo`/`representative` tags only add a "Representative demo" label.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
+
+## Catalog health
+
+The **Catalog health** tab (`explorer/HealthView.tsx`, `?tab=health`; `@crvouga/atlas/reports/catalog-health`) explains why the Specs
+and the Tests disagree. The Specs list links to it ("Why do these counts differ from the Tests?"). On a server it reads
+`GET /api/reports/tests/health`; elsewhere the same document is worked out in the page from the specs and results it holds, and an
+older server without the route is told so in words.
+
+- Denominators are never one number: spec files, defined specs, specs with tests, specs executed and defined but not executed
+  (the coverage gaps, which add to no passed count), tests, outlines, examples and observations (an outline, its examples and
+  their per-environment results are told apart). Each figure has its meaning in its `title`.
+- A table walks from the Specs total to the Tests total, step by step, with the sentences below it. Findings are an `Accordion`
+  (warnings open), each with its severity as text, its code, how many it affects and the paths. Paths that might be one promise
+  are shown as "may be the same promise as ...; not merged": a similar title never joins two specs.
+- Root mappings (`from>to`) join spec paths. Those the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`) are
+  labelled "Configured on the server"; others are tried in the form and kept in the address (`root`), labelled "Tried here", and
+  change nothing on the server. A mapping that matched no path is a warning. Joined specs list every original path.
+- Domains are listed as declared; a domain shared by nearly every spec is a finding, never rewritten. Identity states how many
+  checks are known only by title, how many declare `behavior-id` / `example-id`, and the limits of both.
 
 ## UI catalog
 
@@ -4767,7 +4803,7 @@ The narrowly scoped exceptions are:
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
 | UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
-| Project home | Tests/runs/artifacts/compare tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
+| Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |
@@ -5866,9 +5902,9 @@ Diagnoses the report's metadata, so a domain filter or a coverage percentage can
 
 `counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.
 
-Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.
+Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.
 
-- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.
+- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.
 - `format` (query): `markdown` for a Markdown report instead of JSON.
 - `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
@@ -5882,12 +5918,12 @@ Diagnoses the report's metadata, so a domain filter or a coverage percentage can
 
 `counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.
 
-Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.
+Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
 - `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
-- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.
+- `root` (query): A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.
 - `format` (query): `markdown` for a Markdown report instead of JSON.
 
 Responses: `200` The diagnostics.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.

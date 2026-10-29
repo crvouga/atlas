@@ -3699,7 +3699,7 @@
           "Report"
         ],
         "summary": "Why specs, domains and counts disagree",
-        "description": "Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.\n\n`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.\n\nTwo paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
+        "description": "Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.\n\n`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.\n\nTwo paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.\n\nRole needed: `read`.",
         "x-atlas-role": "read",
         "security": [
           {
@@ -3714,7 +3714,7 @@
             "required": false,
             "name": "root",
             "in": "query",
-            "description": "A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.",
+            "description": "A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.",
             "example": ">specs/",
             "schema": {
               "type": "string"
@@ -3798,7 +3798,7 @@
           "Report"
         ],
         "summary": "Why specs, domains and counts disagree",
-        "description": "Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.\n\n`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.\n\nTwo paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "description": "Diagnoses the report's metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.\n\n`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.\n\nTwo paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check's label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
         "x-atlas-role": "read",
         "security": [
           {
@@ -3825,7 +3825,7 @@
             "required": false,
             "name": "root",
             "in": "query",
-            "description": "A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.",
+            "description": "A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.",
             "example": ">specs/",
             "schema": {
               "type": "string"
@@ -20673,6 +20673,10 @@
                     "kind": {
                       "type": "string"
                     },
+                    "fingerprint": {
+                      "description": "The fingerprint of the spec text now (the promise). Compare it with a result's `specRevision`: different means the promise changed after the result was recorded. Absent: unknown, never \"the same\". Absent from an older server",
+                      "type": "string"
+                    },
                     "tests": {
                       "type": "integer",
                       "minimum": 0,
@@ -20891,6 +20895,10 @@
                         },
                         "kind": {
                           "type": "string"
+                        },
+                        "fingerprint": {
+                          "description": "The fingerprint of the spec text now (the promise). Compare it with a result's `specRevision`: different means the promise changed after the result was recorded. Absent: unknown, never \"the same\". Absent from an older server",
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -21012,6 +21020,24 @@
                       "specRevision": {
                         "description": "The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match",
                         "type": "string"
+                      },
+                      "freshness": {
+                        "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, on results other than a test's current ones, and from an older server. Advisory; never changes a status",
+                        "type": "string",
+                        "enum": [
+                          "modified",
+                          "unknown"
+                        ]
+                      },
+                      "provenance": {
+                        "description": "The labels of its layer and check that say what it ran against and who vouches for it: `build`, `platform`, `applies-to`, `applies-to-by`, `published-at`, `enriched-at`. Present on a test's current results when it has any, and absent from an older server. Never decides a result",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
                       },
                       "evidence": {
                         "type": "object",
@@ -21830,6 +21856,18 @@
                 "maximum": 9007199254740991,
                 "description": "Checks whose id equals their title"
               },
+              "declaredBehaviorIds": {
+                "description": "Checks that declare a `behavior-id` label",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "declaredExampleIds": {
+                "description": "Checks that declare an `example-id` label",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
               "basis": {
                 "type": "string"
               }
@@ -21879,6 +21917,14 @@
                   "minimum": 0,
                   "maximum": 9007199254740991,
                   "description": "Distinct paths the mapping changed"
+                },
+                "source": {
+                  "description": "Where it was declared: the server's `catalog.roots` setting or this request's `root` parameter",
+                  "type": "string",
+                  "enum": [
+                    "configuration",
+                    "request"
+                  ]
                 }
               },
               "required": [
@@ -22044,6 +22090,10 @@
                       },
                       "kind": {
                         "type": "string"
+                      },
+                      "fingerprint": {
+                        "description": "The fingerprint of the spec text now (the promise). Compare it with a result's `specRevision`: different means the promise changed after the result was recorded. Absent: unknown, never \"the same\". Absent from an older server",
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -22165,6 +22215,24 @@
                     "specRevision": {
                       "description": "The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match",
                       "type": "string"
+                    },
+                    "freshness": {
+                      "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, on results other than a test's current ones, and from an older server. Advisory; never changes a status",
+                      "type": "string",
+                      "enum": [
+                        "modified",
+                        "unknown"
+                      ]
+                    },
+                    "provenance": {
+                      "description": "The labels of its layer and check that say what it ran against and who vouches for it: `build`, `platform`, `applies-to`, `applies-to-by`, `published-at`, `enriched-at`. Present on a test's current results when it has any, and absent from an older server. Never decides a result",
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
                     },
                     "evidence": {
                       "type": "object",
@@ -22822,6 +22890,24 @@
                 "specRevision": {
                   "description": "The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match",
                   "type": "string"
+                },
+                "freshness": {
+                  "description": "`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, on results other than a test's current ones, and from an older server. Advisory; never changes a status",
+                  "type": "string",
+                  "enum": [
+                    "modified",
+                    "unknown"
+                  ]
+                },
+                "provenance": {
+                  "description": "The labels of its layer and check that say what it ran against and who vouches for it: `build`, `platform`, `applies-to`, `applies-to-by`, `published-at`, `enriched-at`. Present on a test's current results when it has any, and absent from an older server. Never decides a result",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
                 },
                 "evidence": {
                   "type": "object",

@@ -30,7 +30,7 @@ carry any of these. Every one is optional.
 | `annotations[]` | Notes about the result: a warning, a deprecation, an accessibility finding, a coverage figure. |
 | `attempts[]` | Every try, when the check was retried. |
 | `tags[]` | Free labels to filter by: `smoke`, `payments`. |
-| `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. The viewer reads `build`, `platform`, `applies-to` and `applies-to-by` to tell whether evidence applies to a release (see [the viewer conventions](ui.md#behaviors-read-watch-inspect)). |
+| `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. The viewer reads `build`, `platform`, `applies-to` and `applies-to-by` to tell whether evidence applies to a release, and `published-at` and `enriched-at` (epoch milliseconds or an ISO date) to show when it was published or enriched apart from when the checks ran (see [the viewer conventions](ui.md#behaviors-read-watch-inspect)). `behavior-id` and `example-id` declare a stable id for the behavior and for one example of an outline, and `outline` names the outline; the [catalog health](server.md#reading-the-report-as-an-agent) report counts them and names an id shared by several checks. They never change which check a result belongs to. |
 | `scope{}` | What the evidence does and does not show: surface, device kind, synthetic data, scripted dependencies, audio, pacing, what was asserted and its limits. Unknown when absent. See [Evidence scope](rich-evidence.md#evidence-scope). |
 | `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |

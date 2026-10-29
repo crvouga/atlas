@@ -111,6 +111,26 @@ export function ApplicabilitySummary({ assessment, release }: { assessment: Asse
             </time>
           </Text>
         </Text>
+        {facts.publishedAtMs !== null && (
+          <Text span inherit data-published>
+            Published:{' '}
+            <Text span inherit fw={600}>
+              <time dateTime={new Date(facts.publishedAtMs).toISOString()} title={exactTime(facts.publishedAtMs)}>
+                {exactTime(facts.publishedAtMs)} ({ago(facts.publishedAtMs, now)})
+              </time>
+            </Text>
+          </Text>
+        )}
+        {facts.enrichedAtMs !== null && (
+          <Text span inherit data-enriched>
+            Enriched:{' '}
+            <Text span inherit fw={600}>
+              <time dateTime={new Date(facts.enrichedAtMs).toISOString()} title={exactTime(facts.enrichedAtMs)}>
+                {exactTime(facts.enrichedAtMs)} ({ago(facts.enrichedAtMs, now)})
+              </time>
+            </Text>
+          </Text>
+        )}
         <Text span inherit>
           Build:{' '}
           <Text span inherit fw={600}>
@@ -167,13 +187,17 @@ export function ApplicabilitySummary({ assessment, release }: { assessment: Asse
  */
 export function ApplicabilityControls({
   state,
-  stale,
-  total
+  stale = 0,
+  total = 0,
+  filter = true
 }: {
   state: ApplicabilityState;
-  /** How many behaviors have stale or unverified evidence. */
-  stale: number;
-  total: number;
+  /** How many behaviors (or tests) have stale or unverified evidence. Only shown with the filter. */
+  stale?: number;
+  /** How many behaviors (or tests) there are. Only shown with the filter. */
+  total?: number;
+  /** Whether to offer the stale-or-unverified filter here; a caller that offers it elsewhere sets this false. */
+  filter?: boolean;
 }) {
   const { release, setRelease, onlyStale, setOnlyStale } = state;
   return (
@@ -208,21 +232,23 @@ export function ApplicabilityControls({
             A platform alone does not name a release. Add its build or commit.
           </Text>
         )}
-        <Group role="group" aria-label="Evidence filter" gap="sm">
-          <Button type="button" aria-pressed={!onlyStale} onClick={() => setOnlyStale(false)} variant={onlyStale ? 'subtle' : 'light'}>
-            All evidence{' '}
-            <Text span inherit>
-              {total}
-            </Text>
-          </Button>
-          <Button type="button" aria-pressed={onlyStale} onClick={() => setOnlyStale(true)} variant={onlyStale ? 'light' : 'subtle'}>
-            Stale or unverified{' '}
-            <Text span inherit>
-              {stale}
-            </Text>
-          </Button>
-        </Group>
-        {onlyStale && stale === 0 && (
+        {filter && (
+          <Group role="group" aria-label="Evidence filter" gap="sm">
+            <Button type="button" aria-pressed={!onlyStale} onClick={() => setOnlyStale(false)} variant={onlyStale ? 'subtle' : 'light'}>
+              All evidence{' '}
+              <Text span inherit>
+                {total}
+              </Text>
+            </Button>
+            <Button type="button" aria-pressed={onlyStale} onClick={() => setOnlyStale(true)} variant={onlyStale ? 'light' : 'subtle'}>
+              Stale or unverified{' '}
+              <Text span inherit>
+                {stale}
+              </Text>
+            </Button>
+          </Group>
+        )}
+        {filter && onlyStale && stale === 0 && (
           <Text role="status" component="div" c="dimmed">
             Every behavior has evidence that applies.
           </Text>
