@@ -11,6 +11,7 @@
 import { createBundleReader, writeBundle, type BundleIndex, type BundleEntry } from './bundle';
 import { readUtf8, writeUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
+import { unstoredKeys } from './evidence-detail';
 import type { LayerSummary, ReportLayer } from './layer-types';
 import { LAYER_SCHEMA_VERSION, parseLayerDocument } from '../../schema/src/layer';
 
@@ -82,8 +83,9 @@ export async function readLayerFile(store: ObjectStore, id: string, file: string
   const layer = await readLayer(store, id);
   return layer ? createBundleReader(store, layer.bundle)(file) : null;
 }
-/** Drops a layer's bundle index, leaving the summary composition reads. */
+/** Drops a layer's bundle index, leaving the summary composition reads, plus the bundle keys its attachments name that the bundle does not hold (`unstored`), so a video that was never stored is not counted as a recording. */
 export function layerSummary(layer: ReportLayer): LayerSummary {
   const { bundle: _, ...summary } = layer;
-  return summary;
+  const unstored = unstoredKeys(layer as never);
+  return unstored.length ? { ...summary, unstored } : summary;
 }
