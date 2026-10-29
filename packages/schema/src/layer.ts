@@ -74,16 +74,39 @@ export const LayerRunSchema = z.looseObject({
 /** The execution of a layer, parsed from `LayerRunSchema`. */
 export type LayerRun = z.output<typeof LayerRunSchema>;
 
+/** The `kind` of a measurement that is a named, user-visible product latency (see docs/rich-evidence.md#product-latency). */
+export const PRODUCT_LATENCY_KIND = 'product-latency';
+
+/** The two ends of a measured interval, named in the producer's words: `{ from: 'submit pressed', to: 'confirmation visible' }`. */
+export const MeasurementBoundarySchema = z.looseObject({
+  from: z.string().min(1).optional().describe('The event the interval starts at: `end of speech`, `submit pressed`'),
+  to: z.string().min(1).optional().describe('The event the interval ends at: `audible response`, `confirmation visible`')
+});
+
 /**
  * A number a check measured, such as a latency or a size, with its unit and an optional allowance. A measurement over
  * its `limit` is reported and never changes the check's status.
+ *
+ * A measurement of `kind` `product-latency` is how quickly the product responded to a user, between two named events.
+ * It is not the check's duration (which includes setup, waits and pacing) and a number with no `kind` is never read as
+ * product latency. All the fields after `limit` are optional and describe the measurement; none decides a status.
  */
 export const MeasurementSchema = z.looseObject({
   name: z.string().min(1),
   value: z.number().describe('A finite number'),
   unit: z.string(),
-  limit: z.number().optional().describe('The allowance. A measurement over it is reported, and never fails the check by itself')
+  limit: z.number().optional().describe('The allowance, or budget. A measurement over it is reported, and never fails the check by itself'),
+  kind: z.string().min(1).optional().describe('What the number is, in an open vocabulary. `product-latency`: a user-visible response time between `from` and `to`. Absent: just a number, never read as product latency'),
+  from: z.string().min(1).optional().describe('The event the interval starts at. Without both `from` and `to` a latency is shown but no product claim is made from it'),
+  to: z.string().min(1).optional().describe('The event the interval ends at'),
+  intended: MeasurementBoundarySchema.optional().describe('The interval the name of the measurement claims, when what was measured is only part of it. If `intended.to` differs from `to` (or `intended.from` from `from`) the measurement is shown as partial, never as the complete interval'),
+  source: z.string().optional().describe('How it was measured: `app-instrumentation`, `trace`, `recording-analysis`'),
+  outcome: z.string().min(1).optional().describe('`observed` (the default), `timeout` or `failed`. For anything but `observed` the value is how long the observation waited: at least that much, so it counts against a budget and is never dropped'),
+  instrumentation: z.string().optional().describe('The version or method of the measurement. A change of it between two sets of observations is disclosed when they are compared'),
+  labels: z.record(z.string(), z.string()).optional().describe('What the observation is comparable with: `device`, `build`, `network`. `device` and `build` group the observations and, when two groups differ in the others, the comparison says so')
 });
+/** A measurement as stored in a layer, parsed from `MeasurementSchema`. */
+export type Measurement = z.output<typeof MeasurementSchema>;
 
 /**
  * Structured data of a producer's or tool's own, by namespace: `{ "com.example.coverage": { … } }`.

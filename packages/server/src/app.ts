@@ -34,6 +34,7 @@ import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
 import { catalogHealth, healthMarkdown, parseRootMappings } from '../../reports/src/catalog-health';
 import { parseArtifactFilter } from '../../reports/src/artifact-query';
+import { parseReliabilityScope, reliability, reliabilityMarkdown } from '../../reports/src/reliability';
 import { artifactList, artifactsMarkdown, catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
 import { llmsTxt } from './llms';
 import { openApiDocument } from './openapi';
@@ -472,6 +473,17 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const document = testHistory(found, key);
     if (!document) return problemResponse(404, 'No test in the report has that key.');
     return answer(c, found.version, () => document, () => historyMarkdown(document), `history|${key}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/tests/reliability', async c => {
+    if (!index.ready) return notReady(c);
+    const key = c.req.query('key');
+    if (!key) return problemResponse(400, 'Name the test with ?key=, a key from GET /api/reports/tests.');
+    const found = await catalog();
+    const recorded = testHistory(found, key);
+    if (!recorded) return problemResponse(404, 'No test in the report has that key.');
+    const search = new URL(c.req.url).searchParams;
+    const document = () => reliability(key, recorded.history, parseReliabilityScope(search));
+    return answer(c, found.version, document, () => reliabilityMarkdown(document()), `reliability|${search.toString()}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/runs', async c => {
     if (!index.ready) return notReady(c);

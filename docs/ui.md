@@ -87,6 +87,39 @@ when Watch is on screen.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
 
+## Reliability
+
+An open test shows its reliability (`explorer/Reliability.tsx`, worked out by `reports/reliability` from the history the page
+already holds). Never show a bare percentage: it always comes with the number of independent executions it rests on, the
+"Insufficient evidence" badge below the minimum (one pass is not established reliability), the scope (environment,
+producer, branch, parameters, time window, spec revision) and the warning notes (pooled environments, failed cases
+published again, bounded history). First-try success is over executions that recorded their tries only; a result that
+did not run or did not finish is excluded by name and never counted as a pass. The scope and the open executions table
+are in the address (`rel*`), so a link reproduces the figure and the executions behind it.
+
+## Product latency
+
+A test's duration and its product latency are different things and the viewer never mixes them (`explorer/ProductLatency.tsx`,
+`@crvouga/atlas/reports/latency`). Statistics and the trend are labelled test execution time. Product latency is read only from
+measurements named `product-latency`; it shows boundaries, group (device, build, day), samples, budget and breaches, and a
+baseline comparison that lists changes of instrumentation or conditions. Percentiles and product claims that the evidence
+cannot support are shown as `Withheld` with the reason, a partial interval is badged, timeouts count as samples and breaches,
+and a test with no latency says it is unknown, not fast.
+
+## Outcome summary
+
+A test or behavior detail states what the **selected** result says apart from what the other current sources say
+(`evidence/outcome.ts`, `outcome-summary.tsx`). The heading is the selected source's outcome first ("Selected result
+passed; another scoped source failed"), never the combined status; the combined status is labelled as the worst current
+result. Each other current source is one click away, and sources that share an environment are told apart by status,
+time, revision and their place among them. A failure leads with whether the behavior was reached (decided only by the
+recorded step `kind`: a `hook`, `setup`, `fixture`, `before*` or `given` step failing is "Behavior not verified: setup
+failed", `when`, `then`, `assertion` or `expect` is "Expectation not met", anything else is unknown), then the expected
+and observed values and the closest step and video, then the original output. The cause (product, test harness,
+environment) is unknown unless the producer declared it under the `atlas.failure` extension; it is never read from error
+wording. Records of one source whose outcome changed are listed oldest first, and a later pass is never called a fix.
+In the explorer the chosen source is the `source` search parameter (a layer id; unlike `layer` it does not pin a run).
+
 ## Watch a filtered set as a playlist
 
 The Artifacts tab and an opened run have a **Watch these N results** button. It opens a Mantine `Modal` (`explorer/playlist.tsx`)
@@ -177,7 +210,7 @@ The narrowly scoped exceptions are:
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
 | Project home | Tests/runs/artifacts tabs, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
-| Test detail | Current outcomes, statistics, duration graph, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
+| Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
 | Statecharts | Graph, screen/event/journey details, developer metadata, chart test results | Mantine cards/navigation and product compositions; graph exception above |
 | Evidence | Steps, retries, annotations, facts, unknown extensions, safe downloads and previews | List, Badge, Accordion, Code, Image, native media |

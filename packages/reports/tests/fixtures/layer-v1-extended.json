@@ -32,7 +32,7 @@
           "status": "failed",
           "detail": "expected a receipt",
           "specPath": "specs/checkout.feature",
-          "measurements": [{ "name": "LCP", "value": 2100, "unit": "ms", "limit": 2500, "extensions": { "com.example.p": 75 } }],
+          "measurements": [{ "name": "LCP", "value": 2100, "unit": "ms", "limit": 2500, "extensions": { "com.example.p": 75 } }, { "name": "Confirmation", "value": 500, "unit": "ms", "limit": 800, "kind": "product-latency", "from": "submit pressed", "to": "confirmation visible", "intended": { "to": "receipt printed" }, "source": "app-instrumentation", "outcome": "observed", "instrumentation": "spans-v2", "labels": { "device": "pixel-8", "build": "4821" }, "com.example.future": true }],
           "durationMs": 4200,
           "tags": ["smoke", "payments"],
           "labels": { "owner": "payments-team", "severity": "high" },

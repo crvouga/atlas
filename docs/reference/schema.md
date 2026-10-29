@@ -300,6 +300,17 @@ export const TestHistorySchema = …
 
 `GET /api/reports/tests/history`: one test and every result recorded for it (at most 100), newest first.
 
+#### `TestReliabilitySchema`
+
+```ts
+export const TestReliabilitySchema = …
+```
+
+`GET /api/reports/tests/reliability`: how reliable one test is inside a scope, and exactly how that figure was counted.
+The snapshots one run recorded for one producer, environment and parameter set are one independent execution; only
+`passed` and `failed` executions are trials; `notes` say when the sample is too small, pooled, selectively rerun or
+bounded. It reads results and never changes a status. It is not a production failure probability.
+
 #### `ReportRunSchema`
 
 ```ts
@@ -742,6 +753,22 @@ export type LayerRun = z.output<typeof LayerRunSchema>;
 
 The execution of a layer, parsed from `LayerRunSchema`.
 
+#### `PRODUCT_LATENCY_KIND`
+
+```ts
+export const PRODUCT_LATENCY_KIND = …
+```
+
+The `kind` of a measurement that is a named, user-visible product latency (see docs/rich-evidence.md#product-latency).
+
+#### `MeasurementBoundarySchema`
+
+```ts
+export const MeasurementBoundarySchema = …
+```
+
+The two ends of a measured interval, named in the producer's words: `{ from: 'submit pressed', to: 'confirmation visible' }`.
+
 #### `MeasurementSchema`
 
 ```ts
@@ -750,6 +777,18 @@ export const MeasurementSchema = …
 
 A number a check measured, such as a latency or a size, with its unit and an optional allowance. A measurement over
 its `limit` is reported and never changes the check's status.
+
+A measurement of `kind` `product-latency` is how quickly the product responded to a user, between two named events.
+It is not the check's duration (which includes setup, waits and pacing) and a number with no `kind` is never read as
+product latency. All the fields after `limit` are optional and describe the measurement; none decides a status.
+
+#### `Measurement`
+
+```ts
+export type Measurement = z.output<typeof MeasurementSchema>;
+```
+
+A measurement as stored in a layer, parsed from `MeasurementSchema`.
 
 #### `ExtensionsSchema`
 

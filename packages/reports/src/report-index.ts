@@ -252,7 +252,7 @@ export class ReportIndex {
     this.#attribution.set(id, backend);
     if (!this.#include(evidence.layer)) return;
     this.#added.push({ ...evidence.layer, backend });
-    this.#history.add(evidence.layer, evidence.rows, specs, backend);
+    this.#history.add(evidence.layer, evidence.rows, specs, backend, evidence.fingerprints);
     const wins = new Set<string>();
     const keyOf = layerResultKeys(evidence.layer);
     for (const row of evidence.rows) {

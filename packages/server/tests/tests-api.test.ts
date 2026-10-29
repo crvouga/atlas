@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 
 import { publishChecks } from '../../reports/src/publish-checks';
 import { memoryStore } from '../../reports/tests/memory-store';
-import { ArtifactListSchema, CatalogHealthSchema, RunDetailSchema, RunListSchema, TestCatalogSchema, TestHistorySchema } from '../../schema/src/api';
+import { ArtifactListSchema, CatalogHealthSchema, RunDetailSchema, RunListSchema, TestCatalogSchema, TestHistorySchema, TestReliabilitySchema } from '../../schema/src/api';
 import { ReportStatusSchema } from '../../schema/src/layer';
 import { createNode, type Node } from './node-compat';
 
@@ -142,6 +142,40 @@ describe('GET /api/reports/tests/history', () => {
     expect(missing.status).toBe(400);
     expect(missing.headers.get('content-type')).toContain('application/problem+json');
     expect((await get(node, `/api/reports/tests/history?key=${encodeURIComponent('["nope","nope"]')}`)).status).toBe(404);
+  });
+});
+
+describe('GET /api/reports/tests/reliability', () => {
+  const key = JSON.stringify([PAY, `${PAY}#Pay with a card`]);
+  const reliable = (node: Node, query = '') => get(node, `/api/reports/tests/reliability?key=${encodeURIComponent(key)}${query}`);
+
+  test('counts independent executions, not the snapshots a run published', async () => {
+    const { node } = await project();
+    const document = TestReliabilitySchema.parse(await (await reliable(node)).json());
+    // Desktop web published run A twice (a failure, then a pass): one execution, flagged as published again. The API run is a second.
+    expect(document.eventual).toMatchObject({ executions: 2, passed: 2, failed: 0 });
+    expect(document.snapshots).toBe(3);
+    expect(document.executions.find(execution => execution.environment === 'desktop-web')).toMatchObject({ snapshots: 2, republished: true });
+    expect(document.sample).toBe('insufficient');
+    expect(document.notes.map(note => note.code)).toEqual(expect.arrayContaining(['insufficient-sample', 'selected-reruns', 'pooled-environments']));
+  });
+
+  test('a scope in the address selects the same executions each time, and the document can be read as Markdown', async () => {
+    const { node } = await project();
+    const api = TestReliabilitySchema.parse(await (await reliable(node, '&environment=api')).json());
+    expect(api.eventual.executions).toBe(1);
+    expect(api.outsideScope).toBe(1);
+    expect(api.executions.map(execution => execution.environment)).toEqual(['api']);
+    expect(TestReliabilitySchema.parse(await (await reliable(node, '&environment=api')).json())).toEqual(api);
+    expect(await (await reliable(node, '&format=markdown')).text()).toContain('# Reliability');
+    const etag = (await reliable(node)).headers.get('etag')!;
+    expect((await get(node, `/api/reports/tests/reliability?key=${encodeURIComponent(key)}`, { 'if-none-match': etag })).status).toBe(304);
+  });
+
+  test('says what is wrong with a missing or unknown key', async () => {
+    const { node } = await project();
+    expect((await get(node, '/api/reports/tests/reliability')).status).toBe(400);
+    expect((await get(node, `/api/reports/tests/reliability?key=${encodeURIComponent('["nope","nope"]')}`)).status).toBe(404);
   });
 });
 

@@ -81,6 +81,8 @@ export type EvidenceSummary = {
   readonly annotations: number;
   /** How many tries were recorded when the check was retried. */
   readonly attempts: number;
+  /** The status of each recorded try, in the order they were made (its length is `attempts`). Absent when no try was recorded, and in reports written before this was recorded: a first try is then unknown, never assumed to have passed. */
+  readonly attemptStatuses?: readonly EvidenceStatus[];
   readonly links: number;
   readonly tags: readonly string[];
   /** The normalized tags of the attachments themselves (`#demo` is `demo`), sorted and distinct. Absent when no attachment is tagged. Unlike `tags` they are never inherited from a check or run. */

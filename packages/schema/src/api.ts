@@ -15,7 +15,7 @@
  */
 import { z } from 'zod/v4';
 
-import { CheckSchema, EvidenceScopeSchema, LayerRunSchema } from './layer';
+import { CheckSchema, EvidenceScopeSchema, LayerRunSchema, MeasurementSchema } from './layer';
 
 /** One of the statuses a check has in a report: `passed`, `failed`, `running` (not finished) or `not-run`. Closed. */
 export const EvidenceStatusSchema = z.enum(['passed', 'failed', 'running', 'not-run']);
@@ -95,6 +95,7 @@ export const EvidenceSummarySchema = z.looseObject({
   steps: z.number().int().nonnegative(),
   annotations: z.number().int().nonnegative(),
   attempts: z.number().int().nonnegative(),
+  attemptStatuses: z.array(EvidenceStatusSchema).optional().describe('The status of each recorded try, in the order they were made. Absent when no try was recorded, and in reports written before this was recorded: a first try is then unknown, never assumed to have passed'),
   links: z.number().int().nonnegative(),
   tags: z.array(z.string()),
   artifactTags: z.array(z.string()).optional().describe('Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run'),
@@ -136,7 +137,7 @@ export const LayerRowSchema = z.looseObject({
   status: EvidenceStatusSchema,
   specPath: z.string().nullable().describe('The spec the check belongs to, `specs/<path>`, or null'),
   detail: z.string().describe('Why it has this status; empty when there is nothing to add'),
-  measurements: z.array(z.looseObject({ name: z.string(), value: z.number(), unit: z.string(), limit: z.number().optional() })),
+  measurements: z.array(MeasurementSchema),
   testId: z.string().nullable(),
   variant: z.record(z.string(), z.string()),
   durationMs: z.number().nullable(),
@@ -302,7 +303,9 @@ export const TestResultEntrySchema = z.looseObject({
   layer: z.string().describe('The id of the layer that recorded it'),
   backend: z.string(),
   detail: z.string().describe('Why it has its status, at most 500 characters'),
-  evidence: EvidenceSummarySchema.optional()
+  specRevision: z.string().optional().describe('The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match'),
+  evidence: EvidenceSummarySchema.optional(),
+  latency: z.array(MeasurementSchema).optional().describe('Its product-latency measurements (`kind: product-latency`), when it recorded any. Separate from `durationMs`, which is how long the test took')
 });
 
 const DurationStatsSchema = z.looseObject({
@@ -428,6 +431,57 @@ export const TestHistorySchema = z.looseObject({
   version: z.string(),
   test: TestSummarySchema,
   history: z.array(TestResultEntrySchema)
+});
+
+const ReliabilityRateSchema = z.looseObject({
+  executions: z.number().int().nonnegative().describe('Independent executions that passed or failed'),
+  passed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  rate: z.number().nullable().describe('passed / executions, or null with none')
+});
+
+/**
+ * `GET /api/reports/tests/reliability`: how reliable one test is inside a scope, and exactly how that figure was counted.
+ * The snapshots one run recorded for one producer, environment and parameter set are one independent execution; only
+ * `passed` and `failed` executions are trials; `notes` say when the sample is too small, pooled, selectively rerun or
+ * bounded. It reads results and never changes a status. It is not a production failure probability.
+ */
+export const TestReliabilitySchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  key: z.string().describe('The test\'s key'),
+  scope: z.looseObject({
+    environment: z.array(z.string()).optional(), producer: z.array(z.string()).optional(), parameter: z.array(z.string()).optional(),
+    branch: z.array(z.string()).optional(), sha: z.array(z.string()).optional(), specRevision: z.array(z.string()).optional(),
+    revision: z.enum(['current', 'any']).optional(), since: z.number().optional(), until: z.number().optional()
+  }).describe('What was asked: the selection the figures are about'),
+  minimumExecutions: z.number().int().positive().describe('Completed executions below which the sample is `insufficient`'),
+  sample: z.enum(['none', 'insufficient', 'sufficient']).describe('A count only: it says nothing about whether the executions are representative; read `notes`'),
+  eventual: ReliabilityRateSchema.describe('Executions that passed in the end, over those that passed or failed'),
+  interval: z.looseObject({ method: z.literal('wilson'), level: z.number(), lower: z.number(), upper: z.number(), assumptions: z.string() }).nullable().describe('An interval estimate with the assumptions it needs; null without an execution'),
+  firstAttempt: ReliabilityRateSchema.describe('Over the executions that recorded their tries: those whose first try passed'),
+  unrecordedAttempts: z.number().int().nonnegative().describe('Counted executions that recorded no tries: their first try is unknown, never assumed to have passed'),
+  attempts: z.looseObject({ total: z.number().int().nonnegative(), retried: z.number().int().nonnegative(), recovered: z.number().int().nonnegative() }),
+  currentRevision: z.string().nullable().describe('The spec revision `revision=current` counted, or null'),
+  historical: z.looseObject({
+    executions: z.number().int().nonnegative(), passed: z.number().int().nonnegative(), failed: z.number().int().nonnegative(),
+    revisions: z.array(z.looseObject({ specRevision: z.string(), executions: z.number().int().nonnegative() }))
+  }).describe('Earlier spec revisions: context only, counted nowhere above'),
+  excluded: z.record(z.string(), z.number().int().nonnegative()).describe('Executions in the scope that are not trials, by reason: `not-run`, `unfinished`, `unknown-status`, `historical-revision`, `revision-not-recorded`'),
+  outsideScope: z.number().int().nonnegative().describe('Executions the scope did not select'),
+  snapshots: z.number().int().nonnegative().describe('Raw recorded snapshots behind the counted executions'),
+  cohorts: z.array(ReliabilityRateSchema.extend({ environment: z.string().nullable(), producer: z.string(), parameters: z.record(z.string(), z.string()) })),
+  available: z.looseObject({
+    environments: z.array(FacetValueSchema), producers: z.array(FacetValueSchema), branches: z.array(FacetValueSchema), specRevisions: z.array(FacetValueSchema)
+  }).describe('What a scope could choose among, with independent executions'),
+  notes: z.array(z.looseObject({ code: z.string().describe('An open set: treat a code you do not know as informational'), severity: z.enum(['warning', 'info']), message: z.string() })),
+  executions: z.array(z.looseObject({
+    run: z.string(), at: z.number(), status: z.string(), counted: z.boolean(), excluded: z.string().optional(),
+    environment: z.string().nullable(), producer: z.string(), kind: z.string(), parameters: z.record(z.string(), z.string()),
+    branch: z.string().nullable(), sha: z.string().nullable(), runUrl: z.string().nullable(), layer: z.string(), backend: z.string(),
+    durationMs: z.number().nullable(), specRevision: z.string().optional(), snapshots: z.number().int().positive(),
+    attempts: z.array(z.string()).optional().describe('The status of each recorded try, in order'), firstAttempt: z.string().optional(),
+    republished: z.boolean().describe('A failed snapshot of this execution was followed by a later one')
+  })).describe('Every independent execution of the selection, newest first: the denominator, open to inspection')
 });
 
 /** A run: the layers that name the same execution (else share a run URL, else a branch and commit), with what they recorded. */
