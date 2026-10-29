@@ -2,7 +2,7 @@
  * @module Explorer address
  *
  * Everything the test explorer shows is in the address of the `/` route, so a link reproduces the view: the open test,
- * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the exact layer a test's detail is pinned to, and the one file of a run's layer its Artifacts select. Filters that
+ * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the exact layer a test's detail is pinned to, the recording and position of a shared moment in it (`clip`, `clipAt`), and the one file of a run's layer its Artifacts select. Filters that
  * take several values are comma-separated (`status=failed,flaky`); a comma or backslash inside a value is written `\,`
  * or `\\`, and the router encodes `#` and spaces. Anything unreadable is dropped, never an error.
  *
@@ -71,6 +71,10 @@ export const ExplorerSearchFields = {
   openRun: text,
   /** Pins the open test's detail to one exact layer (a run's record of it), instead of the latest combined evidence. With `openRun` and `artifact` it names the layer the file is in. */
   layer: text,
+  /** With `layer`: the exact recording (an `attachmentIdentity`) of that run a shared moment names. It selects that recording; it never selects another run. */
+  clip: text,
+  /** With `clip`: the position in that recording, in milliseconds. */
+  clipAt: z.coerce.number().nonnegative().optional().catch(undefined),
   /** Which current source (a layer id) of the open test the detail's outcome summary, media and failure describe, without pinning a run. Unknown or absent: the newest. */
   source: text,
   /** With `openRun` and `layer`: the one file of that layer (an `artifactRef`: `id:…`, `key:…` or `name:…`) the run's Artifacts select. */
@@ -120,6 +124,8 @@ export type ExplorerSearch = {
   readonly rev?: number;
   readonly openRun?: string;
   readonly layer?: string;
+  readonly clip?: string;
+  readonly clipAt?: number;
   readonly source?: string;
   readonly artifact?: string;
   readonly relEnv?: string;

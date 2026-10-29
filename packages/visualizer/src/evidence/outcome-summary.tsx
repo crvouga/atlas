@@ -11,9 +11,12 @@ import type { CheckSlot, HistoryEntry } from '@crvouga/atlas/reports/evidence-vi
 import type { CheckDetail } from '@crvouga/atlas/reports/evidence-detail';
 import { effectiveScope, scopeBadges } from '@crvouga/atlas/reports/evidence-scope';
 import { Badge, Box, Button, Flex, List, Paper, Stack, Text, Title } from '@mantine/core';
+import { IconAlertTriangle } from '@tabler/icons-react';
+import { useState } from 'react';
 
 import { ago, duration, shortSha, statusWord } from './format';
 import { StatusMark } from './marks';
+import { momentOwner, requestFailureMoment } from './moments';
 import {
   chronology,
   failureNote,
@@ -67,6 +70,7 @@ export function OutcomeSummary({
   const video = point?.videos[0] ?? videosIn(detail?.check)[0];
   const scope = video ? effectiveScope(video.scope, detail?.check.scope, detail?.inheritedScope) : undefined;
   const timeline = chronology(recordOf(selected), history);
+  const [jumped, setJumped] = useState<string | null>(null);
   return (
     <Paper component="section" aria-label="Outcome summary" data-outcome={selected.row.status} withBorder p="md">
       <Stack gap="sm" miw={0}>
@@ -163,6 +167,29 @@ export function OutcomeSummary({
                     .join(', ')}
                 </Text>
               </Text>
+            )}
+            {video && point && (
+              <Flex gap="xs" align="center" wrap="wrap">
+                <Button
+                  type="button"
+                  variant="light"
+                  color="red"
+                  leftSection={<IconAlertTriangle size={16} aria-hidden="true" />}
+                  onClick={() =>
+                    setJumped(
+                      requestFailureMoment(momentOwner(selected.layer.id, selected.row.kind, selected.row.id))?.text ??
+                        'The recording of this result is not on screen yet. It is in the evidence below.'
+                    )
+                  }
+                >
+                  Jump to the failing moment in the recording
+                </Button>
+                {jumped && (
+                  <Text span inherit role="status" c="dimmed" data-jump-result>
+                    {jumped}
+                  </Text>
+                )}
+              </Flex>
             )}
           </Stack>
         )}
