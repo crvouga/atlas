@@ -30,10 +30,14 @@ carry any of these. Every one is optional.
 | `annotations[]` | Notes about the result: a warning, a deprecation, an accessibility finding, a coverage figure. |
 | `attempts[]` | Every try, when the check was retried. |
 | `tags[]` | Free labels to filter by: `smoke`, `payments`. |
-| `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. |
+| `labels{}` | Facts about the result that are not its identity: `owner`, `severity`, `browser`, `build`. The viewer reads `build`, `platform`, `applies-to` and `applies-to-by` to tell whether evidence applies to a release (see [the viewer conventions](ui.md#behaviors-read-watch-inspect)). |
+| `scope{}` | What the evidence does and does not show: surface, device kind, synthetic data, scripted dependencies, audio, pacing, what was asserted and its limits. Unknown when absent. See [Evidence scope](rich-evidence.md#evidence-scope). |
 | `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
-| `measurements[]` | Numbers, with units and an allowance (already part of the contract). |
+| `measurements[]` | Numbers, with units and an allowance (already part of the contract). A measurement of `kind` `product-latency` names a user-visible response time between two events; see [Product latency](rich-evidence.md#product-latency). |
+
+An attachment may carry its own `tags[]` (`demo`): shown as `#demo` and searchable; see
+[Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos).
 
 On a **layer** the same fields describe the whole run: its CI log, a coverage report, an archive of traces, the
 build number, a link to the pipeline.
@@ -99,6 +103,23 @@ Two checks guard this in the repository: `packages/reports/tests/fixtures/layer-
 every kind of evidence and values from the future) and `layer-extensibility.test.ts`, which proves unknown
 fields survive at every level, malformed evidence is dropped without losing the result, and a reader of the
 first version of the format still reads it all.
+
+### Saying what failed
+
+A failed check or step may declare the expectation it broke under the `atlas.failure` extension, so a reviewer sees
+it before the raw log. Every field is optional, and the declaration never changes the result.
+
+```json
+{
+  "name": "The list includes tea", "kind": "then", "status": "failed",
+  "extensions": { "atlas.failure": { "expected": "tea in the list", "actual": "the list is empty", "attribution": "product" } }
+}
+```
+
+`expected` and `actual` are shown as written. `attribution` is `product`, `test-harness` or `environment`; leave it out
+when you do not know, and the viewer says the cause is unknown. It is never inferred from the message. Whether setup
+failed before the behavior started comes from the failed step's `kind`: `hook`, `setup`, `fixture`, `before`,
+`beforeAll`, `beforeEach` or `given` mean preparation; `when`, `then`, `assertion` or `expect` mean the behavior.
 
 ## Attach evidence
 

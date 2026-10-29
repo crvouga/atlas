@@ -6,4 +6,4 @@ defaultTabs:
   - title: Agent
   - title: Atlas
     command: bun run workspace:run
-# Keep dependencies, .atlas-data and .atlas-workspace private to each checkout.
+# Keep dependencies and .atlas-workspace private to each checkout. Reports live in S3 (copy .env.example to .env).

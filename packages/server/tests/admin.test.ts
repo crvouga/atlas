@@ -1,12 +1,15 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createAtlasServer, type AtlasServer } from '../src/app';
 import { loadServerConfig } from '../src/config';
-import { fileServerSettings } from '../src/settings';
+import { storedSettings } from '../src/settings';
+import { userStateStore } from '../src/user-state';
 import { ServerSettingsSnapshotSchema } from '../../schema/src/server-config';
 import { memoryStore } from '../../reports/tests/memory-store';
+import { fakeS3, S3_TEST_ENV } from './fake-s3';
+import { storeOn } from './fake-s3-store';
 
 const roots: string[] = [];
 const apps: AtlasServer[] = [];
@@ -19,49 +22,55 @@ async function root() {
   roots.push(dir);
   return dir;
 }
+/** A server whose settings and garbage collection policy are kept in a fake S3 bucket, as `atlas serve` keeps them. */
 async function setup() {
   const dir = await root();
-  const original = { auth: { tokens: [{ name: 'admin', role: 'admin', token: 'admin-token-123' }] }, data: './reports' };
-  await writeFile(path.join(dir, 'atlas.server.json'), JSON.stringify(original));
-  const config = loadServerConfig([], {}, dir);
-  const settings = fileServerSettings(config, [], {}, dir);
+  const s3 = fakeS3();
+  const env = { ...S3_TEST_ENV };
+  const config = loadServerConfig([], env, dir, () => '{}');
+  const { settings, gc } = storedSettings(config, [], env, dir, userStateStore(storeOn(s3)));
   const app = createAtlasServer({
-    backends: [{ id: 'data', store: memoryStore() }],
-    write: 'data',
+    backends: [{ id: 's3', store: memoryStore() }],
+    write: 's3',
     settings,
-    tokens: [...config.tokens, { name: 'ci', role: 'publish', token: 'publish-token-123' }]
+    gc,
+    tokens: [{ name: 'admin', role: 'admin', token: 'admin-token-123' }, { name: 'ci', role: 'publish', token: 'publish-token-123' }]
   });
   apps.push(app);
   await app.ready;
-  const request = (method: string, body?: unknown, headers: Record<string, string> = {}) =>
+  const send = (url: string) => (method: string, body?: unknown, headers: Record<string, string> = {}) =>
     app.fetch(
-      new Request('http://atlas/api/settings', {
+      new Request(`http://atlas${url}`, {
         method,
         headers: { authorization: 'Bearer admin-token-123', ...headers },
         ...(body === undefined ? {} : { body: JSON.stringify(body) })
       })
     );
-  return { dir, app, original, settings, request };
+  return { dir, app, s3, settings, gc, request: send('/api/settings'), gcRequest: send('/api/settings/gc') };
 }
 
-test('admin settings exclude auth, preserve it on save and require restart and current revision', async () => {
-  const { dir, original, request } = await setup();
+test('admin settings exclude auth and storage, are saved to S3 not to disk, and need a restart and the current revision', async () => {
+  const { dir, s3, request } = await setup();
   const response = await request('GET');
   expect(response.headers.get('cache-control')).toBe('no-store');
+  const raw = await response.clone().json();
   const data = ServerSettingsSnapshotSchema.parse(await response.json());
   expect(JSON.stringify(data)).not.toContain('admin-token-123');
-  expect(data.active.data).toBe(path.join(dir, 'reports'));
-  const saved = await request('PUT', { data: './new-reports', refreshSeconds: 5 }, { 'if-match': `"${data.revision}"` });
+  expect(JSON.stringify(data)).not.toContain('testsecret');
+  expect('data' in data.active).toBe(false);
+  expect(raw.settings).toEqual({});
+  const saved = await request('PUT', { refreshSeconds: 5 }, { 'if-match': `"${data.revision}"` });
   expect(saved.status).toBe(200);
   expect((await saved.json()).restartRequired).toBe(true);
-  expect(JSON.parse(await readFile(path.join(dir, 'atlas.server.json'), 'utf8')).auth).toEqual(original.auth);
-  expect((await request('PUT', { data: './other' }, { 'if-match': `"${data.revision}"` })).status).toBe(409);
+  // The settings are one JSON document in the bucket, exactly as chosen (no defaults pinned), and nothing is on the disk.
+  expect(JSON.parse(s3.text('server/state.json')!)).toEqual({ schemaVersion: 1, settings: { refreshSeconds: 5 } });
+  expect(await Bun.file(path.join(dir, 'atlas.server.json')).exists()).toBe(false);
+  expect((await request('PUT', { refreshSeconds: 6 }, { 'if-match': `"${data.revision}"` })).status).toBe(409);
   expect((await request('PUT', {})).status).toBe(428);
 });
 
-test('reader/basic/cross-site writes and invalid settings cannot alter the file', async () => {
-  const { dir, request } = await setup();
-  const before = await readFile(path.join(dir, 'atlas.server.json'), 'utf8');
+test('reader/basic/cross-site writes and invalid settings cannot alter the state in S3', async () => {
+  const { s3, request } = await setup();
   const data = await (await request('GET')).json();
   const headers = { 'if-match': `"${data.revision}"` };
   expect((await request('GET', undefined, { authorization: 'Bearer publish-token-123' })).status).toBe(403);
@@ -70,10 +79,10 @@ test('reader/basic/cross-site writes and invalid settings cannot alter the file'
   ).toBe(403);
   expect((await request('PUT', {}, { ...headers, origin: 'http://evil' })).status).toBe(403);
   expect((await request('PUT', { auth: { insecure: true } }, headers)).status).toBe(422);
-  expect((await request('PUT', { write: 'missing' }, headers)).status).toBe(422);
+  expect((await request('PUT', { data: './elsewhere' }, headers)).status).toBe(422);
+  expect((await request('PUT', { backends: [{ id: 'a', url: 'x' }] }, headers)).status).toBe(422);
   expect((await request('PUT', { refreshSeconds: 0 }, headers)).status).toBe(422);
-  expect((await request('PUT', { backends: [{ id: 'bad', url: 'ftp://example.com' }] }, headers)).status).toBe(422);
-  expect(await readFile(path.join(dir, 'atlas.server.json'), 'utf8')).toBe(before);
+  expect(s3.text('server/state.json')).toBeNull();
 });
 
 test('same-origin browser saves work behind a TLS-terminating reverse proxy', async () => {
@@ -87,14 +96,15 @@ test('same-origin browser saves work behind a TLS-terminating reverse proxy', as
   expect(response.status).toBe(200);
 });
 
-test('settings preserve environment precedence and serialize concurrent saves', async () => {
+test('settings serialize concurrent saves, and the environment still overrides what is saved', async () => {
   const dir = await root();
-  const env = { ATLAS_DATA: './env-reports' };
-  const settings = fileServerSettings(loadServerConfig([], env, dir), [], env, dir);
+  const s3 = fakeS3();
+  const env = { ...S3_TEST_ENV, ATLAS_REFRESH_SECONDS: '45' };
+  const { settings } = storedSettings(loadServerConfig([], env, dir, () => '{}'), [], env, dir, userStateStore(storeOn(s3)));
   const { revision } = await settings.read();
-  const answers = await Promise.allSettled([settings.save({ data: './one' }, revision), settings.save({ data: './two' }, revision)]);
+  const answers = await Promise.allSettled([settings.save({ refreshSeconds: 11 }, revision), settings.save({ refreshSeconds: 12 }, revision)]);
   expect(answers.map((answer) => answer.status)).toEqual(['fulfilled', 'rejected']);
-  expect(loadServerConfig([], env, dir).data).toBe(path.join(dir, 'env-reports'));
+  expect(loadServerConfig([], env, dir, () => '{}', JSON.parse(s3.text('server/state.json')!).settings).refreshSeconds).toBe(45);
 });
 
 test('viewer escapes runtime script values, blocks symlinks, respects encoding quality and revalidates assets', async () => {
