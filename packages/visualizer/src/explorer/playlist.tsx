@@ -38,7 +38,7 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const KEYWORDS = new Set(['given', 'when', 'then', 'and', 'but']);
 
 /** The evidence of one entry's check, read when the entry is on screen. */
-function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
+export function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
   return useQuery({
     queryKey: ['evidence-detail', entry.backend ?? '', entry.layer, entry.kind ?? '', entry.check],
     queryFn: ({ signal }) =>

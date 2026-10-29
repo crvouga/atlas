@@ -21900,6 +21900,28 @@
                     ],
                     "additionalProperties": {}
                   }
+                },
+                "kind": {
+                  "description": "The kind of the part that held it. With the producer, environment and parameters it is the condition the result was recorded under. Absent from an older server",
+                  "type": "string"
+                },
+                "parameters": {
+                  "description": "The other choices that made it its own result (a device size, a locale…). Absent when there are none, and from an older server",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "specRevision": {
+                  "description": "The fingerprint of its spec file the layer recorded. Absent means not recorded, never \"the same\"",
+                  "type": "string"
+                },
+                "recordedTitle": {
+                  "description": "The title this run's layer gave the check. `title` is the check's newest title in the whole history; this is the wording as recorded. Absent from an older server",
+                  "type": "string"
                 }
               },
               "required": [

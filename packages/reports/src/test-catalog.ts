@@ -359,6 +359,14 @@ export type RunResult = {
   readonly detail: string;
   /** Every video its evidence references, with who holds it (check, retry attempt or step). Absent when there is none. */
   readonly videos?: readonly VideoRef[];
+  /** The kind of the part that held it (`behavior`, `checks`…). With the producer, environment and parameters it is the condition the result was recorded under. Absent from an older server. */
+  readonly kind?: string;
+  /** The other choices that made it its own result (a device size, a locale…). Absent when there are none, and from an older server. */
+  readonly parameters?: Readonly<Record<string, string>>;
+  /** The fingerprint of its spec file the layer recorded: results with different ones were recorded against different revisions of the spec. Absent means not recorded, never "the same". */
+  readonly specRevision?: string;
+  /** The title this run's layer gave the check. `title` is the newest title the check has in the whole history, so a check that was reworded shows its newest wording in both runs; this is the wording as recorded. Absent from an older server. */
+  readonly recordedTitle?: string;
 };
 
 /**
@@ -480,7 +488,7 @@ type Origin = {
   /** Producer, environment and parameters: with a test and a kind, the slot a result fills. */
   readonly place: string;
 };
-type Held = { readonly o: Origin; readonly s: EvidenceStatus; readonly d: number | null; readonly k: string; readonly t: string; readonly e: EvidenceSummary | undefined; readonly m: readonly EvidenceMeasurement[] | undefined; readonly f?: string | undefined };
+type Held = { readonly o: Origin; readonly s: EvidenceStatus; readonly d: number | null; readonly k: string; readonly t: string; readonly e: EvidenceSummary | undefined; readonly m: readonly EvidenceMeasurement[] | undefined; readonly f?: string | undefined; /** The title this result's layer gave the check (shared, not copied, between results). */ readonly ti?: string };
 
 function originOf(layer: LayerHeader, backend: string): Origin {
   const parameters = Object.keys(layer.parameters).sort().map(key => `${key}=${layer.parameters[key]}`).join('\u0002');
@@ -552,6 +560,8 @@ export class TestHistory {
   readonly #idents = new Map<string, Ident>();
   readonly #runs = new Map<string, RunAcc>();
   readonly #specs = new RecordedSpecs();
+  /** Titles seen, so the many results that share one hold one string. */
+  readonly #titles = new Map<string, string>();
   readonly #seen = new Set<string>();
   #rev = 0;
   #cells: { rev: number; byRun: Map<string, RunCell[]> } | null = null;
@@ -629,8 +639,15 @@ export class TestHistory {
       let ident = this.#idents.get(slot);
       if (!ident) this.#idents.set(slot, ident = { slot, id: row.id, title: row.title, titledAt: layer.recordedAtMs, specPath: row.specPath });
       else if (layer.recordedAtMs > ident.titledAt || (layer.recordedAtMs === ident.titledAt && row.title > ident.title)) { ident.title = row.title; ident.titledAt = layer.recordedAtMs; }
-      this.#remember(slot, { o: origin, s: row.status, d: row.durationMs, k: row.kind, t: row.detail, e: row.evidence, m: productLatency(row.measurements), f: row.specPath ? fingerprints[row.specPath] : undefined });
+      this.#remember(slot, { o: origin, s: row.status, d: row.durationMs, k: row.kind, t: row.detail, e: row.evidence, m: productLatency(row.measurements), f: row.specPath ? fingerprints[row.specPath] : undefined, ti: this.#title(row.title) });
     }
+  }
+
+  #title(title: string): string {
+    const held = this.#titles.get(title);
+    if (held !== undefined) return held;
+    this.#titles.set(title, title);
+    return title;
   }
 
   /** Sorted insert, newest first; past the bound, the oldest is dropped. */
@@ -693,6 +710,10 @@ export class TestHistory {
       key: i.slot, id: i.id, title: i.title, specPath: i.specPath, environment: r.o.environment, producer: r.o.producer,
       status: r.s, durationMs: r.d, at: r.o.at, layer: r.o.layer, detail: shortDetail(r.t),
       ...(r.e?.videos ? { videos: r.e.videos } : {}),
+      kind: r.k,
+      ...(Object.keys(r.o.parameters).length ? { parameters: r.o.parameters } : {}),
+      ...(r.f ? { specRevision: r.f } : {}),
+      ...(r.ti !== undefined ? { recordedTitle: r.ti } : {}),
     }));
     results.sort((a, b) => FAILURE_RANK[b.status] - FAILURE_RANK[a.status] || compareText(a.specPath ?? '', b.specPath ?? '') || compareText(a.title, b.title) || compareText(a.environment ?? '', b.environment ?? '') || compareText(a.producer, b.producer) || compareText(a.key, b.key));
     const layers = [...run.members].sort((a, b) => a.recordedAtMs - b.recordedAtMs || compareText(a.id, b.id));

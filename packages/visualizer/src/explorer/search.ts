@@ -2,7 +2,7 @@
  * @module Explorer address
  *
  * Everything the test explorer shows is in the address of the `/` route, so a link reproduces the view: the open test,
- * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the exact layer a test's detail is pinned to, and the one file of a run's layer its Artifacts select. Filters that
+ * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the Compare tab with its two pinned runs (`base`, `cand`) and the behavior opened (`pair`), the exact layer a test's detail is pinned to, and the one file of a run's layer its Artifacts select. Filters that
  * take several values are comma-separated (`status=failed,flaky`); a comma or backslash inside a value is written `\,`
  * or `\\`, and the router encodes `#` and spaces. Anything unreadable is dropped, never an error.
  *
@@ -63,7 +63,15 @@ export const ExplorerSearchFields = {
   inRun: text,
   group: z.enum(TEST_GROUPS).optional().catch(undefined),
   sort: z.enum(EXPLORER_SORTS).optional().catch(undefined),
-  tab: z.enum(['runs', 'artifacts']).optional().catch(undefined),
+  tab: z.enum(['runs', 'artifacts', 'compare']).optional().catch(undefined),
+  /** The baseline run of the Compare tab (a `RunSummary.key`). Pinned: a newer run never replaces it. */
+  base: text,
+  /** The candidate run of the Compare tab (a `RunSummary.key`). Pinned like `base`. */
+  cand: text,
+  /** The behavior opened in the Compare tab (a `ComparedResult.id`). */
+  pair: text,
+  /** The group of changes the Compare tab lists (a `CompareGroup`). Absent: every change. */
+  change: text,
   /** The run opened in the Runs tab. */
   openRun: text,
   /** Pins the open test's detail to one exact layer (a run's record of it), instead of the latest combined evidence. With `openRun` and `artifact` it names the layer the file is in. */
@@ -110,7 +118,11 @@ export type ExplorerSearch = {
   readonly inRun?: string;
   readonly group?: TestGroup;
   readonly sort?: ExplorerSort;
-  readonly tab?: 'runs' | 'artifacts';
+  readonly tab?: 'runs' | 'artifacts' | 'compare';
+  readonly base?: string;
+  readonly cand?: string;
+  readonly pair?: string;
+  readonly change?: string;
   readonly openRun?: string;
   readonly layer?: string;
   readonly source?: string;

@@ -593,6 +593,16 @@ function RunDetailView({ runKey }: { runKey: string }) {
             Open the CI run
           </Anchor>
         )}
+        {(['base', 'cand'] as const).map((side) => (
+          <Anchor
+            key={side}
+            renderRoot={(props) => (
+              <Link {...props} to="/" search={patched({ tab: 'compare', [side]: run.key, openRun: undefined, layer: undefined, artifact: undefined, pair: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+            )}
+          >
+            {side === 'base' ? 'Compare with this run as the baseline' : 'Compare with this run as the candidate'}
+          </Anchor>
+        ))}
       </Flex>
       <Flex gap="xs" align="center" wrap="wrap">
         <SearchBox

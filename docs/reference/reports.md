@@ -7853,6 +7853,319 @@ export async function readRunFile(store: ObjectStore, id: string, relative: stri
 
 Reads one file of a run, or `null` when it is missing. Also `null`, without reading, for an `id` that is not a plain run name or a `relative` path with an empty, `.`, `..` or backslash segment, so a path can never leave the run.
 
+### Run comparison
+
+Source: `packages/reports/src/run-compare.ts`. Import: `@crvouga/atlas/reports/run-compare`
+
+Answers "what changed between these two runs?" without claiming more than the evidence supports. A run is a pinned
+source: the comparison reads two {@link RunDetail}s as they are and never reaches for a newer run. Pure functions,
+safe in a browser; nothing here changes a status, a slot or a winner.
+
+The rules, each of which keeps a comparison from looking more certain than it is:
+
+- **Identity is explicit.** Results are paired by the check they record (`TestSummary.key`: spec path and check id),
+  then by the condition they were recorded under (kind, producer, environment, parameters). A title is never what
+  pairs two results. A result with the same check but another condition is paired as well, marked as recorded under
+  different conditions, and is not framed as the same experiment. Results of one side with no partner are `added`
+  (only the candidate has them) or `removed` (only the baseline has them); a `removed` result is not a regression,
+  because the candidate may not have run, renamed or dropped it, and the comparison cannot tell which.
+- **Not run is not regressed.** A result that did not run, or is still running, on either side is `unknown`; it is
+  counted as neither a pass nor a failure. Only a completed result against a completed result is a movement.
+- **A changed promise is not the same experiment.** When the wording of a behavior differs between the two sides, the
+  pair is `not-comparable` and both outcomes are shown beside the changed promise instead of as a regression or a
+  recovery. A different spec-file revision with the same wording is disclosed beside the movement: a fingerprint is
+  of the whole file, so it cannot say that this behavior's own promise changed. A revision that was not recorded is
+  unknown, never the same.
+- **Figures are compared like for like.** Product latency and reliability are compared only when both sides were
+  recorded under the same conditions and support the figure; otherwise the reason is given and no improvement is
+  computed. A metric only one side has is named, not compared.
+
+See docs/ui.md
+
+#### `COMPARE_GROUPS`
+
+```ts
+export const COMPARE_GROUPS = …
+```
+
+Where a pair of results (or one result with no partner) stands, in the order a review reads them.
+
+#### `CompareGroup`
+
+```ts
+export type CompareGroup = (typeof COMPARE_GROUPS)[number];
+```
+
+One of {@link COMPARE_GROUPS}.
+
+#### `COMPARE_GROUP_TEXT`
+
+```ts
+export const COMPARE_GROUP_TEXT: Readonly<Record<CompareGroup, { readonly label: string; readonly meaning: string }>>
+```
+
+What each group is called and what it does and does not say.
+
+#### `PromiseState`
+
+```ts
+export type PromiseState = 'same' | 'changed' | 'revision-differs' | 'unknown';
+```
+
+Whether the promise (what the behavior says should happen) is the same on both sides: `same` (same wording and the
+same recorded spec revision), `changed` (the wording differs), `revision-differs` (same wording, another spec-file
+revision), or `unknown` (a revision was not recorded on a side, so nothing can be said).
+
+#### `PromiseReading`
+
+```ts
+export type PromiseReading = {
+  readonly state: PromiseState;
+  readonly baselineTitle: string | null;
+  readonly candidateTitle: string | null;
+  readonly baselineRevision: string | null;
+  readonly candidateRevision: string | null;
+  /** In words, for a person. */
+  readonly reasons: readonly string[];
+};
+```
+
+What is known about whether the promise changed, and why.
+
+#### `Condition`
+
+```ts
+export type Condition = {
+  readonly kind: string | null;
+  readonly producer: string;
+  readonly environment: string | null;
+  readonly parameters: Readonly<Record<string, string>>;
+};
+```
+
+The condition a result was recorded under: with the check, what makes it its own result.
+
+#### `conditionOf`
+
+```ts
+export function conditionOf(result: Pick<RunResult, 'kind' | 'producer' | 'environment' | 'parameters'>): Condition
+```
+
+The condition of a result. A server that does not send `kind` leaves it null: unknown, equal only to another unknown.
+
+#### `conditionId`
+
+```ts
+export function conditionId(condition: Condition): string
+```
+
+A stable text for a condition, equal exactly when two conditions are.
+
+#### `conditionDifferences`
+
+```ts
+export function conditionDifferences(baseline: Condition, candidate: Condition): string[]
+```
+
+How two conditions differ, in words; empty when they are the same.
+
+#### `ComparedResult`
+
+```ts
+export type ComparedResult = {
+  /** Identifies the pair within one comparison: the check, and the condition of each side. Stable for the same two runs. */
+  readonly id: string;
+  /** The check's identity (`TestSummary.key`). */
+  readonly key: string;
+  /** The check's title: the candidate's when it has one, else the baseline's. */
+  readonly title: string;
+  readonly specPath: string | null;
+  readonly baseline: RunResult | null;
+  readonly candidate: RunResult | null;
+  readonly group: CompareGroup;
+  /** One sentence saying what happened, and what is not known. */
+  readonly summary: string;
+  readonly promise: PromiseReading;
+  /** How the two conditions differ, in words, when both sides have a result and they were recorded under different conditions. */
+  readonly conditions: readonly string[];
+  /** What a reader must not assume about this pair, in words. */
+  readonly caveats: readonly string[];
+};
+```
+
+One behavior's results on the two sides.
+
+#### `RunComparison`
+
+```ts
+export type RunComparison = {
+  readonly baseline: RunSummary;
+  readonly candidate: RunSummary;
+  /** Every pair and every unpaired result, in the order of {@link COMPARE_GROUPS}, then spec and title. */
+  readonly results: readonly ComparedResult[];
+  readonly counts: Readonly<Record<CompareGroup, number>>;
+  /** What a reader must not assume about the two runs as a whole: the same run on both sides, different branches, a candidate older than the baseline. */
+  readonly notes: readonly string[];
+};
+```
+
+The whole comparison of two pinned runs.
+
+#### `shortRevision`
+
+```ts
+export function shortRevision(revision: string | null | undefined): string
+```
+
+Short form of a spec fingerprint, to show.
+
+#### `recordedTitle`
+
+```ts
+export function recordedTitle(result: Pick<RunResult, 'title' | 'recordedTitle'>): string
+```
+
+The wording a run recorded for a check: what that run's layer called it, else the check's newest title.
+
+#### `compareRuns`
+
+```ts
+export function compareRuns(baseline: RunDetail, candidate: RunDetail): RunComparison
+```
+
+Pairs the results of two runs and reads what changed. Results are paired by check identity and then by condition (see
+the module comment); titles never pair two results. Each side's results are those the run recorded last for each
+check and condition (`RunDetail.results`).
+
+- `baseline`: The run to compare against.
+
+- `candidate`: The run under review. Both are used as given: a newer run never replaces either.
+
+**Returns** Every result of either run, grouped by what changed, with the reasons.
+
+**Example**
+
+```ts
+const comparison = compareRuns(await runDetail('run:ci-100'), await runDetail('run:ci-101'));
+comparison.results.filter(item => item.group === 'regressed');
+```
+
+#### `MetricComparison`
+
+```ts
+export type MetricComparison =
+  | { readonly state: 'compared'; readonly name: string; readonly baseline: LatencySummary; readonly candidate: LatencySummary; readonly change: LatencyChange; readonly reasons: readonly string[] }
+  | { readonly state: 'incompatible'; readonly name: string; readonly baseline: LatencySummary; readonly candidate: LatencySummary; readonly change: LatencyChange | null; readonly reasons: readonly string[] }
+  | { readonly state: 'baseline-only' | 'candidate-only'; readonly name: string; readonly summary: LatencySummary; readonly reasons: readonly string[] };
+```
+
+What one product-latency metric shows on the two sides.
+
+#### `compareProductLatency`
+
+```ts
+export function compareProductLatency(baseline: readonly LatencyEntry[], candidate: readonly LatencyEntry[], conditionsDiffer: readonly string[] = []): MetricComparison[]
+```
+
+Compares the product latency recorded in two sets of results of one check, one per side. A metric is compared only
+when it is the same measurement (name, unit, boundaries) and both sides were measured on the same devices, in the
+same environments, with the same instrumentation and other conditions; otherwise it is `incompatible` and no change
+is computed, with the reasons. A metric only one side recorded is named as such. A side without any latency is unknown,
+not fast: it contributes no metric. `conditionsDiffer` names differences of the results' own conditions, which make
+every metric incompatible.
+
+#### `ReliabilityComparison`
+
+```ts
+export type ReliabilityComparison = {
+  /** True only when both figures are established, were counted in the same scope and against the same recorded spec revision. */
+  readonly comparable: boolean;
+  readonly baseline: ReliabilityRate;
+  readonly candidate: ReliabilityRate;
+  /** Candidate minus baseline, in percentage points, only when comparable. */
+  readonly points?: number;
+  /** `higher` or `lower` only when the two intervals do not overlap; `indistinguishable` when they do. Absent when not comparable. */
+  readonly direction?: 'higher' | 'lower' | 'indistinguishable';
+  /** Why no change is stated, or what qualifies one. */
+  readonly reasons: readonly string[];
+};
+```
+
+How reliable a check was on each side, and whether the two figures can be set against each other.
+
+#### `reliabilityScopeAt`
+
+```ts
+export function reliabilityScopeAt(result: Pick<RunResult, 'environment' | 'producer' | 'parameters' | 'specRevision'>, run: Pick<RunSummary, 'endedAtMs'>): ReliabilityScope
+```
+
+The scope that counts the independent executions of one result's check up to the end of its run: the same
+environment, producer and parameters, and the spec revision that result was recorded against (executions against
+another revision are other promises). A result that recorded no revision is counted across revisions, which
+{@link compareReliability} will not compare. Use it for each side, with that side's result and run.
+
+#### `compareReliability`
+
+```ts
+export function compareReliability(baseline: ReliabilityDocument, candidate: ReliabilityDocument, conditionsDiffer: readonly string[] = []): ReliabilityComparison
+```
+
+Sets the reliability of a check up to the baseline run against its reliability up to the candidate run. A change is
+stated only when both samples are established (at least `minimumExecutions` independent executions), both counted the
+same recorded spec revision (see {@link reliabilityScopeAt}) and the conditions match; whether the difference exceeds the uncertainty is
+said by `direction`. Otherwise each figure stands alone and the reasons say why.
+
+#### `StepLike`
+
+```ts
+export type StepLike = { readonly name: string; readonly offsetMs?: number | undefined };
+```
+
+The part of a recorded step this module reads.
+
+#### `AlignedStep`
+
+```ts
+export type AlignedStep = {
+  readonly name: string;
+  /** Milliseconds after the check began, on each side; absent when that side did not record it or its time. */
+  readonly baselineOffsetMs?: number;
+  readonly candidateOffsetMs?: number;
+  readonly onBaseline: boolean;
+  readonly onCandidate: boolean;
+};
+```
+
+One step, found on one or both sides.
+
+#### `StepAlignment`
+
+```ts
+export type StepAlignment = {
+  /** `aligned`: some step is on both sides with a time on both (a recording can be sought to it); `unaligned`: otherwise. */
+  readonly state: 'aligned' | 'unaligned';
+  readonly steps: readonly AlignedStep[];
+  /** The steps with a time on both sides: where both recordings can be sought together. */
+  readonly seekable: readonly (AlignedStep & { readonly baselineOffsetMs: number; readonly candidateOffsetMs: number })[];
+  /** Whether the two lists of step names differ (the steps themselves are part of the promise). */
+  readonly differs: boolean;
+  /** In words, why the recordings are or are not aligned. */
+  readonly explanation: string;
+};
+```
+
+How the recorded steps of two results line up.
+
+#### `alignSteps`
+
+```ts
+export function alignSteps(baseline: readonly StepLike[], candidate: readonly StepLike[]): StepAlignment
+```
+
+Lines up the recorded steps of two results by name (the n-th step of a name on one side with the n-th of that name on
+the other), keeping each side's own time origin: an offset is milliseconds after that side's check began. Nothing is
+aligned by position or by fuzzy wording. When nothing lines up, `explanation` says why.
+
 ### S3 object store
 
 Source: `packages/reports/src/s3-store.ts`. Import: `@crvouga/atlas/reports/s3-store`
@@ -9311,6 +9624,14 @@ export type RunResult = {
   readonly detail: string;
   /** Every video its evidence references, with who holds it (check, retry attempt or step). Absent when there is none. */
   readonly videos?: readonly VideoRef[];
+  /** The kind of the part that held it (`behavior`, `checks`…). With the producer, environment and parameters it is the condition the result was recorded under. Absent from an older server. */
+  readonly kind?: string;
+  /** The other choices that made it its own result (a device size, a locale…). Absent when there are none, and from an older server. */
+  readonly parameters?: Readonly<Record<string, string>>;
+  /** The fingerprint of its spec file the layer recorded: results with different ones were recorded against different revisions of the spec. Absent means not recorded, never "the same". */
+  readonly specRevision?: string;
+  /** The title this run's layer gave the check. `title` is the newest title the check has in the whole history, so a check that was reworded shows its newest wording in both runs; this is the wording as recorded. Absent from an older server. */
+  readonly recordedTitle?: string;
 };
 ```
 
