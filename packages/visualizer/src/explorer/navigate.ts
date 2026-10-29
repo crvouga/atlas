@@ -34,3 +34,20 @@ export function useExplorerNavigate() {
 export function patched(patch: ExplorerPatch) {
   return ((prev: Record<string, unknown>) => ({ ...prev, ...patch })) as never;
 }
+
+/**
+ * The open watch playlist as the address holds it, so a link restores it: `watching` is true while the address says it is
+ * open and `clip` is the entry it is on. `open` pushes a history entry (Back closes it), `select` and `close` replace the
+ * current one, so stepping through clips does not fill the history. `open(clip)` starts on that entry.
+ */
+export function useWatchAddress() {
+  const search = useExplorerSearch();
+  const go = useExplorerNavigate();
+  return {
+    watching: search.watch === true,
+    clip: search.watchClip,
+    open: (clip?: string) => go({ watch: true, watchClip: clip }),
+    select: (clip: string) => go({ watchClip: clip }, { replace: true }),
+    close: () => go({ watch: undefined, watchClip: undefined }, { replace: true })
+  };
+}

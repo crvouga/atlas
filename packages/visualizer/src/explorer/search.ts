@@ -2,7 +2,7 @@
  * @module Explorer address
  *
  * Everything the test explorer shows is in the address of the `/` route, so a link reproduces the view: the open test,
- * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the Compare tab with its two pinned runs (`base`, `cand`) and the behavior opened (`pair`), the Catalog health tab with the root mappings it tries (`root`), the exact layer a test's detail is pinned to, the recording and position of a shared moment in it (`clip`, `clipAt`), and the one file of a run's layer its Artifacts select. Filters that
+ * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the Compare tab with its two pinned runs (`base`, `cand`) and the behavior opened (`pair`), the Catalog health tab with the root mappings it tries (`root`), the exact layer a test's detail is pinned to, the recording and position of a shared moment in it (`clip`, `clipAt`), the watch playlist that is open over the list or run and the clip it is on (`watch`, `watchClip`), and the one file of a run's layer its Artifacts select. Filters that
  * take several values are comma-separated (`status=failed,flaky`); a comma or backslash inside a value is written `\,`
  * or `\\`, and the router encodes `#` and spaces. Anything unreadable is dropped, never an error.
  *
@@ -109,6 +109,10 @@ export const ExplorerSearchFields = {
   relRevision: z.enum(['any']).optional().catch(undefined),
   /** The reliability's independent executions (its denominator) are open. */
   relOpen: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined),
+  /** The watch playlist is open over the list, opened run or collection the rest of the address names. A link with it restores the playlist; without it the page is as it was before. */
+  watch: z.preprocess((value) => (value === 'true' ? true : value), z.literal(true)).optional().catch(undefined),
+  /** With `watch`: the entry of the playlist that is playing (its id, which names the result and the layer that recorded it). Unknown or absent: the first one that can be watched. */
+  watchClip: text,
   /** Words to find inside the recordings of the Artifacts tab (what was said or shown, from the text producers supplied). Not a filter of the list. */
   inside: text,
   /** Only the runs, and the results of an opened run, that have a playable video recording. */
@@ -166,6 +170,8 @@ export type ExplorerSearch = {
   readonly relOpen?: true;
   readonly inside?: string;
   readonly video?: true;
+  readonly watch?: true;
+  readonly watchClip?: string;
 };
 
 /** The values of a comma-separated filter, empty when it is not set. */

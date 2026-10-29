@@ -198,7 +198,7 @@ export function Explorer() {
           {model && (model.tests.length > 0 || model.summary.runs > 0) && (
             <Tabs
               value={search.tab ?? 'tests'}
-              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' || value === 'collections' || value === 'compare' || value === 'health' ? value : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined, collection: undefined, rev: undefined, pair: undefined })}
+              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' || value === 'collections' || value === 'compare' || value === 'health' ? value : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined, collection: undefined, rev: undefined, pair: undefined, watch: undefined, watchClip: undefined })}
             >
               <Tabs.List aria-label="Explorer view">
                 <Tabs.Tab

@@ -53,7 +53,7 @@ async function seed() {
       },
       {
         id: 'decline', title: 'A declined card', specPath: SPEC, status: 'failed', detail: 'card_declined was not shown',
-        attachments: [movie('decline.webm', 'decline', { scope: { pacing: 'paced', audioCaptured: false, dependencies: 'scripted' }, durationMs: 4_000 }), { name: 'captions.vtt', contentType: 'text/vtt', data: bytes('WEBVTT\n') }]
+        attachments: [movie('decline.webm', 'decline', { poster: 'shot', scope: { pacing: 'paced', audioCaptured: false, dependencies: 'scripted' }, durationMs: 4_000 }), { id: 'shot', name: 'decline.png', contentType: 'image/png', data: bytes('poster') }, { name: 'captions.vtt', contentType: 'text/vtt', data: bytes('WEBVTT\n') }]
       },
       { id: 'receipt', title: 'Email a receipt', specPath: SPEC, status: 'passed', attachments: [{ name: 'receipt.png', contentType: 'image/png', data: bytes('png') }] }
     ]
@@ -92,7 +92,7 @@ test('Watch lists every result of the filtered set with its outcome, failures in
   expect(itemOf('Email a receipt').getAttribute('data-recording-state')).toBe('none');
   expect(itemOf('Quote an order').getAttribute('data-recording-state')).toBe('api-only');
   // The order is the order of the table the set came from.
-  const table = [...document.querySelectorAll('section[aria-label="Artifacts"] tbody tr')].map((row) => row.querySelector('a')?.textContent);
+  const table = [...document.querySelectorAll('table[data-artifacts] tbody tr')].map((row) => row.querySelector('a')?.textContent);
   expect(items().map((item) => item.querySelector('button')!.textContent!.split(/Passed|Failed/)[0])).toEqual(table);
 });
 
@@ -233,4 +233,79 @@ test('a run can be watched too, with its filtered results', async () => {
   await view.until(() => player() !== null, 'the player');
   expect(itemOf('A declined card').getAttribute('data-status')).toBe('failed');
   expect(itemOf('Email a receipt').getAttribute('data-recording-state')).toBe('none');
+});
+
+test('an unselected clip shows the poster and length the catalog named, loaded lazily, without reading its evidence', async () => {
+  const view = await open();
+  await watch(view);
+  await view.until(() => player() !== null, 'the first player');
+  const declined = itemOf('A declined card');
+  const poster = declined.querySelector<HTMLImageElement>('img[data-poster]')!;
+  expect(poster).not.toBeNull();
+  expect(poster.getAttribute('loading')).toBe('lazy');
+  expect(poster.getAttribute('alt')).toBe('');
+  expect(poster.getAttribute('src')).toContain('/blobs/attachments/');
+  expect(declined.textContent).toContain('4.0 s recording');
+  expect(declined.querySelector('button')!.getAttribute('aria-label')).toContain('4.0 s long');
+  // A clip that declared neither shows neither, and says nothing it was not told.
+  expect(itemOf('Pay with a card').querySelector('img')).toBeNull();
+  expect(itemOf('Pay with a card').textContent).not.toContain('recording ·');
+  expect(itemOf('Email a receipt').querySelector('img')).toBeNull();
+  // Still one evidence read for the clip on screen, however many entries carry hints, and one player.
+  expect(view.requests.filter((url: string) => url.includes('/evidence/detail/'))).toHaveLength(1);
+  expect(document.querySelectorAll('video')).toHaveLength(1);
+});
+
+test('the open playlist and its clip are in the address: a link restores them, Back and closing remove them', async () => {
+  const view = await open();
+  expect(view.router.state.location.search.watch).toBeUndefined();
+  await watch(view);
+  await view.until(() => player() !== null, 'the first player');
+  const searched = () => view.router.state.location.search as { watch?: boolean; watchClip?: string };
+  await view.until(() => searched().watch === true && typeof searched().watchClip === 'string', 'the playlist in the address');
+  const playing = () => document.querySelector('section[data-clip]')!.getAttribute('data-clip')!;
+  expect(searched().watchClip).toBe(playing());
+  // Choosing another clip moves the address along, without adding a history entry.
+  const before = view.router.history.length;
+  await act(async () => itemOf('A declined card').querySelector('button')!.click());
+  await view.until(() => playing() === itemOf('A declined card').getAttribute('data-entry'), 'the declined clip');
+  await view.until(() => searched().watchClip === playing(), 'the clip in the address');
+  expect(view.router.history.length).toBe(before);
+  const link = `/?tab=artifacts&watch=true&watchClip=${encodeURIComponent(playing())}`;
+  const clip = playing();
+  // Closing removes both.
+  await act(async () => document.querySelector<HTMLButtonElement>('.mantine-Modal-close')!.click());
+  await view.until(() => document.querySelector('section[aria-label="Playlist"]') === null, 'the playlist closed');
+  expect(searched().watch).toBeUndefined();
+  expect(searched().watchClip).toBeUndefined();
+  // A link restores the playlist on the same clip.
+  await view.go(link);
+  await view.until(() => document.querySelector('section[aria-label="Playlist"]') !== null && player() !== null, 'the playlist restored');
+  expect(playing()).toBe(clip);
+  expect(document.querySelector('section[data-clip] h3')!.textContent).toBe('A declined card');
+  // A clip the set no longer holds falls back to the first watchable one, and the address says which.
+  await act(async () => document.querySelector<HTMLButtonElement>('.mantine-Modal-close')!.click());
+  await view.go('/?tab=artifacts&watch=true&watchClip=gone');
+  await view.until(() => player() !== null, 'the fallback clip');
+  await view.until(() => searched().watchClip === playing() && playing() !== 'gone', 'the address names the clip shown');
+  // Back from an opened playlist closes it.
+  await act(async () => document.querySelector<HTMLButtonElement>('.mantine-Modal-close')!.click());
+  await view.click('button', /Watch these 4 results/);
+  await view.until(() => document.querySelector('section[aria-label="Playlist"]') !== null, 'the playlist');
+  await act(async () => view.router.history.back());
+  await view.until(() => document.querySelector('section[aria-label="Playlist"]') === null, 'closed by Back');
+});
+
+test('an opened run restores its playlist from the address, and developer details leave it', async () => {
+  const run = encodeURIComponent(RUN(1));
+  const view = await open(`/?tab=runs&openRun=${run}&watch=true`);
+  await view.until(() => document.querySelector('section[aria-label="Playlist"]') !== null && items().length === 3, 'the run playlist from the address');
+  await view.until(() => player() !== null, 'the player');
+  const link = [...document.querySelectorAll<HTMLAnchorElement>('section[data-clip] a')].find((anchor) => anchor.textContent === 'Developer details')!;
+  await act(async () => link.click());
+  await view.until(() => document.querySelector('section[aria-label="Playlist"]') === null, 'the playlist closed');
+  const search = view.router.state.location.search as Record<string, unknown>;
+  expect(search.watch).toBeUndefined();
+  expect(search.watchClip).toBeUndefined();
+  expect(search.test).toBeDefined();
 });

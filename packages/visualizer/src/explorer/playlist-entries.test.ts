@@ -1,7 +1,7 @@
 import type { VideoRef } from '@crvouga/atlas/reports/evidence-types';
 import { expect, test } from 'bun:test';
 
-import { entriesFromRun, playlistCounts, recordingState, stepFrom, type PlaylistEntry } from './playlist-entries';
+import { clipHints, entriesFromRun, playlistCounts, recordingState, stepFrom, type PlaylistEntry } from './playlist-entries';
 
 const video = (recording?: string): VideoRef => ({ name: 'a.webm', owner: 'check', available: recording !== undefined, ...(recording ? { recording } : {}) });
 const entry = (id: string, extra: Partial<PlaylistEntry> = {}): PlaylistEntry => ({
@@ -48,4 +48,13 @@ test('a run result gets its backend from the layers of the run, and none when th
   expect(entriesFromRun([result], layers)[0]).toMatchObject({ backend: 'shared', check: 'c', status: 'failed', tags: ['demo'] });
   expect(entriesFromRun([result], undefined)[0]!.backend).toBeNull();
   expect(recordingState(entriesFromRun([result], undefined)[0]!)).toBe('unplayable');
+});
+
+test('clip hints are the poster and length the catalog already named for the clip that would play, and nothing otherwise', () => {
+  const hinted: VideoRef = { ...video('sha256:1'), poster: 'attachments/p', durationMs: 4_000 };
+  expect(clipHints(entry('a', { videos: [hinted] }))).toEqual({ poster: 'attachments/p', durationMs: 4_000 });
+  expect(clipHints(entry('a', { videos: [video('sha256:1')] }))).toEqual({});
+  // A reference that names no bytes is not the clip that would play.
+  expect(clipHints(entry('a', { videos: [{ ...video(), durationMs: 9 }] }))).toEqual({});
+  expect(clipHints(entry('a'))).toEqual({});
 });
