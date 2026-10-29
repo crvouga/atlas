@@ -10,11 +10,14 @@ import { useRecordedReport } from './check-detail';
 import { useEvidence } from './evidence-context';
 import { duration, statusWord, useNow } from './format';
 import { Origin, StatusMark } from './marks';
+import { EvidenceIncomplete, EvidenceWaiting } from './load-state';
 import { Timeline } from './recording';
 type Props = {
   /** The check whose recording is open, once the combined report holds it. */
   slot: CheckSlot | undefined;
   layerId: string | undefined;
+  /** The exact result to play, when the caller already found it (it wins over `layerId` and the combined winner). */
+  entry?: HistoryEntry | undefined;
   label: string;
   back: string;
   moment: number | null;
@@ -36,14 +39,15 @@ function needsStylesheet(report: RunReport | undefined): boolean {
   return visit(report.steps) || (report.artifacts ?? []).some((artifact) => artifact.media === 'html');
 }
 /** One recorded test, opened in place of its spec. */
-export function RecordingPage({ slot, layerId, label, back, moment, onMoment, onClose }: Props) {
+export function RecordingPage({ slot, layerId, entry, label, back, moment, onMoment, onClose }: Props) {
   const progress = useTestProgress(slot ?? null);
-  const { evidence, backends, pending, ready, unavailable } = useEvidence();
+  const { evidence, backends, pending, ready, unavailable, failed, retry } = useEvidence();
   const now = useNow();
   const history = useMemo(() => (slot ? checkHistory(evidence, slot.specPath, slot.id) : []), [evidence, slot]);
   const winner = slot?.outcomes[0];
   const chosen: HistoryEntry | null =
-    (layerId ? history.find((entry) => entry.layer.id === layerId) : undefined) ??
+    entry ??
+    (layerId ? history.find((earlier) => earlier.layer.id === layerId) : undefined) ??
     (winner ? { layer: winner.layer, row: winner.row } : null);
   const { paths, report } = useRecordedReport(chosen);
   const wantsCss = needsStylesheet(report.data);
@@ -83,17 +87,26 @@ export function RecordingPage({ slot, layerId, label, back, moment, onMoment, on
         )}
       </Box>
       <TestProgress {...progress} />
-      {waiting && (
-        <Text role="status" component="div" c="dimmed">
-          Loading the recording…
-        </Text>
-      )}
+      {waiting && <EvidenceWaiting label="Loading the recording…" usable="The way back to the spec is available." />}
       {!chosen && !waiting && !progress.tests.length && (
         <Alert color={'blue'} my="sm">
           {unavailable ??
-            'This result is not in the combined report any more. A newer run may have replaced it, or its source is switched off.'}
+            (failed.length > 0
+              ? 'This result was not found in the layers that could be read, and some layers could not be read.'
+              : 'This result is not in the combined report any more. A newer run may have replaced it, or its source is switched off.')}{' '}
+          {(unavailable || failed.length > 0) && (
+            <Button type="button" onClick={retry} variant="subtle">
+              Try again
+            </Button>
+          )}
         </Alert>
       )}
+      {chosen && layerId && !entry && chosen.layer.id !== layerId && ready && pending === 0 && (
+        <Alert role="status" color={'blue'} my="sm">
+          The layer this link names is not among the results held for this test. Showing the current result instead.
+        </Alert>
+      )}
+      {ready && !chosen && <EvidenceIncomplete />}
       {chosen && !paths && (
         <Alert color={'blue'} my="sm">
           This result has an outcome and no recorded timeline.

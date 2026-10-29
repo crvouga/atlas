@@ -61,12 +61,15 @@ export function ResultRow({
   slot,
   open,
   onToggle,
+  badge,
   children
 }: {
   label: string;
   slot: CheckSlot | null;
   open: boolean;
   onToggle: () => void;
+  /** A short extra mark after the label, such as a coverage state. */
+  badge?: ReactNode;
   children: ReactNode;
 }) {
   const now = useNow();
@@ -96,6 +99,7 @@ export function ResultRow({
                   </Flex>
                 )}
               </Text>
+              {badge}
               {slot?.live && (
                 <Text span inherit>
                   Running now
@@ -268,6 +272,10 @@ type Props = {
   reads: 'steps' | 'trace';
   /** The check as written, shown until a recording is read or when there is none. */
   written?: ReactNode;
+  /** An exact earlier result the caller found (for example on a server that only sends winners). It wins over `layerId`. */
+  pinned?: HistoryEntry;
+  /** Choosing a run in the history always names its layer, even when that result is a current one, so the choice stays pinned. */
+  pin?: boolean;
 };
 /** Everything recorded for one check: the chosen result, how it went, and every other run of it. */
 export function CheckDetail(props: Props) {
@@ -298,13 +306,13 @@ export function CheckDetail(props: Props) {
     </>
   );
 }
-function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
-  const { evidence, backends } = useEvidence();
+function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pin }: Props) {
+  const { evidence, backends, ready, pending } = useEvidence();
   const now = useNow();
   const [variant, setVariant] = useState(0);
   const history = useMemo(() => checkHistory(evidence, slot.specPath, slot.id), [evidence, slot.specPath, slot.id]);
   const winner = slot.outcomes[Math.min(variant, slot.outcomes.length - 1)]!;
-  const earlier = layerId ? history.find((entry) => entry.layer.id === layerId) : undefined;
+  const earlier = pinned ?? (layerId ? history.find((entry) => entry.layer.id === layerId) : undefined);
   const chosen: HistoryEntry = earlier ?? { layer: winner.layer, row: winner.row };
   const superseded = !slot.outcomes.some((outcome) => outcome.layer.id === chosen.layer.id);
   const { paths, report } = useRecordedReport(chosen);
@@ -344,6 +352,11 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
       {note && (
         <Alert color={'blue'} my="sm">
           {note}
+        </Alert>
+      )}
+      {layerId && !earlier && ready && pending === 0 && (
+        <Alert role="status" color={'blue'} my="sm">
+          The layer this link names is not among the results held for this check. Showing the current result instead.
         </Alert>
       )}
       {failure && (
@@ -397,7 +410,7 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
           {moments > 0 && (
             <Button
               type="button"
-              onClick={() => select({ view: 'recording', check: slot.id, layer: earlier ? chosen.layer.id : null })}
+              onClick={() => select({ view: 'recording', check: slot.id, layer: earlier || variant > 0 ? chosen.layer.id : null })}
               variant="filled"
             >
               Open recording{' '}
@@ -428,7 +441,9 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
                       type="button"
                       aria-current={current || undefined}
                       onClick={() =>
-                        select({ layer: slot.outcomes.some((outcome) => outcome.layer.id === entry.layer.id) ? null : entry.layer.id })
+                        select({
+                          layer: !pin && slot.outcomes.some((outcome) => outcome.layer.id === entry.layer.id) ? null : entry.layer.id
+                        })
                       }
                       variant="light"
                     >

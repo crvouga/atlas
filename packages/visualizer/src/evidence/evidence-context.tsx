@@ -36,6 +36,8 @@ export type EvidenceState = {
   readonly retry: () => void;
   /** Layers whose checks are still arriving. */
   readonly pending: number;
+  /** Layers whose checks could not be read. The report shown leaves them out, so it may be incomplete. */
+  readonly failed: readonly LayerHeader[];
   /** Every distinct layer, whether or not it contributes. */
   readonly layers: readonly LayerHeader[];
   /** The layers that contribute, with their checks, once read. */
@@ -175,7 +177,7 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
       staleTime: Number.POSITIVE_INFINITY,
       retry: 1
     })),
-    combine: (results) => ({ data: results.map((result) => result.data), stamp: results.map((result) => result.dataUpdatedAt).join(',') })
+    combine: (results) => ({ data: results.map((result) => result.data), failed: results.map((result) => result.isError && result.data === undefined), stamp: results.map((result) => result.dataUpdatedAt).join(',') })
   });
 
   // A running suite's layer is re-read as tests finish. Its last read stays on screen meanwhile.
@@ -195,6 +197,8 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
     // `stamp` changes exactly when a layer's rows do.
   }, [wanted, rows.stamp]);
 
+  const failed = useMemo(() => wanted.filter((_, i) => rows.failed[i]), [wanted, rows.failed]);
+
   const shown = effective ? overview.data?.layers ?? NONE : evidence;
   const { tests: liveTests } = useLiveTests();
   const view = useMemo(() => withLiveProgress(evidenceView(combineEvidence(outline, shown)), liveTests), [outline, shown, liveTests]);
@@ -206,11 +210,14 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
     unavailable: effective ? (overview.data === undefined && overview.error ? overview.error.message : null) : pages === undefined && index.error ? index.error.message : null,
     retry: () => {
       if (effective) { void Promise.all([overview.refetch(), serverOutline.refetch()]); return; }
+      // A layer whose rows could not be read is asked for again alone, so the layers already read stay on screen.
+      void client.refetchQueries({ queryKey: ['evidence-rows'], predicate: (query) => query.state.status === 'error' });
       void reportJson<EvidencePage>('/evidence?retry=1')
         .catch(() => null)
         .then(() => Promise.all([index.refetch(), serverOutline.refetch()]));
     },
-    pending: wanted.length - evidence.length,
+    pending: Math.max(0, wanted.length - evidence.length - failed.length),
+    failed,
     layers: effective ? effectiveHeaders : layers,
     evidence: shown,
     backends: effective ? overview.data?.backends ?? [] : first?.backends ?? [],

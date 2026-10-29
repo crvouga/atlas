@@ -196,7 +196,7 @@
     "schemas": "bun packages/schema/scripts/emit-json-schemas.ts",
     "docs": "bun scripts/docs/generate.ts",
     "docs:check": "bun test scripts/docs scripts/release/docs-links.test.ts packages/schema/tests/schemas.test.ts packages/server/tests/openapi.test.ts packages/server/tests/settings.test.ts",
-    "dev": "bun packages/core/bin/atlas.mjs dev --data .atlas-data",
+    "dev": "bun packages/core/bin/atlas.mjs dev",
     "client:dev": "bun packages/core/bin/atlas.mjs dev",
     "client:build": "bun packages/core/bin/atlas.mjs client build --no-data",
     "client:publish-data": "bun packages/visualizer/scripts/publish-data.ts",

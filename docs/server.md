@@ -9,22 +9,24 @@ development and in production.
   CI job ──────┼── PUT /api/store/…  POST /api/checks ─▶│
   device lab ──┘   atlas report publish | stream        │   atlas report status  (the gate: asks /api/status)
                                                         │
-                       backends: ./atlas-data (default), S3, other folders, another Atlas server
+                       one S3-compatible bucket: ALL reports and ALL user state (required)
 ```
 
 - **Clients upload directly to it.** `atlas report publish`, `atlas report stream`, `createReporter` and a plain
   `curl` all end up as layers on the server. Nothing else needs deploying: no bucket access for CI, no artifact
   merging, no static site to rebuild.
-- **Its default backend is its own filesystem** (`./atlas-data`). That folder is the whole state: back it up,
-  mount it on a volume, or put the state in a bucket instead ([backends](#backends)). Several backends are one
-  report, as ever.
+- **Its only storage is an S3-compatible bucket.** All reports and all user state (the garbage collection policy,
+  saved settings) live there and nowhere else: not on its disk, in memory, in a database or in the browser. The
+  storage settings are required and the server refuses to start without them
+  ([required S3 storage](#required-s3-storage)).
 - **The report is live.** Every client holds one server-sent-events connection; when results arrive the server
   says so and each client reads only what changed ([streaming](#streaming)).
 - **Layered, never partitioned**, as everywhere in Atlas: the server only stores immutable, content-addressed
   layers and works out the report from them. Replace it, restore it, or run a second one on a copy of the data:
   the same layers give the same report ([the contract](report-contract.md)).
 
-- [Run it](#run-it) · [Configuration](#configuration) · [Backends](#backends) · [Tokens and roles](#tokens-and-roles)
+- [Run it](#run-it) · [Required S3 storage](#required-s3-storage) · [User state and garbage collection](#user-state-and-garbage-collection)
+- [Configuration](#configuration) · [Storage](#storage) · [Tokens and roles](#tokens-and-roles)
 - [Sending results](#sending-results) · [Streaming](#streaming) · [API reference](#api-reference)
 - [What the server refuses](#what-the-server-refuses) · [Performance](#performance) · [Operating it](#operating-it)
 
@@ -33,7 +35,8 @@ development and in production.
 ```sh
 bun add -d @crvouga/atlas
 export ATLAS_TOKEN=$(openssl rand -hex 24)   # admin token; see "Tokens and roles"
-bunx atlas serve                             # http://127.0.0.1:8080, data in ./atlas-data
+cp .env.example .env                         # then fill in the ATLAS_S3_* variables: storage is required
+bunx atlas serve                             # http://127.0.0.1:8080, everything kept in your S3 bucket
 ```
 
 <!-- generated:runtime-requirements -->
@@ -49,21 +52,118 @@ server in front of it. Vite proxies `/api` (server-sent events included) to the 
 uploaders and the client all use **one host**, exactly as in production, and a change to the client shows at once.
 
 ```sh
-bunx atlas dev --data .atlas-data            # http://127.0.0.1:5180
+bunx atlas dev                               # http://127.0.0.1:5180 (same ATLAS_S3_* variables)
 ATLAS_STORE=http://127.0.0.1:5180 bunx atlas report publish --producer unit --junit out.xml
 ```
 
 For Railway, deploy `ghcr.io/crvouga/atlas:latest` directly: the image contains the server and
 viewer, and every green `main` push updates it. See [running Atlas for a project](deploying.md#run-it) for
-Railway's volume, tokens, healthcheck and image auto updates, or for Docker, Kubernetes and CI.
+Railway's variables, tokens, healthcheck and image auto updates, or for Docker, Kubernetes and CI.
 For anonymous reading, uploads and administration, use `ghcr.io/crvouga/atlas-insecure:latest` with no tokens
 configured; see [deploying without authentication](deploying.md#deploy-without-authentication).
 
+## Required S3 storage
+
+The server keeps **all reports and all user state in S3-compatible object storage, and nowhere else**. There is no
+local-disk, in-memory or database fallback and no flag to choose another place, so the storage settings are
+**required environment variables with no defaults** (they hold secrets, so they are never read from a file or a flag):
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `ATLAS_S3_ENDPOINT` | yes | S3 API endpoint, e.g. `https://s3.eu-west-1.amazonaws.com`, `https://<account>.r2.cloudflarestorage.com`, `http://minio:9000` |
+| `ATLAS_S3_BUCKET` | yes | Bucket for reports and user state. It must already exist |
+| `ATLAS_S3_REGION` | yes | Bucket region (`auto` for Cloudflare R2, `us-east-1` for most self-hosted servers) |
+| `ATLAS_S3_ACCESS_KEY_ID` | yes | Access key of an account that may list, read, write and delete in the bucket and prefix |
+| `ATLAS_S3_SECRET_ACCESS_KEY` | yes | Its secret key |
+| `ATLAS_S3_PREFIX` | no | A folder inside the bucket for everything Atlas writes. Default: the bucket root |
+| `ATLAS_S3_PATH_STYLE` | no | `1` (default) for `endpoint/bucket/key`, `0` for virtual-hosted `bucket.endpoint/key` |
+| `ATLAS_S3_SESSION_TOKEN` | no | Only for temporary credentials |
+
+[`.env.example`](https://github.com/crvouga/atlas/blob/main/.env.example) lists them with explanations. The server does not look for
+ambient AWS credentials (`AWS_*`, profiles, instance roles) and the old `ATLAS_STORE`, `ATLAS_WRITE`, `ATLAS_DATA`,
+`--store`, `--write`, `--data` and the `data`, `backends` and `write` keys of `atlas.server.json` are gone; a
+configuration file that still has one of the keys is refused with a message that says so.
+
+**It fails fast and loud.** Before anything listens, the server checks every variable, then proves the bucket is
+usable (lists it, writes and deletes a scratch object) and reads the user state. If any step fails it prints a banner
+that lists **every** variable with `[MISSING]`, `[INVALID]`, `[ok]` or `[not set]`, says why storage is required (and
+what S3 answered, when S3 was reached), never prints a secret, and exits with status **2**:
+
+```text
+==============================================================================
+  ATLAS CANNOT START: S3 STORAGE IS NOT USABLE
+==============================================================================
+  Why:    the S3 configuration is missing or invalid.
+  Reason: Atlas stores ALL reports and ALL user state (the garbage collection policy and saved
+          settings) in S3-compatible object storage, and nowhere else. There is no local-disk,
+          in-memory or database fallback, so the server refuses to start without working S3.
+
+  Required environment variables:
+  [MISSING] ATLAS_S3_ENDPOINT           S3 API endpoint of the object storage service
+  [ok]      ATLAS_S3_BUCKET             Bucket that holds reports and user state; it must already exist
+  [INVALID] ATLAS_S3_REGION             must be lowercase letters, digits and hyphens, like eu-west-1
+  …
+  Fix these 2: ATLAS_S3_ENDPOINT, ATLAS_S3_REGION
+```
+
+Credentials that S3 rejects, a bucket that does not exist and a user state object that cannot be read stop the
+server in the same way, with the answer from S3 in the banner. `atlas dev` behaves the same.
+
+## User state and garbage collection
+
+Everything a person using Atlas has chosen is **user state**: one JSON document, `server/state.json` under
+`ATLAS_S3_PREFIX`, in the same bucket as the reports. It is never kept on the server's disk or in the browser.
+
+```json
+{
+  "schemaVersion": 1,
+  "gc": { "enabled": true, "maxAgeDays": 90, "keepLatest": 20, "intervalHours": 24 },
+  "settings": { "refreshSeconds": 30 }
+}
+```
+
+(published as [`user-state.schema.json`](https://github.com/crvouga/atlas/blob/main/packages/schema/schemas/user-state.schema.json))
+
+- **`gc` is the garbage collection policy**, defined in the Atlas UI (**Settings**, `/admin`, *Garbage collection*) and
+  read by the server **from S3 every time it collects**, so a saved policy applies at the next pass without a restart.
+- **`settings`** are the report and live-run settings saved from the same page. They apply at the next start, below
+  `atlas.server.json`, the environment and the flags in precedence.
+- A document that does not exist is an empty state; one that exists but cannot be parsed stops the server and is
+  never overwritten.
+
+**No policy saved yet.** Atlas is deletion-free until someone says otherwise: with no `gc` in the document,
+garbage collection is **off and nothing is ever deleted**. The server says so at start, the API answers
+`saved: false, policy: null`, the page shows a "No policy has been saved yet" notice with suggested values that take
+effect only after you turn collection on and save, and `POST /api/settings/gc/run` answers 409. There is no
+fallback to a file, an environment variable or built-in numbers.
+
+**What a policy deletes.** With `enabled: true`, every `intervalHours` (and shortly after start) the server applies the
+policy to every project. It deletes a report layer only when all of these hold:
+
+1. the server has read it and every check it carries has been replaced by a newer layer, so it no longer decides any
+   result (deleting it cannot change the report);
+2. it was recorded more than `maxAgeDays` days ago;
+3. it is not one of the newest `keepLatest` layers of its project.
+
+The layer's catalog entry goes first (so nothing visible points at a missing manifest), then its manifest, then the
+captured files (screenshots, logs, …) that no remaining layer refers to; if any remaining layer cannot be read, no
+file is deleted. Specs, runs and commit inventories are never touched, and a layer that failed to load, that
+`include` hides, or that still decides a result is never a candidate. Because a deleted layer is also removed from the
+test history, history older than the policy allows is gone after the next start. One narrow race remains: a publisher
+that reuses a stored file at the very moment the last layer that used it is deleted can end up with a layer that
+points at a missing file; keep `maxAgeDays` well above the time uploads take.
+
+**Editing it.** `GET /api/settings/gc` and `PUT /api/settings/gc` (admin, with `If-Match` the revision that was read,
+same-origin in browsers) read and save the policy; `POST /api/settings/gc/run` applies it now, and
+`POST /api/settings/gc/run?dryRun=1` only counts what would go. A save that races another is refused with 409. The
+revision is the SHA-256 of the stored document, so saving the policy and saving settings invalidate each other's
+revision: reload, then save. An object store has no conditional writes, so run one server per bucket.
+
 ## Configuration
 
-Everything has a default, so no configuration is a working server for this machine. Settings come from
+Everything but the [S3 storage](#required-s3-storage) has a default. Settings come from the settings saved in S3 (the lowest layer), then
 `atlas.server.json` (or `--config <file>` / `ATLAS_CONFIG`), then environment variables, then flags; a later one
-wins. A mistake (an unknown key, a short token, two write targets, listening beyond this machine without tokens)
+wins. A mistake (an unknown key, a short token, listening beyond this machine without tokens)
 is said in words and the server does not start. The file has a published
 [JSON Schema](https://github.com/crvouga/atlas/blob/main/packages/schema/schemas/server-config.schema.json)
 (`@crvouga/atlas/schemas/server-config.schema.json`).
@@ -73,9 +173,6 @@ is said in words and the server does not start. The file has a published
   "$schema": "./node_modules/@crvouga/atlas/packages/schema/schemas/server-config.schema.json",
   "host": "0.0.0.0",
   "port": 8080,
-  "data": "./atlas-data",
-  "backends": [{ "id": "archive", "url": "s3://my-bucket/atlas/my-project?region=us-east-1", "label": "Archive" }],
-  "write": "data",
   "auth": {
     "tokens": [
       { "name": "ci", "role": "publish", "tokenEnv": "ATLAS_CI_TOKEN" },
@@ -91,11 +188,16 @@ is said in words and the server does not start. The file has a published
 <!-- generated:server-settings -->
 | Setting | File key | Flag | Environment | Default |
 | --- | --- | --- | --- | --- |
+| S3 endpoint URL (**required**) | `storage.s3.endpoint` |  | `ATLAS_S3_ENDPOINT` | **none: the server refuses to start** |
+| Bucket for all reports and user state (**required**) | `storage.s3.bucket` |  | `ATLAS_S3_BUCKET` | **none: the server refuses to start** |
+| Bucket region (**required**) | `storage.s3.region` |  | `ATLAS_S3_REGION` | **none: the server refuses to start** |
+| Access key id (**required**) | `storage.s3.accessKeyId` |  | `ATLAS_S3_ACCESS_KEY_ID` | **none: the server refuses to start** |
+| Secret access key (**required**) | `storage.s3.secretAccessKey` |  | `ATLAS_S3_SECRET_ACCESS_KEY` | **none: the server refuses to start** |
+| Folder in the bucket for everything Atlas writes (optional) | `storage.s3.prefix` |  | `ATLAS_S3_PREFIX` | the bucket root |
+| Path-style bucket addressing (`0` for virtual-hosted) (optional) | `storage.s3.pathStyle` |  | `ATLAS_S3_PATH_STYLE` | yes |
+| Session token for temporary credentials (optional) | `storage.s3.sessionToken` |  | `ATLAS_S3_SESSION_TOKEN` | none |
 | Address to listen on | `host` | `--host <address>` | `ATLAS_HOST`, `HOST` | `127.0.0.1` |
 | Port (`0` picks a free one) | `port` | `--port <n>` | `ATLAS_PORT`, `PORT` | `8080` |
-| The server's own folder: the default backend and write target | `data` | `--data <dir>` | `ATLAS_DATA` | `./atlas-data` |
-| More backends, read together with the data folder | `backends` | `--store <[id=]url>` (repeatable) | `ATLAS_STORE` | none |
-| The backend uploads go to | `write` | `--write <id>` | `ATLAS_WRITE` | `data` |
 | The built client | `site` | `--site <dir>` | `ATLAS_SITE` | `./atlas-site`, else built once |
 | Whose specs the report is laid over | `outlineBranch` | `--outline-branch <branch>` | `ATLAS_OUTLINE_BRANCH` | `main`, then `master`, then the newest |
 | Only layers recorded on these branches take part | `include.branches` | `--branch <name>` (repeatable) | `ATLAS_ONLY_BRANCH` | all |
@@ -117,22 +219,19 @@ is said in words and the server does not start. The file has a published
 `ATLAS_HOST` and `ATLAS_PORT` win over `HOST` and `PORT`, which other tools on a machine often set for their own
 purposes.
 
-## Backends
+## Storage
 
-A backend is anything that implements `ObjectStore`: a folder, an S3-compatible bucket (`s3://`, `r2://`,
-`gs://`), or **another Atlas server** (`https://…`, with `ATLAS_TOKEN` for it). The server reads every backend
-and shows one report; one that is down is named in the client and skipped, and the server recovers by itself.
+The server has one backend, the S3 bucket named by the [required variables](#required-s3-storage); it reads every
+layer in it and shows one report. If the bucket becomes unreachable the server keeps serving what it has, names the
+backend in the client and `/readyz`, and recovers by itself.
 
-- **Uploads go to one backend**: the `data` folder, or the one named by `write` / `ATLAS_WRITE`. Name a bucket
-  to make it the system of record, so the server holds nothing a replacement would lose:
-
-  ```sh
-  ATLAS_STORE=project=s3://my-bucket/atlas/my-project ATLAS_WRITE=project atlas serve
-  ```
-
-- **Layers written to a backend by something else** (CI with bucket access, `atlas report merge`) are found at
-  the next refresh. Layers uploaded through the server are in the report at once.
-- **A server can be a backend of another**: a local server reading the project's shared one shows both.
+- **Uploads go to the bucket** and are in the report at once. Layers written to the bucket by something else (CI
+  with bucket access, `atlas report merge`) are found at the next refresh.
+- **Projects** are folders in the bucket (`projects/<slug>/`), as [below](#multiple-projects-on-one-node).
+- **Clients are different.** `atlas report publish --store …` on a laptop or CI job may name any store (a folder,
+  a bucket, this server's URL); this page is about the server.
+- **Library use.** `createAtlasServer({ backends, write })` accepts any `ObjectStore` so an application embedding the
+  server, or a test, can bring its own; `atlas serve` and `atlas dev` always use S3.
 
 ## Tokens and roles
 
@@ -216,6 +315,26 @@ against a server unchanged. A client uploads **in dependency order**: blobs, the
 entry that makes it visible. The server checks each step and says no to a catalog entry whose manifest is not
 there (`409`), so nothing half-uploaded is ever shown.
 
+## Tagging artifacts
+
+A reviewer can mark a recording `#demo` after it was uploaded without uploading it again. The layer is immutable, so the
+tag is kept beside it: each edit is one small object under `curation/artifact-tags/` in the write backend (or the live
+store of a relay), named by time, never changed or removed. It records the attachment (layer, check, and the attachment's
+`id`, else its bytes' key, else its name), the normalized tags added and removed, the name of the token that made the
+edit, and the server's time. Nothing about the layer, its results or the report's winners changes.
+
+- `GET /api/reports/artifact-tags` (read) returns every edit, oldest first. Fold them to get the tags that stand now: the
+  last edit of a tag wins.
+- `POST /api/reports/artifact-tags` (publish, `Authorization: Bearer`) records an edit. A read token, an anonymous reader
+  and the browser's sign-in box are refused (`403`/`401`) like any upload, so a read-only visitor can see the tags and
+  not change them. The viewer asks for a token when a reviewer adds a tag and keeps it only in that tab.
+- Producer tags (`tags` on the attachment) and reviewer tags are kept apart everywhere: the viewer says who added a
+  reviewer tag and when, and a reviewer can remove only reviewer tags. `capabilities.artifactTags` on `/api/server` says
+  a server has this.
+
+See [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos) for the tag rules. Reviewer tags are
+shown in the viewer's evidence; the tests API (`artifactTag`) searches the producers' tags.
+
 ## Streaming
 
 `GET /api/events` is a server-sent-events stream:
@@ -255,7 +374,9 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | Every test, a summary (by status, environment, producer, domain), insights (failing, flaky, slowest) and facets | `GET /api/reports/tests` |
 | Only some: `q` (all words), `status` (or `flaky`), `environment`, `producer`, `domain`, `spec`, `tag`, `run`; `sort`, `offset`, `limit` | `GET /api/reports/tests?status=failed&environment=ios` |
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
-| The runs that recorded the report (by CI run URL, else branch and commit) | `GET /api/reports/runs` |
+| Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
+| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
+| Recorded results that carry evidence, across the whole history, found by tag, media type, label, feature, environment, branch, revision, outcome and time | `GET /api/reports/artifacts?artifactTag=demo&type=video` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 
 ```sh
@@ -267,6 +388,13 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
   `stats` describes its recorded history: pass rate, flips, whether it is flaky and why (it passed and failed on the
   same commit, passed only after a retry, or its producer said so), durations (avg, p50, p95, min, max, last), runs
   and branches.
+- The **health** document explains the numbers instead of adding one. It keeps spec files, defined specs, specs with an
+  executed test, tests, outlines, examples and per-environment observations apart, and walks from the Specs total to
+  the Tests total. Two spec paths are one logical spec only when a mapping says so
+  (`?root=<from>><to>`, for example `?root=%3Especs/` to put `checkout/cart.feature` under `specs/`); similar paths
+  are reported as ambiguous and never merged, and a similar title is never an identity. Give a check the label
+  `outline` to say which scenario outline an example belongs to. A domain shared by nearly every spec is flagged, but
+  explicit domain metadata always stays authoritative. The document only reads: it changes no status.
 - The server keeps the newest 100 results of every test (progress reported as `running` is not history) and every run's last result per test, in memory, as layers
   arrive; it is rebuilt from the layers on restart. History never changes a result.
 - Without a published spec set, tests are grouped under the specs their layers recorded (`specs[]`: path, domain,
@@ -293,6 +421,9 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /admin` | read | Server settings page. |
 | `GET /api/settings` | admin | Read server settings. |
 | `PUT /api/settings` | admin | Save settings for the next restart. |
+| `GET /api/settings/gc` | admin | Read the garbage collection policy. |
+| `PUT /api/settings/gc` | admin | Save the garbage collection policy. |
+| `POST /api/settings/gc/run` | admin | Collect garbage now, or preview it. |
 | `GET /healthz` | none | Is the process up. |
 | `GET /readyz` | none | Has the server read its backends. |
 | `GET /api/openapi.json` | none | This document. |
@@ -318,10 +449,18 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
 | `GET /api/reports/tests` | read | Every test, with insights, facets and history statistics. |
 | `GET /api/projects/{project}/reports/tests` | read | Every test, with insights, facets and history statistics. |
+| `GET /api/reports/tests/health` | read | Why specs, domains and counts disagree. |
+| `GET /api/projects/{project}/reports/tests/health` | read | Why specs, domains and counts disagree. |
 | `GET /api/reports/tests/history` | read | One test and every result recorded for it. |
 | `GET /api/projects/{project}/reports/tests/history` | read | One test and every result recorded for it. |
+| `GET /api/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
+| `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
+| `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
+| `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `GET /api/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
+| `GET /api/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
+| `GET /api/projects/{project}/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/projects/{project}/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/reports/outline` | read | The specs a report is laid over. |
@@ -415,11 +554,11 @@ What makes it so, none of it at the cost of the contract:
 - **One node for multiple projects.** Local environments and CI select their project slug and talk to the same node, which tells
   every client at once. Two servers on one backend both work and show the same report, but a client hears about
   an upload only from the server that took it and about the other's at the next refresh, so give a team one.
-- **State is the write backend.** Back up `./atlas-data` (or the bucket). Restoring it, or starting a new server
-  on it, shows the same report.
+- **State is the bucket.** Reports and user state are all in it. Back it up, replicate or version it as any data;
+  starting a new server on a restored copy shows the same report and applies the same garbage collection policy.
 - **Stopping.** `SIGTERM` stops accepting, lets requests in flight finish, ends the event streams and exits 0.
 - **Logs.** One JSON line per request (method, path, status, ms) to stdout, none for the probes. The first lines
-  say what it reads and which backend takes uploads, and warn when there are no tokens.
+  say which bucket it uses, what the garbage collection policy in S3 is (or that none is saved), and warn when there are no tokens.
 - **A backend goes down.** The server keeps serving what it has, names the backend in the client and in
   `/readyz`, and recovers by itself. The gate fails closed: unknown is not a pass.
 - **Upgrades.** The layer format is a stable, versioned contract; upgrade the server before the clients that
@@ -429,7 +568,10 @@ What makes it so, none of it at the cost of the contract:
 
 Open **Settings** (`/admin`) and enter an admin token. The token stays in page memory. Read and publish tokens cannot edit settings; the browser sign-in box only grants reading. The API uses `Authorization: Bearer` and refuses cross-origin browser writes.
 
-Use the Storage, Live updates, and Report rules forms to edit saved settings. Advanced includes request limits, logging, a JSON editor, and a read-only view of the active configuration. Save changes and restart Atlas to apply them. Atlas validates the configuration and atomically replaces `atlas.server.json`, preserving authentication and deployment settings. Changes apply at the next restart; environment variables and flags retain precedence. Concurrent edits require reloading the current revision. Data is never moved or removed by changing settings. Keep an old backend as a read source when moving future uploads to a new one. Embedded servers can provide their own settings persistence or manage configuration outside this API.
+The page has a Storage notice (the bucket is set by the `ATLAS_S3_*` variables and cannot be changed here), the **Garbage collection** form, and the Live updates and Report rules forms. Advanced includes request limits, logging, a JSON editor, and a read-only view of the active configuration.
+
+- **Garbage collection** edits the policy: enabled, delete layers older than N days, always keep the newest N layers, run every N hours. *Save garbage collection policy* writes it to S3 at once (it applies at the next pass, no restart). *Preview deletions* counts what a pass would delete, per project, and deletes nothing. See [user state and garbage collection](#user-state-and-garbage-collection).
+- **Settings** forms save to the same JSON document in S3 and apply after a restart. Atlas validates them against the whole deployment first, and the configuration file, environment variables and flags retain precedence. Concurrent edits require reloading the current revision. Data is never moved or removed by changing settings. Embedded servers can provide their own persistence or manage settings outside this API.
 
 Native test reporters for CodeceptJS, Mocha, Jest and Node upload directly to this server; see [runner setup](runners.md). Every publisher uses the same server address and only a publish token. Storage credentials belong in the server environment.
 
@@ -441,13 +583,13 @@ Start with `POST /api/live/<uuid>`, send ordered check deltas with `PATCH /api/l
 
 The server uses its own receipt clock. By default it interrupts a run after 30 seconds without a heartbeat (`ATLAS_RUN_TIMEOUT_SECONDS`). Heartbeats do not reset progress: after 15 minutes with no changed tests/steps, a separate stall timeout interrupts it (`ATLAS_RUN_STALL_SECONDS`, 0 disables). Both settings are editable in the admin UI. Healthy long tests continue renewing heartbeats; increase or disable the progress timeout for tests that legitimately make no observable progress for longer.
 
-Interrupted runs retain completed results and show why the remaining work stopped. Missing outcomes never become passes. The server persists bounded summaries under `server/live/` in its write backend (an HTTP relay keeps operational leases in its own data folder; the remote server only accepts immutable report objects) and restores outstanding leases as interrupted after a server restart. S3 server credentials need GetObject/PutObject for that prefix; generate the updated `atlas report policy --role both` policy. Producers still receive no backend credentials. Live `run` events carry bounded snapshots directly into test rows, including step logs and interruption reasons. The legacy `atlas:change` announcement remains available for older clients; its optional `liveRunId` identifies lease updates. Reconnecting viewers re-fetch progress, reports, and specifications. With SSE connected, live progress uses a 60-second safety refresh; without SSE it polls every two seconds. Returning to the tab or coming back online also revalidates reports and progress.
+Interrupted runs retain completed results and show why the remaining work stopped. Missing outcomes never become passes. The server persists bounded summaries under `server/live/` in its bucket and restores outstanding leases as interrupted after a server restart. S3 server credentials need GetObject/PutObject for that prefix; generate the updated `atlas report policy --role both` policy. Producers still receive no backend credentials. Live `run` events carry bounded snapshots directly into test rows, including step logs and interruption reasons. The legacy `atlas:change` announcement remains available for older clients; its optional `liveRunId` identifies lease updates. Reconnecting viewers re-fetch progress, reports, and specifications. With SSE connected, live progress uses a 60-second safety refresh; without SSE it polls every two seconds. Returning to the tab or coming back online also revalidates reports and progress.
 
 In this repository, use `bun atlas` and `bun example:run` in two terminals. Every example Gherkin scenario executes, including sharing and renaming; `@unrecorded` no longer excludes tests.
 
 ## Multiple projects on one node
 
-Start the node with `atlas server` (or `bun atlas` in this repository). The server builds or finds the Atlas client and serves it with the API from one process. It never imports a consumer or an example. In this repository the node uses port 5180 and `./atlas-data`; `bun example:run` publishes the Todo app to project `todo-app`.
+Start the node with `atlas server` (or `bun atlas` in this repository). The server builds or finds the Atlas client and serves it with the API from one process. It never imports a consumer or an example. In this repository the node uses port 5180 and the bucket named by your `.env`; `bun example:run` publishes the Todo app to project `todo-app`.
 
 Set `ATLAS_PROJECT=todo-app` alongside `ATLAS_SERVER_URL` for native reporters and statechart runs. Report CLI commands accept `--project todo-app` (or `ATLAS_PROJECT`) with an HTTP store. Programmatic HTTP stores, live reporters and native reporter options accept `project: 'todo-app'`. Keep the same slug for the invocation's live progress, final results, spec sets and recordings. Slugs use 1–64 lowercase letters, digits or hyphens, starting and ending with a letter or digit.
 

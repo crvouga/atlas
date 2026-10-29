@@ -281,6 +281,12 @@ export type AtlasPlaywrightReporterOptions = {
   readonly branch?: string;
   /** Where to read the CI run. Default the GitHub Actions run (or the CI's own run URL variable). */
   readonly runUrl?: string;
+  /**
+   * Names this execution, for a local or manual run with no CI run URL: every shard and project that gets the same `id`
+   * is one run, and the next invocation gets another. Default: `ATLAS_RUN_ID` (and `ATLAS_RUN_TITLE`) when set. Only
+   * groups and labels runs; it never changes what a check is or which result wins.
+   */
+  readonly run?: { readonly id: string; readonly title?: string; readonly startedAtMs?: number; readonly endedAtMs?: number };
   /** The spec a test belongs to, relative to the repository. Default: the `.feature` of a playwright-bdd test, else the test file. */
   readonly specPath?: (test: TestCase) => string | undefined;
   /** Paths are relative to this directory. Default the git root above Playwright's `rootDir`, else `rootDir`. */
@@ -290,12 +296,6 @@ export type AtlasPlaywrightReporterOptions = {
   /** A larger file is not uploaded; the check says so in an annotation. Default 50 MiB. */
   readonly maxAttachmentBytes?: number;
   /** The most timeline steps recorded per result. Default 500. */
-  readonly maxSteps?: number;
-  /** Record the project's spec files (path, domain, kind, title) in every layer, so a server can group checks by spec without a published spec set. Default true. */
-  readonly specs?: boolean;
-  /** Send what has finished this often, in ms. Default 5000 (every layer repeats the spec list). */
-  readonly flushMs?: number;
-  /** Send at once when this many checks are waiting. Default 50 (their attachments are held in memory until sent). */
   …
 ```
 

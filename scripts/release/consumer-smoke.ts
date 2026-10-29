@@ -23,6 +23,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { fakeS3, listenFakeS3, S3_TEST_ENV } from '../../packages/server/tests/fake-s3';
 import { probeRunners } from './runner-smoke';
 import { probeQuickstart } from '../docs/quickstart-smoke';
 import { probeAgentInstructions } from '../docs/agent-smoke';
@@ -113,8 +114,8 @@ export function exportSpecifiers(name: string, manifest: Manifest, files: string
 }
 
 /** Start the server, read from it, send results to it, hear them on its stream, and stop it with SIGTERM, which has to end it cleanly. */
-async function probeNode(runtime: string, args: string[], cwd: string): Promise<void> {
-  const child = spawn(runtime, args, { cwd, stdio: ['ignore', 'pipe', 'inherit'] });
+async function probeNode(runtime: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const child = spawn(runtime, args, { cwd, env, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   const url = await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`atlas serve under ${runtime} did not start:\n${output}`)), 60_000);
@@ -327,12 +328,22 @@ async function main(): Promise<void> {
     }
 
     if (atlas && visualizer) {
-      // The server: one process that serves the viewer, the API and the stream, on its own data folder, on both runtimes.
+      // The server: one process that serves the viewer, the API and the stream, on both runtimes. It keeps everything in S3
+      // only, so it runs against an S3 server of its own (a stand-in served from this process), seeded with one report.
       for (const [runtime, args] of RUNTIMES) {
         const site = `node-site-${runtime}`;
         console.log(`consumer-smoke: ${runtime} atlas client build --no-data, then atlas server`);
         await must(runtime, [...args, atlas, 'client', 'build', '--no-data', '--out', site], { cwd: app });
-        await probeNode(runtime, [...args, atlas, 'server', '--data', `reports-${runtime}-all`, '--site', site, '--port', '0', '--host', '127.0.0.1', '--no-log'], app);
+        const bucket = listenFakeS3(fakeS3());
+        try {
+          const env = { ...process.env, ...S3_TEST_ENV, ATLAS_S3_ENDPOINT: bucket.url };
+          const seed = `seed-${runtime}.ctrf.json`;
+          writeFileSync(path.join(app, seed), JSON.stringify({ results: { tool: { name: 'smoke' }, summary: { stop: 1000 }, tests: [{ name: 'seeded', status: 'passed', filePath: 'specs/flow.feature' }] } }));
+          await must(runtime, [...args, atlas, 'report', 'publish', '--store', `s3://${S3_TEST_ENV.ATLAS_S3_BUCKET}?endpoint=${encodeURIComponent(bucket.url)}&region=us-east-1&pathStyle=1`, '--producer', 'smoke', '--ctrf', seed, '--environment', 'desktop-web', '--sha', 'a'.repeat(40), '--branch', 'main'], { cwd: app, env });
+          await probeNode(runtime, [...args, atlas, 'server', '--site', site, '--port', '0', '--host', '127.0.0.1', '--no-log'], app, env);
+        } finally {
+          bucket.stop();
+        }
       }
     }
 

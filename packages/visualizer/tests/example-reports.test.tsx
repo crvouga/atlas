@@ -69,6 +69,7 @@ test('the coffee example shows each environment, and a focused layer leaves the 
   expect(left?.textContent).not.toContain('Android');
 
   await atlas.click('button', 'Pays by card');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('The card form never appeared');
   expect([...atlas.host.querySelectorAll('[aria-label="Environments"] button')].map((button) => button.textContent)).toEqual(
     expect.arrayContaining([
@@ -86,6 +87,7 @@ test('the coffee example shows each environment, and a focused layer leaves the 
   await atlas.sees('Then the barista can start the drink');
 
   await atlas.click('button', 'Card declined, then a wallet works');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('The wallet never confirmed the payment');
   await atlas.sees('Open recording');
   await atlas.click('button', 'Open recording');
@@ -93,10 +95,12 @@ test('the coffee example shows each environment, and a focused layer leaves the 
   await atlas.sees('Customer');
   expect(atlas.text()).not.toContain('unstyled');
   await atlas.click('button', 'Order a drink');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('Recorded in 3 runs');
   await atlas.click('section[aria-label="Other runs of this check"] li button', 'Shared reports');
   await atlas.sees('An earlier result. A newer run replaced it in the combined report.');
   await atlas.click('button', 'Slow payment');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('Payment');
   await atlas.sees('60 s');
   await atlas.sees('Potentially outdated: related code has not been compared');
@@ -148,12 +152,14 @@ test('the todo example shows the same list on each environment, filled by separa
   expect(weekend()?.textContent).toContain('iOS');
   expect(weekend()?.textContent).toContain('Android');
   await atlas.click('button', 'Plans a weekend');
+  await atlas.click('[role="tab"]', 'Inspect');
   expect(atlas.find('[aria-label="Environments"] button', 'Android')!.textContent).toContain('device: phone');
   const offline = scenario('Starts over while offline');
   expect(offline?.getAttribute('data-status')).toBe('passed');
   expect(offline?.textContent).not.toContain('iOS');
   expect(scenario('Keeps working through a sync outage')?.getAttribute('data-status')).toBe('failed');
   await atlas.click('button', 'Keeps working through a sync outage');
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('The retry never caught up');
   expect(atlas.find('nav[aria-label="Gherkin features"] a', 'Rename a list')!.getAttribute('data-result')).toBe('none');
 
