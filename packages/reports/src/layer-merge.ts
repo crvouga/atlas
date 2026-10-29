@@ -16,6 +16,7 @@ import { summarizeEvidenceIn, summarizeLayerEvidence } from './evidence-detail';
 import { effectiveScope } from './evidence-scope';
 import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
+import { UI_PLAN_KIND, uiStateOf } from './ui-state';
 
 /**
  * A short, deterministic fingerprint of a spec's text, shaped `<length>:<hash>:<hash>` (the length in UTF-16 code
@@ -48,9 +49,23 @@ export function parameterKey(parameters: LayerParameters): string {
   return JSON.stringify(Object.entries(parameters).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
 }
 
-/** Whether a part `kind` only qualifies an outcome (today only `performance`) and so is not counted as a check when anything else is recorded. */
+/**
+ * Whether a part `kind` only qualifies an outcome and so is not counted as a check when anything else is recorded: a
+ * `performance` timing, or a `ui-plan` entry (what a UI catalog expects, which a capture of the same state replaces in the
+ * tests' view). It never decides a slot: both still fill their own.
+ */
 export function isDiagnosticKind(kind: string): boolean {
-  return kind === 'performance';
+  return kind === 'performance' || kind === UI_PLAN_KIND;
+}
+
+/**
+ * Whether a part `kind` records an opinion rather than an outcome (today only `critique`, an automated reviewer's
+ * judgement of a captured UI). An opinion is never counted as a check, never gates, and is not folded into a spec's
+ * rollup, even when it is the only thing recorded: a report of opinions alone has no test results. The check's `status`
+ * of such a part says whether the reviewer ran, not whether anything passed.
+ */
+export function isOpinionKind(kind: string): boolean {
+  return kind === 'critique';
 }
 
 /** A fresh status tally with every status at zero. */
@@ -59,10 +74,12 @@ export function emptyCounts(): Record<EvidenceStatus, number> {
 }
 
 /**
- * Counts rows by status, leaving out the diagnostic rows (see `isDiagnosticKind`) that only qualify an outcome.
- * When every row is diagnostic they are counted, so a layer of timings alone is not empty.
+ * Counts rows by status, leaving out the opinion rows (see `isOpinionKind`) always, and the diagnostic rows (see
+ * `isDiagnosticKind`) that only qualify an outcome. When every remaining row is diagnostic they are counted, so a
+ * layer of timings alone is not empty.
  */
-export function outcomeCounts(rows: readonly LayerRow[]): StatusCounts {
+export function outcomeCounts(allRows: readonly LayerRow[]): StatusCounts {
+  const rows = allRows.filter(row => !isOpinionKind(row.kind));
   const outcomes = rows.some(row => !isDiagnosticKind(row.kind)) ? rows.filter(row => !isDiagnosticKind(row.kind)) : rows;
   const counts = emptyCounts();
   for (const row of outcomes) counts[row.status] += 1;
@@ -97,6 +114,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
       const test = tests.get(check.id);
       const evidence = summarizeEvidenceIn(effectiveScope(part.scope, summary.scope), check);
       const item = expectations?.get(check.id);
+      const state = uiStateOf(part.kind, check);
       rows.push({
         kind: part.kind,
         id: check.id,
@@ -109,6 +127,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
         variant: test ? { system: test.system, runtime: test.runtime, seed: test.seed } : {},
         durationMs: test?.durationMs ?? check.durationMs ?? null,
         ...(evidence ? { evidence } : {}),
+        ...(state ? { state } : {}),
         ...(item ? { recording: { state: item.state, ...(item.reason ? { reason: item.reason } : {}) } } : {}),
       });
     }

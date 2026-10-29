@@ -205,7 +205,7 @@ is said in words and the server does not start. The file has a published
 | How often (seconds) the backends are looked at for layers written by something else | `refreshSeconds` | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
 | Let anyone look, not upload | `auth.anonymousRead` | `--anonymous-read` | `ATLAS_ANONYMOUS_READ` | no |
 | Listen publicly with no tokens (something in front signs people in) | `auth.insecure` | `--insecure` | `ATLAS_INSECURE` | no |
-| The admin token (also `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
+| The admin token (also `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
 | The configuration file | `(the file itself)` | `--config <file>` | `ATLAS_CONFIG` | `./atlas.server.json` when it exists |
 | Largest uploaded object in MiB | `limits.maxObjectMiB` |  | `ATLAS_MAX_OBJECT_MIB` | `256` |
 | Largest JSON upload in MiB | `limits.maxJsonMiB` |  | `ATLAS_MAX_JSON_MIB` | `32` |
@@ -238,16 +238,18 @@ backend in the client and `/readyz`, and recovers by itself.
 | Role | May |
 | --- | --- |
 | `read` | look: the client, the report, `/api/status` |
+| `critic` | also publish [critiques](critics.md#authentication-and-authorization) and nothing else: blobs and layers whose producer is `critic.<name>` and whose parts are all of kind `critique`. It cannot post test results, start live runs or change settings |
 | `publish` | also upload layers, specs and runs, and remove the scratch objects `atlas report doctor` writes |
 | `admin` | all server operations |
 
 Tokens are at least 12 characters (`openssl rand -hex 24`) and different from one another. Give them as
-`ATLAS_TOKEN` (admin), `ATLAS_PUBLISH_TOKEN`, `ATLAS_READ_TOKEN`, or under `auth.tokens` in the file, preferably
+`ATLAS_TOKEN` (admin), `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN`, `ATLAS_READ_TOKEN`, or under `auth.tokens` in the file, preferably
 with `tokenEnv` so the file holds no secret.
 
 - **Sending a token:** `Authorization: Bearer <token>`. A browser's sign-in box also works for *looking* (any
   user name, the token as the password). **Uploading needs the Bearer header, never the sign-in box**: a browser
   sends those credentials by itself to any page that asks, which would let another site upload with them.
+- **Run critics against a server with tokens.** With no tokens every caller is an administrator, a critic included.
 - **No tokens** means open, and then the server refuses to listen beyond this machine unless told
   `--insecure` (for when a proxy in front does the signing in).
 - `/healthz` and `/readyz` never need a token, so a load balancer can use them.
@@ -334,6 +336,37 @@ edit, and the server's time. Nothing about the layer, its results or the report'
 
 See [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos) for the tag rules. Reviewer tags are
 shown in the viewer's evidence; the tests API (`artifactTag`) searches the producers' tags.
+
+## Review collections
+
+A team can publish a named, curated review of a few behaviors: recordings from several explicit executions, notes on
+what each is for, and the gaps nobody recorded yet. A **review collection** is kept beside the report under
+`curation/review-collections/` (never as a layer, a check or a run), so it cannot pass or fail anything, decides no
+slot or winner, and never claims its entries are one execution: every entry keeps the layer, run, commit, environment and
+status it was recorded with.
+
+- **Freeze.** `POST /api/reports/review-collections` (publish) takes a title, optional `purpose`, `audience` and `tags`
+  (such as `demo`), the ordered `entries` (`layer` and `check` from `GET /api/reports/artifacts`, optionally `kind`
+  and one `recording`, and a `caption`) and optional `gaps`. The viewer's **Freeze as review collection** button on the
+  Artifacts tab sends the filtered set as it is listed. The server resolves each entry to the result it holds and
+  records what the report says about it; an entry it cannot resolve refuses the whole request (`422`, naming the entry).
+  The order is the curator's: a failed, retried or incomplete result stays beside a later passing replay, each with its
+  own status, time and tries.
+- **Immutable.** A revision is never changed or deleted by the server. Later runs and changed tags do not alter it. To
+  change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest (`409` otherwise); older
+  revisions stay readable (`?revision=`).
+- **Notes and marks** (`POST .../review-collections/reviews`, publish) are separate immutable records with the token's name
+  and the time: a `note`, a `gap` note (optionally at a `timecodeMs` of the entry's recording), `reviewed` and `unreviewed`.
+  They are curation: they change no outcome, layer or winner, and a reviewed mark is not an acceptance sign-off.
+- **When a source goes away** (`GET .../review-collections/detail`) the entry stays where it was with its frozen snapshot
+  and an `availability` of `unavailable` (its layer is gone, for example collected) or `unverified` (held, but the report
+  no longer lists it), with the reason. Nothing is removed or replaced.
+- **Sharing** adds no access. The share URL is the viewer's `?tab=collections&collection=<id>`; reading needs the same
+  read access as the report, and a visitor can Read, Watch and Inspect only what the attachment routes already allow them.
+  Nothing is public by default.
+- **Export.** `GET .../review-collections/export` is a portable manifest: the exact sources, each file with its recorded
+  name, a safe name and path, its `sha256` when the report holds one (`null` is unknown, not verified), and every missing
+  source or file. It holds no bytes. `capabilities.reviewCollections` on `/api/server` says a server has all this.
 
 ## Streaming
 
@@ -459,8 +492,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/store/{key}` | read | Read an object. |
 | `HEAD /api/store/{key}` | read | Does an object exist. |
 | `HEAD /api/projects/{project}/store/{key}` | read | Does an object exist. |
-| `PUT /api/store/{key}` | publish | Upload an object. |
-| `PUT /api/projects/{project}/store/{key}` | publish | Upload an object. |
+| `PUT /api/store/{key}` | critic | Upload an object. |
+| `PUT /api/projects/{project}/store/{key}` | critic | Upload an object. |
 | `DELETE /api/store/{key}` | publish | Remove a scratch object. |
 | `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
 | `GET /api/reports/tests` | read | Every test, with insights, facets and history statistics. |
@@ -475,10 +508,22 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
 | `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
+| `GET /api/reports/review-collections` | read | Review collections: curated sets of recordings, newest first. |
+| `GET /api/projects/{project}/reports/review-collections` | read | Review collections: curated sets of recordings, newest first. |
+| `POST /api/reports/review-collections` | publish | Publish an immutable review collection (or a new revision of one). |
+| `POST /api/projects/{project}/reports/review-collections` | publish | Publish an immutable review collection (or a new revision of one). |
+| `GET /api/reports/review-collections/detail` | read | One review collection revision with how its sources stand now. |
+| `GET /api/projects/{project}/reports/review-collections/detail` | read | One review collection revision with how its sources stand now. |
+| `POST /api/reports/review-collections/reviews` | publish | Add a note, a time-coded gap note or a reviewed mark to a collection entry. |
+| `POST /api/projects/{project}/reports/review-collections/reviews` | publish | Add a note, a time-coded gap note or a reviewed mark to a collection entry. |
+| `GET /api/reports/review-collections/export` | read | Portable index (manifest) of one review collection revision. |
+| `GET /api/projects/{project}/reports/review-collections/export` | read | Portable index (manifest) of one review collection revision. |
 | `GET /api/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
 | `GET /api/projects/{project}/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
+| `GET /api/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
+| `GET /api/projects/{project}/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/projects/{project}/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/reports/outline` | read | The specs a report is laid over. |

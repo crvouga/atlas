@@ -96,6 +96,20 @@ when Watch is on screen.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
 
+## UI catalog
+
+`/catalog` (`catalog/`) is the viewer's inventory of captured UI states ([the guide](ui-catalog.md)). It is computed in the page from
+the layers the viewer already holds (`catalog/provider.tsx`, only while the page is open), so states appear as results stream in and
+it works without a server. Cards are Mantine `Card`s in a responsive `SimpleGrid`; the filters live in the shell's navigation column
+(`UiCatalogFilters`) and the open state in a `Drawer`, and both are the address (`catalog/search.ts`).
+
+- Only `captured` is called captured. Every other coverage (`Capture failed`, `Capturing`, `Skipped`, `Not captured yet`) has its own
+  words and mark, and a cell without a picture says so in words instead of showing an empty frame. Never show a plan as a result.
+- A backend that is not available, a notice, and layers that could not be read are shown above the grid; the catalog says it may be
+  incomplete. Waiting follows the loading policy below, and layers still arriving are counted.
+- Pictures are `loading="lazy"` and only the cards on screen are fetched. The grid is bounded with *Show more*.
+- The open state shows every profile side by side with the layer, backend, producer, shard, commit and time of each picture.
+
 ## Reliability
 
 An open test shows its reliability (`explorer/Reliability.tsx`, worked out by `reports/reliability` from the history the page
@@ -179,6 +193,64 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
   (paced, scripted, silent, synthetic) and the sentence that the length is the recording's, not production latency. Developer
   details opens the test pinned to that run's record and closes the playlist.
 
+## Steps and moments in a recording
+
+Wherever a result's steps sit beside its recording (a result's Timeline under Inspect, the Watch tab of a behavior, an
+opened watch playlist), `evidence/moments.tsx` joins them. Placement is from the recording's own declared timing
+(`evidence/media-timing.ts`, the `atlas.media` extension; see [Place steps in a recording](rich-evidence.md#place-steps-in-a-recording)),
+never from an assumption that the recording starts with the check.
+
+- A step has a "Recording m:ss.s" button that seeks the selected recording; the step's test-clock offset stays visible beside it.
+  A step that cannot be placed (no timing, no origin, no offset, outside the recording, unreadable declaration) is "Not aligned"
+  and selecting it states the reason in a status alert. Nothing is guessed and the video is not moved.
+- While playing, the step under the playhead gets `aria-current="step"` and "Playing now". It never moves focus, scrolls
+  the page or announces itself. Seeking only scrolls the player into view.
+- A paced recording (pauses declared, or a `pacing: paced` scope) says that gaps between steps include deliberate pauses and are
+  not application latency.
+- A failed step has "Jump to the failing moment" in the bar above the timeline, and the failure summary has the same action
+  (`requestFailureMoment`). If the recording is not on screen, or the step cannot be placed, it says so.
+- "Copy link to this moment" names the run (`layer`), the exact recording (`clip`) and the position (`clipAt`, ms), as the
+  explorer address `/?test=…&layer=…&clip=…&clipAt=…` (the playlist links to the result it is playing). Opening it selects that
+  recording of that exact run and seeks once the player knows its length; a position past the end or a recording that the run
+  does not hold is reported and nothing else is played in its place. If the browser refuses to copy, the link is shown to copy.
+- One provider serves one holder: the check, or one try. A try's steps are placed by that try's recording and timing only.
+
+## Review collections
+
+The **Collections** tab (`explorer/collections.tsx`, `?tab=collections&collection=<id>&rev=<n>`) lists and opens review
+collections, and the Artifacts tab's **Freeze as review collection** button (a Mantine `Modal`) freezes the filtered set as it is
+listed. A collection is curation, not a test run (`@crvouga/atlas/reports/review-collection`, `docs/server.md#review-collections`).
+
+- The page never shows one status for the whole collection. Every entry shows the status it was **recorded** with ("Failed as
+  recorded"), its time, run, commit, layer and tries in order, so entries from several runs are never read as one execution; the
+  note at the top says how many runs they come from. The order is the curator's: a failed or incomplete take stays beside a
+  later passing replay and is never collapsed to the newest pass.
+- A revision is frozen. Opening an older revision says a newer one exists; a change is a new revision, never an edit.
+- An entry whose source is gone (`unavailable`) or cannot be checked (`unverified`) stays in its place with the reason and
+  what it was when frozen, and its recording says it is not available. Nothing is removed or replaced.
+- Notes, time-coded gap notes (`m:ss`, or seconds; a mistake is said, not guessed) and the **Reviewed** switch are separate
+  records with who and when. They change no outcome and the page says a mark is not an approval. Writing needs a token that
+  may publish, held only in this tab; a read-only visitor is refused with the server's reason and can still Read, Watch and
+  Inspect. **Download manifest** is the portable index; the share link adds no access.
+
+## Search inside recordings
+
+The Artifacts tab has a **Search inside recordings** section (`explorer/RecordingTextSearch.tsx`; words in `inside`). It
+applies the shared matcher (`find/`) to the transcript, caption and screen-text segments producers attached
+(`explorer/recording-text.ts`; format in [rich evidence](rich-evidence.md#words-in-recordings)), so phrases, close
+spellings, meaning and typed filters (`status:failed`) behave as in every search box.
+
+- Nothing is read until words are typed; then each listed result's evidence and text files are read a few at a time
+  through the report API (the same access rules as playing the recording). The video is never read. A file the viewer
+  may not read is not indexed and is reported as not searched, never counted or quoted. There is no stored index.
+- A result shows the indexed words exactly as indexed, why it matched (exact, close spelling, meaning), the source (spoken,
+  on screen, caption), generated text with its generator, confidence and a warning, the time range, the owning result and
+  retry attempt, and the result's own outcome. A match is never described as the behavior passing.
+- "No match" is only said about searched recordings. Recordings with no text (`Not indexed`), silent or unsupported ones
+  and unreadable text (`Failed`) are counted separately and listed under **Recordings that were not searched**.
+- A result opens the playlist on that result, that attempt's video and, when its time is usable and reachable, that time.
+  With no usable time the recording opens at its start and a note says seeking is unavailable.
+
 ## Icons and notation marks
 
 Use named imports from `@tabler/icons-react` for all UI glyphs. The icon package supplies SVG paths;
@@ -247,6 +319,7 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
+| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts/compare tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |

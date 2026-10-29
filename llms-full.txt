@@ -112,6 +112,7 @@ The complete public export map is generated from the package manifest (wildcards
 @crvouga/atlas/vitest
 @crvouga/atlas/schema
 @crvouga/atlas/server
+@crvouga/atlas/critics
 @crvouga/atlas/reports/*
 @crvouga/atlas/schemas/*
 @crvouga/atlas/openapi.json
@@ -1014,6 +1015,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `extensions['atlas.media']` | attachment (video) | Where the check's steps are in the recording, so a click on a step seeks the video. See [Place steps in a recording](#place-steps-in-a-recording). |
 | `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
 | `specPath` | check | The spec a check belongs to (a `.feature`, a test file), relative to the repository. Checks are grouped by it. |
@@ -1096,6 +1098,44 @@ Every field is optional, and every value except the booleans is an open string.
 - **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
   dropped, and the attachment, check and layer stay.
 
+## Place steps in a recording
+
+A step says when it started on the check's clock (`offsetMs`, after the check started). A video has its own clock, which
+began when the recorder did, and the two are not assumed to agree: a recorder usually starts before the first step, and a
+paced demo may have delays put into the video that the check never waited for. To let a reviewer click a step and land on
+its moment in the video, say how the clocks relate in the `atlas.media` extension of the video attachment:
+
+```ts
+{
+  name: 'checkout.webm', role: 'video', durationMs: 9000,
+  extensions: {
+    'atlas.media': {
+      checkStartMs: 1200,                                           // the check started 1.2 s into the video
+      pauses: [{ atMs: 900, durationMs: 2000, reason: 'title card' }], // 2 s put into the video before the step at +900 ms
+      marks: [{ step: 'pay', mediaMs: 4100 }]                        // a step whose moment in the video you know exactly
+    }
+  }
+}
+```
+
+Every field is optional and none of it decides a status, a slot or a winner. A step is placed at `checkStartMs` + its
+`offsetMs` + the `durationMs` of every pause whose `atMs` is at or before the step; a mark names the moment outright and
+wins. Anything else is unavailable and said so, never guessed.
+
+- **Without timing, nothing is placed.** A video with no `atlas.media`, no `checkStartMs`, or a step with no `offsetMs` and
+  no mark, is never assumed to start with the check, and a step is never placed from the wording of its name. Selecting
+  such a step says why it cannot be shown, and moves nothing.
+- **Outside the video is not clamped.** A moment before the start, or after `durationMs` (or the length the player reports),
+  is unavailable. A declaration with a field Atlas cannot read (a pause without a duration) is reported and places nothing.
+- **Pacing is not latency.** A video with `pauses`, or with a `scope` of `pacing: 'paced'`, is labelled as paced: the time
+  between its steps includes deliberate pauses and is not application latency, and no measurement is changed by it.
+- **Each try has its own clock.** Put the video and the `atlas.media` of a retry on its `attempts[]` entry, with that
+  try's `steps`. A try is aligned only by its own video, never by the check's or an earlier try's.
+- **Link to a moment.** The viewer copies a link that names the run (`layer`), the exact recording (`clip`, its digest or
+  stored key) and the position (`clipAt`, milliseconds into the video). Opening it selects that recording of that run, even
+  when a newer run exists, and goes to the position; a recording the run does not hold is reported, never replaced.
+- **Older layers.** A layer without `atlas.media` reads exactly as before; the video plays and its steps list as ever.
+
 ## Product latency
 
 A test's `durationMs` includes fixture setup, deliberate waits, demo pacing, retries and cleanup, so it says how long the
@@ -1139,6 +1179,11 @@ time. Every field after `unit` is optional and none of them decides a status, a 
 - **Reading it from the API.** `GET /api/reports/tests/history` entries carry `latency` (their product-latency
   measurements) next to `durationMs`. The pure functions are in `@crvouga/atlas/reports/latency`.
 
+## A catalog of UI states
+
+A screenshot per screen, per viewport and color scheme, is a *UI catalog*: check ids are the states, the viewport and scheme are
+`parameters`, and the viewer's `/catalog` shows them with what is still to be captured. See [the UI catalog](ui-catalog.md).
+
 ## Finding runs and artifacts
 
 The viewer's **Runs** and **Artifacts** tabs and the API answer one query, so a link means the same thing everywhere.
@@ -1169,6 +1214,44 @@ curl "$ATLAS_SERVER_URL/api/reports/artifacts?artifactTag=demo&type=video&domain
 - **Views.** *Views* saves the current filters under a name in this browser, per project and tab. A saved view is a
   **live query**: opening it asks again and shows what matches the newest report. It is not a snapshot; an immutable
   review collection is a separate feature. *Copy link* gives the address, which holds the whole query.
+
+## Words in recordings
+
+A reviewer who remembers a phrase that was spoken or shown in a video can search for it on the **Artifacts** tab
+(**Search inside recordings**, the `inside` address parameter). Atlas never transcribes video or reads a screen: it
+searches text you attach, and nothing is read from a recording until words are typed. Attach it beside the video, at the
+same level (the check, or the retry attempt that recorded the video):
+
+```ts
+attachments: [
+  { id: 'video', name: 'checkout.webm', contentType: 'video/webm', data: video },
+  // Spoken words: WebVTT, SubRip, JSON segments or plain text.
+  { name: 'checkout.vtt', role: 'transcript', contentType: 'text/vtt', data: transcript,
+    extensions: { 'atlas.text': { recording: 'video', generated: true, generator: 'my-speech-tool' } } },
+  // Text shown on screen, with its own timing.
+  { name: 'screen.json', role: 'ocr', contentType: 'application/json', data: JSON.stringify({ segments: [{ start: 2, end: 4, text: 'Order total', confidence: 0.9 }] }) }
+]
+```
+
+- **Which attachment is text.** One with `extensions["atlas.text"]`, a `role` of `transcript`, `ocr`, `screen-text`,
+  `captions` or `subtitles`, or a WebVTT or SubRip type. `extensions["atlas.text"].kind` (`speech`, `screen`, `caption`)
+  says what it is; otherwise the role does. It belongs to the video that lists its `id` in `captions`, or that
+  `extensions["atlas.text"].recording` names by `id`, else to the only video at the same level.
+- **Segments.** WebVTT and SubRip cues; JSON as `{ "segments": [...] }` (or `cues`, `results`, `lines`, or a bare list) of
+  `{ text, start, end }` in seconds or `{ text, startMs, endMs }`, with an optional `confidence` between 0 and 1. A
+  segment whose time is missing or invalid is still searched and is shown with no time; the viewer offers the recording
+  and says seeking is unavailable, and never guesses a moment.
+- **Honesty about the text.** `generated: true` (with `generator`) marks text a tool produced; results show it with its
+  confidence and say it may contain errors. A result always shows the indexed words, never a reworded quotation. A
+  match finds a moment; it is not a new assertion, and the result's own outcome and the retry attempt stay beside it.
+- **States are different things.** Searched with no match; not indexed (no text was supplied); unsupported (the video is
+  silent by its `scope.audioCaptured: false`, or the text is in a form that is not read, or sits at a `uri`); failed
+  (`extensions["atlas.text"].state: "failed"` with a `reason`, a file left out with `omitted`, or text that did not
+  parse). The ones not searched are listed apart and never counted as "no match".
+- **Access.** The text is read through the same report API, and so the same access rules, that play the recording. A file
+  the viewer may not read is not indexed and appears in no snippet or count. The index exists only in the open page: there
+  is no stored or cross-project index. Sending evidence to a transcription or OCR service is the producer's explicit
+  decision and happens outside Atlas.
 
 ## Labels describe, parameters split
 
@@ -1386,6 +1469,182 @@ This is a statement about publication. Atlas does not check that a stored video 
 re-check later that a stored file is still readable.
 </doc>
 
+<doc path="docs/ui-catalog.md">
+# The UI catalog
+
+A browsable inventory of a product's user interface: each **state** (a screen, or one state of a screen) captured once per
+**profile** (a viewport, a color scheme, a device), with the facts needed to find and trust it, and what should exist but has not
+been captured yet. Any program that can write a layer can feed it, and the catalog fills in as results stream in, so a run of
+thousands of captures can be watched while it happens and split across as many machines as needed.
+
+Nothing about it is new to the report contract. A state is an ordinary check with a screenshot, the expected set is an ordinary
+layer, and the stream is the one every viewer already holds. This page is the convention that makes those usable as a catalog, the
+decisions behind it, and what is not built yet.
+
+- [How a state is written](#how-a-state-is-written)
+- [What is expected](#what-is-expected)
+- [Publishing from any collector](#publishing-from-any-collector)
+- [Sharding](#sharding)
+- [Streaming and loading](#streaming-and-loading)
+- [Exploring it](#exploring-it)
+- [Decisions](#decisions)
+- [What stays in your project, and what is not built yet](#what-stays-in-your-project-and-what-is-not-built-yet)
+
+## How a state is written
+
+A state is one **check** in a layer whose part has `kind` **`ui-state`**.
+
+| Part of the idea | Where it goes |
+| --- | --- |
+| The state's identity | The check `id`. Make it stable (`checkout/payment`, `home?cohort=new`): a new capture replaces an old one only if the id is the same. |
+| How the capture went | `status`: `passed` is **captured**, `failed` is attempted and failed (say why in `detail`), `running` is being taken, `not-run` is skipped. |
+| The picture | An attachment with `role: "screenshot"` (else the first image), stored in the layer by content or given as an `https` `uri`. `width` and `height` help the viewer lay it out. |
+| The profile | The layer's `environment` (`desktop-web`, `mobile-web`, `ios`, `android`) and `parameters` (`{ "viewport": "390x844", "scheme": "dark" }`). Parameters split a slot, so the same state at another viewport is **another result, side by side**, never a replacement. |
+| Facts the producer declares | The check's `extensions["atlas.ui-state"]`: `route`, `fixture`, `cohort`, `area`, `flags` (a list), `covers` (the product surfaces the state shows). All optional. |
+| Facts that describe without splitting | The check's `labels` (`shard`, `browser`) and `tags`. Labels never make a different slot. |
+| Where it came from | The layer's `producer`, `sha`, `branch`, `runUrl`, `freshness`, `recordedAtMs`: shown with every capture, with the layer id and the backend that holds it. |
+
+```json
+{
+  "producer": "device-farm", "kind": "ui-state", "environment": "mobile-web",
+  "parameters": { "viewport": "390x844", "scheme": "dark" }, "recordedAtMs": 1760000000000,
+  "checks": [{
+    "id": "checkout/payment", "title": "Payment, card declined", "status": "passed",
+    "labels": { "shard": "2/8" },
+    "extensions": { "atlas.ui-state": { "route": "/checkout", "fixture": "declined-card", "cohort": "new-customer", "flags": ["new-nav"], "covers": ["payment-form"] } },
+    "attachments": [{ "name": "payment.png", "role": "screenshot", "contentType": "image/png", "path": "payment.png" }]
+  }]
+}
+```
+
+`atlas report publish --checks file.json --store …` publishes that file, reading `payment.png` from beside it. Nothing in it
+mentions how the page was driven. Because a state is a check, the gate counts it (a `failed` capture fails `atlas report status`),
+`atlas report status` lists it, and a reader that does not know the catalog still shows a check with a screenshot. Evidence never
+decides a result: a picture that cannot be read leaves the check, its status and its slot as they were.
+
+## What is expected
+
+What should exist is a **layer too**, of kind **`ui-plan`**: the same ids, the same profiles (environment and parameters), every
+check `not-run`, published by a planner, by each shard for the states it was given, or both. A plan fills a slot of its own (the
+kind is part of the slot), so a capture never erases it and it never hides a capture; and `not-run` is never a pass.
+
+| A cell (one state in one profile) is | When |
+| --- | --- |
+| **Captured** | the winning capture passed |
+| **Capture failed** | the winning capture failed (its `detail` says why, and a diagnostic picture may be attached) |
+| **Capturing** | the winning result is `running` |
+| **Skipped** | a producer recorded it as `not-run` |
+| **Not captured yet** | a plan expects it and nothing has been recorded |
+
+A captured cell that no plan names is shown as **not in the expected set**. **Without any plan, nothing is "not captured yet" and
+nothing is "not in the expected set"**: what should exist is then unknown, and the catalog says so instead of guessing. "Not yet
+captured" is therefore different from "never declared".
+
+Coverage against an **inventory of the product's surfaces** is a plan entry with `"inventory": true` (the id is the surface;
+nothing is captured for it). A state says which surfaces it shows in `covers`. The catalog lists every surface as *covered* (a
+state that shows it is captured), *states cover it, none captured yet*, or *no state covers it*.
+
+## Publishing from any collector
+
+Any program that writes the layer format feeds the catalog: a shell script, a Go test, a Storybook crawler, a device farm.
+
+```ts
+import { publishChecks } from '@crvouga/atlas/reports/publish-checks';
+import { uiPlanLayer, uiStateLayer } from '@crvouga/atlas/reports/ui-catalog-publish';
+
+// The planner, once: what the product should have, in every profile.
+await publishChecks(store, uiPlanLayer({
+  producer: 'catalog-plan', recordedAtMs: Date.now(), environment: 'mobile-web', profile: { viewport: '390x844', scheme: 'dark' },
+  states: [{ id: 'checkout/payment', covers: ['payment-form'] }, { id: 'settings', inventory: true }]
+}));
+
+// Each collector or shard, with its own captures and no knowledge of the others.
+await publishChecks(store, uiStateLayer({
+  producer: 'web-capture', recordedAtMs: Date.now(), environment: 'mobile-web', profile: { viewport: '390x844', scheme: 'dark' }, shard: '2/8',
+  states: [{ id: 'checkout/payment', route: '/checkout', covers: ['payment-form'], screenshot: { data: png, width: 390, height: 844 } }]
+}));
+```
+
+`uiStateLayer` and `uiPlanLayer` only build the input of `publishChecks`; they use no browser and no test framework. `store` can be
+a directory, a bucket or the server (`httpStore`), exactly as for any layer.
+
+**Playwright is one adapter and not a dependency.** `captureUiState(page, { id, ready })` from `@crvouga/atlas/playwright` waits
+for a readiness check (bounded), photographs the page and returns the capture for `uiStateLayer`. A page that never became ready is
+a `failed` capture that says why (with a picture of what it showed), never an exception that ends the run. Nothing that reads,
+composes or shows the catalog imports a collection framework, and a test keeps it that way.
+
+## Sharding
+
+A shard is **any publisher that does not know the others**: by case, by profile, by area or by machine; Atlas does not care which.
+Each publishes its own layers (a `shard` label records which, and is shown with each capture). The guarantees are those of every
+layer ([the contract](report-contract.md#guarantees)), which is what the tests prove for the catalog:
+
+- The captures of N shards (N is 1 or more), combined, equal the catalog one unsharded run produces.
+- Running a shard again replaces only the cells it produces (a newer `recordedAtMs` wins its slot); every other cell is untouched.
+- A shard that never publishes leaves its cells **not captured yet** when a plan names them, and absent otherwise. They are never
+  shown as captured, and the other shards' cells are unaffected.
+- Atlas does not need the shard count. Completeness is the plan: a cell is expected because a plan says so.
+
+## Streaming and loading
+
+- **Streaming.** There is no second stream. A viewer holds the report over `/api/events` and reads what changed with
+  `/api/reports/evidence/effective?since=<version>`; the catalog is computed from the report it holds, so a capture appears when
+  its layer arrives, with no reload and no file rebuilt. Events carry metadata only; the picture is fetched when a card is on screen.
+- **Reconnecting.** A viewer that was offline or whose stream dropped reads the delta since the version it holds (or the whole report
+  when the server no longer remembers it). Cells are keyed by state and profile, so nothing is missing and nothing is duplicated.
+- **No stream.** A viewer without the stream (or a static export) polls, as the rest of the viewer does, and shows everything that exists.
+- **Slow and failing backends.** Each backend is listed and read on its own, so a slow one never holds back the others: their
+  captures are shown, and the slow backend's appear when it answers. A backend that fails, or a layer that cannot be read, is named
+  on the page and in the document (`sources`); a capture that depended on it is not shown as captured.
+- **Images.** A picture is a file in the layer, addressed by content (`/layers/<layer>/blobs/attachments/<sha256>`), loaded lazily
+  for the cards on screen, and served under the same untrusted-bytes rules as every attachment. A picture given as a `uri` is
+  followed only if it is `http` or `https`. A producer may leave the bytes out (`omitted`), which is told apart from never taken.
+
+## Exploring it
+
+The viewer's **UI catalog** (`/catalog`, in the menu beside the spec types once the report holds a state or a plan) shows a card per
+state with its picture and a coverage badge per profile, and filters by words, coverage, profile, area, route, cohort, feature flag,
+surface and producer. The address holds the filters and the open state, so a link reproduces the view. Opening a state shows its
+profiles side by side with the declared facts, the failure reason, and for each picture the layer, backend, producer, shard, commit
+and time. *Download the manifest* saves the filtered catalog as JSON.
+
+```sh
+curl "$ATLAS_SERVER_URL/api/reports/ui-catalog?coverage=failed,missing&profile=…"   # JSON; add format=markdown for text
+```
+
+`GET /api/reports/ui-catalog` answers the same document the viewer computes (`uiCatalog` from
+`@crvouga/atlas/reports/ui-catalog`), filtered by `q`, `coverage`, `profile`, `area`, `route`, `cohort`, `flag`, `surface` and
+`producer`, paged with `limit` and `offset`, with an ETag. Its picture `path` is relative to `/api/reports`.
+
+## Decisions
+
+The questions the original proposal left open, and how they are answered here. Each is the simplest answer that stays inside the
+[stable contracts](report-contract.md#versioning-and-stability): optional fields only, no change to a slot or a winner.
+
+| Question | Decision |
+| --- | --- |
+| Layer and event schema | An existing check in a `ui-state` part, a `screenshot` attachment, facts under the `atlas.ui-state` extension. No new part type, no new schema version. The report row gained one optional field, `state`, only for `ui-state` and `ui-plan` rows. |
+| Identity and slot | The check id is the state; the slot is the usual (producer, kind, spec, id, environment, parameters). Profile dimensions are `parameters` because they must split the slot; labels never do. |
+| Expected versus captured | A `ui-plan` layer. `ui-plan` is a diagnostic kind (like `performance`): it qualifies a check and is not counted as one when the check has any other result. |
+| Coverage against an inventory | `inventory: true` plan entries plus each state's `covers`. |
+| Carrying images | By content in the layer (`bundleKey`) or by `uri`; loaded lazily; the existing size limits of an upload apply. |
+| The event stream | No new stream or events: the existing `report` event and `?since=` deltas. |
+| Sharding | No shard concept in the format; a shard is any publisher. A `shard` label is provenance. Completeness comes from the plan, so Atlas needs no shard count. |
+| What moves | Reading, composing, the viewer, the document and the API, the publish builders, a Playwright capture adapter. Staying with a product: its state declarations, its inventory, its fixtures and its runner. |
+| Where it lives | `@crvouga/atlas/reports/ui-catalog` (model), `…/ui-catalog-publish` (builders), `…/ui-state` (convention); the viewer's `/catalog`; the server's `/api/reports/ui-catalog`; `@crvouga/atlas/playwright`'s `captureUiState`. |
+| Exploration capabilities | Search, filters, profile comparison, coverage and surface coverage, failure diagnostics, deep links, manifest export. |
+| Static export | The catalog is computed from the layers a viewer holds, so a static export (`atlas client build`) shows it; it just does not stream. |
+
+## What stays in your project, and what is not built yet
+
+**Stays in a project** (it is specific to the product): the list of states and profiles to capture, the inventory of surfaces,
+fixtures and test data, the runner that drives the product to each state, and the readiness conditions of each screen.
+
+**Not built yet:** a command line to list and publish a catalog without a script (use `atlas report publish --checks` today), a
+dedicated static single-file export, diff views that compare two commits of a state, and a hosting-platform publish step beyond
+`atlas serve`. The first slice makes the catalog explorable, streaming, shardable and independent of how it was collected.
+</doc>
+
 <doc path="docs/server.md">
 # The Atlas server
 
@@ -1594,7 +1853,7 @@ is said in words and the server does not start. The file has a published
 | How often (seconds) the backends are looked at for layers written by something else | `refreshSeconds` | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
 | Let anyone look, not upload | `auth.anonymousRead` | `--anonymous-read` | `ATLAS_ANONYMOUS_READ` | no |
 | Listen publicly with no tokens (something in front signs people in) | `auth.insecure` | `--insecure` | `ATLAS_INSECURE` | no |
-| The admin token (also `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
+| The admin token (also `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
 | The configuration file | `(the file itself)` | `--config <file>` | `ATLAS_CONFIG` | `./atlas.server.json` when it exists |
 | Largest uploaded object in MiB | `limits.maxObjectMiB` |  | `ATLAS_MAX_OBJECT_MIB` | `256` |
 | Largest JSON upload in MiB | `limits.maxJsonMiB` |  | `ATLAS_MAX_JSON_MIB` | `32` |
@@ -1627,16 +1886,18 @@ backend in the client and `/readyz`, and recovers by itself.
 | Role | May |
 | --- | --- |
 | `read` | look: the client, the report, `/api/status` |
+| `critic` | also publish [critiques](critics.md#authentication-and-authorization) and nothing else: blobs and layers whose producer is `critic.<name>` and whose parts are all of kind `critique`. It cannot post test results, start live runs or change settings |
 | `publish` | also upload layers, specs and runs, and remove the scratch objects `atlas report doctor` writes |
 | `admin` | all server operations |
 
 Tokens are at least 12 characters (`openssl rand -hex 24`) and different from one another. Give them as
-`ATLAS_TOKEN` (admin), `ATLAS_PUBLISH_TOKEN`, `ATLAS_READ_TOKEN`, or under `auth.tokens` in the file, preferably
+`ATLAS_TOKEN` (admin), `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN`, `ATLAS_READ_TOKEN`, or under `auth.tokens` in the file, preferably
 with `tokenEnv` so the file holds no secret.
 
 - **Sending a token:** `Authorization: Bearer <token>`. A browser's sign-in box also works for *looking* (any
   user name, the token as the password). **Uploading needs the Bearer header, never the sign-in box**: a browser
   sends those credentials by itself to any page that asks, which would let another site upload with them.
+- **Run critics against a server with tokens.** With no tokens every caller is an administrator, a critic included.
 - **No tokens** means open, and then the server refuses to listen beyond this machine unless told
   `--insecure` (for when a proxy in front does the signing in).
 - `/healthz` and `/readyz` never need a token, so a load balancer can use them.
@@ -1723,6 +1984,37 @@ edit, and the server's time. Nothing about the layer, its results or the report'
 
 See [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos) for the tag rules. Reviewer tags are
 shown in the viewer's evidence; the tests API (`artifactTag`) searches the producers' tags.
+
+## Review collections
+
+A team can publish a named, curated review of a few behaviors: recordings from several explicit executions, notes on
+what each is for, and the gaps nobody recorded yet. A **review collection** is kept beside the report under
+`curation/review-collections/` (never as a layer, a check or a run), so it cannot pass or fail anything, decides no
+slot or winner, and never claims its entries are one execution: every entry keeps the layer, run, commit, environment and
+status it was recorded with.
+
+- **Freeze.** `POST /api/reports/review-collections` (publish) takes a title, optional `purpose`, `audience` and `tags`
+  (such as `demo`), the ordered `entries` (`layer` and `check` from `GET /api/reports/artifacts`, optionally `kind`
+  and one `recording`, and a `caption`) and optional `gaps`. The viewer's **Freeze as review collection** button on the
+  Artifacts tab sends the filtered set as it is listed. The server resolves each entry to the result it holds and
+  records what the report says about it; an entry it cannot resolve refuses the whole request (`422`, naming the entry).
+  The order is the curator's: a failed, retried or incomplete result stays beside a later passing replay, each with its
+  own status, time and tries.
+- **Immutable.** A revision is never changed or deleted by the server. Later runs and changed tags do not alter it. To
+  change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest (`409` otherwise); older
+  revisions stay readable (`?revision=`).
+- **Notes and marks** (`POST .../review-collections/reviews`, publish) are separate immutable records with the token's name
+  and the time: a `note`, a `gap` note (optionally at a `timecodeMs` of the entry's recording), `reviewed` and `unreviewed`.
+  They are curation: they change no outcome, layer or winner, and a reviewed mark is not an acceptance sign-off.
+- **When a source goes away** (`GET .../review-collections/detail`) the entry stays where it was with its frozen snapshot
+  and an `availability` of `unavailable` (its layer is gone, for example collected) or `unverified` (held, but the report
+  no longer lists it), with the reason. Nothing is removed or replaced.
+- **Sharing** adds no access. The share URL is the viewer's `?tab=collections&collection=<id>`; reading needs the same
+  read access as the report, and a visitor can Read, Watch and Inspect only what the attachment routes already allow them.
+  Nothing is public by default.
+- **Export.** `GET .../review-collections/export` is a portable manifest: the exact sources, each file with its recorded
+  name, a safe name and path, its `sha256` when the report holds one (`null` is unknown, not verified), and every missing
+  source or file. It holds no bytes. `capabilities.reviewCollections` on `/api/server` says a server has all this.
 
 ## Streaming
 
@@ -1848,8 +2140,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/store/{key}` | read | Read an object. |
 | `HEAD /api/store/{key}` | read | Does an object exist. |
 | `HEAD /api/projects/{project}/store/{key}` | read | Does an object exist. |
-| `PUT /api/store/{key}` | publish | Upload an object. |
-| `PUT /api/projects/{project}/store/{key}` | publish | Upload an object. |
+| `PUT /api/store/{key}` | critic | Upload an object. |
+| `PUT /api/projects/{project}/store/{key}` | critic | Upload an object. |
 | `DELETE /api/store/{key}` | publish | Remove a scratch object. |
 | `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
 | `GET /api/reports/tests` | read | Every test, with insights, facets and history statistics. |
@@ -1864,10 +2156,22 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/artifact-tags` | read | Reviewer tags of attachments: every recorded edit. |
 | `POST /api/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
 | `POST /api/projects/{project}/reports/artifact-tags` | publish | Tag or untag one attachment after upload. |
+| `GET /api/reports/review-collections` | read | Review collections: curated sets of recordings, newest first. |
+| `GET /api/projects/{project}/reports/review-collections` | read | Review collections: curated sets of recordings, newest first. |
+| `POST /api/reports/review-collections` | publish | Publish an immutable review collection (or a new revision of one). |
+| `POST /api/projects/{project}/reports/review-collections` | publish | Publish an immutable review collection (or a new revision of one). |
+| `GET /api/reports/review-collections/detail` | read | One review collection revision with how its sources stand now. |
+| `GET /api/projects/{project}/reports/review-collections/detail` | read | One review collection revision with how its sources stand now. |
+| `POST /api/reports/review-collections/reviews` | publish | Add a note, a time-coded gap note or a reviewed mark to a collection entry. |
+| `POST /api/projects/{project}/reports/review-collections/reviews` | publish | Add a note, a time-coded gap note or a reviewed mark to a collection entry. |
+| `GET /api/reports/review-collections/export` | read | Portable index (manifest) of one review collection revision. |
+| `GET /api/projects/{project}/reports/review-collections/export` | read | Portable index (manifest) of one review collection revision. |
 | `GET /api/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/projects/{project}/reports/runs` | read | The runs that recorded the report. |
 | `GET /api/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
 | `GET /api/projects/{project}/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
+| `GET /api/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
+| `GET /api/projects/{project}/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/projects/{project}/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/reports/outline` | read | The specs a report is laid over. |
@@ -2534,7 +2838,7 @@ Zod schema as `LayerDocumentSchema` from `@crvouga/atlas/schema`.
 | `freshness` | `modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Advisory only; see [Statuses](#statuses-and-the-gate). |
 | `run` | Optional `{ id, title?, startedAtMs?, endedAtMs? }`: the execution a local or manual producer names. Layers with the same `id` in one project are one run in the run list, however many shards or batches uploaded them; a later invocation at the same branch and commit gets another `id`. Without it a run is its `runUrl`, else `branch@sha`, as before. `title` is for people. Grouping and display only: it is **never part of the slot**, never decides a winner or a status, and never hides `sha`, `branch` or `freshness`. A `run` a reader cannot read is treated as absent. |
 | `specs` | The specs the layer was recorded against, with a `fingerprint` of their text, so a reader can warn when a spec changed since. Optional. |
-| `parts[].kind` | An open category (`behavior`, `performance`, `accessibility`, …). A new kind needs no change to any reader. Part of the slot. |
+| `parts[].kind` | An open category (`behavior`, `performance`, `accessibility`, …). A new kind needs no change to any reader. Part of the slot. `ui-state` and `ui-plan` are the [UI catalog](ui-catalog.md)'s: a captured UI state, and the states that are expected. |
 | `parts[].checks[]` | `id` (required, stable), `title`, `status`, `detail`, `specPath`, `measurements`, `durationMs`. |
 | `tags`, `labels`, `links`, `attachments`, `annotations`, `extensions` | Evidence, on the layer, a part or a check: what a result carries beyond its outcome. All optional and open. See [evidence](#evidence) and [the guide](extending.md). |
 | `checks[].steps`, `checks[].attempts` | A check's timeline, and every try when it was retried. Optional. |
@@ -2677,8 +2981,12 @@ are part of the contract:
 Tools map to these four. CTRF `skipped`, `pending` and `other`, and JUnit `<skipped>`, are `not-run`.
 An Atlas path that passed on retry (`flaky`) is `passed`, with the detail "Passed on retry (flaky)".
 
-Timings that only qualify a check (parts of kind `performance`) are not counted as checks when
+Timings that only qualify a check (parts of kind `performance`), and what a UI catalog expects (`ui-plan`), are not counted as checks when
 anything else is recorded. A measurement over its allowance is reported and never fails a check.
+
+Opinions (parts of kind `critique`, the verdicts of [automated UI reviewers](critics.md)) are never counted as checks,
+even when they are all that was recorded, and are never part of the gate: a low score, or a critic that crashed, leaves
+`atlas report status` as it was. The `status` of a critique check says only whether the critic ran.
 
 **Freshness never changes a status.** A layer whose spec fingerprint no longer matches, whose
 checkout was modified, or whose related code changed still shows its recorded outcome, with a
@@ -2978,6 +3286,13 @@ when you do not know, and the viewer says the cause is unknown. It is never infe
 failed before the behavior started comes from the failed step's `kind`: `hook`, `setup`, `fixture`, `before`,
 `beforeAll`, `beforeEach` or `given` mean preparation; `when`, `then`, `assertion` or `expect` mean the behavior.
 
+### Placing steps in a recording
+
+A video may declare how its clock relates to the check's under the `atlas.media` extension (`checkStartMs`, `pauses`,
+`marks`), so the viewer can seek it from a step and mark the step playing. Without it the video plays as ever and no step
+is placed. The fields, the rules and the link to a moment are in
+[Place steps in a recording](rich-evidence.md#place-steps-in-a-recording).
+
 ## Attach evidence
 
 ### From the command line
@@ -3099,6 +3414,7 @@ Annotation `type`: `note`, `warning`, `deprecation`, `issue`, `accessibility`, `
 | A kind of file Atlas has never seen | Attach it with its media type and a `role`. It is stored and offered for download today. |
 | Structured data of your own | Put it in `extensions` under a name you own. It is kept, and shown as raw data. |
 | A new annotation type, role or step kind | Use it. Open vocabularies need no registration. |
+| An automated reviewer's opinion of a captured UI | A [critique](critics.md): a part of kind `critique` with the `atlas.critique` extension. It is never counted and never gates. |
 | Something that should be shown well | Ask for a renderer (below). |
 | A field every tool should have | Open an issue. It is added as an optional field, and the rules above guarantee nothing breaks. |
 
@@ -3118,6 +3434,199 @@ The client is part of Atlas, so a renderer for a new media type is a contributio
 ([reporting issues](reporting-issues.md)) with a sample file. Until it lands, the attachment is still stored,
 listed with its name, role, type and size, and offered for download, and everything else about the result is
 unaffected.
+</doc>
+
+<doc path="docs/critics.md">
+# Critics: automated reviewers that mark which UIs need polish
+
+A **critic** looks at one captured UI (an image and what is known about it) and says how polished it is, and ideally
+where and why it is not. A critic may be a pretrained model that gives a score, a vision-capable language model that
+follows a rubric, or a classic measure such as a contrast ratio. All three are the same thing to Atlas, through one small
+contract, so people review the likeliest problems first.
+
+**Critics are producers that publish layers.** Atlas supplies the contract, the runner, the evidence format and the
+credential. It never executes a model on the server and never holds a provider key. A critique is not a test result and
+is not human review: it never changes whether a report passes.
+
+- [What is available](#what-is-available)
+- [The critic contract](#the-critic-contract)
+- [A critique is a layer](#a-critique-is-a-layer)
+- [Running critics](#running-critics)
+- [State-aware judging, calibration and modes](#state-aware-judging-calibration-and-modes)
+- [Authentication and authorization](#authentication-and-authorization)
+- [Credentials](#credentials)
+- [What is not here yet](#what-is-not-here-yet)
+
+## What is available
+
+Import `@crvouga/atlas/critics`. It needs no model, no provider SDK and no network; a critic brings its own.
+
+| You want | Use |
+| --- | --- |
+| Define a critic | `defineCritic` (the contract below) |
+| Judge many images with caching, retries, rate limits, timeouts and budgets | `runCritic` |
+| Store the opinions | `critiqueLayer`, `publishCritiques` (a layer of parts of kind `critique`) |
+| Read them back | `readCritique`, `critiquesOfLayer`, `critiqueCurrency` |
+| Read a score in context, measure a threshold, decide an exit code | `relativeVerdict`, `calibrate`, `gateDecision` |
+| Keep keys out of configuration and logs | `parseCredentialRef`, `resolveCredential`, `assertNoLiteralCredentials`, `createRedactor` |
+| Let a token publish critiques and nothing else | the `critic` role (below) |
+
+The JSON Schema of the evidence is [`critique.schema.json`](../packages/schema/schemas/critique.schema.json). The
+function-level reference is generated from the code: [critics](reference/critics.md).
+
+## The critic contract
+
+```ts
+import { defineCritic } from '@crvouga/atlas/critics';
+
+export default defineCritic({
+  name: 'contrast', version: '1.0.0', kind: 'heuristic',   // kind is an open string: model, llm, ml, heuristic…
+  describe: () => ({ sendsImagesTo: null, needsSetup: false }),
+  evaluate: async ({ image, imageSha256, entry, signal }) => ({
+    verdict: { score: measureContrast(image), scale: '0..1, higher is better' }
+  })
+});
+```
+
+A critic only judges one image. `describe()` says where images are sent (`sendsImagesTo`, `null` when they never leave
+the machine), the model, and the fixed parameters (temperature, the SHA-256 of the rubric): together with the critic's
+`name` and `version` and the image hash they are the identity of a judgement. `evaluate` returns a `verdict` (a score
+and how to read it), `findings`, or both, and may throw: throw a `RateLimitedError` (with the provider's `Retry-After` in
+milliseconds), an `InvalidOutputError`, or any `CriticError` with your own reason code. The runner records the failure
+and the next run retries it. A failure never becomes a score.
+
+## A critique is a layer
+
+A critique is a check inside a part of kind `critique`, in a layer whose `producer` is `critic.<name>`. The check's
+`status` says only whether the critic ran: `passed` a verdict was produced, `failed` the critic could not produce one.
+The opinion is evidence, by the rules of [extending.md](extending.md#the-rules-that-keep-it-compatible-forever), so it
+can never decide a result. It lives in `extensions["atlas.critique"]` and is repeated as standard evidence, so a viewer
+that has never heard of critics still shows it: the score is a measurement named `polish`, and each finding is an
+annotation of type `critique`.
+
+```json
+{
+  "producer": "critic.vision-llm",
+  "kind": "critique",
+  "checks": [{
+    "id": "critique/checkout/payment-sheet",
+    "status": "passed",
+    "measurements": [{ "name": "polish", "value": 0.62, "unit": "score" }],
+    "annotations": [{ "type": "critique", "level": "warning", "message": "spacing: Label touches both edges of the button. (suggestion: Increase horizontal padding.)" }],
+    "extensions": { "atlas.critique": {
+      "schema": 1,
+      "subject": { "entryKey": "checkout/payment-sheet", "imageSha256": "…", "state": "overlay" },
+      "critic": { "name": "vision-llm", "kind": "llm", "version": "1.0.0" },
+      "model": { "id": "…", "provider": "…" },
+      "parameters": { "temperature": 0, "rubric": "<sha256 of the rubric>" },
+      "verdict": { "score": 0.62, "scale": "0..1, higher is better", "label": "needs-polish", "confidence": 0.7 },
+      "findings": [{ "id": "f1", "category": "spacing", "severity": "minor", "region": { "unit": "px", "x": 24, "y": 612, "w": 342, "h": 48 }, "rationale": "Label touches both edges of the button.", "suggestion": "Increase horizontal padding." }]
+    } }
+  }]
+}
+```
+
+- A single score (a model-based critic) is a valid critique: everything except `schema`, `subject` and `critic` is optional.
+- `kind`, `category`, `severity`, `label` and failure `reason` are open strings, and every object is open. A value or field
+  nobody has heard of is kept and shown generically, never rejected.
+- A reader that cannot read the whole extension (a missing `subject`, a score that is not a number, a `schema` version it
+  does not know) drops the extension and keeps the check and its status. An unreadable opinion is unknown.
+- **Anchored to pixels.** `subject.imageSha256` is the hash of the image that was judged. When an entry's image changes,
+  `critiqueCurrency` says the old critique judged an earlier image: it is shown, never hidden, and the entry counts as not
+  yet judged.
+- **Slots.** The producer is the critic's name; the critic and model versions are labels. A newer version of a critic
+  replaces an older one's critique of the same entry. Put the version in `parameters` of `critiqueLayer` to compare
+  versions side by side instead.
+- **The prompt is recorded as a hash** (`parameters.rubric`), not as text.
+- **Failures are data.** A crash, a timeout, a rate limit that never cleared and an unparseable answer are `failed`
+  critiques with `failure.reason` (`error`, `timeout`, `rate-limited`, `invalid-output`, `image-mismatch`…) and a message.
+
+**Critiques never change the gate.** Parts of kind `critique` are left out of every count and of `atlas report status`,
+even when they are the only thing recorded (a report of opinions alone has no test results, so the gate says so). A low
+score does not fail it, and neither does a critic that crashed. A project that wants a score to fail something opts in
+with `gateDecision` in `gate` mode, which is computed by the reader from critique data and never changes a check's
+status, a slot or a winner.
+
+## Running critics
+
+`runCritic` owns everything around the judgement; a critic only judges one image.
+
+- **Caching.** An entry is skipped, without fetching its image, when a critique with a verdict already exists for the same
+  critic, version, model, parameters and image hash (`existing`, read with `critiquesOfLayer`). Identical images across
+  runs are judged once; only a changed image is judged again. A failed critique is not a cache hit. `force` judges again.
+  Layers are content-addressed, so publishing the same outcomes twice is harmless.
+- **Concurrency, timeout, rate limits.** A bounded number of calls in flight. A call over `timeoutMs` is aborted and
+  recorded as `timeout`; the run goes on. A rate-limit answer waits at least `Retry-After`, with exponential backoff and
+  jitter, for a bounded number of attempts, and then is recorded as `rate-limited`.
+- **Budgets.** `budget: { maxImages, maxTokens, maxCostUsd }`. When one is reached the run stops cleanly and returns what
+  it finished with `stoppedBy: 'budget'`. Cost and tokens come from the `usage` a critic reports.
+- **Dry run.** `dryRun` loads and sends nothing and returns what would be judged and skipped, and where images would go
+  (`sendsImagesTo`).
+- **Reproducibility.** Results come back in the order of the entries, so the same inputs publish the same layer; a
+  deterministic critic gives identical scores on every run. Atlas records what explains a result (critic, version,
+  model, rubric hash, parameters) and does not promise that a language model answers the same twice. A re-run adds a
+  newer layer instead of changing an old one.
+- **Images may leave the machine.** `describe().sendsImagesTo` is the thing to show a person before a run that sends
+  images to a third party, and to require explicit confirmation for.
+
+```ts
+import { critiquesOfLayer, publishCritiques, runCritic } from '@crvouga/atlas/critics';
+
+const result = await runCritic({
+  critic, entries, loadImage: (entry) => fetchImage(entry),
+  existing: layers.flatMap((layer) => critiquesOfLayer(layer).map((found) => found.critique)),
+  budget: { maxImages: 200 }, secrets: [providerKey]
+});
+await publishCritiques(store, { critic, outcomes: result.outcomes, recordedAtMs: Date.now() });
+```
+
+## State-aware judging, calibration and modes
+
+A raw score is not absolute: a loading overlay is not a full screen.
+
+- `relativeVerdict` reads a score against the project's scores of the **same state kind** (a percentile within the kind)
+  and against the same entry's previous image (`delta`), and goes into `verdict.relative`.
+- `calibrate` measures a critic against labelled examples **per state kind**: sample sizes, precision, recall, the
+  threshold chosen, and `inSample`, which is true unless held-out examples were given. In-sample figures flatter a critic
+  and are labelled as such.
+- `gateDecision` turns scores into an exit code. Modes: `report` (default: shown, always exit 0), `warn` (a warning for each
+  score below its threshold, exit 0), `gate` (exit 1 when a threshold is crossed). `gate` is **refused** (exit 2, with the
+  reasons) unless every state kind present has a calibration of this critic and version with a threshold, at least 10 bad
+  and 10 good examples, and held-out figures. An explicit threshold never waives that evidence.
+
+## Authentication and authorization
+
+Run critics against a server that has tokens: a server with no tokens is open and every caller is an administrator, a
+critic included.
+
+A token of role `critic` (`ATLAS_CRITIC_TOKEN`, or `role: "critic"` under `auth.tokens`) may do what `read` may, and
+publish critiques, and nothing else. Through the store protocol (`PUT /api/store/…`) it may upload blobs and layers, and
+the catalog entries that make them visible, whose `producer` is `critic.<name>` and whose parts are all of kind
+`critique`. Anything else is `403` naming the rule it broke, and the layer is not stored. It cannot post test results,
+start live runs, change settings or remove anything. `publish` and `admin` tokens may publish critiques too. As for every
+token: send it as `Authorization: Bearer`, never in a URL, never over plain `http` beyond this machine.
+
+## Credentials
+
+Developers bring their own models and AI accounts. Configuration names a credential by **reference**
+(`env:SOME_API_KEY`, `file:/run/secrets/key`) and never contains one, so it can be committed;
+`assertNoLiteralCredentials` refuses a configuration with a literal key and says where, never what. Credentials are read at
+run time (`resolveCredential`) and every message the runner records goes through a redactor (`secrets` in `runCritic`,
+`createRedactor`) that removes them, in their URL-encoded and base64 forms too, and anything shaped like a provider key,
+token or JWT. A credential never reaches a layer, a progress event or an error message.
+
+## What is not here yet
+
+This release delivers the contract, the evidence format, the runner, state-aware judging and calibration, credential
+handling and the scoped `critic` role. Still to come, tracked in [issue 50](https://github.com/crvouga/atlas/issues/50):
+
+- the **catalog read surface** for critics (cursor pagination, `since`, realtime events, images by hash), which builds on
+  the UI catalog of [issue 43](https://github.com/crvouga/atlas/issues/43);
+- the **`atlas critic` command** (`list`, `setup`, `doctor`, `run`, `watch`, `review`, `calibrate`), its interactive mode
+  and its `--format json` documents;
+- the **built-in UIClip critic** and the **LLM critic** with provider adapters;
+- the **viewer**: a ranked "needs polish" list, finding overlays and agreement across critics. Until then critiques are
+  stored, composed and kept out of test counts, and the viewer lists only test results.
 </doc>
 
 <doc path="docs/report-backends.md">
@@ -4006,6 +4515,20 @@ when Watch is on screen.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with
   none are listed under "No domain declared"; the Tests view reports domain problems).
 
+## UI catalog
+
+`/catalog` (`catalog/`) is the viewer's inventory of captured UI states ([the guide](ui-catalog.md)). It is computed in the page from
+the layers the viewer already holds (`catalog/provider.tsx`, only while the page is open), so states appear as results stream in and
+it works without a server. Cards are Mantine `Card`s in a responsive `SimpleGrid`; the filters live in the shell's navigation column
+(`UiCatalogFilters`) and the open state in a `Drawer`, and both are the address (`catalog/search.ts`).
+
+- Only `captured` is called captured. Every other coverage (`Capture failed`, `Capturing`, `Skipped`, `Not captured yet`) has its own
+  words and mark, and a cell without a picture says so in words instead of showing an empty frame. Never show a plan as a result.
+- A backend that is not available, a notice, and layers that could not be read are shown above the grid; the catalog says it may be
+  incomplete. Waiting follows the loading policy below, and layers still arriving are counted.
+- Pictures are `loading="lazy"` and only the cards on screen are fetched. The grid is bounded with *Show more*.
+- The open state shows every profile side by side with the layer, backend, producer, shard, commit and time of each picture.
+
 ## Reliability
 
 An open test shows its reliability (`explorer/Reliability.tsx`, worked out by `reports/reliability` from the history the page
@@ -4089,6 +4612,64 @@ over the same filtered set the page lists, in the same order (`explorer/playlist
   (paced, scripted, silent, synthetic) and the sentence that the length is the recording's, not production latency. Developer
   details opens the test pinned to that run's record and closes the playlist.
 
+## Steps and moments in a recording
+
+Wherever a result's steps sit beside its recording (a result's Timeline under Inspect, the Watch tab of a behavior, an
+opened watch playlist), `evidence/moments.tsx` joins them. Placement is from the recording's own declared timing
+(`evidence/media-timing.ts`, the `atlas.media` extension; see [Place steps in a recording](rich-evidence.md#place-steps-in-a-recording)),
+never from an assumption that the recording starts with the check.
+
+- A step has a "Recording m:ss.s" button that seeks the selected recording; the step's test-clock offset stays visible beside it.
+  A step that cannot be placed (no timing, no origin, no offset, outside the recording, unreadable declaration) is "Not aligned"
+  and selecting it states the reason in a status alert. Nothing is guessed and the video is not moved.
+- While playing, the step under the playhead gets `aria-current="step"` and "Playing now". It never moves focus, scrolls
+  the page or announces itself. Seeking only scrolls the player into view.
+- A paced recording (pauses declared, or a `pacing: paced` scope) says that gaps between steps include deliberate pauses and are
+  not application latency.
+- A failed step has "Jump to the failing moment" in the bar above the timeline, and the failure summary has the same action
+  (`requestFailureMoment`). If the recording is not on screen, or the step cannot be placed, it says so.
+- "Copy link to this moment" names the run (`layer`), the exact recording (`clip`) and the position (`clipAt`, ms), as the
+  explorer address `/?test=…&layer=…&clip=…&clipAt=…` (the playlist links to the result it is playing). Opening it selects that
+  recording of that exact run and seeks once the player knows its length; a position past the end or a recording that the run
+  does not hold is reported and nothing else is played in its place. If the browser refuses to copy, the link is shown to copy.
+- One provider serves one holder: the check, or one try. A try's steps are placed by that try's recording and timing only.
+
+## Review collections
+
+The **Collections** tab (`explorer/collections.tsx`, `?tab=collections&collection=<id>&rev=<n>`) lists and opens review
+collections, and the Artifacts tab's **Freeze as review collection** button (a Mantine `Modal`) freezes the filtered set as it is
+listed. A collection is curation, not a test run (`@crvouga/atlas/reports/review-collection`, `docs/server.md#review-collections`).
+
+- The page never shows one status for the whole collection. Every entry shows the status it was **recorded** with ("Failed as
+  recorded"), its time, run, commit, layer and tries in order, so entries from several runs are never read as one execution; the
+  note at the top says how many runs they come from. The order is the curator's: a failed or incomplete take stays beside a
+  later passing replay and is never collapsed to the newest pass.
+- A revision is frozen. Opening an older revision says a newer one exists; a change is a new revision, never an edit.
+- An entry whose source is gone (`unavailable`) or cannot be checked (`unverified`) stays in its place with the reason and
+  what it was when frozen, and its recording says it is not available. Nothing is removed or replaced.
+- Notes, time-coded gap notes (`m:ss`, or seconds; a mistake is said, not guessed) and the **Reviewed** switch are separate
+  records with who and when. They change no outcome and the page says a mark is not an approval. Writing needs a token that
+  may publish, held only in this tab; a read-only visitor is refused with the server's reason and can still Read, Watch and
+  Inspect. **Download manifest** is the portable index; the share link adds no access.
+
+## Search inside recordings
+
+The Artifacts tab has a **Search inside recordings** section (`explorer/RecordingTextSearch.tsx`; words in `inside`). It
+applies the shared matcher (`find/`) to the transcript, caption and screen-text segments producers attached
+(`explorer/recording-text.ts`; format in [rich evidence](rich-evidence.md#words-in-recordings)), so phrases, close
+spellings, meaning and typed filters (`status:failed`) behave as in every search box.
+
+- Nothing is read until words are typed; then each listed result's evidence and text files are read a few at a time
+  through the report API (the same access rules as playing the recording). The video is never read. A file the viewer
+  may not read is not indexed and is reported as not searched, never counted or quoted. There is no stored index.
+- A result shows the indexed words exactly as indexed, why it matched (exact, close spelling, meaning), the source (spoken,
+  on screen, caption), generated text with its generator, confidence and a warning, the time range, the owning result and
+  retry attempt, and the result's own outcome. A match is never described as the behavior passing.
+- "No match" is only said about searched recordings. Recordings with no text (`Not indexed`), silent or unsupported ones
+  and unreadable text (`Failed`) are counted separately and listed under **Recordings that were not searched**.
+- A result opens the playlist on that result, that attempt's video and, when its time is usable and reachable, that time.
+  With no usable time the recording opens at its start and a note says seeking is unavailable.
+
 ## Icons and notation marks
 
 Use named imports from `@tabler/icons-react` for all UI glyphs. The icon package supplies SVG paths;
@@ -4157,6 +4738,7 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
+| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts/compare tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |
@@ -5111,7 +5693,7 @@ Responses: `200` It exists.; `401` No token, or an unknown one. Send `Authorizat
 
 ### Upload an object
 
-`PUT /api/store/{key}` · role: publish
+`PUT /api/store/{key}` · role: critic
 
 The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
 
@@ -5122,6 +5704,8 @@ The write half of the `ObjectStore` interface. The server checks what it can fro
 - keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
 
 Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.
 
 - `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
 - `content-type` (header): Stored with the object and returned when it is read.
@@ -5131,7 +5715,7 @@ Responses: `200` Already there with the same bytes.; `201` Stored.; `401` No tok
 
 ### Upload an object
 
-`PUT /api/projects/{project}/store/{key}` · role: publish
+`PUT /api/projects/{project}/store/{key}` · role: critic
 
 The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
 
@@ -5142,6 +5726,8 @@ The write half of the `ObjectStore` interface. The server checks what it can fro
 - keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
 
 Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
@@ -5387,6 +5973,128 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `201` The recorded entry.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.
 
+### Review collections: curated sets of recordings, newest first
+
+`GET /api/reports/review-collections` · role: read
+
+The newest revision of every review collection, in brief: id, revision and how many exist, title, purpose, audience, tags, how many entries and gaps it has, who published it and when. A collection is curation kept beside the report; it is not a layer, a check or a run, and it has no status. Open one with `/api/reports/review-collections/detail?id=`. Its share URL is the viewer's `?tab=collections&collection=<id>` and needs the same read access as the rest of the report.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The collections.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Review collections: curated sets of recordings, newest first
+
+`GET /api/projects/{project}/reports/review-collections` · role: read
+
+The newest revision of every review collection, in brief: id, revision and how many exist, title, purpose, audience, tags, how many entries and gaps it has, who published it and when. A collection is curation kept beside the report; it is not a layer, a check or a run, and it has no status. Open one with `/api/reports/review-collections/detail?id=`. Its share URL is the viewer's `?tab=collections&collection=<id>` and needs the same read access as the rest of the report.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The collections.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Publish an immutable review collection (or a new revision of one)
+
+`POST /api/reports/review-collections` · role: publish
+
+Freezes an ordered set of references to recorded results as one named collection, recorded under the name of the publish (or admin) token that sends it. Take each entry's `layer` and `check` (and `kind`) from `GET /api/reports/artifacts`, and optionally one of its recordings (`videos[].recording`). The server resolves every entry to the result the report holds and records what the report says about it (status, time, run, commit, environment, tries, videos): the request does not claim them. An entry it cannot resolve refuses the whole request (`422`, naming the entry). The order is yours and is never re-sorted; failed, rejected and incomplete results stay in it beside a later passing replay.
+
+Entries from different runs are never one execution: each keeps its own layer, run and status. A collection has no status of its own, adds no check and cannot change any result or winner. A revision is immutable. To change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest revision (`409` otherwise); the earlier ones stay readable. Notes and reviewed marks are separate (`/reviews`). A reader-only token, a browser sign-in box and an anonymous reader are refused; nothing is shared publicly by default.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded revision.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` `basedOn` names no collection.; `409` `basedOn.revision` is not the newest.; `413` Request too large.; `422` Not a collection, or an entry the report does not hold.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Publish an immutable review collection (or a new revision of one)
+
+`POST /api/projects/{project}/reports/review-collections` · role: publish
+
+Freezes an ordered set of references to recorded results as one named collection, recorded under the name of the publish (or admin) token that sends it. Take each entry's `layer` and `check` (and `kind`) from `GET /api/reports/artifacts`, and optionally one of its recordings (`videos[].recording`). The server resolves every entry to the result the report holds and records what the report says about it (status, time, run, commit, environment, tries, videos): the request does not claim them. An entry it cannot resolve refuses the whole request (`422`, naming the entry). The order is yours and is never re-sorted; failed, rejected and incomplete results stay in it beside a later passing replay.
+
+Entries from different runs are never one execution: each keeps its own layer, run and status. A collection has no status of its own, adds no check and cannot change any result or winner. A revision is immutable. To change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest revision (`409` otherwise); the earlier ones stay readable. Notes and reviewed marks are separate (`/reviews`). A reader-only token, a browser sign-in box and an anonymous reader are refused; nothing is shared publicly by default.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded revision.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` `basedOn` names no collection.; `409` `basedOn.revision` is not the newest.; `413` Request too large.; `422` Not a collection, or an entry the report does not hold.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### One review collection revision with how its sources stand now
+
+`GET /api/reports/review-collections/detail` · role: read
+
+The revision (the newest without `revision`), every revision number, the review notes and reviewed marks of that revision, and for each entry `availability`: `available` (its layer is held and the report lists the result), `unverified` (the layer is held but the report no longer lists the result or recording) or `unavailable` (the layer is gone, for example deleted by garbage collection), with the reason. An entry whose source is not available stays in its place with its frozen snapshot; it is never removed or replaced. Entries keep the status each layer recorded, with their own times, in the order the curator chose. A reviewed mark is curation: it changes no outcome and is not an approval.
+
+- `id` (query, required): A collection id from the list.
+- `revision` (query): A revision number. Default: the newest.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The revision.; `400` No `id`, or a bad `revision`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such collection or revision.
+
+### One review collection revision with how its sources stand now
+
+`GET /api/projects/{project}/reports/review-collections/detail` · role: read
+
+The revision (the newest without `revision`), every revision number, the review notes and reviewed marks of that revision, and for each entry `availability`: `available` (its layer is held and the report lists the result), `unverified` (the layer is held but the report no longer lists the result or recording) or `unavailable` (the layer is gone, for example deleted by garbage collection), with the reason. An entry whose source is not available stays in its place with its frozen snapshot; it is never removed or replaced. Entries keep the status each layer recorded, with their own times, in the order the curator chose. A reviewed mark is curation: it changes no outcome and is not an approval.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (query, required): A collection id from the list.
+- `revision` (query): A revision number. Default: the newest.
+
+Responses: `200` The revision.; `400` No `id`, or a bad `revision`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such collection or revision.
+
+### Add a note, a time-coded gap note or a reviewed mark to a collection entry
+
+`POST /api/reports/review-collections/reviews` · role: publish
+
+Records one immutable entry, by the name of the publish (or admin) token and the server's time: a `note` or a `gap` (text required; with `entry` and optionally `timecodeMs`, a moment in that entry's recording), or a `reviewed` / `unreviewed` mark for one entry. It changes no check outcome, no layer, no collection revision and no report winner; a mark is not an acceptance sign-off. The notes of a revision are in its `detail`.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded note.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No such collection or revision.; `413` Request too large.; `422` Not a note: missing text, an unknown entry, or a mark without an entry.
+
+### Add a note, a time-coded gap note or a reviewed mark to a collection entry
+
+`POST /api/projects/{project}/reports/review-collections/reviews` · role: publish
+
+Records one immutable entry, by the name of the publish (or admin) token and the server's time: a `note` or a `gap` (text required; with `entry` and optionally `timecodeMs`, a moment in that entry's recording), or a `reviewed` / `unreviewed` mark for one entry. It changes no check outcome, no layer, no collection revision and no report winner; a mark is not an acceptance sign-off. The notes of a revision are in its `detail`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded note.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No such collection or revision.; `413` Request too large.; `422` Not a note: missing text, an unknown entry, or a mark without an entry.
+
+### Portable index (manifest) of one review collection revision
+
+`GET /api/reports/review-collections/export` · role: read
+
+A manifest an archive can be built from: the collection, each entry with its exact source (layer, check, kind, recording), the status and run it was recorded with, how it stands now, whether it is marked reviewed, and the files it references with their name as recorded, a safe name and path (`files/<position>-<safeName>`), and the recorded `sha256` when the report holds one (`null` is unknown, not verified). A source that cannot be read now is listed under `missing` and its files are marked `missing`; nothing is left out silently. The manifest contains no bytes; recordings are fetched from the attachment routes, which keep their own access control. Sent as an attachment.
+
+- `id` (query, required): A collection id.
+- `revision` (query): A revision number. Default: the newest.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The manifest.; `400` No `id`, or a bad `revision`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such collection or revision.
+
+### Portable index (manifest) of one review collection revision
+
+`GET /api/projects/{project}/reports/review-collections/export` · role: read
+
+A manifest an archive can be built from: the collection, each entry with its exact source (layer, check, kind, recording), the status and run it was recorded with, how it stands now, whether it is marked reviewed, and the files it references with their name as recorded, a safe name and path (`files/<position>-<safeName>`), and the recorded `sha256` when the report holds one (`null` is unknown, not verified). A source that cannot be read now is listed under `missing` and its files are marked `missing`; nothing is left out silently. The manifest contains no bytes; recordings are fetched from the attachment routes, which keep their own access control. Sent as an attachment.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (query, required): A collection id.
+- `revision` (query): A revision number. Default: the newest.
+
+Responses: `200` The manifest.; `400` No `id`, or a bad `revision`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such collection or revision.
+
 ### The runs that recorded the report
 
 `GET /api/reports/runs` · role: read
@@ -5496,6 +6204,52 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `format` (query): `markdown` for Markdown instead of JSON.
 
 Responses: `200` The matching results and the facets.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The UI catalog: captured UI states per profile, and what is still expected
+
+`GET /api/reports/ui-catalog` · role: read
+
+A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.
+
+- `limit` (query): At most this many states (default 200).
+- `offset` (query): Skip this many states (default 0).
+- `q` (query): Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces or producers.
+- `coverage` (query): Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.
+- `profile` (query): Profile keys, as listed in `profiles[].key`.
+- `area` (query): Areas.
+- `route` (query): Routes.
+- `cohort` (query): Cohorts.
+- `flag` (query): Feature flags a state was captured with.
+- `surface` (query): Surfaces a state covers.
+- `producer` (query): Producers that captured or planned a state.
+- `format` (query): `markdown` for Markdown instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The UI catalog: captured UI states per profile, and what is still expected
+
+`GET /api/projects/{project}/reports/ui-catalog` · role: read
+
+A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `limit` (query): At most this many states (default 200).
+- `offset` (query): Skip this many states (default 0).
+- `q` (query): Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces or producers.
+- `coverage` (query): Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.
+- `profile` (query): Profile keys, as listed in `profiles[].key`.
+- `area` (query): Areas.
+- `route` (query): Routes.
+- `cohort` (query): Cohorts.
+- `flag` (query): Feature flags a state was captured with.
+- `surface` (query): Surfaces a state covers.
+- `producer` (query): Producers that captured or planned a state.
+- `format` (query): `markdown` for Markdown instead of JSON.
+
+Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
 ### Every test one run recorded
 

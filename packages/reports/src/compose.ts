@@ -13,7 +13,7 @@ import { eachLimited } from './completion-order';
 import type { BackendInfo, LayerEvidence, LayerHeader, StatusCounts } from './evidence-types';
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import { catalogEntries, catalogLayers } from './layer-catalog';
-import { combineEvidence, distinctHeaders, emptyCounts, isDiagnosticKind, layerEvidence, type CombinedEvidence, type EvidenceResult } from './layer-merge';
+import { combineEvidence, distinctHeaders, emptyCounts, isDiagnosticKind, isOpinionKind, layerEvidence, type CombinedEvidence, type EvidenceResult } from './layer-merge';
 import { RecordedSpecs } from './recorded-specs';
 import type { ReportOutline } from './layer-types';
 import type { ObjectStore } from './object-store';
@@ -68,10 +68,11 @@ export type CombinedReport = {
 const BACKEND_ID = /^[a-z0-9-]+$/;
 
 /**
- * Counts results by status. Diagnostic results (parts of kind `performance`, which only qualify a check) are left out
+ * Counts results by status. Opinion results (parts of kind `critique`) are never counted. Diagnostic results (parts of kind `performance`, which only qualify a check) are left out
  * whenever any other result is present; if only diagnostics exist, they are counted so the report is not empty.
  */
-export function countResults(results: readonly EvidenceResult[]): StatusCounts & { total: number } {
+export function countResults(all: readonly EvidenceResult[]): StatusCounts & { total: number } {
+  const results = all.filter(result => !isOpinionKind(result.row.kind));
   const outcomes = results.some(result => !isDiagnosticKind(result.row.kind)) ? results.filter(result => !isDiagnosticKind(result.row.kind)) : results;
   const counts: Record<EvidenceStatus, number> = emptyCounts();
   for (const result of outcomes) counts[result.row.status] += 1;
@@ -80,7 +81,7 @@ export function countResults(results: readonly EvidenceResult[]): StatusCounts &
 
 /** Counts a combined report's winning results in total and per environment, and lists the specs that have no result at all. */
 export function summarize(combined: CombinedEvidence): ReportSummary {
-  const results = [...combined.specs.flatMap(entry => entry.results), ...combined.unassigned];
+  const results = [...combined.specs.flatMap(entry => entry.results), ...combined.unassigned].filter(result => !isOpinionKind(result.row.kind));
   const environments = new Map<string, EvidenceResult[]>();
   for (const result of results) {
     const key = result.layer.environment ?? 'unspecified';
@@ -91,7 +92,7 @@ export function summarize(combined: CombinedEvidence): ReportSummary {
   return {
     checks: countResults(results),
     byEnvironment: Object.fromEntries([...environments].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([key, value]) => [key, countResults(value)])),
-    specsWithoutEvidence: combined.specs.filter(entry => entry.results.length === 0).map(entry => entry.spec.path)
+    specsWithoutEvidence: combined.specs.filter(entry => entry.results.every(result => isOpinionKind(result.row.kind))).map(entry => entry.spec.path)
   };
 }
 

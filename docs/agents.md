@@ -103,6 +103,7 @@ The complete public export map is generated from the package manifest (wildcards
 @crvouga/atlas/vitest
 @crvouga/atlas/schema
 @crvouga/atlas/server
+@crvouga/atlas/critics
 @crvouga/atlas/reports/*
 @crvouga/atlas/schemas/*
 @crvouga/atlas/openapi.json

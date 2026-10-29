@@ -10,6 +10,8 @@ import {
   type RouterHistory
 } from '@tanstack/react-router';
 import { z } from 'zod/v4';
+import { CatalogSearchFields } from '../catalog/search';
+import { UiCatalogPage } from '../catalog/UiCatalogPage';
 import { SpecPage } from '../evidence/spec-page';
 import { ExplorerSearchFields } from '../explorer/search';
 import { ProductPage } from '../views/ProductPage';
@@ -30,6 +32,9 @@ const SpecSearch = RootSearch.extend({
   spec: z.string().min(1).optional().catch(undefined),
   check: z.string().min(1).optional().catch(undefined),
   layer: z.string().min(1).optional().catch(undefined),
+  /** A shared moment: the exact recording (an `attachmentIdentity`) of that layer, and the position in it in milliseconds. */
+  clip: z.coerce.string().min(1).optional().catch(undefined),
+  clipAt: z.coerce.number().nonnegative().optional().catch(undefined),
   view: z.enum(['recording']).optional().catch(undefined),
   moment: z.coerce.number().int().positive().optional().catch(undefined),
   /** The release evidence is read against: its build, commit and platform, and the evidence filter (see `evidence/applicability.ts`). A build such as `90` is read from a typed link as a number: coerced back to its text. */
@@ -84,7 +89,14 @@ function routeTree() {
     validateSearch: (search) => SpecSearch.parse(search),
     component: SpecPage
   });
-  return rootRoute.addChildren([productRoute, chartRoute, specRoute]);
+  /** The UI catalog: the captured states of the interface, filtered by the address (see `catalog/search.ts`). */
+  const catalogRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/catalog',
+    validateSearch: (search) => RootSearch.extend(CatalogSearchFields).parse(search),
+    component: UiCatalogPage
+  });
+  return rootRoute.addChildren([productRoute, chartRoute, specRoute, catalogRoute]);
 }
 export function createAtlasRouter(history: RouterHistory) {
   return createRouter({ routeTree: routeTree(), history, defaultPreload: false, scrollRestoration: true });

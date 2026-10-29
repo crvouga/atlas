@@ -92,12 +92,17 @@ export function failureNote(extensions: Readonly<Record<string, unknown>> | unde
  * the action). Steps are ordered by their start offset, else by their position. Undefined when no step failed or none
  * was recorded.
  */
-export function failedStep(steps: readonly Step[] | undefined): FailurePoint | undefined {
+export function failedStepOf(steps: readonly Step[] | undefined): Step | undefined {
   if (!steps?.length) return undefined;
   const failedParents = new Set(steps.filter((step) => step.status === 'failed' && step.parentId).map((step) => step.parentId));
   const order = steps.map((step, index) => ({ step, index }));
   order.sort((a, b) => (a.step.offsetMs ?? 0) - (b.step.offsetMs ?? 0) || a.index - b.index);
-  const found = order.find(({ step }) => step.status === 'failed' && !(step.id !== undefined && failedParents.has(step.id)))?.step;
+  return order.find(({ step }) => step.status === 'failed' && !(step.id !== undefined && failedParents.has(step.id)))?.step;
+}
+
+/** {@link failedStepOf} described as the point a failure happened at: its kind and phase, message, offset and own videos. */
+export function failedStep(steps: readonly Step[] | undefined): FailurePoint | undefined {
+  const found = failedStepOf(steps);
   if (!found) return undefined;
   return {
     name: found.name,

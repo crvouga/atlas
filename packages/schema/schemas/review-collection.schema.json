@@ -1,0 +1,398 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/review-collection.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "description": "The collection's stable id, in its share URL"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "1 for the first; every change is a new revision"
+    },
+    "title": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "audience": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable within the collection; notes and reviewed marks refer to it"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "layer": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "The id of the archived layer that recorded the result"
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "description": "The check's id in that layer"
+              },
+              "kind": {
+                "description": "The kind of the part holding the check, when the same id exists in several parts",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "recording": {
+                "description": "One recording of the result (`VideoRef.recording`: `sha256:…`, a bundle key or an address). Absent: the result as a whole",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              }
+            },
+            "required": [
+              "layer",
+              "check"
+            ],
+            "additionalProperties": {}
+          },
+          "caption": {
+            "type": "string"
+          },
+          "snapshot": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "specPath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "not-run"
+                ],
+                "description": "The result's recorded status, as that layer recorded it"
+              },
+              "recordedAtMs": {
+                "type": "number"
+              },
+              "environment": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "producer": {
+                "type": "string"
+              },
+              "branch": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "run": {
+                "type": "string",
+                "description": "The key of the run it belongs to"
+              },
+              "runUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "backend": {
+                "description": "The backend the layer was read from",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "testKey": {
+                "type": "string",
+                "description": "The test's key, as `GET /api/reports/tests` lists it"
+              },
+              "attemptStatuses": {
+                "description": "The status of each recorded try, in order, when the check was retried. Never collapsed to the last",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "running",
+                    "not-run"
+                  ]
+                }
+              },
+              "videos": {
+                "description": "Its references to videos when it was frozen",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "The attachment name"
+                    },
+                    "owner": {
+                      "type": "string",
+                      "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                    },
+                    "attempt": {
+                      "description": "The retry attempt that holds it, or that holds the step that does",
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "step": {
+                      "description": "The name of the step that holds it",
+                      "type": "string"
+                    },
+                    "tags": {
+                      "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "recording": {
+                      "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "boolean",
+                      "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                    },
+                    "scope": {
+                      "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
+                      "type": "object",
+                      "properties": {
+                        "surface": {
+                          "description": "Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "deviceKind": {
+                          "description": "What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "syntheticData": {
+                          "description": "True: the data was made up for the run. False: real data. Absent: unknown",
+                          "type": "boolean"
+                        },
+                        "dependencies": {
+                          "description": "Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "audioCaptured": {
+                          "description": "True: the recording has real audio. False: it is silent. Absent: unknown",
+                          "type": "boolean"
+                        },
+                        "pacing": {
+                          "description": "How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "asserted": {
+                          "description": "The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "limitations": {
+                          "description": "Known limits of what this evidence shows, in the producer's words",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "declaredBy": {
+                          "description": "Who or what made this declaration: a tool, a team, a person",
+                          "type": "string"
+                        },
+                        "verified": {
+                          "description": "The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "verifiedBy": {
+                          "description": "What checked the `verified` fields",
+                          "type": "string"
+                        },
+                        "provenance": {
+                          "description": "Where the declaration comes from and how to check it: a document, a CI step, a device log",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "rel": {
+                                "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "url"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        },
+                        "extensions": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "owner",
+                    "available"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "title",
+              "specPath",
+              "status",
+              "recordedAtMs",
+              "environment",
+              "producer",
+              "branch",
+              "sha",
+              "run",
+              "runUrl",
+              "backend",
+              "testKey"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "snapshot"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "after": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "It sits after this many entries"
+          }
+        },
+        "required": [
+          "id",
+          "note",
+          "after"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "frozenFrom": {
+      "type": "string"
+    },
+    "basedOn": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": {}
+    },
+    "createdBy": {
+      "type": "string",
+      "description": "The name of the token that published it (never the token)"
+    },
+    "createdAtMs": {
+      "type": "number",
+      "description": "When the server recorded it, epoch milliseconds"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "revision",
+    "title",
+    "tags",
+    "entries",
+    "gaps",
+    "createdBy",
+    "createdAtMs"
+  ],
+  "additionalProperties": {}
+}

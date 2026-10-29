@@ -1,5 +1,5 @@
 import type { CheckDetail, EvidenceHolder } from '@crvouga/atlas/reports/evidence-detail';
-import { isVideoAttachment, roleOfType } from '@crvouga/atlas/reports/evidence-detail';
+import { attachmentIdentity, isVideoAttachment, roleOfType } from '@crvouga/atlas/reports/evidence-detail';
 import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { LayerHeader, LayerRow } from '@crvouga/atlas/reports/evidence-types';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
@@ -12,6 +12,8 @@ import { reportAssetUrl, reportJson, reportText } from './api';
 import { ScopeNotice, ScopeProvider, useScope } from './evidence-scope';
 import { duration, plural, safeUri } from './format';
 import { StatusMark } from './marks';
+import { MomentBar, MomentPlayback, momentOwner, SeekStep, useIsPlaying, useMomentVideo, useRequestedMoment } from './moments';
+import { videosIn } from './outcome';
 /**
  * How one kind of attachment is shown. The first renderer that matches wins, so a new kind of artifact (a
  * flame graph, a HAR, a coverage map) is one more entry, and an attachment nobody has a renderer for is still
@@ -38,6 +40,8 @@ const label = (attachment: Attachment) => attachment.description ?? attachment.n
 /** A video that plays inline; when the file cannot be loaded or this browser cannot play it, it says so and offers the file, instead of an empty player. */
 function VideoPlayer({ attachment, url }: { attachment: Attachment; url: string }) {
   const [failed, setFailed] = useState(false);
+  // Inside a result's playback the player is the one its steps seek and that marks the step playing.
+  const moments = useMomentVideo(attachment);
   if (failed)
     return (
       <Alert role="alert" color="orange" title="This video cannot be played">
@@ -50,7 +54,19 @@ function VideoPlayer({ attachment, url }: { attachment: Attachment; url: string 
         </Text>
       </Alert>
     );
-  return <Box src={url} controls preload="metadata" aria-label={label(attachment)} component="video" maw="100%" w="100%" onError={() => setFailed(true)} />;
+  return (
+    <Box
+      src={url}
+      controls
+      preload="metadata"
+      aria-label={label(attachment)}
+      component="video"
+      maw="100%"
+      w="100%"
+      onError={() => setFailed(true)}
+      {...moments}
+    />
+  );
 }
 function TextValue({ attachment, path }: { attachment: Attachment; path: string | null }) {
   const stored = useQuery({
@@ -261,37 +277,11 @@ export function Timeline({ steps, layer }: { steps: readonly Step[]; layer: stri
   }, [steps]);
   const render = (parent: string | null): ReactNode => (
     <List spacing="xs" listStyleType="none" type="ordered">
-      {(tree.get(parent) ?? []).map((step, index) => {
-        const status = STEP_STATUS[(step.status ?? '').toLowerCase()];
-        return (
-          <List.Item data-evidence-step key={`${step.id ?? step.name}:${index}`} data-status={status ?? step.status ?? 'none'}>
-            <Flex gap="xs" align="center" wrap="wrap">
-              <StatusMark status={status ?? 'none'} size={14} />
-              <Text span inherit>
-                {step.name}
-              </Text>
-              {step.kind && (
-                <Text span inherit>
-                  {step.kind}
-                </Text>
-              )}
-              {step.status && !status && (
-                <Text span inherit>
-                  {step.status}
-                </Text>
-              )}
-              <Box flex={1} />
-              <Text span inherit c="dimmed">
-                {[step.offsetMs !== undefined ? `+${duration(step.offsetMs)}` : '', duration(step.durationMs)].filter(Boolean).join(' · ')}
-              </Text>
-            </Flex>
-            {step.detail && <Text component="div">{step.detail}</Text>}
-            {step.annotations && <Notes notes={step.annotations} />}
-            {step.attachments && <Attachments attachments={step.attachments} layer={layer} />}
-            {step.id && tree.has(step.id) && render(step.id)}
-          </List.Item>
-        );
-      })}
+      {(tree.get(parent) ?? []).map((step, index) => (
+        <TimelineStep key={`${step.id ?? step.name}:${index}`} step={step} layer={layer}>
+          {step.id && tree.has(step.id) && render(step.id)}
+        </TimelineStep>
+      ))}
     </List>
   );
   return (
@@ -299,8 +289,50 @@ export function Timeline({ steps, layer }: { steps: readonly Step[]; layer: stri
       <Title order={4} mb="sm">
         {plural(steps.length, 'step', 'steps')}
       </Title>
+      <MomentBar />
       {render(null)}
     </Box>
+  );
+}
+/** One step of the timeline: its outcome and times, a control to show it in the recording when there is one, and what it carries. */
+function TimelineStep({ step, layer, children }: { step: Step; layer: string; children: ReactNode }) {
+  const status = STEP_STATUS[(step.status ?? '').toLowerCase()];
+  const playing = useIsPlaying(step);
+  return (
+    <List.Item
+      data-evidence-step
+      data-status={status ?? step.status ?? 'none'}
+      data-playing={playing || undefined}
+      aria-current={playing ? 'step' : undefined}
+      {...(playing ? { bg: 'blue.0' } : {})}
+    >
+      <Flex gap="xs" align="center" wrap="wrap">
+        <StatusMark status={status ?? 'none'} size={14} />
+        <Text span inherit>
+          {step.name}
+        </Text>
+        {step.kind && (
+          <Text span inherit>
+            {step.kind}
+          </Text>
+        )}
+        {step.status && !status && (
+          <Text span inherit>
+            {step.status}
+          </Text>
+        )}
+        {playing && <Badge variant="light">Playing now</Badge>}
+        <Box flex={1} />
+        <SeekStep step={step} />
+        <Text span inherit c="dimmed">
+          {[step.offsetMs !== undefined ? `+${duration(step.offsetMs)}` : '', duration(step.durationMs)].filter(Boolean).join(' · ')}
+        </Text>
+      </Flex>
+      {step.detail && <Text component="div">{step.detail}</Text>}
+      {step.annotations && <Notes notes={step.annotations} />}
+      {step.attachments && <Attachments attachments={step.attachments} layer={layer} />}
+      {children}
+    </List.Item>
   );
 }
 export function Notes({ notes }: { notes: readonly Annotation[] }) {
@@ -333,6 +365,7 @@ export function Notes({ notes }: { notes: readonly Annotation[] }) {
     </List>
   );
 }
+const NO_FILES: readonly Attachment[] = [];
 function Tries({ attempts, layer }: { attempts: readonly Attempt[]; layer: string }) {
   if (!attempts.length) return null;
   return (
@@ -355,7 +388,11 @@ function Tries({ attempts, layer }: { attempts: readonly Attempt[]; layer: strin
             </Flex>
             {attempt.detail && <Text component="div">{attempt.detail}</Text>}
             <ScopeProvider scope={attempt.scope}>
-              {attempt.attachments && <Attachments attachments={attempt.attachments} layer={layer} />}
+              {/* A try is placed in its own recording with that recording's own timing, never in another try's. */}
+              <MomentPlayback steps={attempt.steps} attachments={attempt.attachments ?? NO_FILES} layer={layer}>
+                {attempt.steps && attempt.steps.length > 0 ? <Timeline steps={attempt.steps} layer={layer} /> : <MomentBar />}
+                {attempt.attachments && <Attachments attachments={attempt.attachments} layer={layer} />}
+              </MomentPlayback>
             </ScopeProvider>
           </List.Item>
         ))}
@@ -413,15 +450,17 @@ function Facts({ holder }: { holder: EvidenceHolder }) {
     </Stack>
   );
 }
-function Evidence({ holder, layer, steps }: { holder: EvidenceHolder; layer: string; steps?: boolean }) {
+function Evidence({ holder, layer, steps = false, owner }: { holder: EvidenceHolder; layer: string; steps?: boolean; owner?: string }) {
   return (
     <ScopeProvider scope={holder.scope}>
-      <Facts holder={holder} />
-      {holder.annotations && <Notes notes={holder.annotations} />}
-      {steps && holder.steps && holder.steps.length > 0 && <Timeline steps={holder.steps} layer={layer} />}
-      {holder.attempts && holder.attempts.length > 1 && <Tries attempts={holder.attempts} layer={layer} />}
-      {holder.attachments && <Attachments attachments={holder.attachments} layer={layer} />}
-      {holder.extensions && <Raw extensions={holder.extensions} />}
+      <MomentPlayback steps={steps ? holder.steps : undefined} attachments={holder.attachments ?? NO_FILES} layer={layer} primary={steps} owner={owner}>
+        <Facts holder={holder} />
+        {holder.annotations && <Notes notes={holder.annotations} />}
+        {steps && holder.steps && holder.steps.length > 0 ? <Timeline steps={holder.steps} layer={layer} /> : <MomentBar />}
+        {holder.attempts && holder.attempts.length > 1 && <Tries attempts={holder.attempts} layer={layer} />}
+        {holder.attachments && <Attachments attachments={holder.attachments} layer={layer} />}
+        {holder.extensions && <Raw extensions={holder.extensions} />}
+      </MomentPlayback>
     </ScopeProvider>
   );
 }
@@ -444,6 +483,7 @@ export function useCheckDetail(layer: LayerHeader, row: LayerRow, enabled = true
 export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerRow }) {
   const wanted = row.evidence !== undefined || layer.evidence !== undefined;
   const detail = useCheckDetail(layer, row);
+  const requested = useRequestedMoment();
   if (!wanted) return null;
   if (detail.isLoading)
     return (
@@ -466,13 +506,19 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
     <ArtifactTagsProvider layer={layer.id} kind={row.kind} check={row.id} holders={[check, run]}>
       <Stack aria-label="Evidence" gap="sm" miw={0}>
         <TagFilterBar holders={[check, run]} />
+        {requested.clip !== undefined && requested.layer === layer.id && ![...videosIn(check), ...videosIn(run)].some((video) => attachmentIdentity(video) === requested.clip) && (
+          <Alert role="status" color="orange" title="The recording this link names is not in this result" data-moment-missing>
+            The link names a recording that this run did not record for this check. Nothing is played in its place, and no other run is
+            substituted.
+          </Alert>
+        )}
         {declared && (
           <Box aria-label="Scope of this result" component="section">
             <ScopeNotice scope={declared} name={row.title} />
           </Box>
         )}
         <ScopeProvider scope={inheritedScope}>
-          <Evidence holder={check} layer={layer.id} steps />
+          <Evidence holder={check} layer={layer.id} steps owner={momentOwner(layer.id, row.kind, row.id)} />
         </ScopeProvider>
         {hasRun && (
           <Box aria-label="From the run" component="section" mb="lg">

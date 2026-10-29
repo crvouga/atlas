@@ -27,6 +27,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `extensions['atlas.media']` | attachment (video) | Where the check's steps are in the recording, so a click on a step seeks the video. See [Place steps in a recording](#place-steps-in-a-recording). |
 | `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |
 | `specPath` | check | The spec a check belongs to (a `.feature`, a test file), relative to the repository. Checks are grouped by it. |
@@ -109,6 +110,44 @@ Every field is optional, and every value except the booleans is an open string.
 - **It decides nothing.** A scope never changes a status, a slot or a winner. A scope an older Atlas cannot read is
   dropped, and the attachment, check and layer stay.
 
+## Place steps in a recording
+
+A step says when it started on the check's clock (`offsetMs`, after the check started). A video has its own clock, which
+began when the recorder did, and the two are not assumed to agree: a recorder usually starts before the first step, and a
+paced demo may have delays put into the video that the check never waited for. To let a reviewer click a step and land on
+its moment in the video, say how the clocks relate in the `atlas.media` extension of the video attachment:
+
+```ts
+{
+  name: 'checkout.webm', role: 'video', durationMs: 9000,
+  extensions: {
+    'atlas.media': {
+      checkStartMs: 1200,                                           // the check started 1.2 s into the video
+      pauses: [{ atMs: 900, durationMs: 2000, reason: 'title card' }], // 2 s put into the video before the step at +900 ms
+      marks: [{ step: 'pay', mediaMs: 4100 }]                        // a step whose moment in the video you know exactly
+    }
+  }
+}
+```
+
+Every field is optional and none of it decides a status, a slot or a winner. A step is placed at `checkStartMs` + its
+`offsetMs` + the `durationMs` of every pause whose `atMs` is at or before the step; a mark names the moment outright and
+wins. Anything else is unavailable and said so, never guessed.
+
+- **Without timing, nothing is placed.** A video with no `atlas.media`, no `checkStartMs`, or a step with no `offsetMs` and
+  no mark, is never assumed to start with the check, and a step is never placed from the wording of its name. Selecting
+  such a step says why it cannot be shown, and moves nothing.
+- **Outside the video is not clamped.** A moment before the start, or after `durationMs` (or the length the player reports),
+  is unavailable. A declaration with a field Atlas cannot read (a pause without a duration) is reported and places nothing.
+- **Pacing is not latency.** A video with `pauses`, or with a `scope` of `pacing: 'paced'`, is labelled as paced: the time
+  between its steps includes deliberate pauses and is not application latency, and no measurement is changed by it.
+- **Each try has its own clock.** Put the video and the `atlas.media` of a retry on its `attempts[]` entry, with that
+  try's `steps`. A try is aligned only by its own video, never by the check's or an earlier try's.
+- **Link to a moment.** The viewer copies a link that names the run (`layer`), the exact recording (`clip`, its digest or
+  stored key) and the position (`clipAt`, milliseconds into the video). Opening it selects that recording of that run, even
+  when a newer run exists, and goes to the position; a recording the run does not hold is reported, never replaced.
+- **Older layers.** A layer without `atlas.media` reads exactly as before; the video plays and its steps list as ever.
+
 ## Product latency
 
 A test's `durationMs` includes fixture setup, deliberate waits, demo pacing, retries and cleanup, so it says how long the
@@ -152,6 +191,11 @@ time. Every field after `unit` is optional and none of them decides a status, a 
 - **Reading it from the API.** `GET /api/reports/tests/history` entries carry `latency` (their product-latency
   measurements) next to `durationMs`. The pure functions are in `@crvouga/atlas/reports/latency`.
 
+## A catalog of UI states
+
+A screenshot per screen, per viewport and color scheme, is a *UI catalog*: check ids are the states, the viewport and scheme are
+`parameters`, and the viewer's `/catalog` shows them with what is still to be captured. See [the UI catalog](ui-catalog.md).
+
 ## Finding runs and artifacts
 
 The viewer's **Runs** and **Artifacts** tabs and the API answer one query, so a link means the same thing everywhere.
@@ -182,6 +226,44 @@ curl "$ATLAS_SERVER_URL/api/reports/artifacts?artifactTag=demo&type=video&domain
 - **Views.** *Views* saves the current filters under a name in this browser, per project and tab. A saved view is a
   **live query**: opening it asks again and shows what matches the newest report. It is not a snapshot; an immutable
   review collection is a separate feature. *Copy link* gives the address, which holds the whole query.
+
+## Words in recordings
+
+A reviewer who remembers a phrase that was spoken or shown in a video can search for it on the **Artifacts** tab
+(**Search inside recordings**, the `inside` address parameter). Atlas never transcribes video or reads a screen: it
+searches text you attach, and nothing is read from a recording until words are typed. Attach it beside the video, at the
+same level (the check, or the retry attempt that recorded the video):
+
+```ts
+attachments: [
+  { id: 'video', name: 'checkout.webm', contentType: 'video/webm', data: video },
+  // Spoken words: WebVTT, SubRip, JSON segments or plain text.
+  { name: 'checkout.vtt', role: 'transcript', contentType: 'text/vtt', data: transcript,
+    extensions: { 'atlas.text': { recording: 'video', generated: true, generator: 'my-speech-tool' } } },
+  // Text shown on screen, with its own timing.
+  { name: 'screen.json', role: 'ocr', contentType: 'application/json', data: JSON.stringify({ segments: [{ start: 2, end: 4, text: 'Order total', confidence: 0.9 }] }) }
+]
+```
+
+- **Which attachment is text.** One with `extensions["atlas.text"]`, a `role` of `transcript`, `ocr`, `screen-text`,
+  `captions` or `subtitles`, or a WebVTT or SubRip type. `extensions["atlas.text"].kind` (`speech`, `screen`, `caption`)
+  says what it is; otherwise the role does. It belongs to the video that lists its `id` in `captions`, or that
+  `extensions["atlas.text"].recording` names by `id`, else to the only video at the same level.
+- **Segments.** WebVTT and SubRip cues; JSON as `{ "segments": [...] }` (or `cues`, `results`, `lines`, or a bare list) of
+  `{ text, start, end }` in seconds or `{ text, startMs, endMs }`, with an optional `confidence` between 0 and 1. A
+  segment whose time is missing or invalid is still searched and is shown with no time; the viewer offers the recording
+  and says seeking is unavailable, and never guesses a moment.
+- **Honesty about the text.** `generated: true` (with `generator`) marks text a tool produced; results show it with its
+  confidence and say it may contain errors. A result always shows the indexed words, never a reworded quotation. A
+  match finds a moment; it is not a new assertion, and the result's own outcome and the retry attempt stay beside it.
+- **States are different things.** Searched with no match; not indexed (no text was supplied); unsupported (the video is
+  silent by its `scope.audioCaptured: false`, or the text is in a form that is not read, or sits at a `uri`); failed
+  (`extensions["atlas.text"].state: "failed"` with a `reason`, a file left out with `omitted`, or text that did not
+  parse). The ones not searched are listed apart and never counted as "no match".
+- **Access.** The text is read through the same report API, and so the same access rules, that play the recording. A file
+  the viewer may not read is not indexed and appears in no snippet or count. The index exists only in the open page: there
+  is no stored or cross-project index. Sending evidence to a transcription or OCR service is the producer's explicit
+  decision and happens outside Atlas.
 
 ## Labels describe, parameters split
 

@@ -93,7 +93,7 @@ What it knows lives in its backends (by default a folder on its own disk), so re
 
 Source: `packages/server/src/auth.ts`
 
-Who is asking, and may they. Tokens have a role (`read` < `publish` < `admin`) and are compared in constant time. Reading
+Who is asking, and may they. Tokens have a role (`read` < `critic` < `publish` < `admin`) and are compared in constant time. Reading
 accepts a Bearer token or the browser's sign-in box (any user name, the token as the password); changing anything needs
 the Bearer header, because a browser sends the sign-in box's credentials to any page that asks, which would let another
 site upload with them. A server with no tokens is open, and refuses to listen beyond this machine unless told it may.
@@ -530,10 +530,10 @@ The version of the API described, `major.minor.patch`: the minor grows when an o
 #### `Role`
 
 ```ts
-export type Role = 'none' | 'read' | 'publish' | 'admin';
+export type Role = 'none' | 'read' | 'critic' | 'publish' | 'admin';
 ```
 
-Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`).
+Who may call an operation: `none` (anyone), or the least role that may (`read` < `critic` < `publish` < `admin`).
 
 #### `Operation`
 
@@ -624,6 +624,50 @@ export function projectServer(options: AtlasServerOptions, create: (options: Atl
 ```
 
 Wrap the single-project protocol in project selection. Auth, upload validation and composition stay identical.
+
+### Review collection routes
+
+Source: `packages/server/src/review-collections.ts`
+
+`/api/reports/review-collections`: publish an immutable, named, ordered collection of references to recorded results
+(with notes and gaps), read it back with how every source stands now, add reviewers' notes and "reviewed" marks, and
+export a portable manifest. A collection is curation kept beside the report under `curation/`: it is never a layer, a
+check or a run, changes no status, slot or winner, and never alters what is uploaded. Reading needs a reader (the
+same as the rest of the report, so nothing becomes public by sharing a link); publishing and noting need a Bearer
+token with the `publish` role, recorded under that token's name. Recordings are still served only by the attachment
+routes, under their own access control.
+
+See docs/server.md#review-collections
+
+#### `ReviewCollectionDeps`
+
+```ts
+export type ReviewCollectionDeps = {
+  /** Where collections and notes are kept: the write backend's store. */
+  readonly store: ObjectStore;
+  /** Every backend's store, to tell whether a layer is still held anywhere. */
+  readonly stores: readonly ObjectStore[];
+  readonly auth: Auth;
+  readonly index: ReportIndex;
+  readonly now: () => number;
+  /** The largest request body, in bytes. */
+  readonly maxBytes: number;
+  readonly unauthorized: (verdict: Extract<ReturnType<Auth['check']>, { ok: false }>) => Response;
+};
+```
+
+What the review collection routes need from the server around them.
+
+#### `mountReviewCollections`
+
+```ts
+export function mountReviewCollections(app: Hono, deps: ReviewCollectionDeps): void
+```
+
+Registers the review collection routes on `app`:
+`GET /api/reports/review-collections`, `POST /api/reports/review-collections`,
+`GET /api/reports/review-collections/detail`, `POST /api/reports/review-collections/reviews` and
+`GET /api/reports/review-collections/export`.
 
 ### settings-page.ts
 

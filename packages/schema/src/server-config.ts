@@ -12,8 +12,11 @@
  */
 import { z } from 'zod/v4';
 
-/** What a bearer token may do: `read` (look), `publish` (also upload) or `admin` (also remove scratch objects). */
-export const ServerRoleSchema = z.enum(['read', 'publish', 'admin']);
+/**
+ * What a bearer token may do: `read` (look), `critic` (also publish critiques, and nothing else), `publish` (also upload
+ * anything) or `admin` (also remove scratch objects).
+ */
+export const ServerRoleSchema = z.enum(['read', 'critic', 'publish', 'admin']);
 /** One of the roles of `ServerRoleSchema`. */
 export type ServerRole = z.infer<typeof ServerRoleSchema>;
 
@@ -24,7 +27,7 @@ export type ServerRole = z.infer<typeof ServerRoleSchema>;
 export const ServerTokenSchema = z
   .strictObject({
     name: z.string().min(1).describe('Shown in logs, never the token itself'),
-    role: ServerRoleSchema.describe('`read` may look. `publish` may also upload. `admin` may also remove scratch objects'),
+    role: ServerRoleSchema.describe('`read` may look. `critic` may also publish critiques (layers of producer `critic.*` whose parts are all of kind `critique`). `publish` may also upload. `admin` may also remove scratch objects'),
     token: z.string().min(12).optional().describe('The token. Prefer `tokenEnv`, so the file holds no secret'),
     tokenEnv: z.string().optional().describe('The name of the environment variable that holds the token')
   })

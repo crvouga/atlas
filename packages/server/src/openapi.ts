@@ -15,14 +15,14 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
-export const API_VERSION = '1.5.0';
+export const API_VERSION = '1.6.0';
 
-/** Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`). */
-export type Role = 'none' | 'read' | 'publish' | 'admin';
+/** Who may call an operation: `none` (anyone), or the least role that may (`read` < `critic` < `publish` < `admin`). */
+export type Role = 'none' | 'read' | 'critic' | 'publish' | 'admin';
 
 type JsonSchema = Record<string, unknown>;
 type Param = { readonly name: string; readonly in: 'path' | 'query' | 'header'; readonly description: string; readonly required?: boolean; readonly schema?: JsonSchema; readonly example?: unknown };
@@ -66,7 +66,8 @@ const COMPONENTS = {
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
-  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  ReviewCollectionRequest: [ReviewCollectionRequestSchema, 'input'], ReviewCollection: [ReviewCollectionSchema, 'output'], ReviewCollectionList: [ReviewCollectionListSchema, 'output'], ReviewCollectionDetail: [ReviewCollectionDetailSchema, 'output'], ReviewNoteInput: [ReviewNoteInputSchema, 'input'], ReviewNote: [ReviewNoteSchema, 'output'], ReviewManifest: [ReviewManifestSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -277,7 +278,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
     responses: { '200': { description: 'It exists.' }, '401': UNAUTHORIZED, '404': problem('No such object.') }
   },
   {
-    route: 'PUT /api/store/*', path: '/api/store/{key}', operationId: 'putObject', tag: 'Store protocol', role: 'publish',
+    route: 'PUT /api/store/*', path: '/api/store/{key}', operationId: 'putObject', tag: 'Store protocol', role: 'critic',
     summary: 'Upload an object',
     description: [
       'The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:',
@@ -288,7 +289,9 @@ const BASE_OPERATIONS: readonly Operation[] = [
       '- a **run manifest** must have passed its privacy scan;',
       '- keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.',
       '',
-      'Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser\'s sign-in box is refused.'
+      'Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser\'s sign-in box is refused.',
+      '',
+      'A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.'
     ].join('\n'),
     parameters: [KEY, { name: 'content-type', in: 'header', description: 'Stored with the object and returned when it is read.', schema: str }],
     body: { description: 'The object\'s bytes.', contentType: 'application/octet-stream', schema: { type: 'string', format: 'binary' }, required: true },
@@ -397,6 +400,50 @@ const BASE_OPERATIONS: readonly Operation[] = [
     responses: { '201': json('The recorded entry.', 'ArtifactTagEntry'), '401': UNAUTHORIZED, '403': FORBIDDEN, '413': problem('Request too large.'), '422': problem('Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.') }
   },
   {
+    route: 'GET /api/reports/review-collections', path: '/api/reports/review-collections', operationId: 'listReviewCollections', tag: 'Report', role: 'read',
+    summary: 'Review collections: curated sets of recordings, newest first',
+    description: 'The newest revision of every review collection, in brief: id, revision and how many exist, title, purpose, audience, tags, how many entries and gaps it has, who published it and when. A collection is curation kept beside the report; it is not a layer, a check or a run, and it has no status. Open one with `/api/reports/review-collections/detail?id=`. Its share URL is the viewer\'s `?tab=collections&collection=<id>` and needs the same read access as the rest of the report.',
+    responses: { '200': json('The collections.', 'ReviewCollectionList'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'POST /api/reports/review-collections', path: '/api/reports/review-collections', operationId: 'publishReviewCollection', tag: 'Report', role: 'publish',
+    summary: 'Publish an immutable review collection (or a new revision of one)',
+    description: [
+      'Freezes an ordered set of references to recorded results as one named collection, recorded under the name of the publish (or admin) token that sends it. Take each entry\'s `layer` and `check` (and `kind`) from `GET /api/reports/artifacts`, and optionally one of its recordings (`videos[].recording`). The server resolves every entry to the result the report holds and records what the report says about it (status, time, run, commit, environment, tries, videos): the request does not claim them. An entry it cannot resolve refuses the whole request (`422`, naming the entry). The order is yours and is never re-sorted; failed, rejected and incomplete results stay in it beside a later passing replay.',
+      '',
+      'Entries from different runs are never one execution: each keeps its own layer, run and status. A collection has no status of its own, adds no check and cannot change any result or winner. A revision is immutable. To change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest revision (`409` otherwise); the earlier ones stay readable. Notes and reviewed marks are separate (`/reviews`). A reader-only token, a browser sign-in box and an anonymous reader are refused; nothing is shared publicly by default.'
+    ].join('\n'),
+    body: { description: 'The title, optional purpose, audience and tags, the ordered entries, optional gaps, and `basedOn` for a new revision. At most 500 entries and 100 gaps.', contentType: 'application/json', required: true, schema: ref('ReviewCollectionRequest') },
+    responses: { '201': json('The recorded revision.', 'ReviewCollection'), '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('`basedOn` names no collection.'), '409': problem('`basedOn.revision` is not the newest.'), '413': problem('Request too large.'), '422': problem('Not a collection, or an entry the report does not hold.'), '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/review-collections/detail', path: '/api/reports/review-collections/detail', operationId: 'getReviewCollection', tag: 'Report', role: 'read',
+    summary: 'One review collection revision with how its sources stand now',
+    description: 'The revision (the newest without `revision`), every revision number, the review notes and reviewed marks of that revision, and for each entry `availability`: `available` (its layer is held and the report lists the result), `unverified` (the layer is held but the report no longer lists the result or recording) or `unavailable` (the layer is gone, for example deleted by garbage collection), with the reason. An entry whose source is not available stays in its place with its frozen snapshot; it is never removed or replaced. Entries keep the status each layer recorded, with their own times, in the order the curator chose. A reviewed mark is curation: it changes no outcome and is not an approval.',
+    parameters: [
+      { name: 'id', in: 'query', required: true, description: 'A collection id from the list.', schema: str, example: 'rc-0123456789abcdef' },
+      { name: 'revision', in: 'query', description: 'A revision number. Default: the newest.', schema: { type: 'integer', minimum: 1 } }
+    ],
+    responses: { '200': json('The revision.', 'ReviewCollectionDetail'), '400': problem('No `id`, or a bad `revision`.'), '401': UNAUTHORIZED, '404': problem('No such collection or revision.') }
+  },
+  {
+    route: 'POST /api/reports/review-collections/reviews', path: '/api/reports/review-collections/reviews', operationId: 'addReviewNote', tag: 'Report', role: 'publish',
+    summary: 'Add a note, a time-coded gap note or a reviewed mark to a collection entry',
+    description: 'Records one immutable entry, by the name of the publish (or admin) token and the server\'s time: a `note` or a `gap` (text required; with `entry` and optionally `timecodeMs`, a moment in that entry\'s recording), or a `reviewed` / `unreviewed` mark for one entry. It changes no check outcome, no layer, no collection revision and no report winner; a mark is not an acceptance sign-off. The notes of a revision are in its `detail`.',
+    body: { description: 'The collection and revision, optionally the entry, the kind and its text.', contentType: 'application/json', required: true, schema: ref('ReviewNoteInput') },
+    responses: { '201': json('The recorded note.', 'ReviewNote'), '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('No such collection or revision.'), '413': problem('Request too large.'), '422': problem('Not a note: missing text, an unknown entry, or a mark without an entry.') }
+  },
+  {
+    route: 'GET /api/reports/review-collections/export', path: '/api/reports/review-collections/export', operationId: 'exportReviewCollection', tag: 'Report', role: 'read',
+    summary: 'Portable index (manifest) of one review collection revision',
+    description: 'A manifest an archive can be built from: the collection, each entry with its exact source (layer, check, kind, recording), the status and run it was recorded with, how it stands now, whether it is marked reviewed, and the files it references with their name as recorded, a safe name and path (`files/<position>-<safeName>`), and the recorded `sha256` when the report holds one (`null` is unknown, not verified). A source that cannot be read now is listed under `missing` and its files are marked `missing`; nothing is left out silently. The manifest contains no bytes; recordings are fetched from the attachment routes, which keep their own access control. Sent as an attachment.',
+    parameters: [
+      { name: 'id', in: 'query', required: true, description: 'A collection id.', schema: str },
+      { name: 'revision', in: 'query', description: 'A revision number. Default: the newest.', schema: { type: 'integer', minimum: 1 } }
+    ],
+    responses: { '200': json('The manifest.', 'ReviewManifest'), '400': problem('No `id`, or a bad `revision`.'), '401': UNAUTHORIZED, '404': problem('No such collection or revision.') }
+  },
+  {
     route: 'GET /api/reports/runs', path: '/api/reports/runs', operationId: 'getReportRuns', tag: 'Report', role: 'read',
     summary: 'The runs that recorded the report',
     description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures, their video counts (references, distinct playable recordings, unavailable) and the artifact tags, media types and labels their results carry. Filters narrow the list before `limit`: AND across the parameters, OR within one; `filters` in the answer names those that were applied and `facets` offers each dimension\'s values with counts. A server that does not know a filter ignores it and does not name it in `filters`. Send `format=markdown` for Markdown.',
@@ -444,6 +491,26 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The matching results and the facets.', 'ArtifactList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/ui-catalog', path: '/api/reports/ui-catalog', operationId: 'getUiCatalog', tag: 'Report', role: 'read',
+    summary: 'The UI catalog: captured UI states per profile, and what is still expected',
+    description: 'A browsable inventory of the product\'s user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer\'s environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell\'s `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.',
+    parameters: [
+      { name: 'limit', in: 'query', description: 'At most this many states (default 200).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'offset', in: 'query', description: 'Skip this many states (default 0).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'q', in: 'query', description: 'Words that must all appear in a state\'s id, title, route, fixture, cohort, area, flags, surfaces or producers.', schema: str },
+      { name: 'coverage', in: 'query', description: 'Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.', schema: str },
+      { name: 'profile', in: 'query', description: 'Profile keys, as listed in `profiles[].key`.', schema: str },
+      { name: 'area', in: 'query', description: 'Areas.', schema: str },
+      { name: 'route', in: 'query', description: 'Routes.', schema: str },
+      { name: 'cohort', in: 'query', description: 'Cohorts.', schema: str },
+      { name: 'flag', in: 'query', description: 'Feature flags a state was captured with.', schema: str },
+      { name: 'surface', in: 'query', description: 'Surfaces a state covers.', schema: str },
+      { name: 'producer', in: 'query', description: 'Producers that captured or planned a state.', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The catalog.', 'UiCatalog'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',
@@ -579,6 +646,7 @@ export const NOT_OPERATIONS: ReadonlyMap<string, string> = new Map([
 const SECURITY: Record<Role, readonly Record<string, string[]>[]> = {
   none: [],
   read: [{ bearer: [] }, { basic: [] }],
+  critic: [{ bearer: [] }],
   publish: [{ bearer: [] }],
   admin: [{ bearer: [] }]
 };
@@ -613,7 +681,7 @@ export function openApiDocument(options: { readonly serverUrl?: string } = {}): 
       description: [
         'One Atlas node serves multiple projects. Clients select a project using ?project=<slug>, X-Atlas-Project, or /api/projects/<slug>/… . Each project has independent specs, layers, recordings, status, and event streams. Within each project, the newest completed result of every check wins its slot. Unqualified requests address the legacy default project.',
         '',
-        '**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `publish` < `admin`. Uploading needs a Bearer token; a browser\'s HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.',
+        '**Authentication.** With tokens configured, send `Authorization: Bearer <token>`. Roles: `read` < `critic` < `publish` < `admin`. A `critic` token may read, and publish critiques (layers of automated reviewers) and nothing else. Uploading needs a Bearer token; a browser\'s HTTP Basic sign-in (any user name, the token as the password) is accepted for reading only. A server with no tokens is open and listens on this machine only unless told otherwise.',
         '',
         '**Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents (`application/problem+json`) with a `detail` that says what to do. `401` send a token, `403` that token may not, `409` upload what this depends on first or you are changing something immutable, `413` too large, `422` not valid, `503` still starting (retry after `Retry-After`).',
         '',

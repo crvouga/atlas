@@ -34,6 +34,7 @@ import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
 import { catalogHealth, healthMarkdown, parseRootMappings } from '../../reports/src/catalog-health';
 import { parseArtifactFilter } from '../../reports/src/artifact-query';
+import { filterUiCatalog, pageUiCatalog, parseUiCatalogQuery, uiCatalog, uiCatalogMarkdown } from '../../reports/src/ui-catalog';
 import { parseReliabilityScope, reliability, reliabilityMarkdown } from '../../reports/src/reliability';
 import { artifactList, artifactsMarkdown, catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
 import { llmsTxt } from './llms';
@@ -50,6 +51,7 @@ import { createAuth, type Auth } from './auth';
 import type { ResolvedToken } from './config';
 import { EventHub } from './events';
 import { projectServer } from './projects';
+import { mountReviewCollections } from './review-collections';
 import { readLimited, storeApi } from './store-api';
 
 const gzipAsync = promisify(gzip);
@@ -314,7 +316,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true }
     });
   });
 
@@ -430,6 +432,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     }
     return model.value;
   };
+  let uiModel: { version: string; value: ReturnType<typeof uiCatalog> } | undefined;
   const wantsMarkdown = (c: Context) => {
     const format = c.req.query('format');
     return format === 'markdown' || format === 'md' || (format === undefined && /\btext\/markdown\b/.test(c.req.header('accept') ?? ''));
@@ -502,6 +505,17 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const document = () => artifactList(index.history, found.version, parseArtifactFilter(search), { limit: number('limit', 100), offset: number('offset', 0), domainOf: path => domains.get(path) });
     return answer(c, found.version, document, () => artifactsMarkdown(document()), `artifacts|${search.toString()}|${wantsMarkdown(c)}`);
   });
+  app.get('/api/reports/ui-catalog', async c => {
+    if (!index.ready) return notReady(c);
+    const snapshot = index.snapshot();
+    const search = new URL(c.req.url).searchParams;
+    const number = (name: string, fallback: number) => (/^\d+$/.test(search.get(name) ?? '') ? Number(search.get(name)) : fallback);
+    // The catalog is a function of the report, so it is built once per version and narrowed per question.
+    if (uiModel?.version !== snapshot.version) uiModel = { version: snapshot.version, value: uiCatalog(snapshot.layers, { version: snapshot.version, backends: snapshot.backends, notices: snapshot.notices }) };
+    const whole = uiModel.value;
+    const document = () => pageUiCatalog(filterUiCatalog(whole, parseUiCatalogQuery(search)), { limit: number('limit', 200), offset: number('offset', 0) });
+    return answer(c, snapshot.version, document, () => uiCatalogMarkdown(document()), `ui-catalog|${search.toString()}|${wantsMarkdown(c)}`);
+  });
   app.get('/api/reports/runs/detail', async c => {
     if (!index.ready) return notReady(c);
     const key = c.req.query('key');
@@ -533,6 +547,8 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
       throw error;
     }
   });
+  // Review collections: immutable, curated references to recorded results, with reviewers' notes kept apart.
+  mountReviewCollections(app, { store: tagStore, stores, auth, index, now, maxBytes: limits.json, unauthorized });
   app.route('/api/reports', layers);
 
   // Upload: the store protocol, and a simple JSON way in for anything that can make a request.

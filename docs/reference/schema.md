@@ -233,6 +233,137 @@ export const ArtifactTagsSchema = …
 
 `GET /api/reports/artifact-tags`: every recorded edit, oldest first. Fold them with `foldArtifactTags`.
 
+#### `ReviewSourceSchema`
+
+```ts
+export const ReviewSourceSchema = …
+```
+
+A source a review collection points at: one recorded result of one archived layer, and optionally one of its recordings. Exact and immutable: a layer never changes.
+
+#### `ReviewEntryInputSchema`
+
+```ts
+export const ReviewEntryInputSchema = …
+```
+
+One entry of a request to publish a collection: a source and the curator\'s caption for it.
+
+#### `ReviewGapInputSchema`
+
+```ts
+export const ReviewGapInputSchema = …
+```
+
+A gap the curator names: something the review should show and no recording does. It sits after the first `after` entries (0 or absent: before the first).
+
+#### `ReviewCollectionRequestSchema`
+
+```ts
+export const ReviewCollectionRequestSchema = …
+```
+
+The body of `POST /api/reports/review-collections`: a new collection, or, with `basedOn`, an explicit new revision of
+one. At least one entry or gap. The server records which sources the entries are now; it never alters the request.
+
+#### `ReviewSnapshotSchema`
+
+```ts
+export const ReviewSnapshotSchema = …
+```
+
+What the server recorded about the source of an entry at the moment it was frozen.
+
+#### `ReviewEntrySchema`
+
+```ts
+export const ReviewEntrySchema = …
+```
+
+One entry of a frozen collection.
+
+#### `ReviewGapSchema`
+
+```ts
+export const ReviewGapSchema = …
+```
+
+A gap item of a collection.
+
+#### `ReviewCollectionSchema`
+
+```ts
+export const ReviewCollectionSchema = …
+```
+
+One revision of a review collection, as stored: immutable. It is curation, not a test run: it has no status of its own,
+carries no check, and its entries are references to results that other runs recorded. Entries from different
+runs are never one execution.
+
+#### `ReviewCollectionSummarySchema`
+
+```ts
+export const ReviewCollectionSummarySchema = …
+```
+
+One collection in the list: its newest revision in brief.
+
+#### `ReviewCollectionListSchema`
+
+```ts
+export const ReviewCollectionListSchema = …
+```
+
+`GET /api/reports/review-collections`: the newest revision of every collection, newest first.
+
+#### `ReviewNoteInputSchema`
+
+```ts
+export const ReviewNoteInputSchema = …
+```
+
+The body of `POST /api/reports/review-collections/reviews`: a note, a time-coded gap note, or a reviewed marker on one entry. Curation only: it changes no outcome.
+
+#### `ReviewNoteSchema`
+
+```ts
+export const ReviewNoteSchema = …
+```
+
+One recorded review note. Entries are never changed or removed: they are the audit trail.
+
+#### `ReviewAvailabilitySchema`
+
+```ts
+export const ReviewAvailabilitySchema = …
+```
+
+How an entry\'s source stands now: `available` (the layer and the result are in the report), `unverified` (the layer is held but the result is outside the report\'s history window) or `unavailable` (the layer is gone).
+
+#### `ReviewCollectionDetailSchema`
+
+```ts
+export const ReviewCollectionDetailSchema = …
+```
+
+`GET /api/reports/review-collections/detail`: one revision, how each source stands now, and the review notes.
+
+#### `ReviewManifestFileSchema`
+
+```ts
+export const ReviewManifestFileSchema = …
+```
+
+One file in an export manifest.
+
+#### `ReviewManifestSchema`
+
+```ts
+export const ReviewManifestSchema = …
+```
+
+`GET /api/reports/review-collections/export`: a portable index of one revision. It lists sources and files; it contains no bytes.
+
 #### `HelloEventSchema`
 
 ```ts
@@ -366,6 +497,39 @@ export const RunDetailSchema = …
 ```
 
 `GET /api/reports/runs/detail`: one run and its last result for every test, environment and producer it recorded.
+
+#### `UiProfileSchema`
+
+```ts
+export const UiProfileSchema = …
+```
+
+A state's profile: the client and the choices it was captured under.
+
+#### `UiImageSchema`
+
+```ts
+export const UiImageSchema = …
+```
+
+The picture of a capture.
+
+#### `UiCellSchema`
+
+```ts
+export const UiCellSchema = …
+```
+
+One state in one profile.
+
+#### `UiCatalogSchema`
+
+```ts
+export const UiCatalogSchema = …
+```
+
+`GET /api/reports/ui-catalog`: the UI catalog, computed from the winning results of the `ui-state` and `ui-plan` parts
+of every layer. States are in id order and cells in profile order, so the same layers always give the same document.
 
 ### Command results (`--format json`)
 
@@ -644,12 +808,128 @@ export function transitionId(source: string, event: string)
 Builds the id of a transition, the key of `transitions` in a manifest: the source state's name,
 `TRANSITION_ID_SEPARATOR`, then the event name.
 
+### The `atlas.critique` evidence schema
+
+Source: `packages/schema/src/critique.ts`
+
+What an automated reviewer (a critic) says about one captured UI. It is not a new layer format: a critique is a
+check inside a part of kind `critique`, and the opinion rides in the check's `extensions["atlas.critique"]`, so by the
+rules of docs/extending.md it can never decide a result. The check's `status` says only whether the critic ran
+(`passed` a verdict was produced, `failed` the critic could not produce one, `running`, `not-run`).
+
+Everything except `schema`, `subject` and `critic` is optional, so a single score (a model-based critic) and rich
+findings (an LLM critic) are one shape. Every object is open, and `kind`, `category`, `severity`, `label` and `reason`
+are open strings: a value nobody has heard of is kept and shown generically, never rejected. A reader that cannot read
+the whole extension drops it and keeps the check and its status (`readCritique` in `@crvouga/atlas/critics`).
+
+See docs/critics.md
+See docs/extending.md
+
+#### `CRITIQUE_EXTENSION`
+
+```ts
+export const CRITIQUE_EXTENSION = …
+```
+
+The key under which a critique is stored in a check's `extensions`.
+
+#### `CRITIQUE_SCHEMA_VERSION`
+
+```ts
+export const CRITIQUE_SCHEMA_VERSION = …
+```
+
+The version of the `atlas.critique` extension a reader of this release understands. A critique of another version is unknown, not wrong.
+
+#### `CRITIQUE_PART_KIND`
+
+```ts
+export const CRITIQUE_PART_KIND = …
+```
+
+The `kind` of the report part that holds critiques. Parts of this kind are opinions: never counted, never part of the gate.
+
+#### `CRITIC_PRODUCER_PREFIX`
+
+```ts
+export const CRITIC_PRODUCER_PREFIX = …
+```
+
+The prefix of the `producer` of a layer of critiques: `critic.<critic name>`.
+
+#### `CritiqueRegionSchema`
+
+```ts
+export const CritiqueRegionSchema = …
+```
+
+The region of the image a finding is about, in the stated unit (`px` of the stored image, or `normalized` 0..1).
+
+#### `CritiqueFindingSchema`
+
+```ts
+export const CritiqueFindingSchema = …
+```
+
+One thing a critic found: where, what kind, how bad, why, and what to do. Nothing is required.
+
+#### `CritiqueRelativeSchema`
+
+```ts
+export const CritiqueRelativeSchema = …
+```
+
+How a score reads in context. A raw score is not absolute: a loading overlay is compared with other loading overlays,
+not with full screens, and a change against the same entry's previous image is more telling than the level.
+
+#### `CritiqueVerdictSchema`
+
+```ts
+export const CritiqueVerdictSchema = …
+```
+
+The judgement: a score and how to read it, a label, a confidence. A critic that cannot score may give only a label.
+
+#### `CritiqueFailureSchema`
+
+```ts
+export const CritiqueFailureSchema = …
+```
+
+Why a critic produced no verdict: a reason code in an open vocabulary (`error`, `timeout`, `rate-limited`, `invalid-output`) and a message that holds no credential.
+
+#### `CritiqueSchema`
+
+```ts
+export const CritiqueSchema = …
+```
+
+The `atlas.critique` extension, version 1: the image judged (`subject`), who judged (`critic`, `model`,
+`parameters`), the opinion (`verdict`, `findings`) or why there is none (`failure`), and what it cost (`usage`).
+The prompt is recorded only as a hash (`parameters.rubric`). Emitted as `critique.schema.json`.
+
+#### `Critique`
+
+```ts
+export type Critique = z.output<typeof CritiqueSchema>;
+```
+
+A critique as stored in a check's `extensions["atlas.critique"]`.
+
+#### `CritiqueFinding`
+
+```ts
+export type CritiqueFinding = z.output<typeof CritiqueFindingSchema>;
+```
+
+One finding of a critique.
+
 ### Schema package entry point (`@crvouga/atlas/schema`)
 
 Source: `packages/schema/src/index.ts`. Import: `@crvouga/atlas/schema`
 
 Re-exports every Zod schema, constant and inferred type of the Atlas contract: the layer format and report status
-(`layer`), the statechart run manifest (`manifest`, `common`), the spec file formats (`spec`), the run index and
+(`layer`), the `atlas.critique` evidence of automated UI reviewers (`critique`), the statechart run manifest (`manifest`, `common`), the spec file formats (`spec`), the run index and
 report sources the viewer reads (`runs-index`, `report-sources`) and the server configuration (`server-config`).
 The JSON Schemas shipped in `schemas/` are generated from these by `bun run schemas`.
 
@@ -1738,7 +2018,8 @@ See docs/server.md
 export const ServerRoleSchema = …
 ```
 
-What a bearer token may do: `read` (look), `publish` (also upload) or `admin` (also remove scratch objects).
+What a bearer token may do: `read` (look), `critic` (also publish critiques, and nothing else), `publish` (also upload
+anything) or `admin` (also remove scratch objects).
 
 #### `ServerRole`
 

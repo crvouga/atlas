@@ -414,7 +414,7 @@ Responses: `200` It exists.; `401` No token, or an unknown one. Send `Authorizat
 
 ### Upload an object
 
-`PUT /api/store/{key}` · role: publish
+`PUT /api/store/{key}` · role: critic
 
 The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
 
@@ -425,6 +425,8 @@ The write half of the `ObjectStore` interface. The server checks what it can fro
 - keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
 
 Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.
 
 - `key` (path, required): An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.
 - `content-type` (header): Stored with the object and returned when it is read.
@@ -434,7 +436,7 @@ Responses: `200` Already there with the same bytes.; `201` Stored.; `401` No tok
 
 ### Upload an object
 
-`PUT /api/projects/{project}/store/{key}` · role: publish
+`PUT /api/projects/{project}/store/{key}` · role: critic
 
 The write half of the `ObjectStore` interface. The server checks what it can from the bytes in hand and says no to what would corrupt the report for everyone:
 
@@ -445,6 +447,8 @@ The write half of the `ObjectStore` interface. The server checks what it can fro
 - keys are immutable: the same bytes again are `200` (a retry), other bytes under the same key are `409`.
 
 Upload in dependency order: blobs, then the manifest, then the catalog entry. `atlas report publish`, `atlas report stream` and `httpStore` do. Needs a `Bearer` token of role `publish` or `admin`; a browser's sign-in box is refused.
+
+A token of role `critic` may upload only what a critic publishes: blobs, and layers (and their catalog entries) whose `producer` is `critic.<name>` and whose parts are all of kind `critique`. Anything else is `403` with the rule it broke, and nothing is stored.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
@@ -690,6 +694,128 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `201` The recorded entry.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.
 
+### Review collections: curated sets of recordings, newest first
+
+`GET /api/reports/review-collections` · role: read
+
+The newest revision of every review collection, in brief: id, revision and how many exist, title, purpose, audience, tags, how many entries and gaps it has, who published it and when. A collection is curation kept beside the report; it is not a layer, a check or a run, and it has no status. Open one with `/api/reports/review-collections/detail?id=`. Its share URL is the viewer's `?tab=collections&collection=<id>` and needs the same read access as the rest of the report.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The collections.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Review collections: curated sets of recordings, newest first
+
+`GET /api/projects/{project}/reports/review-collections` · role: read
+
+The newest revision of every review collection, in brief: id, revision and how many exist, title, purpose, audience, tags, how many entries and gaps it has, who published it and when. A collection is curation kept beside the report; it is not a layer, a check or a run, and it has no status. Open one with `/api/reports/review-collections/detail?id=`. Its share URL is the viewer's `?tab=collections&collection=<id>` and needs the same read access as the rest of the report.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The collections.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.
+
+### Publish an immutable review collection (or a new revision of one)
+
+`POST /api/reports/review-collections` · role: publish
+
+Freezes an ordered set of references to recorded results as one named collection, recorded under the name of the publish (or admin) token that sends it. Take each entry's `layer` and `check` (and `kind`) from `GET /api/reports/artifacts`, and optionally one of its recordings (`videos[].recording`). The server resolves every entry to the result the report holds and records what the report says about it (status, time, run, commit, environment, tries, videos): the request does not claim them. An entry it cannot resolve refuses the whole request (`422`, naming the entry). The order is yours and is never re-sorted; failed, rejected and incomplete results stay in it beside a later passing replay.
+
+Entries from different runs are never one execution: each keeps its own layer, run and status. A collection has no status of its own, adds no check and cannot change any result or winner. A revision is immutable. To change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest revision (`409` otherwise); the earlier ones stay readable. Notes and reviewed marks are separate (`/reviews`). A reader-only token, a browser sign-in box and an anonymous reader are refused; nothing is shared publicly by default.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded revision.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` `basedOn` names no collection.; `409` `basedOn.revision` is not the newest.; `413` Request too large.; `422` Not a collection, or an entry the report does not hold.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Publish an immutable review collection (or a new revision of one)
+
+`POST /api/projects/{project}/reports/review-collections` · role: publish
+
+Freezes an ordered set of references to recorded results as one named collection, recorded under the name of the publish (or admin) token that sends it. Take each entry's `layer` and `check` (and `kind`) from `GET /api/reports/artifacts`, and optionally one of its recordings (`videos[].recording`). The server resolves every entry to the result the report holds and records what the report says about it (status, time, run, commit, environment, tries, videos): the request does not claim them. An entry it cannot resolve refuses the whole request (`422`, naming the entry). The order is yours and is never re-sorted; failed, rejected and incomplete results stay in it beside a later passing replay.
+
+Entries from different runs are never one execution: each keeps its own layer, run and status. A collection has no status of its own, adds no check and cannot change any result or winner. A revision is immutable. To change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest revision (`409` otherwise); the earlier ones stay readable. Notes and reviewed marks are separate (`/reviews`). A reader-only token, a browser sign-in box and an anonymous reader are refused; nothing is shared publicly by default.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded revision.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` `basedOn` names no collection.; `409` `basedOn.revision` is not the newest.; `413` Request too large.; `422` Not a collection, or an entry the report does not hold.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### One review collection revision with how its sources stand now
+
+`GET /api/reports/review-collections/detail` · role: read
+
+The revision (the newest without `revision`), every revision number, the review notes and reviewed marks of that revision, and for each entry `availability`: `available` (its layer is held and the report lists the result), `unverified` (the layer is held but the report no longer lists the result or recording) or `unavailable` (the layer is gone, for example deleted by garbage collection), with the reason. An entry whose source is not available stays in its place with its frozen snapshot; it is never removed or replaced. Entries keep the status each layer recorded, with their own times, in the order the curator chose. A reviewed mark is curation: it changes no outcome and is not an approval.
+
+- `id` (query, required): A collection id from the list.
+- `revision` (query): A revision number. Default: the newest.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The revision.; `400` No `id`, or a bad `revision`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such collection or revision.
+
+### One review collection revision with how its sources stand now
+
+`GET /api/projects/{project}/reports/review-collections/detail` · role: read
+
+The revision (the newest without `revision`), every revision number, the review notes and reviewed marks of that revision, and for each entry `availability`: `available` (its layer is held and the report lists the result), `unverified` (the layer is held but the report no longer lists the result or recording) or `unavailable` (the layer is gone, for example deleted by garbage collection), with the reason. An entry whose source is not available stays in its place with its frozen snapshot; it is never removed or replaced. Entries keep the status each layer recorded, with their own times, in the order the curator chose. A reviewed mark is curation: it changes no outcome and is not an approval.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (query, required): A collection id from the list.
+- `revision` (query): A revision number. Default: the newest.
+
+Responses: `200` The revision.; `400` No `id`, or a bad `revision`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such collection or revision.
+
+### Add a note, a time-coded gap note or a reviewed mark to a collection entry
+
+`POST /api/reports/review-collections/reviews` · role: publish
+
+Records one immutable entry, by the name of the publish (or admin) token and the server's time: a `note` or a `gap` (text required; with `entry` and optionally `timecodeMs`, a moment in that entry's recording), or a `reviewed` / `unreviewed` mark for one entry. It changes no check outcome, no layer, no collection revision and no report winner; a mark is not an acceptance sign-off. The notes of a revision are in its `detail`.
+
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded note.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No such collection or revision.; `413` Request too large.; `422` Not a note: missing text, an unknown entry, or a mark without an entry.
+
+### Add a note, a time-coded gap note or a reviewed mark to a collection entry
+
+`POST /api/projects/{project}/reports/review-collections/reviews` · role: publish
+
+Records one immutable entry, by the name of the publish (or admin) token and the server's time: a `note` or a `gap` (text required; with `entry` and optionally `timecodeMs`, a moment in that entry's recording), or a `reviewed` / `unreviewed` mark for one entry. It changes no check outcome, no layer, no collection revision and no report winner; a mark is not an acceptance sign-off. The notes of a revision are in its `detail`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `201` The recorded note.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No such collection or revision.; `413` Request too large.; `422` Not a note: missing text, an unknown entry, or a mark without an entry.
+
+### Portable index (manifest) of one review collection revision
+
+`GET /api/reports/review-collections/export` · role: read
+
+A manifest an archive can be built from: the collection, each entry with its exact source (layer, check, kind, recording), the status and run it was recorded with, how it stands now, whether it is marked reviewed, and the files it references with their name as recorded, a safe name and path (`files/<position>-<safeName>`), and the recorded `sha256` when the report holds one (`null` is unknown, not verified). A source that cannot be read now is listed under `missing` and its files are marked `missing`; nothing is left out silently. The manifest contains no bytes; recordings are fetched from the attachment routes, which keep their own access control. Sent as an attachment.
+
+- `id` (query, required): A collection id.
+- `revision` (query): A revision number. Default: the newest.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The manifest.; `400` No `id`, or a bad `revision`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such collection or revision.
+
+### Portable index (manifest) of one review collection revision
+
+`GET /api/projects/{project}/reports/review-collections/export` · role: read
+
+A manifest an archive can be built from: the collection, each entry with its exact source (layer, check, kind, recording), the status and run it was recorded with, how it stands now, whether it is marked reviewed, and the files it references with their name as recorded, a safe name and path (`files/<position>-<safeName>`), and the recorded `sha256` when the report holds one (`null` is unknown, not verified). A source that cannot be read now is listed under `missing` and its files are marked `missing`; nothing is left out silently. The manifest contains no bytes; recordings are fetched from the attachment routes, which keep their own access control. Sent as an attachment.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (query, required): A collection id.
+- `revision` (query): A revision number. Default: the newest.
+
+Responses: `200` The manifest.; `400` No `id`, or a bad `revision`.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No such collection or revision.
+
 ### The runs that recorded the report
 
 `GET /api/reports/runs` · role: read
@@ -799,6 +925,52 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `format` (query): `markdown` for Markdown instead of JSON.
 
 Responses: `200` The matching results and the facets.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The UI catalog: captured UI states per profile, and what is still expected
+
+`GET /api/reports/ui-catalog` · role: read
+
+A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.
+
+- `limit` (query): At most this many states (default 200).
+- `offset` (query): Skip this many states (default 0).
+- `q` (query): Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces or producers.
+- `coverage` (query): Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.
+- `profile` (query): Profile keys, as listed in `profiles[].key`.
+- `area` (query): Areas.
+- `route` (query): Routes.
+- `cohort` (query): Cohorts.
+- `flag` (query): Feature flags a state was captured with.
+- `surface` (query): Surfaces a state covers.
+- `producer` (query): Producers that captured or planned a state.
+- `format` (query): `markdown` for Markdown instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### The UI catalog: captured UI states per profile, and what is still expected
+
+`GET /api/projects/{project}/reports/ui-catalog` · role: read
+
+A browsable inventory of the product's user interface, computed from the winning results of the `ui-state` and `ui-plan` parts of every layer (see the UI catalog guide). Each state is a check id; each cell is one profile of it (the layer's environment and parameters) with its coverage: `captured` only when the winning capture passed, `failed`, `capturing`, `skipped`, or `missing` when a plan expects it and nothing has been captured. A picture is read from the cell's `capture.image.path` under the reports API root, or `uri`. What is expected is itself a layer, so a shard that never published leaves its states `missing`, never captured. The document equals what the viewer computes from the same report. Narrow it by `q` (words), `coverage`, `profile` (a profile `key`), `area`, `route`, `cohort`, `flag`, `surface` and `producer`: AND across parameters, OR within one; a state keeps only the cells that match `profile` and `coverage`. Page the states with `limit` and `offset`. Viewers need not poll: they hold the report over `/api/events` and read changes with `/api/reports/evidence/effective?since=`.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `limit` (query): At most this many states (default 200).
+- `offset` (query): Skip this many states (default 0).
+- `q` (query): Words that must all appear in a state's id, title, route, fixture, cohort, area, flags, surfaces or producers.
+- `coverage` (query): Coverage values: `captured`, `failed`, `capturing`, `skipped`, `missing`. Comma-separated.
+- `profile` (query): Profile keys, as listed in `profiles[].key`.
+- `area` (query): Areas.
+- `route` (query): Routes.
+- `cohort` (query): Cohorts.
+- `flag` (query): Feature flags a state was captured with.
+- `surface` (query): Surfaces a state covers.
+- `producer` (query): Producers that captured or planned a state.
+- `format` (query): `markdown` for Markdown instead of JSON.
+
+Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
 ### Every test one run recorded
 
