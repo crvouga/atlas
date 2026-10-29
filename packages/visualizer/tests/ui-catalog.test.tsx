@@ -25,6 +25,20 @@ async function open(stores = [memoryStore()], at = '/catalog') {
   return { node, stores };
 }
 
+test('populated UI states expose the catalog in the spec-type menu from a spec page', async () => {
+  const store = memoryStore();
+  await publishChecks(store, uiPlanLayer({ producer: 'todo-plan', recordedAtMs: 1, ...light, states: [{ id: 'welcome' }] }));
+  await publishChecks(store, uiStateLayer({ producer: 'todo-capture', recordedAtMs: 2, ...light, states: [shot('welcome')] }));
+  const { node } = await open([store], '/specs/gherkin');
+  await atlas!.until(() => document.querySelector('button[aria-label="Spec type"]') !== null, 'spec menu loaded');
+  await atlas!.click('button', 'Spec type');
+  await atlas!.until(() => !!atlas!.find('[role="menuitem"]', 'UI catalog'), 'UI catalog menu item');
+  await atlas!.click('[role="menuitem"]', 'UI catalog');
+  await atlas!.sees('Screen welcome');
+  expect(atlas!.router.state.location.pathname).toBe('/catalog');
+  node.close();
+});
+
 test('the catalog lists captured states with their pictures loaded lazily, and says which are expected but not captured', async () => {
   const store = memoryStore();
   await publishChecks(store, uiPlanLayer({ producer: 'planner', recordedAtMs: 1, ...light, states: [{ id: 'home', covers: ['home'] }, { id: 'cart', covers: ['cart'] }, { id: 'admin', inventory: true }] }));
@@ -126,4 +140,87 @@ test('an address that names a state nobody has recorded says so instead of waiti
 test('a project with no UI states says how one is recorded', async () => {
   await open([memoryStore()]);
   await atlas!.sees('No UI states have been recorded yet');
+});
+
+const gallery = () => document.querySelector<HTMLElement>('nav[aria-label="Catalog item navigation"]')!;
+const galleryButton = (name: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
+async function galleryKey(key: string, target: HTMLElement = gallery(), extra: KeyboardEventInit = {}) {
+  await act(async () => target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra })));
+}
+
+test('gallery arrows and numbered pagination navigate the filtered order, preserve scope, and stop at both ends', async () => {
+  const store = memoryStore();
+  await publishChecks(store, uiStateLayer({ producer: 'capture', recordedAtMs: 1, ...light, states: [shot('a'), shot('b', { status: 'failed' }), shot('c'), shot('d')] }));
+  await open([store], '/catalog?coverage=captured&state=a');
+  await atlas!.sees('Item 1 of 3: Screen a');
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
+  const details = document.getElementById(dialog.getAttribute('aria-describedby')!)!;
+  expect(details.contains(gallery())).toBe(false);
+  expect(details.compareDocumentPosition(gallery()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(galleryButton('Previous catalog item').disabled).toBe(true);
+  await galleryKey('ArrowLeft');
+  expect(atlas!.router.state.location.search.state).toBe('a');
+  await atlas!.click('button', 'Next catalog item');
+  await atlas!.sees('Item 2 of 3: Screen c');
+  expect(document.activeElement).toBe(gallery());
+  expect(atlas!.router.state.location.search.coverage).toBe('captured');
+  await atlas!.click('button', 'Go to item 3: Screen d');
+  await atlas!.sees('Item 3 of 3: Screen d');
+  expect(galleryButton('Next catalog item').disabled).toBe(true);
+  expect(galleryButton('Go to item 3: Screen d').getAttribute('aria-current')).toBe('page');
+  await galleryKey('ArrowRight');
+  expect(atlas!.router.state.location.search.state).toBe('d');
+  await galleryKey('ArrowLeft');
+  await atlas!.sees('Item 2 of 3: Screen c');
+  await galleryKey('ArrowRight', gallery(), { altKey: true });
+  expect(atlas!.router.state.location.search.state).toBe('c');
+  // Native editing keeps its arrow keys.
+  const input = document.createElement('input');
+  gallery().append(input);
+  await galleryKey('ArrowRight', input);
+  expect(atlas!.router.state.location.search.state).toBe('c');
+  input.remove();
+  await galleryKey('ArrowRight');
+  await atlas!.sees('Item 3 of 3: Screen d');
+  await galleryKey('Escape');
+  await atlas!.until(() => !gallery(), 'gallery closed by Escape');
+  expect(atlas!.router.state.location.search.state).toBeUndefined();
+  expect(atlas!.router.state.location.search.coverage).toBe('captured');
+  await galleryKey('ArrowRight', document.body);
+  expect(atlas!.router.state.location.search.state).toBeUndefined();
+});
+
+test('a single-item gallery disables both arrows, and an item outside the filters keeps its deep link without a false position', async () => {
+  const store = memoryStore();
+  await publishChecks(store, uiStateLayer({ producer: 'capture', recordedAtMs: 1, ...light, states: [shot('a'), shot('b', { status: 'failed' })] }));
+  await open([store], '/catalog?coverage=captured&state=a');
+  await atlas!.sees('Item 1 of 1: Screen a');
+  expect(galleryButton('Previous catalog item').disabled).toBe(true);
+  expect(galleryButton('Next catalog item').disabled).toBe(true);
+  await atlas!.go('/catalog?coverage=captured&state=b');
+  await atlas!.sees('Screen b is outside the current filters.');
+  expect(document.querySelector('button[aria-label="Next catalog item"]')).toBeNull();
+  await galleryKey('ArrowLeft');
+  expect(atlas!.router.state.location.search.state).toBe('b');
+  await galleryKey('Escape');
+  await atlas!.until(() => !gallery(), 'outside-filter gallery closed');
+});
+
+test('keyboard navigation works from the close button, reaches items beyond the card limit, and restores focus on exit', async () => {
+  const store = memoryStore();
+  await publishChecks(store, uiPlanLayer({ producer: 'planner', recordedAtMs: 1, ...light, states: Array.from({ length: 50 }, (_, i) => ({ id: `state-${String(i).padStart(2, '0')}` })) }));
+  await open([store]);
+  await atlas!.sees('state-00');
+  expect(cards()).toHaveLength(48);
+  const opener = atlas!.find('a', 'Open state-00')!;
+  await act(async () => { opener.focus(); opener.click(); });
+  await atlas!.sees('Item 1 of 50: state-00');
+  await galleryKey('ArrowRight', galleryButton('Close the state'));
+  await atlas!.sees('Item 2 of 50: state-01');
+  await atlas!.click('button', 'Go to item 50: state-49');
+  await atlas!.sees('Item 50 of 50: state-49');
+  expect(cards()).toHaveLength(48);
+  await galleryKey('Escape');
+  await atlas!.until(() => !gallery(), 'gallery closed');
+  await atlas!.until(() => document.activeElement === opener, 'focus restored to opener');
 });

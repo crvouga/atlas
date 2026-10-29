@@ -166,7 +166,10 @@ The viewer's **UI catalog** (`/catalog`, in the menu beside the spec types once 
 state with its picture and a coverage badge per profile, and filters by words, coverage, profile, area, route, cohort, feature flag,
 surface and producer. The address holds the filters and the open state, so a link reproduces the view. Opening a state shows its
 profiles side by side with the declared facts, the failure reason, and for each picture the layer, backend, producer, shard, commit
-and time. *Download the manifest* saves the filtered catalog as JSON.
+and time. A persistent bottom bar holds the previous/next arrows and numbered pagination. They move through all states matching the current filters, including states
+beyond the cards currently shown. Left/Right arrow keys navigate while the detail is focused; Escape closes it and returns
+focus to its opener. Navigation stops at either end, announces the current item and total, and keeps the filters in the address.
+A linked state outside the filters still opens, with an explanation instead of an incorrect position. *Download the manifest* saves the filtered catalog as JSON.
 
 ```sh
 curl "$ATLAS_SERVER_URL/api/reports/ui-catalog?coverage=failed,missing&profile=…"   # JSON; add format=markdown for text
