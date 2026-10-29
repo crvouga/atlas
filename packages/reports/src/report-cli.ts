@@ -1,7 +1,7 @@
 /**
  * @module The `atlas report` command
  *
- * `reportMain` is `atlas report publish | stream | status | merge | doctor | policy`, written so it can be called from code and
+ * `reportMain` is `atlas report publish | stream | status | verify-recordings | merge | doctor | policy`, written so it can be called from code and
  * tests as well as a terminal: it takes its arguments, environment, working directory, clock, git and standard input as
  * parameters and returns the exit code. Every command can print a JSON document (`--format json`) instead of prose, and a
  * command that is wrong throws, which `runReportCommand` turns into a message (or a JSON error) and exit code 2.
@@ -31,6 +31,7 @@ import { parseWith } from './parse-with';
 import { publishChecks } from './publish-checks';
 import { createReporter } from './reporter';
 import { formatStatusMarkdown, formatStatusText, reportStatus } from './report-status';
+import { verifyStoreRecordings, type RecordingGap } from './recording-verify';
 import { publishRunBundle } from './run-bundle';
 import { collectSpecFiles, latestSpecSet, publishSpecSet } from './spec-set';
 import { linkChecksToSpecs } from './spec-link';
@@ -56,6 +57,8 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
                        [--specs <dir>] [--format text|json|markdown]
                        [--require-environments a,b] [--require-all-specs]
                        [--branch <name>]... [--ignore-modified]
+  atlas report verify-recordings [--store <dir|s3://…|id=url>]... [--backends <module>] [--layer <id>]...
+                       [--limit <n>] [--branch <name>]... [--ignore-modified] [--format text|json]
   atlas report merge   [--store …]... [--backends <module>] --into <dir|s3://…>
   atlas report doctor  [--store …]... [--role publisher|reader|both]
   atlas report policy  --store s3://bucket/prefix [--role publisher|reader|both]
@@ -99,6 +102,13 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
             --require-all-specs    fail while any spec has no results
             --branch <name>        only layers recorded on this branch (repeatable)
             --ignore-modified      leave out layers from modified checkouts and unknown origins
+  verify-recordings   Read back the videos the layers published and check they are still there as published: the
+            layer still lists the file, its blob is still stored, its size and SHA-256 are the recorded ones, and it
+            begins like the container its media type names. Exit 1 when any video is missing, unreadable, corrupt or
+            not that container, naming the layer and check; test results are never changed. This checks stored bytes,
+            not playback in a browser. Videos given only by address are counted, not checked.
+            --layer <id>   only the layer whose id starts with this (repeatable; at least 7 digits)
+            --limit <n>    only the newest n layers
   merge     Copy the layers of several stores into one.
   doctor    Check that a store works: credentials, listing, writing, and what it holds.
   policy    Print the least-privilege IAM policy for publishers, readers, or both.
@@ -107,8 +117,8 @@ export const REPORT_USAGE = `atlas report — layered evidence for any kind of s
                        { id, label?, store } (or a function returning it): a device lab, anything
                        that implements ObjectStore.
 
-  --format json (alias --json)   publish, stream, merge, doctor and status print one JSON document instead of prose
-                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status). A command
+  --format json (alias --json)   publish, stream, merge, doctor, status and verify-recordings print one JSON document instead of prose
+                       (schemas: publish-result, stream-result, merge-result, doctor-result, report-status, verify-recordings-result). A command
                        that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   A store may be an Atlas server (https://…): ATLAS_STORE=https://atlas.example.com, with ATLAS_TOKEN.
 
@@ -443,6 +453,38 @@ export async function reportMain(argv: readonly string[], io: ReportIo = { out: 
     });
     io.out(format === 'json' ? `${JSON.stringify(status, null, 2)}\n` : format === 'markdown' ? formatStatusMarkdown(status) : formatStatusText(status));
     return status.ok ? 0 : 1;
+  }
+
+  if (command === 'verify-recordings') {
+    const format = value(rest, 'format') ?? (rest.includes('--json') ? 'json' : 'text');
+    if (!['text', 'json'].includes(format)) throw new Error(`--format takes text|json (got "${format}")`);
+    const ids = values(rest, 'layer');
+    const short = ids.find(id => !/^[0-9a-f]{7,64}$/i.test(id));
+    if (short) throw new Error(`--layer takes at least 7 hexadecimal digits of a layer id (got "${short}")`);
+    const limitText = value(rest, 'limit');
+    if (limitText !== undefined && !/^\d+$/.test(limitText)) throw new Error(`--limit takes a whole number (got "${limitText}")`);
+    const include = layerFilter(rest, env);
+    let layers = 0, checked = 0, verified = 0, referenced = 0;
+    const gaps: (RecordingGap & { layer: string })[] = [];
+    const notices: string[] = [];
+    for (const backend of await backendsOf(rest, base, env)) {
+      const found = await verifyStoreRecordings(backend.store, { ids, ...(limitText !== undefined ? { limit: Number(limitText) } : {}), ...(include ? { include } : {}) });
+      for (const layer of found.layers) {
+        layers += 1; checked += layer.checked; verified += layer.ok; referenced += layer.referenced;
+        gaps.push(...layer.gaps.map(gap => ({ ...gap, layer: layer.layer })));
+      }
+      notices.push(...found.notices);
+    }
+    const ok = gaps.length === 0 && notices.length === 0;
+    if (format === 'json') {
+      io.out(`${JSON.stringify({ ok, layers, checked, verified, referenced, gaps, notices }, null, 2)}\n`);
+      return ok ? 0 : 1;
+    }
+    io.out(`Recordings in ${layers} layer${layers === 1 ? '' : 's'}: ${verified} of ${checked} stored video${checked === 1 ? '' : 's'} verified${referenced ? `, ${referenced} given by address (not checked)` : ''}\n`);
+    for (const gap of gaps) io.out(`! ${gap.problem}: ${gap.check ?? 'the run'} / ${gap.name} in layer ${gap.layer.slice(0, 12)} (${gap.reason})\n`);
+    for (const notice of notices) io.out(`! ${notice}\n`);
+    if (!ok) io.out('Test results are unchanged. Publish the missing recordings again to repair the gaps.\n');
+    return ok ? 0 : 1;
   }
 
   if (command === 'merge') {

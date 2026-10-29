@@ -28,6 +28,7 @@ test('every documented JSON result validates against the same registry that publ
     merge: { args: ['report', 'merge', '--into', 'merged'], code: 0 },
     doctor: { args: ['report', 'doctor'], code: 0 },
     status: { args: ['report', 'status'], code: 0 },
+    verifyRecordings: { args: ['report', 'verify-recordings'], code: 0 },
     error: { args: ['report', 'publish'], code: 2 }
   };
   try {

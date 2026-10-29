@@ -222,6 +222,38 @@ describe('GET /api/reports/runs?video=true', () => {
   });
 });
 
+describe('GET /api/reports/runs?recordings=', () => {
+  test('filters runs by recording completeness over every run before the limit, with facet counts, and never reads a recording', async () => {
+    const store = memoryStore();
+    const movie = (name: string) => ({ name, role: 'video', contentType: 'video/webm', data: new TextEncoder().encode(name) });
+    const expected = { recordingExpectation: 'required' as const };
+    await publishChecks(store, { producer: 'web', runUrl: 'https://ci.example/runs/1', recordedAtMs: 1_000, checks: [{ id: 'a', title: 'A', status: 'passed', ...expected, attachments: [movie('a.webm')] }] });
+    await publishChecks(store, { producer: 'web', runUrl: 'https://ci.example/runs/2', recordedAtMs: 2_000, checks: [{ id: 'a', title: 'A', status: 'passed', ...expected }] });
+    await publishChecks(store, { producer: 'web', runUrl: 'https://ci.example/runs/3', recordedAtMs: 3_000, checks: [{ id: 'a', title: 'A', status: 'passed' }] });
+    const node = createNode({ stores: [{ id: 'main', label: 'Main', store }], refreshMs: 60_000 });
+    nodes.push(node);
+    await node.ready;
+    const runs = async (query: string) => RunListSchema.parse(await (await get(node, `/api/reports/runs${query}`)).json());
+    const all = await runs('');
+    expect(Object.fromEntries(all.runs.map(run => [run.key.slice(-1), run.recordings?.state]))).toEqual({ 1: 'complete', 2: 'incomplete', 3: undefined });
+    expect(all.facets!.recordings).toEqual(expect.arrayContaining([{ value: 'complete', count: 1 }, { value: 'incomplete', count: 1 }, { value: 'unknown', count: 1 }]));
+    // The incomplete run is found though a newer run comes first, and it is still a green run.
+    const gaps = await runs('?recordings=incomplete&limit=1');
+    expect(gaps.filters).toContain('recordings');
+    expect(gaps.total).toBe(1);
+    expect(gaps.runs.map(run => [run.key.slice(-1), run.counts.passed, run.recordings])).toEqual([['2', 1, expect.objectContaining({ state: 'incomplete', expected: 1, published: 0, unresolved: 1 })]]);
+    // Old runs with no receipt are Unknown, never Complete; values combine with OR.
+    expect((await runs('?recordings=unknown')).runs.map(run => run.key.slice(-1))).toEqual(['3']);
+    expect((await runs('?recordings=complete,unknown')).runs.map(run => run.key.slice(-1))).toEqual(['3', '1']);
+    // A different dimension combines with AND.
+    expect((await runs('?recordings=complete&outcome=failed')).total).toBe(0);
+    // Recorded results are not asked about it: the artifacts list neither filters by it nor claims to.
+    const artifacts = ArtifactListSchema.parse(await (await get(node, '/api/reports/artifacts?recordings=complete')).json());
+    expect(artifacts.filters).not.toContain('recordings');
+    expect(artifacts.total).toBeGreaterThan(0);
+  });
+});
+
 describe('GET /api/reports/tests/health', () => {
   /** Results published under `checkout/cart.feature` while the specs are recorded under `specs/`. */
   async function drifted() {

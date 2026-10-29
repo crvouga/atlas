@@ -2,7 +2,7 @@
  * @module Run and artifact filters
  *
  * The filter bar of the Runs and Artifacts tabs: words, artifact tag, media type, label, environment, branch, outcome,
- * feature domain and a time range, each offering the values the report has with counts in the scope of the list. What is
+ * feature domain and a time range (and, for runs, the completeness of their recordings, apart from their outcome), each offering the values the report has with counts in the scope of the list. What is
  * chosen shows as removable chips and is the address, so copying it or reloading restores the same view; named views keep
  * a query to open again. Choices combine with AND across the controls and OR within one.
  */
@@ -18,7 +18,7 @@ import { patched, useExplorerNavigate } from './navigate';
 import { filtered, joined, NO_FILTERS, toggled, values, type ExplorerSearch } from './search';
 import { filtersOf, isView, readViews, writeViews, type SavedView } from './views';
 
-type Param = 'artifactTag' | 'type' | 'label' | 'env' | 'branch' | 'outcome' | 'domain' | 'producer';
+type Param = 'artifactTag' | 'type' | 'label' | 'env' | 'branch' | 'outcome' | 'recordings' | 'domain' | 'producer';
 
 const NOUN: Record<Param, string> = {
   artifactTag: 'Tag',
@@ -27,13 +27,18 @@ const NOUN: Record<Param, string> = {
   env: 'Environment',
   branch: 'Branch',
   outcome: 'Outcome',
+  recordings: 'Recordings',
   domain: 'Domain',
   producer: 'Producer'
 };
 
+/** How the completeness of a run's recordings reads. */
+const COMPLETENESS: Record<string, string> = { complete: 'Complete', incomplete: 'Incomplete', 'none-expected': 'None expected', unknown: 'Unknown' };
+
 /** How a chosen value reads: tags with their hash, environments by name. */
 function shown(param: Param, value: string): string {
   if (param === 'artifactTag') return `#${value}`;
+  if (param === 'recordings') return COMPLETENESS[value] ?? value;
   if (param === 'env') return environmentLabel(value);
   if (param === 'domain' && value === '(no spec)') return 'No spec';
   return value;
@@ -178,7 +183,7 @@ export function FilterBar({
   const [draft, setDraft] = useState(search.q ?? '');
   // The address may change from elsewhere (a link, a saved view, back): follow it.
   useEffect(() => setDraft((current) => (current.trim() === (search.q ?? '').trim() ? current : (search.q ?? ''))), [search.q]);
-  const params: Param[] = ['artifactTag', 'type', 'label', 'env', 'branch', 'outcome', ...(tab === 'artifacts' ? (['domain'] as const) : []), 'producer'];
+  const params: Param[] = ['artifactTag', 'type', 'label', 'env', 'branch', 'outcome', ...(tab === 'runs' ? (['recordings'] as const) : []), ...(tab === 'artifacts' ? (['domain'] as const) : []), 'producer'];
   const chips = [
     ...params.flatMap((param) =>
       values(search[param]).map((value) => ({ label: `${NOUN[param]}: ${shown(param, value)}`, clear: { [param]: toggled(search[param], value) } as never }))
@@ -233,6 +238,9 @@ export function FilterBar({
           <Facet param="env" facets={facets.environments} search={search} />
           <Facet param="branch" facets={facets.branches} search={search} />
           <Facet param="outcome" facets={facets.outcomes} search={search} />
+          {tab === 'runs' && (facets.recordings || values(search.recordings).length > 0) && (
+            <Facet param="recordings" facets={facets.recordings ?? []} search={search} />
+          )}
           {tab === 'artifacts' && facets.domains && <Facet param="domain" facets={facets.domains} search={search} />}
           {facets.producers.length > 1 && <Facet param="producer" facets={facets.producers} search={search} />}
           <TextInput type="date" label="From" value={search.since ?? ''} onChange={(event) => go({ since: event.target.value || undefined })} />

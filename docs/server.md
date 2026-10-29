@@ -409,7 +409,7 @@ with `format=markdown` (or `Accept: text/markdown`), and takes the project prefi
 | One test: every recorded result (status, duration, environment, branch, commit, CI run), newest first | `GET /api/reports/tests/history?key=<key>` |
 | How reliable one test is in a scope (environment, producer, parameters, branch, commit, spec revision, time window): independent executions, first-try and eventual success, what was left out and why | `GET /api/reports/tests/reliability?key=<key>&environment=phone` |
 | Why Specs, domains and counts disagree: ambiguous spec paths, shared domains, gaps, a reconciliation of the totals | `GET /api/reports/tests/health` |
-| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
+| The runs that recorded the report (by CI run URL, else branch and commit); `?video=true` keeps those with a playable video; `artifactTag`, `type`, `label`, `environment`, `branch`, `outcome`, `recordings` (completeness of the recordings the run's layers expected), `since`, `until` narrow it ([filtering](rich-evidence.md#finding-runs-and-artifacts)) | `GET /api/reports/runs` |
 | Recorded results that carry evidence, across the whole history, found by tag, media type, label, feature, environment, branch, revision, outcome and time | `GET /api/reports/artifacts?artifactTag=demo&type=video` |
 | Every test one run recorded | `GET /api/reports/runs/detail?key=<run key>` |
 

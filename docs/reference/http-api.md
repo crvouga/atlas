@@ -833,6 +833,7 @@ Every run, newest first: layers grouped by their CI run URL (else branch and com
 - `branch` (query): Branches.
 - `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
 - `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `recordings` (query): Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.
 - `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
 - `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
 - `until` (query): Only records at or before this time (same forms as `since`).
@@ -861,6 +862,7 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `branch` (query): Branches.
 - `sha` (query): Revisions: a full commit id or a prefix of at least seven characters.
 - `outcome` (query): Statuses: `passed`, `failed`, `running`, `not-run`. A run's outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.
+- `recordings` (query): Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.
 - `q` (query): Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.
 - `since` (query): Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result's recording time; a run's end.
 - `until` (query): Only records at or before this time (same forms as `since`).

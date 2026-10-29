@@ -208,7 +208,8 @@ curl "$ATLAS_SERVER_URL/api/reports/artifacts?artifactTag=demo&type=video&domain
 - **Dimensions.** `artifactTag`, `type` (the media type as a role: `video`, `image`, `audio`, `snapshot`, `text`,
   `file`; `video` means a playable recording), `label` (`key=value`, or `key`), `domain` and `spec` (artifacts only),
   `environment` (the device or client), `producer`, `branch`, `sha` (seven or more characters), `outcome` (`passed`,
-  `failed`, `running`, `not-run`), `since` and `until` (epoch milliseconds or an ISO date), and `q` (words).
+  `failed`, `running`, `not-run`), `recordings` (runs only: `complete`, `incomplete`, `none-expected` or `unknown`, see
+  [recording completeness](#recording-completeness)), `since` and `until` (epoch milliseconds or an ISO date), and `q` (words).
 - **Semantics.** Filters combine with AND across dimensions and OR within one (`environment=ios,android`). With both
   `artifactTag` and `type`, one attachment must be both where the report says which video carries which tag: a tagged
   screenshot beside an untagged video is not a tagged video. `inherited=1` also counts the tags an attachment inherits
@@ -475,7 +476,33 @@ publish; it never contains a path or a token.
   retry (publishing again reuses the stored files).
 - `atlas report status --format json` has `recordings`: `state` is `complete`, `incomplete`, `none-expected` or
   `unknown`, with counts and each gap. It never changes `ok`. A layer without a receipt is `unknown`, never `complete`.
-- The viewer shows `Recordings 2 of 3: incomplete` beside the run's origin, apart from its green or red outcomes.
+- The viewer shows `Recordings 2 of 3: incomplete` beside the run's origin and in each row of the Runs tab, apart from
+  its green or red outcomes.
+- **Find runs by completeness.** `GET /api/reports/runs?recordings=incomplete` (and the Runs tab's *Recordings* filter,
+  `?tab=runs&recordings=incomplete`) keep the runs whose layers have a skipped or unresolved expected recording. The
+  values are `complete`, `incomplete`, `none-expected` and `unknown`, comma-separated for OR, and they combine with the
+  other filters by AND. A run whose layers declared no expectations is `unknown`, never `complete`, and a run with any
+  layer without a receipt cannot be `complete`. It is answered from the layers' receipts, before the page limit, and
+  never reads a recording; the facet counts say how many runs have each state. It is a property of a run, so the
+  artifacts list does not take it. A server that predates it ignores the parameter and does not name it in `filters`, and
+  the viewer then says the list is not narrowed by it.
 
-This is a statement about publication. Atlas does not check that a stored video plays in a browser, and does not yet
-re-check later that a stored file is still readable.
+### Is the recording still there?
+
+A receipt says a file was published. Whether it is still retrievable later is a separate question, and Atlas answers it
+two ways without touching a check's result:
+
+- **Layer bundle.** A video that names a `bundleKey` the layer's bundle does not list (the file was acknowledged and is
+  gone, or never arrived) is not offered to play. The report marks it `available: false` with `reason: "not-in-bundle"`,
+  the run counts it in `videos.unavailable` and `videos.missing`, and the Runs tab explains that the run stored the file
+  but no longer holds it, which is different from a reference that never named any bytes.
+- **`atlas report verify-recordings`** reads the videos of the stored layers back and checks, for each, that the bundle
+  lists it, that its blob is still in the store, that its size and SHA-256 are the recorded ones, and that it begins like
+  the container its media type names (WebM, MP4, QuickTime, Ogg, AVI). It exits 1 and names the layer and check for
+  every gap (`not-in-bundle`, `blob-missing`, `unreadable`, `size-mismatch`, `checksum-mismatch`, `undecodable`);
+  `--format json` prints the `verify-recordings-result` document. `--layer <id>` and `--limit <n>` narrow the work, since
+  it reads blobs. A store that cannot answer is `unreadable`, never verified. Test results are unchanged either way.
+
+Both are statements about stored bytes. Atlas does not check that a stored video plays in a given browser (a valid header
+can still have an unsupported codec or be truncated), and acknowledging an upload is not playback. Videos given only by
+`uri` are counted as referenced and not checked.

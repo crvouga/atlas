@@ -12,6 +12,7 @@ import { createBundleReader, writeBundle, type BundleIndex, type BundleEntry } f
 import { readUtf8, writeUtf8 } from './object-io';
 import type { ObjectStore } from './object-store';
 import type { LayerSummary, ReportLayer } from './layer-types';
+import { unbundledKeys } from './evidence-detail';
 import { LAYER_SCHEMA_VERSION, parseLayerDocument } from '../../schema/src/layer';
 
 /** The key prefix under which every layer's catalog entry is written. */
@@ -82,8 +83,9 @@ export async function readLayerFile(store: ObjectStore, id: string, file: string
   const layer = await readLayer(store, id);
   return layer ? createBundleReader(store, layer.bundle)(file) : null;
 }
-/** Drops a layer's bundle index, leaving the summary composition reads. */
+/** Drops a layer's bundle index, leaving the summary composition reads, plus which bundle keys its attachments name that the bundle does not hold (`unbundled`, when any). */
 export function layerSummary(layer: ReportLayer): LayerSummary {
-  const { bundle: _, ...summary } = layer;
-  return summary;
+  const { bundle, ...summary } = layer;
+  const unbundled = unbundledKeys(layer, bundle);
+  return unbundled.length ? { ...summary, unbundled } : summary;
 }

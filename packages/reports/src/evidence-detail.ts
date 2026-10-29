@@ -50,6 +50,23 @@ export function summarizeEvidence(...holders: readonly EvidenceHolder[]): Eviden
 }
 
 /**
+ * What a reader knows about the layer whose evidence it summarizes, beyond the evidence itself. `inherited` is the scope
+ * a part or layer declares (see {@link summarizeEvidenceIn}); `unbundled` holds the bundle keys that attachments name but
+ * the layer's bundle does not contain (see {@link unbundledKeys}), so a video that names one is unavailable rather than playable.
+ */
+export type EvidenceContext = { readonly inherited?: EvidenceScope | undefined; readonly unbundled?: ReadonlySet<string> | undefined };
+
+/** Like {@link summarizeEvidenceIn}, knowing which bundle keys the layer does not hold. A video naming one is `available: false` with `reason: 'not-in-bundle'`. */
+export function summarizeEvidenceWith(context: EvidenceContext, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined {
+  return summarize(holders, 'check', context.inherited, false, context.unbundled);
+}
+
+/** Like {@link summarizeLayerEvidence}, knowing which bundle keys the layer does not hold (see {@link summarizeEvidenceWith}). */
+export function summarizeLayerEvidenceWith(context: EvidenceContext, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined {
+  return summarize(holders, 'layer', undefined, true, context.unbundled);
+}
+
+/**
  * Like {@link summarizeEvidence} for the checks of a part: a video that declares no scope, and sits in a holder that
  * declares none, takes the scope `inherited` from its part or layer (the nearest declaration of the two, see
  * `effectiveScope`). Without `inherited` it is the same as `summarizeEvidence`.
@@ -67,7 +84,7 @@ export function summarizeLayerEvidence(...holders: readonly EvidenceHolder[]): E
   return summarize(holders, 'layer', undefined, true);
 }
 
-function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inherited?: EvidenceScope, firstIsParent = false): EvidenceSummary | undefined {
+function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inherited?: EvidenceScope, firstIsParent = false, unbundled?: ReadonlySet<string>): EvidenceSummary | undefined {
   if (!holders.some(holder => count(holder) > 0)) return undefined;
   const roles = new Set<string>();
   const tags = new Set<string>();
@@ -81,7 +98,7 @@ function summarize(holders: readonly EvidenceHolder[], owner: VideoOwner, inheri
       attachments += 1;
       for (const tag of normalizeTags(item.tags)) artifactTags.add(tag);
       roles.add(item.role ?? roleOfType(item.contentType ?? contentTypeOf(item.name)));
-      const video = videoOf(item, by, where, effectiveScope(item.scope, ...scopes));
+      const video = videoOf(item, by, where, effectiveScope(item.scope, ...scopes), unbundled);
       if (video) videos.push(video);
     }
   };
@@ -124,11 +141,13 @@ export function attachmentIdentity(item: Pick<Attachment, 'name' | 'sha256' | 'b
   return item.sha256 ? `sha256:${item.sha256}` : item.bundleKey ?? item.uri ?? (item.text === undefined ? undefined : `inline:${item.name}`);
 }
 
-function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }, scope: EvidenceScope | undefined): VideoRef | undefined {
+function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number; step?: string }, scope: EvidenceScope | undefined, unbundled?: ReadonlySet<string>): VideoRef | undefined {
   if (!isVideoAttachment(item)) return undefined;
-  const recording = attachmentIdentity(item);
+  // It names bytes in the layer that the layer does not hold: stored, then gone (or never arrived). Not a recording.
+  const lost = item.bundleKey !== undefined && unbundled?.has(item.bundleKey) === true;
+  const recording = lost ? undefined : attachmentIdentity(item);
   const tags = normalizeTags(item.tags);
-  return { name: item.name, owner, ...where, ...(tags.length ? { tags } : {}), ...(recording === undefined ? {} : { recording }), available: recording !== undefined, ...(scope ? { scope } : {}) };
+  return { name: item.name, owner, ...where, ...(tags.length ? { tags } : {}), ...(recording === undefined ? {} : { recording }), available: recording !== undefined, ...(lost ? { reason: 'not-in-bundle' as const } : {}), ...(scope ? { scope } : {}) };
 }
 
 /**
@@ -138,12 +157,12 @@ function videoOf(item: Attachment, owner: VideoOwner, where: { attempt?: number;
 export function videoCounts(videos: readonly VideoRef[] | undefined): VideoCounts | undefined {
   if (!videos?.length) return undefined;
   const distinct = new Set<string>();
-  let unavailable = 0;
+  let unavailable = 0, missing = 0;
   for (const video of videos) {
     if (video.available && video.recording !== undefined) distinct.add(video.recording);
-    else unavailable += 1;
+    else { unavailable += 1; if (video.reason === 'not-in-bundle') missing += 1; }
   }
-  return { references: videos.length, recordings: distinct.size, unavailable };
+  return { references: videos.length, recordings: distinct.size, unavailable, ...(missing ? { missing } : {}) };
 }
 
 /** A role to show when a producer gave none, from the media type: `image`, `video`, `audio`, `snapshot` (text/html), `text` (text, JSON, XML) or `file`. Roles are an open vocabulary; a producer's own role always wins. */
@@ -216,4 +235,15 @@ export function bundleKeysOf(holder: EvidenceHolder): string[] {
   for (const step of holder.steps ?? []) take(step.attachments);
   for (const attempt of holder.attempts ?? []) { take(attempt.attachments); for (const step of attempt.steps ?? []) take(step.attachments); }
   return [...keys];
+}
+
+/**
+ * The bundle keys that attachments of a layer's holders (the layer, its parts, their checks, with their steps and
+ * attempts) name but the layer's `bundle` does not contain, sorted. A viewer asking for such a file is answered 404, so
+ * a video naming one is unavailable. `bundle` is the layer's `BundleIndex` (or anything keyed by file key).
+ */
+export function unbundledKeys(layer: EvidenceHolder & { readonly parts: readonly (EvidenceHolder & { readonly checks: readonly EvidenceHolder[] })[] }, bundle: Readonly<Record<string, unknown>>): string[] {
+  const missing = new Set<string>();
+  for (const holder of [layer, ...layer.parts.flatMap(part => [part, ...part.checks])]) for (const key of bundleKeysOf(holder)) if (!Object.hasOwn(bundle, key)) missing.add(key);
+  return [...missing].sort();
 }

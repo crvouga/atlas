@@ -459,6 +459,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'branch', in: 'query', description: 'Branches.', schema: str },
       { name: 'sha', in: 'query', description: 'Revisions: a full commit id or a prefix of at least seven characters.', schema: str },
       { name: 'outcome', in: 'query', description: 'Statuses: `passed`, `failed`, `running`, `not-run`. A run\'s outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.', schema: str },
+      { name: 'recordings', in: 'query', description: 'Recording completeness of the run, apart from its outcome: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no recording expectations is `unknown`, never `complete`). Repeatable or comma-separated. Answered from the layers\' receipts; no recording is read. A server that does not know it ignores it and does not name it in `filters`.', schema: str },
       { name: 'q', in: 'query', description: 'Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.', schema: str },
       { name: 'since', in: 'query', description: 'Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result\'s recording time; a run\'s end.', schema: str },
       { name: 'until', in: 'query', description: 'Only records at or before this time (same forms as `since`).', schema: str },

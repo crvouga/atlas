@@ -7,7 +7,7 @@
  * or `\\`, and the router encodes `#` and spaces. Anything unreadable is dropped, never an error.
  *
  * The Runs and Artifacts tabs share the tests' `q`, `env`, `producer`, `domain` and `spec` and add `artifactTag`,
- * `type`, `label`, `branch`, `outcome`, `since` and `until`, so a link to one tab's filters opens the same query on another.
+ * `type`, `label`, `branch`, `outcome`, `since` and `until` (and the Runs tab alone `recordings`, the completeness of its recordings), so a link to one tab's filters opens the same query on another.
  */
 import { joinList, splitList, type ArtifactFilter } from '@crvouga/atlas/reports/artifact-query';
 import type { ReliabilityScope } from '@crvouga/atlas/reports/reliability';
@@ -55,6 +55,8 @@ export const ExplorerSearchFields = {
   branch: text,
   /** Outcomes of a run or recorded result (`passed`, `failed`…). */
   outcome: text,
+  /** Recording completeness of a run (`complete`, `incomplete`, `none-expected`, `unknown`): runs only, apart from the outcome. */
+  recordings: text,
   /** Only records from this day (`YYYY-MM-DD`, the viewer's local time). */
   since: text,
   /** Only records until the end of this day (`YYYY-MM-DD`, local time). */
@@ -122,6 +124,7 @@ export type ExplorerSearch = {
   readonly label?: string;
   readonly branch?: string;
   readonly outcome?: string;
+  readonly recordings?: string;
   readonly since?: string;
   readonly until?: string;
   readonly inRun?: string;
@@ -216,7 +219,7 @@ export function reliabilityScopeOf(search: ExplorerSearch): ReliabilityScope {
 }
 
 /** The filters of the Runs and Artifacts tabs, in the address. */
-export const FILTER_FIELDS = ['q', 'artifactTag', 'inherited', 'type', 'label', 'env', 'producer', 'branch', 'outcome', 'domain', 'spec', 'since', 'until', 'video'] as const;
+export const FILTER_FIELDS = ['q', 'artifactTag', 'inherited', 'type', 'label', 'env', 'producer', 'branch', 'outcome', 'recordings', 'domain', 'spec', 'since', 'until', 'video'] as const;
 
 /** A patch that removes every filter of the Runs and Artifacts tabs. */
 export const NO_FILTERS = Object.fromEntries(FILTER_FIELDS.map((field) => [field, undefined])) as { [K in (typeof FILTER_FIELDS)[number]]?: undefined };
@@ -250,6 +253,7 @@ export function filterOf(search: ExplorerSearch): ArtifactFilter {
     producer: list(search.producer),
     branch: list(search.branch),
     outcome: list(search.outcome),
+    recordings: list(search.recordings),
     domain: list(search.domain),
     spec: list(search.spec),
     since,

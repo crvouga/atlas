@@ -78,7 +78,8 @@ export const VideoRefSchema = z.looseObject({
   step: z.string().optional().describe('The name of the step that holds it'),
   tags: z.array(z.string()).optional().describe('The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)'),
   recording: z.string().optional().describe('What identifies the bytes; references with the same value are one recording. Absent when it cannot be played'),
-  available: z.boolean().describe('False when the reference names no bytes (no bundle key, address or inline text)'),
+  available: z.boolean().describe('False when the reference names no bytes (no bundle key, address or inline text), or names a bundle key the layer does not hold'),
+  reason: z.string().optional().describe('Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable'),
   scope: EvidenceScopeSchema.optional().describe('What this recording shows as its producer declared it: its own `scope`, else its attempt\'s, check\'s, part\'s or layer\'s. Absent: the scope is unknown, never live, physical or audible')
 });
 
@@ -86,7 +87,8 @@ export const VideoRefSchema = z.looseObject({
 export const VideoCountsSchema = z.looseObject({
   references: z.number().int().nonnegative().describe('Every reference to a video; identical bytes referenced twice count twice'),
   recordings: z.number().int().nonnegative().describe('Distinct playable recordings'),
-  unavailable: z.number().int().nonnegative().describe('References that name no bytes')
+  unavailable: z.number().int().nonnegative().describe('References that cannot be played: they name no bytes, or name a file the layer does not hold'),
+  missing: z.number().int().positive().optional().describe('Of `unavailable`, those that name a file the layer\'s bundle does not hold (stored, then gone). Absent when there are none')
 });
 
 /** What a result carries beyond its outcome, as counts and short facts. Present only when there is something. */
@@ -673,6 +675,12 @@ export const ReportRunSchema = z.looseObject({
   totalDurationMs: z.number().nullable(),
   failing: z.array(z.looseObject({ key: z.string(), title: z.string(), environment: z.string().nullable(), detail: z.string() })),
   videos: VideoCountsSchema.optional().describe('Its videos, from its layers and the last result of each test. Absent when it has none or the report carries no video information'),
+  recordings: z.looseObject({
+    state: z.enum(['complete', 'incomplete', 'none-expected', 'unknown']).describe('`incomplete` when an expected recording was skipped or unresolved; else `unknown` when a layer declared no expectations; else `complete` when something was expected and `none-expected` when nothing was'),
+    expected: z.number().int().nonnegative(), published: z.number().int().nonnegative().describe('Of the expected recordings, uploaded or referenced by address'),
+    skipped: z.number().int().nonnegative(), unresolved: z.number().int().nonnegative(), notApplicable: z.number().int().nonnegative(),
+    layersWithoutReceipt: z.number().int().nonnegative().describe('Layers of the run that declared no recording expectations: nothing is claimed for them')
+  }).optional().describe('Whether the recordings its layers expected were published, apart from its outcomes. Absent when no layer declared an expectation: its completeness is unknown, never complete. Matched by the `recordings` filter'),
   attachments: z.number().int().positive().optional().describe('Files attached to the run itself, in its layers, not to a check. Absent when there are none'),
   artifactTags: z.array(z.string()).optional().describe('The normalized tags of the attachments of its results, sorted and distinct. Absent when none is tagged, and in reports of older servers'),
   tags: z.array(z.string()).optional().describe('The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches). Absent when none'),
@@ -687,7 +695,8 @@ export const QueryFacetValueSchema = z.looseObject({ value: z.string(), count: z
 export const QueryFacetsSchema = z.looseObject({
   artifactTags: z.array(QueryFacetValueSchema), types: z.array(QueryFacetValueSchema), labels: z.array(QueryFacetValueSchema).describe('Values are `key=value`'),
   environments: z.array(QueryFacetValueSchema), producers: z.array(QueryFacetValueSchema), branches: z.array(QueryFacetValueSchema), outcomes: z.array(QueryFacetValueSchema),
-  domains: z.array(QueryFacetValueSchema).optional().describe('Only for artifacts: runs have no domain')
+  domains: z.array(QueryFacetValueSchema).optional().describe('Only for artifacts: runs have no domain'),
+  recordings: z.array(QueryFacetValueSchema).optional().describe('Only for runs: `complete`, `incomplete`, `none-expected` and `unknown` with how many runs have each. Absent on servers that predate the filter')
 });
 
 /** `GET /api/reports/runs`: runs, newest first. */

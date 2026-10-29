@@ -10,7 +10,7 @@ Source: `packages/reports/src/artifact-query.ts`. Import: `@crvouga/atlas/report
 
 One shareable query for the runs of a project and for the recorded results that carry evidence (recordings,
 screenshots, traces): by artifact tag, label, media type, feature (domain, spec), environment or device, producer,
-branch, revision, outcome and time. The same rules answer `GET /api/reports/runs`, `GET /api/reports/artifacts`
+branch, revision, outcome, time and (runs only) recording completeness. The same rules answer `GET /api/reports/runs`, `GET /api/reports/artifacts`
 and the viewer's Runs and Artifacts views, so a link means the same thing everywhere.
 
 The semantics are fixed, not inferred:
@@ -81,6 +81,12 @@ export type ArtifactFilter = {
   readonly domain?: readonly string[];
   /** Spec paths. Not applicable to runs. */
   readonly spec?: readonly string[];
+  /**
+   * Recording completeness of a run: `complete`, `incomplete`, `none-expected` or `unknown` (a run whose layers declared no
+   * recording expectations is `unknown`, never `complete`). Answered from the layers' receipts alone, without reading any
+   * recording. Applies to runs only; it is independent of `outcome`.
+   */
+  readonly recordings?: readonly string[];
   /** Only records at or after this time (epoch ms): a result's recording time, a run's end. */
   readonly since?: number;
   /** Only records at or before this time (epoch ms). */
@@ -124,6 +130,8 @@ export type FilterFields = {
   /** Absent when the dimension does not apply (runs have no domain). */
   readonly domains?: readonly string[];
   readonly specs?: readonly string[];
+  /** The recording completeness of a run (one value). Absent when the dimension does not apply (results). */
+  readonly recordings?: readonly string[];
   readonly at: number;
 };
 ```
@@ -143,6 +151,8 @@ export type QueryFacets = {
   readonly branches: readonly QueryFacetValue[];
   readonly outcomes: readonly QueryFacetValue[];
   readonly domains?: readonly QueryFacetValue[];
+  /** Runs only: `complete`, `incomplete`, `none-expected` and `unknown`, with how many runs have each. */
+  readonly recordings?: readonly QueryFacetValue[];
 };
 ```
 
@@ -204,6 +214,14 @@ export function usedFilters(filter: ArtifactFilter): FilterName[]
 
 Which filters a query uses, by the names an address gives them.
 
+#### `forArtifacts`
+
+```ts
+export function forArtifacts(filter: ArtifactFilter): ArtifactFilter
+```
+
+Every filter in `filter` that may be applied to a recorded result, as the artifacts query applies them (no recording completeness, which is a property of a run).
+
 #### `isFiltered`
 
 ```ts
@@ -218,7 +236,7 @@ Whether a query narrows anything.
 export function forRuns(filter: ArtifactFilter): ArtifactFilter
 ```
 
-Every filter in `filter` that may be applied to a record with these fields, as the runs query applies them (no domain or spec).
+Every filter in `filter` that may be applied to a run, as the runs query applies them (no domain or spec).
 
 #### `matchesFilter`
 
@@ -1684,6 +1702,32 @@ label the later holder wins. `artifactTags` are the attachments' own normalized 
 name implies), sorted and distinct. `videos` lists every attachment whose effective media type is video, with the
 check, retry attempt or step that holds it (see {@link isVideoAttachment}), each with the scope that applies to it.
 
+#### `EvidenceContext`
+
+```ts
+export type EvidenceContext = { readonly inherited?: EvidenceScope | undefined; readonly unbundled?: ReadonlySet<string> | undefined };
+```
+
+What a reader knows about the layer whose evidence it summarizes, beyond the evidence itself. `inherited` is the scope
+a part or layer declares (see {@link summarizeEvidenceIn}); `unbundled` holds the bundle keys that attachments name but
+the layer's bundle does not contain (see {@link unbundledKeys}), so a video that names one is unavailable rather than playable.
+
+#### `summarizeEvidenceWith`
+
+```ts
+export function summarizeEvidenceWith(context: EvidenceContext, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined
+```
+
+Like {@link summarizeEvidenceIn}, knowing which bundle keys the layer does not hold. A video naming one is `available: false` with `reason: 'not-in-bundle'`.
+
+#### `summarizeLayerEvidenceWith`
+
+```ts
+export function summarizeLayerEvidenceWith(context: EvidenceContext, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined
+```
+
+Like {@link summarizeLayerEvidence}, knowing which bundle keys the layer does not hold (see {@link summarizeEvidenceWith}).
+
 #### `summarizeEvidenceIn`
 
 ```ts
@@ -1803,6 +1847,16 @@ export function bundleKeysOf(holder: EvidenceHolder): string[]
 ```
 
 Every distinct bundle key (`bundleKey`) that the attachments of a holder, its steps and its attempts point to, so a layer's files can be copied. Attachments held by `uri` or inline `text` have none.
+
+#### `unbundledKeys`
+
+```ts
+export function unbundledKeys(layer: EvidenceHolder & { readonly parts: readonly (EvidenceHolder & { readonly checks: readonly EvidenceHolder[] })[] }, bundle: Readonly<Record<string, unknown>>): string[]
+```
+
+The bundle keys that attachments of a layer's holders (the layer, its parts, their checks, with their steps and
+attempts) name but the layer's `bundle` does not contain, sorted. A viewer asking for such a file is answered 404, so
+a video naming one is unavailable. `bundle` is the layer's `BundleIndex` (or anything keyed by file key).
 
 ### Live evidence from running suites
 
@@ -2109,8 +2163,10 @@ export type VideoRef = {
   readonly tags?: readonly string[];
   /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
   readonly recording?: string;
-  /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
+  /** False when the reference names no bytes at all (no bundle key, address or inline text), or names a bundle key the layer does not hold, so it can never be played. */
   readonly available: boolean;
+  /** Why it is unavailable, when the report can tell: `not-in-bundle` names a file the layer should hold (its bundle key) but does not, a recording that was acknowledged and is no longer there. Absent otherwise, and for an available video. An open vocabulary: treat an unknown reason as plain unavailable. */
+  readonly reason?: 'not-in-bundle';
   /** What this recording shows, as declared for it: its own `scope`, else its attempt's, check's, part's or layer's. Absent when none declared one: its scope is unknown, not live, physical or audible. */
   readonly scope?: EvidenceScope;
 };
@@ -2128,8 +2184,10 @@ export type VideoCounts = {
   readonly references: number;
   /** Distinct playable recordings: identical bytes referenced twice are one. */
   readonly recordings: number;
-  /** References that name no bytes. A report that predates availability metadata has none of these and none of the others. */
+  /** References that cannot be played: they name no bytes, or name a file the layer does not hold. A report that predates availability metadata has none of these and none of the others. */
   readonly unavailable: number;
+  /** Of `unavailable`, those that name a file the layer's bundle does not hold (stored, then gone). Absent when there are none. */
+  readonly missing?: number;
 };
 ```
 
@@ -4870,7 +4928,7 @@ Reads one captured file (a screenshot, a frame, a recorded report) of a layer, o
 export function layerSummary(layer: ReportLayer): LayerSummary
 ```
 
-Drops a layer's bundle index, leaving the summary composition reads.
+Drops a layer's bundle index, leaving the summary composition reads, plus which bundle keys its attachments name that the bundle does not hold (`unbundled`, when any).
 
 ### Layer types
 
@@ -4931,6 +4989,8 @@ export type LayerSummary = LayerExtras & {
   readonly source: SourceRecord | null;
   /** Where the layer's timelines and captured files are read from: its own bundle (`layer`), an older commit-keyed recording (`commit`), or nowhere (`null`). */
   readonly recording: { readonly type: 'layer' } | { readonly type: 'commit'; readonly sha: string; readonly source: string } | null;
+  /** Bundle keys that attachments name but the layer's bundle does not hold, sorted. Derived when the layer is read (`layerSummary`), never written to a layer; absent when none, and for layers that have no bundle of their own. */
+  readonly unbundled?: readonly string[];
 };
 ```
 
@@ -6356,6 +6416,160 @@ skipped or unresolved; otherwise `unknown` when a contributing layer has no rece
 report with no results at all is unknown too); otherwise `complete` when something was expected and `none-expected` when
 nothing was. Gaps are sorted so the output never depends on read order.
 
+#### `RunRecordings`
+
+```ts
+export type RunRecordings = {
+  /** `incomplete`: a recording is skipped or unresolved. `unknown`: no gap is known, but a layer declared no expectations. `complete`: everything expected was published. `none-expected`: every layer declared expectations and none required a recording. */
+  readonly state: 'complete' | 'incomplete' | 'none-expected' | 'unknown';
+  /** Recordings the layers expected. */
+  readonly expected: number;
+  /** Of those, uploaded or referenced by address. */
+  readonly published: number;
+  readonly skipped: number;
+  readonly unresolved: number;
+  /** Intentionally unrecorded checks: neither expected nor missing. */
+  readonly notApplicable: number;
+  /** Layers of the run that declared no expectations: nothing is claimed for them. */
+  readonly layersWithoutReceipt: number;
+};
+```
+
+A run's recording completeness, from the receipts of its layers (see {@link runRecordings}).
+
+#### `runRecordings`
+
+```ts
+export function runRecordings(layers: readonly (RecordingCounts | undefined)[]): RunRecordings | undefined
+```
+
+The recording completeness of a run, from the `recordings` counts of each of its layers (`undefined` for a layer that
+has no receipt). `undefined` when no layer has a receipt: the run claims nothing, which a reader treats as `unknown`.
+A gap always wins (`incomplete`); otherwise a layer without a receipt keeps the run `unknown`, never `complete`. Reads
+only the counts, never a recording, and never changes a status.
+
+### Recording verification
+
+Source: `packages/reports/src/recording-verify.ts`. Import: `@crvouga/atlas/reports/recording-verify`
+
+Answers "is the recording we published still there, and does it still look like the video we published?" apart from
+"did the tests pass?" and apart from "was it uploaded?" (the receipt, see `recording-receipt.ts`). `verifyLayerRecordings`
+reads each video a layer keeps in its bundle back from the store and checks, in order, that the layer's bundle still
+lists its file, that the blob it lives in is still stored, that its size and SHA-256 are the ones recorded at upload,
+and that its first bytes are the container header its media type promises. A problem is a gap in the evidence, named
+with the check that holds the video; it never changes a status, a slot or a winner.
+
+Trap: this is a stored-bytes check, not a playback test. A file with a valid header can still fail to play in a given
+browser (codec, truncation), and acknowledging an upload is not playback either. Videos given only by `uri` are counted
+as `referenced`, not checked: Atlas holds no bytes to read back.
+
+See docs/rich-evidence.md#recording-completeness
+
+#### `RecordingProblem`
+
+```ts
+export type RecordingProblem =
+  /** The layer names the file but its bundle does not list it: stored, then gone (or never arrived). */
+  | 'not-in-bundle'
+  /** The bundle lists the file but a blob holding its bytes is no longer in the store (a 404 when played). */
+  | 'blob-missing'
+  /** The store could not be read just now. Not proof the bytes are gone, and not a pass. */
+  | 'unreadable'
+  /** The stored bytes are not as many as were recorded. */
+  | 'size-mismatch'
+  /** The stored bytes do not hash to the SHA-256 recorded at upload. */
+  | 'checksum-mismatch'
+  /** The stored bytes do not begin like the container their media type names, or are empty: incompatible or corrupt. */
+  | 'undecodable';
+```
+
+What is wrong with a stored recording. An open vocabulary: a reader treats an unknown problem as a gap.
+
+#### `RecordingGap`
+
+```ts
+export type RecordingGap = {
+  /** The check that holds the video, or `null` for a video attached to the layer or a part. */
+  readonly check: string | null;
+  /** The attachment's name. */
+  readonly name: string;
+  readonly bundleKey: string;
+  readonly problem: RecordingProblem;
+  /** A short, non-secret explanation: sizes or the container found. */
+  readonly reason: string;
+};
+```
+
+One video of a layer that failed verification.
+
+#### `LayerRecordingVerification`
+
+```ts
+export type LayerRecordingVerification = {
+  readonly layer: string;
+  /** Videos read back from the store: those that name a bundle key. */
+  readonly checked: number;
+  /** Of those, the ones that passed every check. */
+  readonly ok: number;
+  /** Videos given only by `uri`, which Atlas cannot read back. */
+  readonly referenced: number;
+  readonly gaps: readonly RecordingGap[];
+};
+```
+
+What verifying one layer found.
+
+#### `containerProblem`
+
+```ts
+export function containerProblem(bytes: Uint8Array, contentType: string): string | null
+```
+
+Whether the first bytes of a stored video are the container its media type names, as a reason it is not, or `null` when
+it looks right or the type is one this check has no signature for (then nothing is claimed). Recognizes WebM and
+Matroska (EBML), MP4, QuickTime and 3GPP (an ISO box), Ogg and AVI. An empty file is never a video.
+
+#### `verifyLayerRecordings`
+
+```ts
+export async function verifyLayerRecordings(store: ObjectStore, layer: ReportLayer): Promise<LayerRecordingVerification>
+```
+
+Reads back every video of `layer` that is kept in its bundle and reports the ones that are no longer retrievable or no
+longer look like what was published (see {@link RecordingProblem}). Each blob is read once however many checks
+reference it. A store that fails to answer is `unreadable`, never a pass. It only reads: nothing is written, and no
+status changes.
+
+**Example**
+
+```ts
+const layer = await readLayer(store, id);
+const { gaps } = await verifyLayerRecordings(store, layer!);
+gaps.map(gap => `${gap.check}: ${gap.problem}`);
+```
+
+#### `StoreRecordingVerification`
+
+```ts
+export type StoreRecordingVerification = {
+  readonly layers: readonly LayerRecordingVerification[];
+  /** Layers that could not be read at all (their manifest is unreadable or gone): their recordings are unknown, not verified. */
+  readonly notices: readonly string[];
+};
+```
+
+What verifying the layers of one store found.
+
+#### `verifyStoreRecordings`
+
+```ts
+export async function verifyStoreRecordings(store: ObjectStore, options: { readonly ids?: readonly string[]; readonly limit?: number; readonly include?: (layer: ReportLayer) => boolean } = {}): Promise<StoreRecordingVerification>
+```
+
+Verifies the recordings of the layers a store lists, newest first. `ids` narrows to layers whose id starts with one of
+them (at least 7 hex digits); `limit` keeps only that many of the newest. A layer that cannot be read is a notice, never
+skipped silently and never counted as verified. A store that cannot be listed rejects.
+
 ### Reliability of a test
 
 Source: `packages/reports/src/reliability.ts`. Import: `@crvouga/atlas/reports/reliability`
@@ -6715,7 +6929,7 @@ Call this inside a Solid root: it creates signals and a store.
 
 Source: `packages/reports/src/report-cli.ts`. Import: `@crvouga/atlas/reports/report-cli`
 
-`reportMain` is `atlas report publish | stream | status | merge | doctor | policy`, written so it can be called from code and
+`reportMain` is `atlas report publish | stream | status | verify-recordings | merge | doctor | policy`, written so it can be called from code and
 tests as well as a terminal: it takes its arguments, environment, working directory, clock, git and standard input as
 parameters and returns the exit code. Every command can print a JSON document (`--format json`) instead of prose, and a
 command that is wrong throws, which `runReportCommand` turns into a message (or a JSON error) and exit code 2.
@@ -9874,13 +10088,13 @@ export type RunSummary = {
    */
   readonly videos?: VideoCounts;
   /**
+   * Whether the recordings its layers expected were published, apart from its outcomes (see `runRecordings`). Absent when
+   * none of its layers declared a recording expectation: its completeness is unknown, never complete. Never changes a status.
+   */
+  readonly recordings?: RunRecordings;
+  /**
    * Files attached to the run itself, in its layers (and their parts), not to any one check: review movies, archives,
    * summaries. All kinds, videos included. Absent when none, and in a report that carries no such information.
-   */
-  readonly attachments?: number;
-  /** The normalized tags of the attachments of its results and layers, sorted and distinct. Absent when none is tagged. */
-  readonly artifactTags?: readonly string[];
-  /** The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches), sorted and distinct. Absent when none. */
   …
 ```
 
@@ -10212,7 +10426,7 @@ What a query looks at in a run: see {@link ArtifactFilter}. A run's outcome is `
 #### `artifactList`
 
 ```ts
-export function artifactList(history: TestHistory, version: string, query: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList
+export function artifactList(history: TestHistory, version: string, asked: ArtifactFilter = {}, page: { readonly limit?: number; readonly offset?: number; readonly domainOf?: (specPath: string) => string | undefined } = {}): ArtifactList
 ```
 
 The recorded results that carry evidence and match a query, newest first, across the whole history (`limit` default

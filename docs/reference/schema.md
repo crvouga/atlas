@@ -535,7 +535,7 @@ of every layer. States are in id order and cells in profile order, so the same l
 
 Source: `packages/schema/src/cli-results.ts`
 
-What `atlas report publish`, `stream`, `merge` and `doctor` print on standard output with `--format json` (alias
+What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings` print on standard output with `--format json` (alias
 `--json`), and what any `atlas` command prints on standard error for a command that was wrong: one JSON document,
 so an agent or a script never has to parse prose. (`status` and `policy` already print documents:
 `ReportStatusSchema`, and an IAM policy.) Each is also published as a JSON Schema.
@@ -593,6 +593,24 @@ export const DoctorResultSchema = …
 ```
 
 What `atlas report doctor --format json` prints.
+
+#### `RecordingGapSchema`
+
+```ts
+export const RecordingGapSchema = …
+```
+
+A published video that could not be read back from the store as published (see `atlas report verify-recordings`).
+
+#### `VerifyRecordingsResultSchema`
+
+```ts
+export const VerifyRecordingsResultSchema = …
+```
+
+What `atlas report verify-recordings --format json` prints: whether the videos the layers published can still be read
+back from the store as they were published. It describes stored bytes, never playback in a browser, and it never changes
+a check\'s result.
 
 #### `CommandErrorSchema`
 
