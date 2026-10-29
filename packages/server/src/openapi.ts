@@ -425,7 +425,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
   {
     route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',
     summary: 'Every test one run recorded',
-    description: 'One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.',
+    description: 'One run and its last result for every test, environment and producer it recorded, failures first, and `layers`: each layer of the run with its backend, how many checks it recorded (zero means evidence only, never a pass) and how many files it carries as a whole. Open a layer\'s files with `/api/reports/evidence/detail/{backend}/{id}`. Send `format=markdown` for Markdown.',
     parameters: [
       { name: 'key', in: 'query', required: true, description: 'The run\'s `key` from `/api/reports/runs`, URL-encoded.', schema: str },
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
@@ -462,7 +462,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
   {
     route: 'GET /api/reports/evidence/detail/:backend/:id', path: '/api/reports/evidence/detail/{backend}/{id}', operationId: 'getCheckDetail', tag: 'Report', role: 'read',
     summary: 'Everything one result carries',
-    description: 'The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run\'s. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.',
+    description: 'The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run\'s, and `parts`: what each part of the layer that carries files or links of its own holds. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.',
     parameters: [BACKEND, LAYER_ID, { name: 'check', in: 'query', description: 'The check id.', schema: str }, { name: 'kind', in: 'query', description: 'The kind of the part, when the same id is in several.', schema: str }],
     responses: { '200': json('The detail.', 'CheckDetail'), '401': UNAUTHORIZED, '404': problem('No such layer or check.') }
   },

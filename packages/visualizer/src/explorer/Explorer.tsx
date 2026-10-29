@@ -175,10 +175,10 @@ export function Explorer() {
           <Title order={1} mb="sm">
             {projectTitle()}
           </Title>
-          {model && model.tests.length > 0 && (
+          {model && (model.tests.length > 0 || model.summary.runs > 0) && (
             <Tabs
               value={search.tab ?? 'tests'}
-              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' ? value : undefined, test: undefined, openRun: undefined, layer: undefined })}
+              onChange={(value) => go({ tab: value === 'runs' || value === 'artifacts' ? value : undefined, test: undefined, openRun: undefined, layer: undefined, artifact: undefined })}
             >
               <Tabs.List aria-label="Explorer view">
                 <Tabs.Tab
@@ -245,7 +245,12 @@ export function Explorer() {
             Loading tests…
           </Text>
         )}
-        {empty && !kinds.length && (
+        {empty && model && model.summary.runs > 0 && search.tab !== 'runs' && (
+          <Text component="div" c="dimmed">
+            No test results recorded, but {model.summary.runs === 1 ? '1 run carries' : `${model.summary.runs} runs carry`} files. Open the Runs tab to see them.
+          </Text>
+        )}
+        {empty && !kinds.length && !(model && model.summary.runs > 0) && (
           <Text component="div" c="dimmed">
             No reports yet. Publish tests and specs to this project to populate its report.
           </Text>
@@ -256,13 +261,12 @@ export function Explorer() {
           </Text>
         )}
         {model &&
-          !empty &&
           listing &&
           (search.tab === 'runs' ? (
             <RunsView />
           ) : search.tab === 'artifacts' ? (
             <ArtifactsView />
-          ) : (
+          ) : empty ? null : (
             <>
               <InsightStrip model={model} scope={listing.scope} search={search} />
               <Toolbar

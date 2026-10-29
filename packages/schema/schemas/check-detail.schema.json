@@ -1645,6 +1645,30 @@
       "additionalProperties": {},
       "description": "What the run as a whole carries: its logs, links, labels, annotations, scope and extensions"
     },
+    "parts": {
+      "description": "Without `check` only: the parts of the layer that carry files or links of their own, each with what it carries. Absent when none",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "title"
+        ],
+        "additionalProperties": {}
+      }
+    },
     "inheritedScope": {
       "description": "The scope the check inherits: its part's declaration, else its layer's. Absent when neither declared one: unknown, not live or physical",
       "type": "object",

@@ -7,7 +7,8 @@ import { Alert, Anchor, Badge, Box, Button, Code, Flex, Group, List, NativeSelec
  * tests and how they went, how long it took, whether it has recordings to watch, and a link to the run. Opening one lists
  * every test it ran, filterable, with a way to show exactly those tests in the explorer. Videos are counted as
  * references (every mention) and as distinct playable recordings (identical bytes are one), and a reference whose file
- * was never stored is shown as unavailable, never as a recording.
+ * was never stored is shown as unavailable, never as a recording. An opened run lists its artifacts first (see
+ * `RunArtifacts`), and a run of no checks says so instead of reading as passed.
  */
 import { videoCounts } from '@crvouga/atlas/reports/evidence-detail';
 import type { VideoCounts, VideoRef } from '@crvouga/atlas/reports/evidence-types';
@@ -23,6 +24,7 @@ import type { FindDoc, Ranked } from '../find/rank';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { Meter, StatusMark } from '../evidence/marks';
 import { useRunDetail, useRunList, useTestCatalog } from './catalog';
+import { RunArtifacts } from './RunArtifacts';
 import { FilterBar } from './filters';
 import { SearchNotes, TypedFilters } from './search-notes';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
@@ -50,6 +52,13 @@ function Freshness({ run }: { run: RunSummary }) {
   );
 }
 function Counts({ run }: { run: RunSummary }) {
+  // A run of no checks (only files) has not passed anything: say so, rather than "0 passed".
+  if (run.tests === 0 && Object.values(run.counts).every((count) => count === 0))
+    return (
+      <Text span inherit c="dimmed" data-status="none">
+        No checks recorded
+      </Text>
+    );
   return (
     <Text span inherit>
       {run.counts.failed > 0 && (
@@ -94,14 +103,35 @@ function Unavailable({ videos }: { videos: VideoCounts }) {
 /** A run's videos in its row: a link to the recordings, how many references they come from, and what cannot be played. */
 function RunVideos({ run }: { run: RunSummary }) {
   const videos = run.videos;
-  if (!videos) return <Text span inherit c="dimmed" data-video="none">No video</Text>;
+  const files = run.attachments ? (
+    <Anchor
+      aria-label={`Open the ${plural(run.attachments, 'file', 'files')} of run ${runName(run.key)}`}
+      renderRoot={(props) => (
+        <Link {...props} to="/" search={patched({ openRun: run.key, layer: undefined, artifact: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+      )}
+    >
+      <Text span inherit data-run-files>
+        {plural(run.attachments, 'run file', 'run files')}
+      </Text>
+    </Anchor>
+  ) : null;
+  if (!videos)
+    return (
+      <Stack gap={0}>
+        <Text span inherit c="dimmed" data-video="none">
+          No video
+        </Text>
+        {files}
+      </Stack>
+    );
   return (
     <Stack gap={0} data-video={videos.recordings > 0 ? 'available' : 'unavailable'}>
+      {files}
       {videos.recordings > 0 && (
         <Anchor
           aria-label={`Watch ${plural(videos.recordings, 'recording', 'recordings')} in run ${runName(run.key)}`}
           renderRoot={(props) => (
-            <Link {...props} to="/" search={patched({ openRun: run.key, video: true })} resetScroll={false} activeOptions={{ exact: true }} />
+            <Link {...props} to="/" search={patched({ openRun: run.key, layer: undefined, artifact: undefined, video: true })} resetScroll={false} activeOptions={{ exact: true }} />
           )}
         >
           <IconVideo size={16} aria-hidden="true" /> {plural(videos.recordings, 'video', 'videos')}
@@ -317,12 +347,12 @@ function RunTable() {
           </Table.Thead>
           <Table.Tbody>
             {list.slice(0, shown).map((run) => (
-              <Table.Tr key={run.key} data-status={run.counts.failed ? 'failed' : 'passed'}>
+              <Table.Tr key={run.key} data-status={run.counts.failed ? 'failed' : run.tests === 0 ? 'not-run' : 'passed'}>
                 <Table.Td title={exactTime(run.endedAtMs)}>
                   <Anchor
                     aria-label={`Open run ${runLabel(run)}`}
                     renderRoot={(props) => (
-                      <Link {...props} to="/" search={patched({ openRun: run.key, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+                      <Link {...props} to="/" search={patched({ openRun: run.key, layer: undefined, artifact: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
                     )}
                   >
                     {ago(run.endedAtMs, now)}
@@ -452,7 +482,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
   const back = (
     <Anchor
       renderRoot={(props) => (
-        <Link {...props} to="/" search={patched({ openRun: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+        <Link {...props} to="/" search={patched({ openRun: undefined, layer: undefined, artifact: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
       )}
     >
       <Text aria-hidden="true" span inherit>
@@ -528,7 +558,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
           <Meter counts={run.counts} />
         </Text>
         <Text span inherit>
-          {plural(run.tests, 'test', 'tests')}
+          {run.tests === 0 ? 'No tests' : plural(run.tests, 'test', 'tests')}
         </Text>
         <Counts run={run} />
       </Stack>
@@ -539,13 +569,14 @@ function RunDetailView({ runKey }: { runKey: string }) {
           <Unavailable videos={run.videos} />
         </Text>
       )}
+      <RunArtifacts detail={detail.data} />
       <Flex gap="xs" align="center" wrap="wrap">
         <Anchor
           renderRoot={(props) => (
             <Link
               {...props}
               to="/"
-              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined, layer: undefined })}
+              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined, layer: undefined, artifact: undefined })}
               resetScroll={false}
               activeOptions={{ exact: true }}
             />
@@ -626,7 +657,7 @@ function RunDetailView({ runKey }: { runKey: string }) {
                     <Link
                       {...props}
                       to="/"
-                      search={patched({ tab: undefined, openRun: undefined, test: result.key, layer: result.layer })}
+                      search={patched({ tab: undefined, openRun: undefined, artifact: undefined, test: result.key, layer: result.layer })}
                       resetScroll={false}
                       activeOptions={{ exact: true }}
                     />

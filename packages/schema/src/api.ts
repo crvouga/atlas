@@ -211,6 +211,7 @@ export const CheckDetailSchema = z.looseObject({
   kind: z.string(),
   check: CheckSchema,
   run: z.looseObject({}).describe('What the run as a whole carries: its logs, links, labels, annotations, scope and extensions'),
+  parts: z.array(z.looseObject({ kind: z.string(), id: z.string(), title: z.string() })).optional().describe('Without `check` only: the parts of the layer that carry files or links of their own, each with what it carries. Absent when none'),
   inheritedScope: EvidenceScopeSchema.optional().describe('The scope the check inherits: its part\'s declaration, else its layer\'s. Absent when neither declared one: unknown, not live or physical')
 });
 
@@ -442,6 +443,7 @@ export const ReportRunSchema = z.looseObject({
   totalDurationMs: z.number().nullable(),
   failing: z.array(z.looseObject({ key: z.string(), title: z.string(), environment: z.string().nullable(), detail: z.string() })),
   videos: VideoCountsSchema.optional().describe('Its videos, from its layers and the last result of each test. Absent when it has none or the report carries no video information'),
+  attachments: z.number().int().positive().optional().describe('Files attached to the run itself, in its layers, not to a check. Absent when there are none'),
   artifactTags: z.array(z.string()).optional().describe('The normalized tags of the attachments of its results, sorted and distinct. Absent when none is tagged, and in reports of older servers'),
   tags: z.array(z.string()).optional().describe('The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches). Absent when none'),
   types: z.array(z.string()).optional().describe('The media types (roles) of its attachments, sorted and distinct; `video` only for a playable recording. Absent when it has no attachment'),
@@ -504,5 +506,12 @@ export const RunDetailSchema = z.looseObject({
     key: z.string(), id: z.string(), title: z.string(), specPath: z.string().nullable(), environment: z.string().nullable(), producer: z.string(),
     status: EvidenceStatusSchema, durationMs: z.number().nullable(), at: z.number(), layer: z.string(), detail: z.string(),
     videos: z.array(VideoRefSchema).optional().describe('Every video its evidence references, with who holds it')
-  }))
+  })),
+  layers: z.array(z.looseObject({
+    id: z.string().describe('The layer id; read its files with `/api/reports/evidence/detail/{backend}/{id}`'),
+    backend: z.string(), producer: z.string(), environment: z.string().nullable(), recordedAtMs: z.number(),
+    checks: z.number().int().nonnegative().describe('How many checks the layer recorded. Zero means evidence only, not a pass'),
+    attachments: z.number().int().nonnegative().describe('Files the layer carries as a whole, not those of its checks'),
+    videos: VideoCountsSchema.optional()
+  })).optional().describe('Every layer of the run, oldest first. Absent from an older server')
 });

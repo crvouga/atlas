@@ -1713,6 +1713,16 @@ Whether an attachment is a video, by its effective media type: the producer's `c
 name implies. A role never decides this on its own (`demo` on a PNG is not a video), except that a `video` role
 settles a file whose type nothing says (`application/octet-stream`).
 
+#### `attachmentIdentity`
+
+```ts
+export function attachmentIdentity(item: Pick<Attachment, 'name' | 'sha256' | 'bundleKey' | 'uri' | 'text'>): string | undefined
+```
+
+What identifies an attachment's bytes: its digest, else its bundle key, address or inline text. Attachments with the
+same identity are the same file however many results reference them. Undefined when it names no bytes at all (it can
+never be opened). This is the `recording` of a {@link VideoRef}.
+
 #### `videoCounts`
 
 ```ts
@@ -1764,6 +1774,27 @@ export function runEvidence(layer: EvidenceHolder): EvidenceHolder
 ```
 
 What a layer carries as a whole (its scope, tags, labels, links, attachments, annotations and extensions; not its parts' checks). Absent fields stay absent.
+
+#### `PartEvidence`
+
+```ts
+export type PartEvidence = EvidenceHolder & {
+  readonly kind: string;
+  readonly id: string;
+  readonly title: string;
+};
+```
+
+What one part of a layer (one kind of report) carries as a whole, named by the part.
+
+#### `partsEvidence`
+
+```ts
+export function partsEvidence(layer: { readonly parts: readonly (EvidenceHolder & { readonly kind: string; readonly id: string; readonly title: string })[] }): PartEvidence[]
+```
+
+The parts of a layer that carry evidence of their own (attachments, links, labels…), each with its name. Parts
+that carry none are left out. A part's files belong to the run, not to any one check.
 
 #### `bundleKeysOf`
 
@@ -4639,7 +4670,8 @@ Routes, relative to where it is mounted:
   runs of this machine. `cursor` is the previous page's; 409 when it no longer matches the listing (refresh).
   Any `retry` value re-lists backends that were unavailable now instead of after the wait.
 - `GET /evidence/rows/:backend/:id` the checks and spec fingerprints of one layer (`LayerRows`).
-- `GET /evidence/detail/:backend/:id?check=&kind=` the run-level evidence of an immutable layer, or one check's detail.
+- `GET /evidence/detail/:backend/:id?check=&kind=` the run-level evidence of an immutable layer (and, as `parts`, what its
+  parts carry as a whole), or one check's detail.
 - `GET /layers/:id/blobs/*` an attachment of an immutable layer by its bundle key, served by `attachmentResponse`.
 - `GET /layers/:id/*` the recorded `frame.css`, `tests/<test>/report.json` and `tests/<test>/files/<frame>` of a layer.
 - `GET /live/:source/frame.css` and `GET /live/:source/tests/:testId/*` the same for a run still writing (uncached).
@@ -8601,14 +8633,14 @@ export type RunSummary = {
    * and references that cannot be played. Absent when it has none, and in a report that carries no video information.
    */
   readonly videos?: VideoCounts;
+  /**
+   * Files attached to the run itself, in its layers (and their parts), not to any one check: review movies, archives,
+   * summaries. All kinds, videos included. Absent when none, and in a report that carries no such information.
+   */
+  readonly attachments?: number;
   /** The normalized tags of the attachments of its results and layers, sorted and distinct. Absent when none is tagged. */
   readonly artifactTags?: readonly string[];
   /** The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches), sorted and distinct. Absent when none. */
-  readonly tags?: readonly string[];
-  /** The media types (roles) of its attachments, sorted and distinct; `video` only for a playable recording. Absent when it has no attachment. */
-  readonly types?: readonly string[];
-  /** The `key=value` labels of its results and layers, sorted and distinct. Absent when none. */
-  readonly labels?: readonly string[];
   …
 ```
 
@@ -8666,6 +8698,29 @@ export type RunResult = {
 
 One test's last result within one run.
 
+#### `RunLayer`
+
+```ts
+export type RunLayer = {
+  /** The layer's id: 64 hex digits for an archived layer. */
+  readonly id: string;
+  /** The backend it was read from, for `GET /evidence/detail/{backend}/{id}`. */
+  readonly backend: string;
+  readonly producer: string;
+  readonly environment: string | null;
+  readonly recordedAtMs: number;
+  /** How many checks the layer recorded. A layer of zero checks is evidence only: it is not a passing test. */
+  readonly checks: number;
+  /** Files the layer carries as a whole (not those of its checks). */
+  readonly attachments: number;
+  /** Its videos, when it has any. */
+  readonly videos?: VideoCounts;
+};
+```
+
+One layer of a run, as the run's artifact hub names it: who recorded it, how many checks it holds (zero is possible
+and is not a pass) and the files it carries as a whole. Read the files with `GET /evidence/detail/{backend}/{id}`.
+
 #### `RunDetail`
 
 ```ts
@@ -8674,6 +8729,8 @@ export type RunDetail = {
   readonly version: string;
   readonly run: RunSummary;
   readonly results: readonly RunResult[];
+  /** Every layer of the run, oldest first, so its run-level files can be found even in a layer with no checks. Absent from an older server. */
+  readonly layers?: readonly RunLayer[];
 };
 ```
 
@@ -8779,7 +8836,7 @@ const catalog = testCatalog(catalogModel(layers, { history }));
 - `of(key: string): readonly TestResultEntry[]` — The recorded results of one test (by `TestSummary.key`), newest first. Empty when none.
 - `get runCount(): number { return this.#runs.size; }` — How many runs it knows of.
 - `runs(): RunSummary[]` — Every run, newest first.
-- `run(key: string): { readonly run: RunSummary; readonly results: RunResult[] } | null` — One run and its results (failed first, then by spec and title), or null.
+- `run(key: string): { readonly run: RunSummary; readonly results: RunResult[]; readonly layers: RunLayer[] } | null` — One run and its results (failed first, then by spec and title), or null.
 - `evidenceResults(): readonly { readonly result: ArtifactResult; readonly fields: FilterFields }[]` — Every recorded result that carries an attachment, newest first, with the values a query looks at. Built once per layer added. The domain is left to the caller (`artifactList`), which may know more specs than the layers recorded.
 - `testsIn(key: string): ReadonlySet<string>` — The keys of the tests one run recorded.
 

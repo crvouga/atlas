@@ -756,7 +756,7 @@ Responses: `200` The matching results and the facets.; `304` Unchanged since the
 
 `GET /api/reports/runs/detail` · role: read
 
-One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.
+One run and its last result for every test, environment and producer it recorded, failures first, and `layers`: each layer of the run with its backend, how many checks it recorded (zero means evidence only, never a pass) and how many files it carries as a whole. Open a layer's files with `/api/reports/evidence/detail/{backend}/{id}`. Send `format=markdown` for Markdown.
 
 - `key` (query, required): The run's `key` from `/api/reports/runs`, URL-encoded.
 - `format` (query): `markdown` for Markdown instead of JSON.
@@ -768,7 +768,7 @@ Responses: `200` The run and its results.; `304` Unchanged since the `If-None-Ma
 
 `GET /api/projects/{project}/reports/runs/detail` · role: read
 
-One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.
+One run and its last result for every test, environment and producer it recorded, failures first, and `layers`: each layer of the run with its backend, how many checks it recorded (zero means evidence only, never a pass) and how many files it carries as a whole. Open a layer's files with `/api/reports/evidence/detail/{backend}/{id}`. Send `format=markdown` for Markdown.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
@@ -878,7 +878,7 @@ Responses: `200` The rows.; `401` No token, or an unknown one. Send `Authorizati
 
 `GET /api/reports/evidence/detail/{backend}/{id}` · role: read
 
-The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run's. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.
+The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run's, and `parts`: what each part of the layer that carries files or links of its own holds. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.
 
 - `backend` (path, required): A backend id from `/api/server`.
 - `id` (path, required): A layer id: 64 lowercase hex digits.
@@ -892,7 +892,7 @@ Responses: `200` The detail.; `401` No token, or an unknown one. Send `Authoriza
 
 `GET /api/projects/{project}/reports/evidence/detail/{backend}/{id}` · role: read
 
-The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run's. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.
+The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run's, and `parts`: what each part of the layer that carries files or links of its own holds. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.
 
 Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
 
