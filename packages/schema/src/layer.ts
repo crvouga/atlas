@@ -453,7 +453,8 @@ function lenientAttachment(item: unknown): unknown {
 }
 
 function lenientEvidence(holder: Record<string, unknown>, nested: readonly string[] = []): Record<string, unknown> {
-  const out: Record<string, unknown> = lenientScope(holder);
+  // Readers must not rewrite the raw document: upload validation hashes its original field order.
+  const out: Record<string, unknown> = { ...lenientScope(holder) };
   const set = (key: string, value: unknown) => { if (value === undefined) delete out[key]; else out[key] = value; };
   if ('tags' in out) set('tags', lenientList(out.tags, z.string()));
   if ('links' in out) set('links', lenientList(out.links, LinkSchema));
@@ -488,7 +489,7 @@ function lenientLayer(raw: Record<string, unknown>): Record<string, unknown> {
 export type ParsedLayer = { readonly ok: true; readonly layer: LayerDocument } | { readonly ok: false; readonly reason: string };
 
 /**
- * Reads a layer manifest of any age and returns it, or the reason it cannot be read; it never throws. Layers written
+ * Reads a layer manifest of any age and returns it, or the reason it cannot be read; it never throws or mutates the input. Layers written
  * before `schemaVersion` existed are version 1. A layer of a newer major version is refused by name ("Upgrade
  * @crvouga/atlas to read it") rather than half understood. Evidence the reader cannot read (a malformed attachment,
  * step, annotation, link, tag, label or extension) is dropped and the check keeps its status and place; anything
