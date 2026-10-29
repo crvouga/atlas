@@ -6,7 +6,7 @@
  * and `?since=` deltas, and works unchanged when the viewer reads a store or a static export without a server.
  */
 import { uiCatalog, type UiCatalog } from '@crvouga/atlas/reports/ui-catalog';
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useDeferredValue, useMemo, type ReactNode } from 'react';
 
 import { useEvidence } from '../evidence/evidence-context';
 
@@ -14,7 +14,11 @@ const CatalogContext = createContext<UiCatalog | null>(null);
 
 /** Computes the catalog for its children, only while `enabled` (the catalog page is open): other pages pay nothing. */
 export function UiCatalogProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
-  const { evidence, backends, notices, version } = useEvidence();
+  const held = useEvidence();
+  const { backends, notices, version } = held;
+  // While layers stream in, the catalog is rebuilt for the newest layers only when the page has nothing more urgent to do, so typing a
+  // filter or scrolling is never held up by a layer that has just arrived.
+  const evidence = useDeferredValue(held.evidence);
   const catalog = useMemo(() => (enabled ? uiCatalog(evidence, { backends, notices, ...(version ? { version } : {}) }) : null), [enabled, evidence, backends, notices, version]);
   return <CatalogContext.Provider value={catalog}>{children}</CatalogContext.Provider>;
 }

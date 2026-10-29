@@ -1,7 +1,7 @@
 /**
  * @module UI catalog filters
  *
- * The controls beside the catalog: words, coverage, profile, area, route, cohort, feature flag, surface and producer. Each offers
+ * The controls beside the catalog: words, coverage, profile, area, route, cohort, feature flag, surface, producer and the attributes a producer declared. Each offers
  * the values the catalog has with how many states have them. What is chosen is the address, so copying it or reloading restores
  * the same view; choices combine with AND across the controls and OR within one.
  */
@@ -14,7 +14,10 @@ import { useUiCatalog } from './provider';
 import { useCatalogNavigate, useCatalogSearch } from './search';
 import { coverageWord } from './words';
 
-type Field = 'coverage' | 'profile' | 'area' | 'route' | 'cohort' | 'flag' | 'surface' | 'producer';
+type Field = 'coverage' | 'profile' | 'area' | 'route' | 'cohort' | 'flag' | 'surface' | 'producer' | 'attribute';
+
+/** How many options a control draws at once; typing narrows the rest. A catalog may have thousands of routes. */
+const OPTIONS = 100;
 
 function Facet({ field, label, options, query }: { field: Field; label: string; options: readonly UiFacetValue[]; query: UiCatalogQuery }) {
   const go = useCatalogNavigate();
@@ -27,6 +30,7 @@ function Facet({ field, label, options, query }: { field: Field; label: string; 
       data={data}
       value={[...chosen]}
       searchable
+      limit={OPTIONS}
       clearable
       placeholder={chosen.length ? undefined : `Any ${label.toLowerCase()}`}
       nothingFoundMessage="Nothing found"
@@ -55,8 +59,9 @@ export function UiCatalogFilters() {
       <Facet field="flag" label="Feature flag" options={facets.flags} query={query} />
       <Facet field="surface" label="Surface" options={facets.surfaces} query={query} />
       <Facet field="producer" label="Producer" options={facets.producers} query={query} />
+      <Facet field="attribute" label="Attribute" options={facets.attributes ?? []} query={query} />
       {isUiCatalogFiltered(query) && (
-        <Button type="button" variant="subtle" onClick={() => go({ q: undefined, coverage: undefined, profile: undefined, area: undefined, route: undefined, cohort: undefined, flag: undefined, surface: undefined, producer: undefined })}>
+        <Button type="button" variant="subtle" onClick={() => go({ q: undefined, coverage: undefined, profile: undefined, area: undefined, route: undefined, cohort: undefined, flag: undefined, surface: undefined, producer: undefined, attribute: undefined })}>
           Clear filters
         </Button>
       )}

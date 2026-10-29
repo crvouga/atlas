@@ -127,3 +127,15 @@ test('a project with no UI states says how one is recorded', async () => {
   await open([memoryStore()]);
   await atlas!.sees('No UI states have been recorded yet');
 });
+
+test('attributes a producer declared are filterable from the address and shown with the state, with no change to the viewer for a new name', async () => {
+  const store = memoryStore();
+  await publishChecks(store, uiStateLayer({ producer: 'capture', recordedAtMs: 1, ...light, states: [shot('home', { attributes: { locale: 'de-DE' } }), shot('cart', { attributes: { locale: 'en-US', 'brand-new-dimension': 'x' } }), shot('pay')] }));
+  await open([store], '/catalog?attribute=locale%3Dde-DE');
+  await atlas!.sees('Screen home');
+  expect(cards()).toEqual(['home']);
+  await atlas!.go('/catalog?state=cart');
+  await atlas!.sees('Profiles side by side');
+  expect(atlas!.text()).toContain('brand-new-dimension');
+  expect(atlas!.text()).toContain('en-US');
+});

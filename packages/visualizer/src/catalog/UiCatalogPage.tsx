@@ -26,6 +26,8 @@ import { coverageStatus, coverageWord } from './words';
 
 /** How many state cards are drawn before "Show more". */
 const CARDS = 48;
+/** How many rows of the surface table are drawn before "Show more". */
+const SURFACES = 100;
 
 function CoverageBadge({ cell }: { cell: UiCell }) {
   return (
@@ -114,7 +116,8 @@ function StateDetail({ state, onClose }: { state: UiCatalogState; onClose: () =>
   const now = useNow();
   const facts: [string, string][] = [
     ['Route', state.route ?? ''], ['Fixture', state.fixture ?? ''], ['Cohort', state.cohort ?? ''], ['Area', state.area ?? ''],
-    ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')]
+    ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')],
+    ...Object.entries(state.attributes ?? {})
   ];
   return (
     <Drawer opened onClose={onClose} position="right" size="xl" title={<Title order={2}>{state.title}</Title>} closeButtonProps={{ 'aria-label': 'Close the state' }}>
@@ -183,6 +186,7 @@ function Summary({ catalog, narrowed }: { catalog: UiCatalog; narrowed: boolean 
 }
 
 function Surfaces({ catalog }: { catalog: UiCatalog }) {
+  const [rows, setRows] = useState(SURFACES);
   if (!catalog.surfaces.length) return null;
   const open = catalog.summary.uncoveredSurfaces;
   const inventoried = catalog.surfaces.some((surface) => surface.inventoried);
@@ -204,7 +208,7 @@ function Surfaces({ catalog }: { catalog: UiCatalog }) {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {catalog.surfaces.map((surface) => (
+                {catalog.surfaces.slice(0, rows).map((surface) => (
                   <Table.Tr key={surface.id} data-surface={surface.id}>
                     <Table.Td>
                       <Anchor
@@ -222,6 +226,11 @@ function Surfaces({ catalog }: { catalog: UiCatalog }) {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
+          {catalog.surfaces.length > rows && (
+            <Button type="button" variant="subtle" onClick={() => setRows(rows + SURFACES)}>
+              Show more surfaces ({catalog.surfaces.length - rows} more)
+            </Button>
+          )}
         </Accordion.Panel>
       </Accordion.Item>
     </Accordion>
@@ -298,7 +307,7 @@ export function UiCatalogPage() {
             {whole.states.length > 0 && catalog.states.length === 0 && (
               <Stack gap="xs" align="flex-start" role="status" data-no-match>
                 <Text c="dimmed">Nothing matches these filters.</Text>
-                <Button type="button" variant="light" onClick={() => go({ q: undefined, coverage: undefined, profile: undefined, area: undefined, route: undefined, cohort: undefined, flag: undefined, surface: undefined, producer: undefined })}>
+                <Button type="button" variant="light" onClick={() => go({ q: undefined, coverage: undefined, profile: undefined, area: undefined, route: undefined, cohort: undefined, flag: undefined, surface: undefined, producer: undefined, attribute: undefined })}>
                   Clear filters
                 </Button>
               </Stack>

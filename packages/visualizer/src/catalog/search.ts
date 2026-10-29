@@ -27,6 +27,8 @@ export const CatalogSearchFields = {
   flag: text,
   surface: text,
   producer: text,
+  /** `name=value` pairs of the attributes a producer declared. */
+  attribute: text,
   /** The open state: a state id. */
   state: text,
   /** A comparison is open: `commit` (two commits of the same profiles) or `profile` (two profiles of this report). */
