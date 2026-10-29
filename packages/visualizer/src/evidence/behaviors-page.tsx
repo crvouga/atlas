@@ -18,7 +18,8 @@ import { useDocSearch } from '../find/doc-search';
 import { passesFilters } from '../find/query';
 import type { BehaviorsSearch } from '../app/router';
 import { specKind } from '../spec-kind';
-import { ApplicabilitySummary } from './applicability-view';
+import { needsAttention, type ReleaseIdentity } from './applicability';
+import { ApplicabilityControls, ApplicabilitySummary, useApplicabilityState, type ApplicabilityState } from './applicability-view';
 import { behaviorDoc, indexBehaviors, type IndexedBehavior } from './behavior-index';
 import { BehaviorPanel, behaviorSteps, CoverageBadge, Player, Provenance, RevisionLine } from './behavior-panel';
 import { forgetReturn, recallReturn, rememberReturn, scopeKey } from './behavior-return';
@@ -36,29 +37,29 @@ const PAGE = 40;
 const NO_DOMAIN = 'No domain declared';
 
 /** Reads every feature and files its behaviors; `pending` while features are still being read. */
-function useBehaviorIndex() {
+function useBehaviorIndex(release: ReleaseIdentity) {
   const evidence = useEvidence();
   const gherkin = specKind('gherkin')!;
   const files = useMemo(() => evidence.files.filter(gherkin.accepts), [evidence.files, gherkin]);
   const { texts, pending } = useSpecTexts(files, true, false);
   const index = useMemo(
-    () => indexBehaviors({ files, texts, specs: evidence.specs, view: evidence.view, evidence: evidence.evidence }),
-    [files, texts, evidence.specs, evidence.view, evidence.evidence]
+    () => indexBehaviors({ files, texts, specs: evidence.specs, view: evidence.view, evidence: evidence.evidence, release }),
+    [files, texts, evidence.specs, evidence.view, evidence.evidence, release]
   );
   return { index, pending: pending || evidence.filesPending, filesError: evidence.filesError };
 }
 
 /** What the search and coverage filter leave of the project's behaviors, best match first when words were typed. */
-function useListing(entries: readonly IndexedBehavior[], search: BehaviorsSearch) {
+function useListing(entries: readonly IndexedBehavior[], search: BehaviorsSearch, onlyStale: boolean) {
   const docs = useMemo(() => new Map(entries.map((entry) => [entry.id, behaviorDoc(entry)] as const)), [entries]);
   const list = useMemo(() => [...docs.values()], [docs]);
   const found = useDocSearch(list, useDeferredValue(search.q));
   const scoped = useMemo(() => {
-    const kept = entries.filter((entry) => (!found.hits || found.hits.has(entry.id)) && passesFilters(docs.get(entry.id)?.facets, found.parsed.filters));
+    const kept = entries.filter((entry) => (!found.hits || found.hits.has(entry.id)) && (!onlyStale || needsAttention(entry.assessment)) && passesFilters(docs.get(entry.id)?.facets, found.parsed.filters));
     if (!found.hits) return kept;
     const order = new Map([...found.hits.keys()].map((id, at) => [id, at] as const));
     return [...kept].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-  }, [entries, docs, found.hits, found.parsed]);
+  }, [entries, docs, found.hits, found.parsed, onlyStale]);
   const counts = useMemo(() => coverageCounts(scoped.map((entry) => entry.behavior)), [scoped]);
   const shown = useMemo(() => (search.coverage ? scoped.filter((entry) => entry.behavior.state === search.coverage) : scoped), [scoped, search.coverage]);
   return { found, scoped, shown, counts, ranked: found.hits !== null };
@@ -216,7 +217,7 @@ function BehaviorList({ listing, selected, limit, onMore }: { listing: Listing; 
 }
 
 /** The index: search, coverage filter, the list, and beside it the Read / Watch / Inspect panel of the selected behavior. */
-function Index({ listing, search, index, pending, filesError }: { listing: Listing; search: BehaviorsSearch; index: ReturnType<typeof useBehaviorIndex>['index']; pending: boolean; filesError: boolean }) {
+function Index({ listing, search, index, pending, filesError, applicability }: { listing: Listing; search: BehaviorsSearch; index: ReturnType<typeof useBehaviorIndex>['index']; pending: boolean; filesError: boolean; applicability: ApplicabilityState }) {
   const navigate = useNavigate({ from: '/behaviors' });
   const scope = scopeKey(search);
   const [draft, setDraft] = useState(search.q ?? '');
@@ -250,6 +251,10 @@ function Index({ listing, search, index, pending, filesError }: { listing: Listi
           <Text component="div" c="dimmed">
             Everything the project's features say should happen, found by its words. Read what should happen, watch a recording of it, and inspect the record behind it.
           </Text>
+          <Group component="nav" aria-label="Where the evidence is" gap="md" mt="xs">
+            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ tab: 'runs' } as never} />}>Runs</Anchor>
+            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ tab: 'artifacts' } as never} />}>Videos and artifacts</Anchor>
+          </Group>
         </Box>
         <TextInput
           type="search"
@@ -273,6 +278,7 @@ function Index({ listing, search, index, pending, filesError }: { listing: Listi
         </Group>
         <SearchNotes issues={listing.found.parsed.issues} semantic={listing.found.status} />
         <CoverageFilter listing={listing} coverage={search.coverage} />
+        <ApplicabilityControls state={applicability} stale={index.entries.filter((entry) => needsAttention(entry.assessment)).length} total={index.entries.length} />
         <Disclosure unread={index.unread} features={index.features} unreadable={index.unreadable} pending={pending} error={filesError} />
         {selected && (
           <Group gap="sm" wrap="wrap" role="group" aria-label="Selected behavior">
@@ -316,7 +322,7 @@ function Index({ listing, search, index, pending, filesError }: { listing: Listi
                       {' · '}
                       <Anchor renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: 'gherkin' }} search={{ spec: selected.file, check: selected.behavior.slot?.id }} />}>Open the feature</Anchor>
                     </Text>
-                    <BehaviorPanel key={selected.id} behavior={selected.behavior} applicability={selected.assessment} inspect={<Inspect entry={selected} />} />
+                    <BehaviorPanel key={selected.id} behavior={selected.behavior} applicability={selected.assessment} release={applicability.release} inspect={<Inspect entry={selected} />} />
                   </Stack>
                 </Paper>
               ) : search.behavior ? (
@@ -337,7 +343,7 @@ function Index({ listing, search, index, pending, filesError }: { listing: Listi
 }
 
 /** The dedicated workspace: what should happen beside its recording, the scoped summary, and the record behind a disclosure. */
-function Workspace({ entry, listing }: { entry: IndexedBehavior; listing: Listing }) {
+function Workspace({ entry, listing, release }: { entry: IndexedBehavior; listing: Listing; release: ReleaseIdentity }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const [inspecting, setInspecting] = useState<string | null>(null);
   const { behavior } = entry;
@@ -420,7 +426,7 @@ function Workspace({ entry, listing }: { entry: IndexedBehavior; listing: Listin
             )}
             {behavior.subject && <Provenance subject={behavior.subject} />}
             <RevisionLine revision={behavior.revision} />
-            <ApplicabilitySummary assessment={entry.assessment} release={{}} />
+            <ApplicabilitySummary assessment={entry.assessment} release={release} />
           </Stack>
         </SimpleGrid>
         <ScopedSummary behavior={behavior} />
@@ -455,11 +461,12 @@ function WorkspaceMissing({ pending }: { pending: boolean }) {
 /** The behaviors route: the project-wide index, or the workspace when one behavior is expanded. */
 export function BehaviorsPage() {
   const search = useSearch({ from: '/behaviors' });
-  const { index, pending, filesError } = useBehaviorIndex();
-  const listing = useListing(index.entries, search);
+  const applicability = useApplicabilityState();
+  const { index, pending, filesError } = useBehaviorIndex(applicability.release);
+  const listing = useListing(index.entries, search, applicability.onlyStale);
   if (search.workspace) {
     const entry = index.entries.find((candidate) => candidate.id === search.behavior);
-    return entry ? <Workspace entry={entry} listing={listing} /> : <WorkspaceMissing pending={pending} />;
+    return entry ? <Workspace entry={entry} listing={listing} release={applicability.release} /> : <WorkspaceMissing pending={pending} />;
   }
-  return <Index listing={listing} search={search} index={index} pending={pending} filesError={filesError} />;
+  return <Index listing={listing} search={search} index={index} pending={pending} filesError={filesError} applicability={applicability} />;
 }
