@@ -11140,6 +11140,15 @@
                                   "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
                                   "type": "string"
                                 },
+                                "durationMs": {
+                                  "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "poster": {
+                                  "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
+                                  "type": "string"
+                                },
                                 "scope": {
                                   "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                                   "type": "object",
@@ -11621,6 +11630,15 @@
                               },
                               "reason": {
                                 "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                "type": "string"
+                              },
+                              "durationMs": {
+                                "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "poster": {
+                                "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
                                 "type": "string"
                               },
                               "scope": {
@@ -12141,6 +12159,15 @@
                                   "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
                                   "type": "string"
                                 },
+                                "durationMs": {
+                                  "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "poster": {
+                                  "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
+                                  "type": "string"
+                                },
                                 "scope": {
                                   "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                                   "type": "object",
@@ -12622,6 +12649,15 @@
                               },
                               "reason": {
                                 "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                "type": "string"
+                              },
+                              "durationMs": {
+                                "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "poster": {
+                                "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
                                 "type": "string"
                               },
                               "scope": {
@@ -16036,6 +16072,15 @@
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
                             "type": "string"
                           },
+                          "durationMs": {
+                            "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "poster": {
+                            "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
+                            "type": "string"
+                          },
                           "scope": {
                             "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                             "type": "object",
@@ -16532,6 +16577,15 @@
                           },
                           "reason": {
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                            "type": "string"
+                          },
+                          "durationMs": {
+                            "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "poster": {
+                            "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
                             "type": "string"
                           },
                           "scope": {
@@ -19148,6 +19202,15 @@
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
                             "type": "string"
                           },
+                          "durationMs": {
+                            "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "poster": {
+                            "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
+                            "type": "string"
+                          },
                           "scope": {
                             "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                             "type": "object",
@@ -19632,6 +19695,15 @@
                               },
                               "reason": {
                                 "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                                "type": "string"
+                              },
+                              "durationMs": {
+                                "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "poster": {
+                                "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
                                 "type": "string"
                               },
                               "scope": {
@@ -20278,6 +20350,15 @@
                           },
                           "reason": {
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                            "type": "string"
+                          },
+                          "durationMs": {
+                            "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "poster": {
+                            "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
                             "type": "string"
                           },
                           "scope": {
@@ -21677,6 +21758,15 @@
                                   "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
                                   "type": "string"
                                 },
+                                "durationMs": {
+                                  "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "poster": {
+                                  "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
+                                  "type": "string"
+                                },
                                 "scope": {
                                   "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                                   "type": "object",
@@ -22872,6 +22962,15 @@
                                 "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "poster": {
+                                "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
+                                "type": "string"
+                              },
                               "scope": {
                                 "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                                 "type": "object",
@@ -23545,6 +23644,15 @@
                           },
                           "reason": {
                             "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                            "type": "string"
+                          },
+                          "durationMs": {
+                            "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "poster": {
+                            "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
                             "type": "string"
                           },
                           "scope": {
@@ -25126,6 +25234,15 @@
                         "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
                         "type": "string"
                       },
+                      "durationMs": {
+                        "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "poster": {
+                        "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
+                        "type": "string"
+                      },
                       "scope": {
                         "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
                         "type": "object",
@@ -26660,6 +26777,15 @@
                       },
                       "reason": {
                         "description": "Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable",
+                        "type": "string"
+                      },
+                      "durationMs": {
+                        "description": "How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers",
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "poster": {
+                        "description": "The bundle key, in the same layer, of the image the producer named as this recording's poster: a hint to show before the file is opened. Absent when there is none or the layer's bundle does not hold it, and in documents of older servers",
                         "type": "string"
                       },
                       "scope": {

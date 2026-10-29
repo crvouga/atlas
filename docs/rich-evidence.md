@@ -27,6 +27,7 @@ decided exactly as before ([the report contract](report-contract.md)). Evidence 
 | `attempts` | check | Every try of a retried check, with its own status, detail, steps and attachments. A check that passed after failing is flaky. |
 | `tags`, `labels` | check, layer | Filters and groups (`smoke`, `flaky`, an owner, a browser). |
 | `tags` | attachment | Marks one recording or screenshot, for example `demo`: shown as a `#demo` chip, and searchable. See [Tagging artifacts and demos](#tagging-artifacts-and-demos). |
+| `poster` (the `id` of an image in the same list) and `durationMs` | attachment (video) | Shown beside the recording in a watch playlist before anything is opened: the report carries them as the optional `poster` (a bundle key) and `durationMs` of each video reference, so no evidence is read per entry. Neither is ever a latency. |
 | `extensions['atlas.media']` | attachment (video) | Where the check's steps are in the recording, so a click on a step seeks the video. See [Place steps in a recording](#place-steps-in-a-recording). |
 | `scope` | attachment, attempt, check, part, layer | What a recording does and does not show: where it ran, whether data and dependencies were real, whether audio was captured. See [Evidence scope](#evidence-scope). |
 | `annotations`, `links` | check, step, attempt, layer | Notes, warnings and issue links next to the result. |

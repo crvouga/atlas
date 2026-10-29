@@ -80,6 +80,8 @@ export const VideoRefSchema = z.looseObject({
   recording: z.string().optional().describe('What identifies the bytes; references with the same value are one recording. Absent when it cannot be played'),
   available: z.boolean().describe('False when the reference names no bytes: no bundle key, address or inline text, or a bundle key that the layer\'s own bundle does not hold'),
   reason: z.string().optional().describe('Why it is unavailable, when the report can tell: `not-in-bundle` is a file the layer names but does not hold (stored, then gone). An open vocabulary: treat an unknown reason as plain unavailable'),
+  durationMs: z.number().nonnegative().optional().describe('How long the recording is, in milliseconds, as its producer declared it: a hint to show before the file is opened, never a latency. Absent when none was declared, and in documents of older servers'),
+  poster: z.string().optional().describe('The bundle key, in the same layer, of the image the producer named as this recording\'s poster: a hint to show before the file is opened. Absent when there is none or the layer\'s bundle does not hold it, and in documents of older servers'),
   scope: EvidenceScopeSchema.optional().describe('What this recording shows as its producer declared it: its own `scope`, else its attempt\'s, check\'s, part\'s or layer\'s. Absent: the scope is unknown, never live, physical or audible')
 });
 

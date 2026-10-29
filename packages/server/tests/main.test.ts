@@ -19,7 +19,8 @@ async function start(s3: ReturnType<typeof fakeS3>, options: { env?: Record<stri
   const controller = new AbortController();
   const state = { output: '' };
   const done = serveMain(['--port', '0', '--no-log', ...(options.argv ?? [])], { out: text => { state.output += text; }, env: { ...S3_TEST_ENV, ...options.env } as Record<string, string>, cwd, signal: controller.signal, fetch: s3.fetch });
-  for (let i = 0; i < 400 && !state.output.includes('Atlas ready') && !state.output.includes('ATLAS CANNOT START'); i++) await new Promise(resolve => setTimeout(resolve, 25));
+  // The first start builds the client cold, which takes 6-10 s on a loaded CI runner: wait up to 25 s (inside the tests' 30 s), returning as soon as it is ready.
+  for (let i = 0; i < 1000 && !state.output.includes('Atlas ready') && !state.output.includes('ATLAS CANNOT START'); i++) await new Promise(resolve => setTimeout(resolve, 25));
   const url = /ready on (http:\/\/[^:]+:\d+)/.exec(state.output)?.[1]?.replace('localhost', '127.0.0.1');
   return { state, url, cwd, stop: async () => { controller.abort(); return done; } };
 }
