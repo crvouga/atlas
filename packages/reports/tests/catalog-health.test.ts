@@ -155,4 +155,27 @@ describe('identity', () => {
     expect(health.findings.map(item => item.code)).toContain('no-spec-definitions');
     expect(health.ok).toBe(true);
   });
+
+  test('declared behavior and example ids are counted; an id on two checks is reported and the checks stay apart', async () => {
+    const model = await modelOf([
+      { checks: [
+        { id: 'pay-old', specPath: 'specs/pay.feature', labels: { 'behavior-id': 'checkout.pay', 'example-id': 'pay.visa' } },
+        { id: 'pay-new', specPath: 'specs/pay.feature', labels: { 'behavior-id': 'checkout.pay' } },
+        { id: 'refund', specPath: 'specs/pay.feature', labels: { 'behavior-id': 'checkout.refund' } },
+        { id: 'plain', specPath: 'specs/pay.feature' }
+      ] }
+    ], [spec('specs/pay.feature')]);
+    const health = catalogHealth(model);
+    expect(health.identity).toMatchObject({ checks: 4, declaredBehaviorIds: 3, declaredExampleIds: 1 });
+    expect(health.counts.tests.total).toBe(4);
+    const split = health.findings.find(item => item.code === 'declared-id-split')!;
+    expect(split.severity).toBe('info');
+    expect(split.items).toEqual([{ path: 'behavior-id=checkout.pay', candidates: [{ path: 'specs/pay.feature  pay-new', reason: 'same behavior-id' }, { path: 'specs/pay.feature  pay-old', reason: 'same behavior-id' }] }]);
+    expect(health.ok).toBe(true);
+  });
+
+  test('a declared mapping keeps where it came from', async () => {
+    const model = await modelOf([{ checks: [{ id: 'add', specPath: 'checkout/cart.feature' }] }], [spec('specs/checkout/cart.feature')]);
+    expect(catalogHealth(model, [{ ...ROOT, source: 'configuration' }]).roots).toEqual([{ from: '', to: 'specs/', matched: 1, source: 'configuration' }]);
+  });
 });

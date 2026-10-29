@@ -2,7 +2,7 @@
  * @module Explorer address
  *
  * Everything the test explorer shows is in the address of the `/` route, so a link reproduces the view: the open test,
- * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the Compare tab with its two pinned runs (`base`, `cand`) and the behavior opened (`pair`), the exact layer a test's detail is pinned to, the recording and position of a shared moment in it (`clip`, `clipAt`), and the one file of a run's layer its Artifacts select. Filters that
+ * the words searched, the filters, the grouping, the order, the Runs tab with the run opened in it, the Compare tab with its two pinned runs (`base`, `cand`) and the behavior opened (`pair`), the Catalog health tab with the root mappings it tries (`root`), the exact layer a test's detail is pinned to, the recording and position of a shared moment in it (`clip`, `clipAt`), and the one file of a run's layer its Artifacts select. Filters that
  * take several values are comma-separated (`status=failed,flaky`); a comma or backslash inside a value is written `\,`
  * or `\\`, and the router encodes `#` and spaces. Anything unreadable is dropped, never an error.
  *
@@ -63,7 +63,9 @@ export const ExplorerSearchFields = {
   inRun: text,
   group: z.enum(TEST_GROUPS).optional().catch(undefined),
   sort: z.enum(EXPLORER_SORTS).optional().catch(undefined),
-  tab: z.enum(['runs', 'artifacts', 'collections', 'compare']).optional().catch(undefined),
+  tab: z.enum(['runs', 'artifacts', 'collections', 'compare', 'health']).optional().catch(undefined),
+  /** The root mappings (`from>to`, comma-separated) the Catalog health tab tries, beside those the server is configured with. */
+  root: text,
   /** The review collection opened in the Collections tab (its stable id), and the revision of it (default: the newest). */
   collection: text,
   rev: z.coerce.number().int().positive().optional().catch(undefined),
@@ -127,7 +129,8 @@ export type ExplorerSearch = {
   readonly inRun?: string;
   readonly group?: TestGroup;
   readonly sort?: ExplorerSort;
-  readonly tab?: 'runs' | 'artifacts' | 'collections' | 'compare';
+  readonly tab?: 'runs' | 'artifacts' | 'collections' | 'compare' | 'health';
+  readonly root?: string;
   readonly collection?: string;
   readonly rev?: number;
   readonly base?: string;

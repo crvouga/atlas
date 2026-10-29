@@ -345,10 +345,10 @@ const BASE_OPERATIONS: readonly Operation[] = [
       '',
       '`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.',
       '',
-      'Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check\'s label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.'
+      'Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check\'s label `outline` names the outline its example belongs to; the labels `behavior-id` and `example-id` declare stable ids, which are counted and checked for ids shared by several checks. Send `format=markdown` for Markdown.'
     ].join('\n'),
     parameters: [
-      { name: 'root', in: 'query', description: 'A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.', schema: str, example: '>specs/' },
+      { name: 'root', in: 'query', description: 'A root mapping `from>to`, URL-encoded. Repeatable or comma-separated. It is added to the mappings the server is configured with (`catalog.roots`, `ATLAS_CATALOG_ROOTS`); `roots[].source` says which is which.', schema: str, example: '>specs/' },
       { name: 'format', in: 'query', description: '`markdown` for a Markdown report instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': { ...json('The diagnostics.', 'CatalogHealth'), headers: { ETag: { description: 'Changes with the report, its history and the mappings.', schema: str } } }, '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }

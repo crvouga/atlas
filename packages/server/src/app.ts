@@ -32,7 +32,7 @@ import { reportStatus } from '../../reports/src/report-status';
 import { ReportIndex, type IndexChange } from '../../reports/src/report-index';
 import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
-import { catalogHealth, healthMarkdown, parseRootMappings } from '../../reports/src/catalog-health';
+import { catalogHealth, healthMarkdown, parseRootMapping, parseRootMappings, type RootMapping } from '../../reports/src/catalog-health';
 import { parseArtifactFilter } from '../../reports/src/artifact-query';
 import { filterUiCatalog, pageUiCatalog, parseUiCatalogQuery, uiCatalog, uiCatalogMarkdown } from '../../reports/src/ui-catalog';
 import { parseReliabilityScope, reliability, reliabilityMarkdown } from '../../reports/src/reliability';
@@ -70,6 +70,8 @@ export type AtlasServerOptions = {
   /** The built viewer. Without it, only the API is served. */
   readonly site?: string;
   readonly outlineBranch?: string;
+  /** Root mappings `from>to` the catalog health report always applies (the `catalog.roots` setting), beside any `root` a request adds. */
+  readonly catalogRoots?: readonly string[];
   readonly include?: (layer: LayerHeader) => boolean;
   readonly refreshMs?: number;
   readonly limits?: { readonly maxObjectMiB?: number; readonly maxJsonMiB?: number; readonly maxStreams?: number };
@@ -461,11 +463,15 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const document = () => testCatalog(found, query);
     return answer(c, found.version, document, () => catalogMarkdown(document()), `tests|${new URL(c.req.url).search}|${wantsMarkdown(c)}`);
   });
+  const configuredRoots: RootMapping[] = (options.catalogRoots ?? []).flatMap(text => parseRootMapping(text) ?? []).map(mapping => ({ ...mapping, source: 'configuration' as const }));
   app.get('/api/reports/tests/health', async c => {
     if (!index.ready) return notReady(c);
     const found = await catalog();
     const params = new URL(c.req.url).searchParams;
-    const document = () => catalogHealth(found, parseRootMappings(params));
+    // The mappings the operator configured, then those this request adds (one already configured is not counted twice).
+    const requested = parseRootMappings(params).filter(mapping => !configuredRoots.some(item => item.from === mapping.from && item.to === mapping.to));
+    const roots: RootMapping[] = [...configuredRoots, ...requested.map(mapping => ({ ...mapping, source: 'request' as const }))];
+    const document = () => catalogHealth(found, roots);
     return answer(c, found.version, document, () => healthMarkdown(document()), `health|${params.getAll('root').join('\u0001')}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/tests/history', async c => {
