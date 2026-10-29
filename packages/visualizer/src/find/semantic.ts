@@ -54,9 +54,9 @@ export function applySemantic(docs: readonly FindDoc[], lexical: readonly Ranked
     if (!vector) continue;
     const similarity = cosine(queryVector, vector);
     if (similarity < SEMANTIC_FLOOR) continue;
-    blended.push({ doc, score: similarity * maxLexical * 0.5, snippet: '' });
+    blended.push({ doc, score: similarity * maxLexical * 0.5, snippet: '', semantic: true });
   }
-  blended.sort((a, b) => b.score - a.score || (a.doc.title < b.doc.title ? -1 : a.doc.title > b.doc.title ? 1 : 0));
+  blended.sort((a, b) => Number(b.exact === true) - Number(a.exact === true) || b.score - a.score || (a.doc.title < b.doc.title ? -1 : a.doc.title > b.doc.title ? 1 : 0));
   return blended.slice(0, limit);
 }
 

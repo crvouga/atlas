@@ -12,7 +12,8 @@
  */
 import type { EvidenceStatus, SpecEntry } from './explorer-types';
 import type { LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
-import { summarizeEvidence } from './evidence-detail';
+import { summarizeEvidenceIn, summarizeLayerEvidence } from './evidence-detail';
+import { effectiveScope } from './evidence-scope';
 import { layerPlace } from './layer-axes';
 import type { LayerParameters, LayerSummary, ReportOutline } from './layer-types';
 
@@ -89,10 +90,13 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     return found;
   };
   const rows: LayerRow[] = [];
+  const receipt = summary.recordings;
+  const expectations = receipt ? new Map(receipt.items.map(item => [item.check, item])) : null;
   for (const part of summary.parts) {
     for (const check of part.checks) {
       const test = tests.get(check.id);
-      const evidence = summarizeEvidence(check);
+      const evidence = summarizeEvidenceIn(effectiveScope(part.scope, summary.scope), check);
+      const item = expectations?.get(check.id);
       rows.push({
         kind: part.kind,
         id: check.id,
@@ -105,13 +109,15 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
         variant: test ? { system: test.system, runtime: test.runtime, seed: test.seed } : {},
         durationMs: test?.durationMs ?? check.durationMs ?? null,
         ...(evidence ? { evidence } : {}),
+        ...(item ? { recording: { state: item.state, ...(item.reason ? { reason: item.reason } : {}) } } : {}),
       });
     }
   }
   const recording = summary.recording;
-  const layerSummaryEvidence = summarizeEvidence(summary, ...summary.parts);
+  const layerSummaryEvidence = summarizeLayerEvidence(summary, ...summary.parts);
   const layer: LayerHeader = {
     ...(summary.freshness ? { freshness: summary.freshness } : {}),
+    ...(summary.run ? { run: summary.run } : {}),
     id: summary.id,
     backend,
     producer: summary.producer,
@@ -127,6 +133,7 @@ export function layerEvidence(summary: LayerSummary, backend: string): LayerEvid
     counts: outcomeCounts(rows),
     execution: textFingerprint(layerExecutionKey(summary)),
     ...(layerSummaryEvidence ? { evidence: layerSummaryEvidence } : {}),
+    ...(receipt ? { recordings: { expected: receipt.expected, uploaded: receipt.uploaded, referenced: receipt.referenced, skipped: receipt.skipped, unresolved: receipt.unresolved, notApplicable: receipt.notApplicable } } : {}),
   };
   const fingerprints: Record<string, string> = {};
   for (const spec of summary.specs) if (spec.fingerprint) fingerprints[specPath(spec.path)] = spec.fingerprint;
@@ -305,12 +312,12 @@ export function distinctLayers(layers: readonly LayerSummary[]): LayerSummary[] 
 }
 
 /**
- * A string equal for the mutable and the archived address of one execution: its producer, sha, time and parts.
+ * A string equal for the mutable and the archived address of one execution: its producer, sha, time, parts and, when the producer named one, its execution id.
  * Object key order is ignored at every depth, including check evidence and extensions; array order is preserved.
  * This is an advisory execution identity, not the content digest that addresses an immutable layer in storage.
  */
 export function layerExecutionKey(layer: LayerSummary): string {
-  return JSON.stringify([layer.producer, layer.sha, layer.recordedAtMs, orderedValue(layer.parts)]);
+  return JSON.stringify([layer.producer, layer.sha, layer.recordedAtMs, orderedValue(layer.parts), ...(layer.run ? [layer.run.id] : [])]);
 }
 
 /** Sort JSON objects recursively without changing array order or interpreting extension keys as prototypes. */

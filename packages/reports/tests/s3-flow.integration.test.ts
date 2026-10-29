@@ -19,7 +19,9 @@ const suite = endpoint ? describe : describe.skip;
 suite('one bucket, many publishers, one node', () => {
   let root: string;
   const bucket = process.env.ATLAS_TEST_S3_BUCKET ?? 'atlas-test';
-  const store = () => `s3://${bucket}/flow-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}?endpoint=${endpoint}&region=us-east-1`;
+  const prefixOf = () => `flow-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  let prefix = prefixOf();
+  const store = () => { prefix = prefixOf(); return `s3://${bucket}/${prefix}?endpoint=${endpoint}&region=us-east-1`; };
   const env = { AWS_ACCESS_KEY_ID: process.env.ATLAS_TEST_S3_KEY ?? 'atlaskey', AWS_SECRET_ACCESS_KEY: process.env.ATLAS_TEST_S3_SECRET ?? 'atlassecret' };
 
   beforeAll(async () => {
@@ -76,12 +78,14 @@ suite('one bucket, many publishers, one node', () => {
     const controller = new AbortController();
     let output = '';
     // This exercises the API, so skip the unrelated cold client build on a fresh CI runner.
-    const done = serveMain(['--data', path.join(root, 'server-data'), '--site', path.join(root, 'no-site'), '--store', url, '--port', '0', '--host', '127.0.0.1', '--refresh', '1', '--no-log'], { out: text => { output += text; }, env, cwd: root, signal: controller.signal });
+    // The server is configured the only way it can be: the ATLAS_S3_* variables, here naming the same bucket and prefix.
+    const serverEnv = { ATLAS_S3_ENDPOINT: endpoint!, ATLAS_S3_BUCKET: bucket, ATLAS_S3_REGION: 'us-east-1', ATLAS_S3_PREFIX: prefix, ATLAS_S3_ACCESS_KEY_ID: env.AWS_ACCESS_KEY_ID, ATLAS_S3_SECRET_ACCESS_KEY: env.AWS_SECRET_ACCESS_KEY };
+    const done = serveMain(['--site', path.join(root, 'no-site'), '--port', '0', '--host', '127.0.0.1', '--refresh', '1', '--no-log'], { out: text => { output += text; }, env: serverEnv, cwd: root, signal: controller.signal });
     try {
       for (let i = 0; i < 200 && !output.includes('Atlas ready'); i++) await new Promise(resolve => setTimeout(resolve, 25));
       const base = /ready on (http:\/\/[^:]+:\d+)/.exec(output)?.[1]?.replace('localhost', '127.0.0.1');
       expect(base).toBeDefined();
-      expect(output).toContain('Backends: data (uploads),');
+      expect(output).toContain(`Storage: s3://${bucket}/${prefix}/`);
       const effective = async () => (await (await fetch(`${base}/api/reports/evidence/effective`)).json()) as EffectiveEvidence;
       expect((await effective()).layers.length).toBe(1);
       expect(await (await fetch(`${base}/api/data/specs/cart.feature`)).text()).toContain('Shopping cart');

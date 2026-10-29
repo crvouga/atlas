@@ -5,7 +5,7 @@
   "properties": {
     "ok": {
       "type": "boolean",
-      "const": true
+      "description": "True when the layer was written. False only with `--require-recordings` when an expected recording is not uploaded (the layer was still written; the exit code is then 1)"
     },
     "store": {
       "type": "string",
@@ -71,6 +71,111 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "recordings": {
+          "description": "Present when a check declared a `recordingExpectation`: what became of each expected video, with sizes and checksums of the stored bytes. It describes publication only; the checks keep their results",
+          "type": "object",
+          "properties": {
+            "expected": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Checks that required a recording: uploaded + referenced + skipped + unresolved"
+            },
+            "uploaded": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "referenced": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unresolved": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "notApplicable": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Checks intentionally unrecorded. They are not expected and not missing"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The id of the check"
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "description": "Why the recording is not uploaded. Never contains a path, a token or payload data",
+                    "type": "string"
+                  },
+                  "files": {
+                    "description": "Every video attachment of the check, at any level",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string"
+                        },
+                        "bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "sha256": {
+                          "description": "The checksum of the stored bytes: proof the layer holds this exact file",
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  }
+                },
+                "required": [
+                  "check",
+                  "state"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          },
+          "required": [
+            "expected",
+            "uploaded",
+            "referenced",
+            "skipped",
+            "unresolved",
+            "notApplicable",
+            "items"
+          ],
+          "additionalProperties": {}
         }
       },
       "required": [
@@ -139,6 +244,61 @@
         "files",
         "bytes",
         "alreadyPublished"
+      ],
+      "additionalProperties": {}
+    },
+    "recordings": {
+      "description": "Present when a check declared a `recordingExpectation`",
+      "type": "object",
+      "properties": {
+        "strict": {
+          "type": "boolean",
+          "description": "Whether `--require-recordings` was given"
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "True when every expected recording is uploaded or referenced"
+        },
+        "expected": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "uploaded": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "check": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "check",
+              "state"
+            ],
+            "additionalProperties": {}
+          },
+          "description": "Each expected recording that is skipped or unresolved. Retry after fixing it: publishing again reuses the stored files"
+        }
+      },
+      "required": [
+        "strict",
+        "complete",
+        "expected",
+        "uploaded",
+        "gaps"
       ],
       "additionalProperties": {}
     },

@@ -52,7 +52,7 @@ describe('test history', () => {
       const layer = await publish(store, plan);
       const summary = layerSummary((await readLayer(store, layer.id))!);
       const evidence = layerEvidence(summary, 'one');
-      history.add(evidence.layer, evidence.rows, summary.specs);
+      history.add(evidence.layer, evidence.rows, summary.specs, 'one', evidence.fingerprints);
     }
     const index = new ReportIndex([{ id: 'one', store }]);
     await index.refresh();

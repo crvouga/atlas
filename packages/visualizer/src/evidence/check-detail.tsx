@@ -2,6 +2,7 @@ import { recordingPaths } from '@crvouga/atlas/reports/evidence-types';
 import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
 import { flattenFrames } from '@crvouga/atlas/reports/frames';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
+import { boundaryOf, isProductLatency } from '@crvouga/atlas/reports/latency';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
 import { Accordion, Alert, Anchor, Box, Button, Code, Flex, Group, List, Stack, Table, Text, Title } from '@mantine/core';
@@ -9,12 +10,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
 import { TestProgress, useTestProgress } from '../live/test-progress';
 import { reportJson } from './api';
-import { ResultEvidence } from './artifacts';
+import { ResultEvidence, useCheckDetail } from './artifacts';
 import { useEvidence } from './evidence-context';
 import { ago, duration, plural, statusWord, useNow } from './format';
 import type { FeatureExamples, FeatureStep } from './gherkin';
 import { Bounded, Origin, StatusMark } from './marks';
 import { ModelTrace } from './model-trace';
+import { OutcomeSummary } from './outcome-summary';
+import { failedReportStep, failedStep, recordOf, sourceLabels, type ResultRecord } from './outcome';
 import { recordedModelStates } from './quint';
 /** What the address says is open: a check, and optionally one particular layer's record of it. */
 export type CheckSelection = {
@@ -49,24 +52,20 @@ function environmentMarks(slot: CheckSlot) {
   if (seen.size < 2) return [];
   return [...seen].map(([id, status]) => ({ id, status }));
 }
-function outcomeName(outcome: EvidenceResult) {
-  const environment = outcome.layer.environment ? environmentLabel(outcome.layer.environment) : '';
-  const parameters = Object.entries(outcome.parameters)
-    .map(([name, value]) => `${name}: ${value}`)
-    .join(', ');
-  return [environment, parameters].filter(Boolean).join(' · ') || outcome.layer.producer;
-}
 export function ResultRow({
   label,
   slot,
   open,
   onToggle,
+  badge,
   children
 }: {
   label: string;
   slot: CheckSlot | null;
   open: boolean;
   onToggle: () => void;
+  /** A short extra mark after the label, such as a coverage state. */
+  badge?: ReactNode;
   children: ReactNode;
 }) {
   const now = useNow();
@@ -90,12 +89,13 @@ export function ResultRow({
                   <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
                     {marks.map((mark) => (
                       <Text key={mark.id || 'unspecified'} data-status={mark.status} span inherit>
-                        {environmentLabel(mark.id || null)}
+                        {environmentLabel(mark.id || null)} {statusWord(mark.status).toLowerCase()}
                       </Text>
                     ))}
                   </Flex>
                 )}
               </Text>
+              {badge}
               {slot?.live && (
                 <Text span inherit>
                   Running now
@@ -268,6 +268,18 @@ type Props = {
   reads: 'steps' | 'trace';
   /** The check as written, shown until a recording is read or when there is none. */
   written?: ReactNode;
+  /** An exact earlier result the caller found (for example on a server that only sends winners). It wins over `layerId`. */
+  pinned?: HistoryEntry;
+  /** Choosing a run in the history always names its layer, even when that result is a current one, so the choice stays pinned. */
+  pin?: boolean;
+  /** The layer id of the current source the address selected (without pinning a run). Used with `onSource`; otherwise the choice is local. */
+  source?: string;
+  /** Called with the layer id when a source is chosen (null for the newest), so the page can keep the choice in its address. */
+  onSource?: (layerId: string | null) => void;
+  /** Whether the outcome summary states its own heading. False when the page already shows it. */
+  headline?: boolean;
+  /** Every record of this check the page knows (a node's history of it), when the layers held here are only the winners. */
+  records?: readonly ResultRecord[];
 };
 /** Everything recorded for one check: the chosen result, how it went, and every other run of it. */
 export function CheckDetail(props: Props) {
@@ -298,16 +310,28 @@ export function CheckDetail(props: Props) {
     </>
   );
 }
-function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
-  const { evidence, backends } = useEvidence();
+function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pin, source, onSource, headline = true, records }: Props) {
+  const { evidence, backends, ready, pending } = useEvidence();
   const now = useNow();
   const [variant, setVariant] = useState(0);
   const history = useMemo(() => checkHistory(evidence, slot.specPath, slot.id), [evidence, slot.specPath, slot.id]);
-  const winner = slot.outcomes[Math.min(variant, slot.outcomes.length - 1)]!;
-  const earlier = layerId ? history.find((entry) => entry.layer.id === layerId) : undefined;
+  const sourceAt = onSource && source ? slot.outcomes.findIndex((outcome) => outcome.layer.id === source) : -1;
+  const index = Math.min(onSource ? Math.max(sourceAt, 0) : variant, slot.outcomes.length - 1);
+  const winner = slot.outcomes[index]!;
+  const earlier = pinned ?? (layerId ? history.find((entry) => entry.layer.id === layerId) : undefined);
   const chosen: HistoryEntry = earlier ?? { layer: winner.layer, row: winner.row };
   const superseded = !slot.outcomes.some((outcome) => outcome.layer.id === chosen.layer.id);
   const { paths, report } = useRecordedReport(chosen);
+  const recorded = useCheckDetail(chosen.layer, chosen.row);
+  const point = useMemo(
+    () => (chosen.row.status === 'failed' ? (failedStep(recorded.data?.check.steps) ?? failedReportStep(report.data)) : undefined),
+    [chosen.row.status, recorded.data, report.data]
+  );
+  const labels = sourceLabels(slot.outcomes, now);
+  const choose = (at: number) => {
+    setVariant(at);
+    onSource?.(at === 0 ? null : slot.outcomes[at]!.layer.id);
+  };
   const moments = report.data ? flattenFrames(report.data.steps).length : 0;
   const timings = superseded ? [] : slot.diagnostics.filter((entry) => entry.layer.id === chosen.layer.id || slot.diagnostics.length === 1);
   const note = superseded ? 'An earlier result. A newer run replaced it in the combined report.' : qualification(winner.warning);
@@ -320,12 +344,32 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
       : '';
   return (
     <Stack gap="sm" miw={0}>
+      <OutcomeSummary
+        slot={slot}
+        selected={chosen}
+        history={records && records.length > history.length ? records : history.map(recordOf)}
+        point={point}
+        detail={recorded.data}
+        now={now}
+        showHeadline={headline}
+        choose={(layer) => {
+          const at = slot.outcomes.findIndex((outcome) => outcome.layer.id === layer);
+          if (at >= 0) choose(at);
+          else select({ layer });
+        }}
+      />
       {slot.outcomes.length > 1 && !earlier && (
         <Flex role="group" aria-label="Environments" gap="xs" align="center" wrap="wrap">
-          {slot.outcomes.map((outcome, index) => (
-            <Button key={outcome.key} type="button" aria-pressed={index === variant} onClick={() => setVariant(index)} variant="light">
+          {slot.outcomes.map((outcome, at) => (
+            <Button
+              key={outcome.key}
+              type="button"
+              aria-pressed={at === index}
+              onClick={() => choose(at)}
+              variant="light"
+            >
               <StatusMark status={outcome.row.status} size={12} />
-              {outcomeName(outcome)}
+              {labels[at]!.text}
             </Button>
           ))}
         </Flex>
@@ -344,6 +388,11 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
       {note && (
         <Alert color={'blue'} my="sm">
           {note}
+        </Alert>
+      )}
+      {layerId && !earlier && ready && pending === 0 && (
+        <Alert role="status" color={'blue'} my="sm">
+          The layer this link names is not among the results held for this check. Showing the current result instead.
         </Alert>
       )}
       {failure && (
@@ -387,6 +436,14 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
                   against an allowance of {measurement.limit} {measurement.unit}
                 </Text>
               )}
+              {isProductLatency(measurement) && (
+                <Text span inherit c="dimmed">
+                  {' '}
+                  · product latency, {boundaryOf(measurement).label}
+                  {boundaryOf(measurement).state === 'partial' && ` (partial: not ${boundaryOf(measurement).intended})`}
+                  {measurement.outcome !== undefined && measurement.outcome !== 'observed' && ` · ${measurement.outcome}: waited at least this long`}
+                </Text>
+              )}
             </Text>
           );
         })
@@ -397,7 +454,7 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
           {moments > 0 && (
             <Button
               type="button"
-              onClick={() => select({ view: 'recording', check: slot.id, layer: earlier ? chosen.layer.id : null })}
+              onClick={() => select({ view: 'recording', check: slot.id, layer: earlier || index > 0 ? chosen.layer.id : null })}
               variant="filled"
             >
               Open recording{' '}
@@ -428,7 +485,9 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written }: Props) {
                       type="button"
                       aria-current={current || undefined}
                       onClick={() =>
-                        select({ layer: slot.outcomes.some((outcome) => outcome.layer.id === entry.layer.id) ? null : entry.layer.id })
+                        select({
+                          layer: !pin && slot.outcomes.some((outcome) => outcome.layer.id === entry.layer.id) ? null : entry.layer.id
+                        })
                       }
                       variant="light"
                     >
