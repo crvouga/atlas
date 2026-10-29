@@ -1,14 +1,13 @@
 import { Badge, Button, Group, Kbd, List, Modal, Stack, Text } from '@mantine/core';
 import { Spotlight, useSpotlight } from '@mantine/spotlight';
-import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useAtlas } from '../app/atlas-context';
 import { useTestCatalog } from '../explorer/catalog';
 import { SearchNotes } from '../explorer/search-notes';
-import { keys, specKey, useAdapter } from '../data/queries';
 import { useEvidence } from '../evidence/evidence-context';
 import { plural } from '../evidence/format';
+import { useSpecTexts } from '../evidence/spec-texts';
 import { StatusMark } from '../evidence/marks';
 import { kindOfFile } from '../spec-kind';
 import { describeHit } from './behaviors';
@@ -50,66 +49,6 @@ function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
   return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A';
-}
-/**
- * Reads the text of every spec for search, a few at a time, once `enabled`. Each file lands as it arrives, so a search
- * can use what is read so far; `read` of `total` say how far it is, and `failed` how many could not be read at all.
- */
-function useSpecTexts(files: readonly string[], enabled: boolean, open: boolean) {
-  const adapter = useAdapter();
-  const client = useQueryClient();
-  const source = specKey(adapter);
-  const cache = useRef(new Map<string, string>());
-  const unreadable = useRef(new Set<string>());
-  const [texts, setTexts] = useState<ReadonlyMap<string, string>>(() => new Map());
-  const [pending, setPending] = useState(false);
-  const [failedFiles, setFailedFiles] = useState<ReadonlySet<string>>(() => new Set());
-  const key = files.join('\n');
-  // Opening the finder is another chance for the files that could not be read.
-  useEffect(() => {
-    if (!open || unreadable.current.size === 0) return;
-    for (const file of unreadable.current) cache.current.delete(file);
-    unreadable.current.clear();
-    setFailedFiles(new Set());
-  }, [open]);
-  useEffect(() => {
-    if (!enabled) return;
-    const wanted = key.length === 0 ? [] : key.split('\n');
-    let cancelled = false;
-    const missing = wanted.filter((file) => !cache.current.has(file));
-    if (missing.length === 0) {
-      setPending(false);
-      return;
-    }
-    setPending(true);
-    let cursor = 0;
-    const pull = async () => {
-      for (;;) {
-        const file = missing[cursor++];
-        if (file === undefined || cancelled) return;
-        let text = '';
-        try {
-          text = await client.fetchQuery({ queryKey: keys.specFile(source, file), queryFn: () => adapter.specFile(file), retry: false });
-        } catch {
-          text = '';
-          unreadable.current.add(file);
-        }
-        if (cancelled) return;
-        cache.current.set(file, text);
-        setTexts(new Map(cache.current));
-        if (unreadable.current.has(file)) setFailedFiles(new Set(unreadable.current));
-      }
-    };
-    void Promise.all([pull(), pull(), pull(), pull()]).then(() => {
-      if (!cancelled) setPending(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [adapter, client, enabled, key, source]);
-  const read = useMemo(() => files.filter((file) => texts.has(file)).length, [files, texts]);
-  const failed = useMemo(() => files.filter((file) => failedFiles.has(file)).length, [files, failedFiles]);
-  return { texts, pending, total: files.length, read, failed };
 }
 export function Finder() {
   const open = useFinderOpen();
