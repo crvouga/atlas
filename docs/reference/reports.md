@@ -2207,6 +2207,10 @@ export type VideoRef = {
   readonly available: boolean;
   /** Why it is unavailable, when the report can tell: `not-in-bundle` names a file the layer should hold (its bundle key) but does not, a recording that was acknowledged and is no longer there. Absent otherwise, and for an available video. An open vocabulary: treat an unknown reason as plain unavailable. */
   readonly reason?: 'not-in-bundle';
+  /** How long the recording is, in milliseconds, as its producer declared (`Attachment.durationMs`): a hint to show before the file is opened, never measured here and never a latency. Absent when none was declared, and in documents of older servers. */
+  readonly durationMs?: number;
+  /** The bundle key, in the same layer, of the image the producer named as this recording's poster (`Attachment.poster`): a hint to show before the file is opened. Only an image the layer's bundle holds; absent when there is none, and in documents of older servers. */
+  readonly poster?: string;
   /** What this recording shows, as declared for it: its own `scope`, else its attempt's, check's, part's or layer's. Absent when none declared one: its scope is unknown, not live, physical or audible. */
   readonly scope?: EvidenceScope;
 };
