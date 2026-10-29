@@ -1,0 +1,140 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/user-state.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "gc": {
+      "description": "The garbage collection policy. Absent until someone saves one: then nothing is deleted",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Delete eligible layers on a schedule. `false` keeps the policy but deletes nothing"
+        },
+        "maxAgeDays": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3650,
+          "description": "A superseded layer is eligible once it was recorded more than this many days ago"
+        },
+        "keepLatest": {
+          "default": 20,
+          "description": "Always keep this many of the newest layers, however old, so recent history stays",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "intervalHours": {
+          "default": 24,
+          "description": "How often the server applies the policy",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 720
+        }
+      },
+      "required": [
+        "enabled",
+        "maxAgeDays"
+      ],
+      "additionalProperties": false
+    },
+    "settings": {
+      "description": "Report and live-run settings saved from the settings page, applied at the next start",
+      "type": "object",
+      "properties": {
+        "outlineBranch": {
+          "description": "Which branch's specs the report is laid over. Default main, then master, then the newest",
+          "type": "string"
+        },
+        "include": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "branches": {
+              "description": "Only layers recorded on these branches take part",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "ignoreModified": {
+              "description": "Leave out layers from modified checkouts and unknown origins",
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "refreshSeconds": {
+          "default": 10,
+          "description": "How often the backends are looked at for layers written by something other than this server",
+          "type": "number",
+          "minimum": 1
+        },
+        "limits": {
+          "default": {
+            "maxObjectMiB": 256,
+            "maxJsonMiB": 32,
+            "maxStreams": 500
+          },
+          "type": "object",
+          "properties": {
+            "maxObjectMiB": {
+              "default": 256,
+              "description": "The largest object an upload may be",
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "maxJsonMiB": {
+              "default": 32,
+              "description": "The largest JSON body (a manifest, a checks request)",
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "maxStreams": {
+              "default": 500,
+              "description": "Viewers that may be connected for live updates at once",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        },
+        "heartbeatSeconds": {
+          "default": 15,
+          "description": "How often a live connection is touched, so proxies keep it open",
+          "type": "number",
+          "minimum": 1
+        },
+        "runTimeoutSeconds": {
+          "default": 30,
+          "description": "Interrupt a live run after this many seconds without a producer heartbeat",
+          "type": "number",
+          "minimum": 10,
+          "maximum": 3600
+        },
+        "runStallSeconds": {
+          "default": 900,
+          "description": "Interrupt after this many seconds without test progress; 0 disables progress expiry",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "log": {
+          "default": true,
+          "description": "One JSON line per request",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion"
+  ],
+  "additionalProperties": {}
+}

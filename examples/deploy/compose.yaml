@@ -1,22 +1,43 @@
-# The whole thing on one machine: the Atlas server, keeping its results on a volume.
+# The whole thing on one machine: the Atlas server, and an S3-compatible server (SeaweedFS) holding everything.
+#
+# Atlas keeps ALL reports and ALL user state (the garbage collection policy, saved settings) in S3-compatible object
+# storage and nowhere else: it has no local disk or database to fall back to, and refuses to start without the
+# ATLAS_S3_* settings below. Point them at AWS S3, Cloudflare R2, MinIO, ... in production.
 #
 #   docker compose up --pull always
 #   # every environment sends its results to it (another terminal, a laptop, CI):
 #   export ATLAS_STORE=http://localhost:8080 ATLAS_TOKEN=demo-token-change-me-123
 #   bunx atlas report publish --producer unit --junit out.xml --specs ./specs
 #   # or as they finish:   my-test-runner --json | bunx atlas report stream --producer unit
-#   # then open http://localhost:8080
+#   # then open http://localhost:8080 (the garbage collection policy is defined at http://localhost:8080/admin)
 #
-# The token is for this demo only. Use a long random one: openssl rand -hex 24
+# The token and the S3 credentials are for this demo only. Use a long random token: openssl rand -hex 24
 services:
+  s3:
+    image: chrislusf/seaweedfs:latest
+    command: server -s3 -s3.config=/etc/s3.json -dir=/data
+    volumes:
+      - ./s3.json:/etc/s3.json:ro
+      - s3-data:/data
+  bucket:
+    image: amazon/aws-cli:latest
+    depends_on: [s3]
+    environment: { AWS_ACCESS_KEY_ID: atlaskey, AWS_SECRET_ACCESS_KEY: atlassecret, AWS_DEFAULT_REGION: us-east-1 }
+    entrypoint: ["/bin/sh", "-c", "until aws --endpoint-url http://s3:8333 s3 mb s3://atlas 2>/dev/null || aws --endpoint-url http://s3:8333 s3 ls s3://atlas >/dev/null 2>&1; do sleep 2; done"]
+    restart: "no"
   atlas:
     image: ghcr.io/crvouga/atlas:latest
+    depends_on:
+      bucket: { condition: service_completed_successfully }
     environment:
       ATLAS_TOKEN: "${ATLAS_TOKEN:-demo-token-change-me-123}"
+      ATLAS_S3_ENDPOINT: http://s3:8333
+      ATLAS_S3_BUCKET: atlas
+      ATLAS_S3_REGION: us-east-1
+      ATLAS_S3_ACCESS_KEY_ID: atlaskey
+      ATLAS_S3_SECRET_ACCESS_KEY: atlassecret
     ports:
       - "8080:8080"
-    volumes:
-      - atlas-data:/data
     restart: unless-stopped
 volumes:
-  atlas-data: {}
+  s3-data: {}

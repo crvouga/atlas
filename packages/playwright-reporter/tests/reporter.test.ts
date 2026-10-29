@@ -108,6 +108,25 @@ describe('Playwright Test reporter', () => {
     expect(lines).toEqual(['Atlas: 2 checks in 2 layers to the given store']);
   });
 
+  test('names the execution from the option or ATLAS_RUN_ID, so shards of one invocation share a run', async () => {
+    const dir = repo();
+    const file = path.join(dir, 'e2e', 'checkout.spec.ts');
+    const publish = async (options: AtlasPlaywrightReporterOptions, env: Record<string, string> = {}) => {
+      const store = memoryStore();
+      const root = rootSuite();
+      const project = projectSuite(root, 'Desktop Chrome', { browserName: 'chromium' });
+      const one = testCase(childSuite(childSuite(project, 'file', 'e2e/checkout.spec.ts'), 'describe', 'Checkout'), 'pays by card', file);
+      const { reporter } = reporterWith(store, { ...options, env: { ...ENV, ...env } });
+      reporter.onBegin(config(dir), root);
+      run(reporter, one, [result('passed', { duration: 5 })]);
+      await reporter.onEnd();
+      return (await layersOf(store))[0]!;
+    };
+    expect((await publish({ run: { id: 'demo-1', title: 'Demo' } })).run).toEqual({ id: 'demo-1', title: 'Demo' });
+    expect((await publish({}, { ATLAS_RUN_ID: 'demo-2', ATLAS_RUN_TITLE: 'From env' })).run).toEqual({ id: 'demo-2', title: 'From env' });
+    expect(await publish({})).not.toHaveProperty('run');
+  });
+
   test('a test that passed on retry is passed, tagged flaky, with an attempt per try and the failed try\'s evidence', async () => {
     const dir = repo();
     const store = memoryStore();

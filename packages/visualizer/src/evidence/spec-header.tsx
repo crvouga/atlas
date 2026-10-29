@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { SpecKind } from '../spec-kind';
 import { useEvidence } from './evidence-context';
 import { useNow } from './format';
+import { EvidenceIncomplete, EvidenceWaiting } from './load-state';
 import { CountLine, Meter, Origin } from './marks';
 /** A spec's name, where it lives, and what the combined report holds for it. */
 export function SpecHeader({
@@ -23,7 +24,7 @@ export function SpecHeader({
   planned?: number;
   children?: ReactNode;
 }) {
-  const { backends, ready, unavailable, pending } = useEvidence();
+  const { backends, ready, unavailable, pending, failed } = useEvidence();
   const now = useNow();
   const summary = entry?.summary ?? NO_EVIDENCE;
   const newest = entry?.slots
@@ -50,13 +51,13 @@ export function SpecHeader({
             <Text span inherit>
               Recorded results are unavailable.
             </Text>
-          ) : !ready ? (
-            <Text role="status" span inherit>
-              Loading recorded results…
-            </Text>
+          ) : !ready || (summary.status === 'none' && pending > 0) ? (
+            <EvidenceWaiting usable={`The ${kind.one} below is readable.`} />
           ) : summary.status === 'none' ? (
             <Text span inherit>
-              {pending > 0 ? 'Loading recorded results…' : `No completed test report for this ${kind.one} yet.`}
+              {failed.length > 0
+                ? `No completed test report for this ${kind.one} in the layers that could be read.`
+                : `No completed test report for this ${kind.one} yet.`}
             </Text>
           ) : (
             <>
@@ -69,6 +70,7 @@ export function SpecHeader({
             </>
           )}
         </Flex>
+        {ready && <EvidenceIncomplete />}
         {newest && (
           <Flex gap="xs" align="center" wrap="wrap" c="dimmed">
             Latest from <Origin layer={newest.layer} backends={backends} now={now} />

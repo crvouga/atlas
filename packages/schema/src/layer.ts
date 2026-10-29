@@ -60,15 +60,53 @@ export type CheckStatus = z.infer<typeof CheckStatusSchema>;
 export const FRESHNESS = ['unknown', 'modified'] as const;
 
 /**
+ * The execution a layer belongs to, named by the producer: one invocation of a local or manual run, which several
+ * layers (shards, batches, producers) may share. Presentation and history grouping only: it never takes part in the
+ * slot a result fills, in which result wins, or in a status. Absent, a run is told by its CI run URL, else `branch@sha`.
+ * Within one project, layers that carry the same `id` are one run; a later invocation gets another `id`.
+ */
+export const LayerRunSchema = z.looseObject({
+  id: z.string().min(1).max(256).describe('The execution\'s identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded'),
+  title: z.string().optional().describe('A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`'),
+  startedAtMs: z.number().nonnegative().optional().describe('When the execution started, epoch milliseconds'),
+  endedAtMs: z.number().nonnegative().optional().describe('When the execution ended, epoch milliseconds')
+});
+/** The execution of a layer, parsed from `LayerRunSchema`. */
+export type LayerRun = z.output<typeof LayerRunSchema>;
+
+/** The `kind` of a measurement that is a named, user-visible product latency (see docs/rich-evidence.md#product-latency). */
+export const PRODUCT_LATENCY_KIND = 'product-latency';
+
+/** The two ends of a measured interval, named in the producer's words: `{ from: 'submit pressed', to: 'confirmation visible' }`. */
+export const MeasurementBoundarySchema = z.looseObject({
+  from: z.string().min(1).optional().describe('The event the interval starts at: `end of speech`, `submit pressed`'),
+  to: z.string().min(1).optional().describe('The event the interval ends at: `audible response`, `confirmation visible`')
+});
+
+/**
  * A number a check measured, such as a latency or a size, with its unit and an optional allowance. A measurement over
  * its `limit` is reported and never changes the check's status.
+ *
+ * A measurement of `kind` `product-latency` is how quickly the product responded to a user, between two named events.
+ * It is not the check's duration (which includes setup, waits and pacing) and a number with no `kind` is never read as
+ * product latency. All the fields after `limit` are optional and describe the measurement; none decides a status.
  */
 export const MeasurementSchema = z.looseObject({
   name: z.string().min(1),
   value: z.number().describe('A finite number'),
   unit: z.string(),
-  limit: z.number().optional().describe('The allowance. A measurement over it is reported, and never fails the check by itself')
+  limit: z.number().optional().describe('The allowance, or budget. A measurement over it is reported, and never fails the check by itself'),
+  kind: z.string().min(1).optional().describe('What the number is, in an open vocabulary. `product-latency`: a user-visible response time between `from` and `to`. Absent: just a number, never read as product latency'),
+  from: z.string().min(1).optional().describe('The event the interval starts at. Without both `from` and `to` a latency is shown but no product claim is made from it'),
+  to: z.string().min(1).optional().describe('The event the interval ends at'),
+  intended: MeasurementBoundarySchema.optional().describe('The interval the name of the measurement claims, when what was measured is only part of it. If `intended.to` differs from `to` (or `intended.from` from `from`) the measurement is shown as partial, never as the complete interval'),
+  source: z.string().optional().describe('How it was measured: `app-instrumentation`, `trace`, `recording-analysis`'),
+  outcome: z.string().min(1).optional().describe('`observed` (the default), `timeout` or `failed`. For anything but `observed` the value is how long the observation waited: at least that much, so it counts against a budget and is never dropped'),
+  instrumentation: z.string().optional().describe('The version or method of the measurement. A change of it between two sets of observations is disclosed when they are compared'),
+  labels: z.record(z.string(), z.string()).optional().describe('What the observation is comparable with: `device`, `build`, `network`. `device` and `build` group the observations and, when two groups differ in the others, the comparison says so')
 });
+/** A measurement as stored in a layer, parsed from `MeasurementSchema`. */
+export type Measurement = z.output<typeof MeasurementSchema>;
 
 /**
  * Structured data of a producer's or tool's own, by namespace: `{ "com.example.coverage": { … } }`.
@@ -88,6 +126,34 @@ export const MomentSchema = z.looseObject({
   step: z.string().optional().describe('The `id` of a step'),
   offsetMs: z.number().nonnegative().optional()
 });
+
+/**
+ * What a piece of evidence does and does not show, declared by the producer that made it: where it ran, whether its
+ * data and dependencies were real, whether audio was captured, how it was paced and which assertions the result
+ * stands on. Every field is optional and a field that is absent is unknown, never assumed live, physical or end to end.
+ *
+ * It is a declaration, not a finding: Atlas shows it as the producer's word, apart from the dimensions the producer
+ * names in `verified` (facts something independent checked). It describes evidence and never decides a status, a slot
+ * or a winner. The nearest declaration wins as a whole, never field by field: an attachment's `scope`, else its
+ * attempt's, else its check's, else its part's, else its layer's.
+ */
+export const EvidenceScopeSchema = z.looseObject({
+  surface: z.string().min(1).optional().describe('Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…'),
+  deviceKind: z.string().min(1).optional().describe('What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately'),
+  syntheticData: z.boolean().optional().describe('True: the data was made up for the run. False: real data. Absent: unknown'),
+  dependencies: z.string().min(1).optional().describe('Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown'),
+  audioCaptured: z.boolean().optional().describe('True: the recording has real audio. False: it is silent. Absent: unknown'),
+  pacing: z.string().min(1).optional().describe('How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown'),
+  asserted: z.array(z.string()).optional().describe('The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior'),
+  limitations: z.array(z.string()).optional().describe('Known limits of what this evidence shows, in the producer\'s words'),
+  declaredBy: z.string().optional().describe('Who or what made this declaration: a tool, a team, a person'),
+  verified: z.array(z.string()).optional().describe('The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared'),
+  verifiedBy: z.string().optional().describe('What checked the `verified` fields'),
+  provenance: z.array(LinkSchema).optional().describe('Where the declaration comes from and how to check it: a document, a CI step, a device log'),
+  extensions: ExtensionsSchema.optional()
+});
+/** A producer-declared evidence scope as stored in a layer, parsed from `EvidenceScopeSchema`. */
+export type EvidenceScope = z.output<typeof EvidenceScopeSchema>;
 
 /**
  * A file or a value that goes with a result: a screenshot, a video, a trace, a log, a DOM or accessibility
@@ -110,6 +176,9 @@ export const AttachmentSchema = z.looseObject({
   height: z.number().nonnegative().optional(),
   durationMs: z.number().nonnegative().optional().describe('For video and audio'),
   description: z.string().optional(),
+  omitted: z.string().optional().describe('Why the producer did not include its bytes, in an open vocabulary: too-large, not-found, not-allowed, over-budget, policy… Present on a metadata-only attachment, so a reader can tell "left out" from "never recorded"'),
+  scope: EvidenceScopeSchema.optional().describe('What this one attachment (usually a recording) does and does not show. Overrides the scope of its attempt, check, part and layer as a whole'),
+  tags: z.array(z.string()).optional().describe('Free labels of this one attachment, such as `demo`: shown as `#demo`, searchable, and normalized by `normalizeTag` (a leading `#` and letter case never matter). Unlike the tags of a check they say nothing about its result'),
   at: MomentSchema.optional(),
   poster: z.string().optional().describe('The `id` of an attachment that stands for this one before it is opened'),
   captions: z.array(z.string()).optional().describe('The `id`s of attachments (WebVTT, SRT) that caption this one'),
@@ -117,6 +186,51 @@ export const AttachmentSchema = z.looseObject({
 });
 /** An attachment as stored in a layer, parsed from `AttachmentSchema`. */
 export type Attachment = z.output<typeof AttachmentSchema>;
+
+/**
+ * Whether a check is expected to have a screen recording (a video). `required`: the producer expects one, and the layer's
+ * recording receipt says whether it arrived. `not-applicable`: the check is intentionally unrecorded (an API-only check),
+ * so it counts as neither a recorded pass nor a missing video. An open string: a reader treats any other value, and its
+ * absence, as no expectation.
+ */
+export const RECORDING_EXPECTATIONS = ['required', 'not-applicable'] as const;
+
+/**
+ * The state of one check's recording in a receipt, in an open vocabulary. Conventions: `uploaded` (the video's bytes are in
+ * the layer, with a checksum), `referenced` (only a `uri` was given: Atlas cannot vouch for it), `skipped` (the video was
+ * captured but its bytes were left out, with a reason), `unresolved` (no video was attached at all), `not-applicable`
+ * (intentionally unrecorded). A reader shows a state it does not know as it is and never counts it as uploaded.
+ */
+export const RecordingItemSchema = z.looseObject({
+  check: z.string().min(1).describe('The id of the check'),
+  state: z.string().min(1),
+  reason: z.string().optional().describe('Why the recording is not uploaded. Never contains a path, a token or payload data'),
+  files: z.array(z.looseObject({
+    name: z.string(),
+    state: z.string().optional(),
+    bytes: z.number().int().nonnegative().optional(),
+    sha256: z.string().optional().describe('The checksum of the stored bytes: proof the layer holds this exact file'),
+    reason: z.string().optional()
+  })).optional().describe('Every video attachment of the check, at any level')
+});
+
+/**
+ * What a layer's producer published about the recordings it expected: counts and one item per check that expected a
+ * recording (or declared itself not applicable). Written by `publishChecks` when any check declares a
+ * `recordingExpectation`; a layer without it says nothing, which a reader reports as Unknown, never Complete. It only
+ * describes publication: it never changes a check's status, its slot or which result wins.
+ */
+export const RecordingReceiptSchema = z.looseObject({
+  expected: z.number().int().nonnegative().describe('Checks that required a recording: uploaded + referenced + skipped + unresolved'),
+  uploaded: z.number().int().nonnegative(),
+  referenced: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  unresolved: z.number().int().nonnegative(),
+  notApplicable: z.number().int().nonnegative().describe('Checks intentionally unrecorded. They are not expected and not missing'),
+  items: z.array(RecordingItemSchema)
+});
+/** A recording receipt as stored in a layer, parsed from `RecordingReceiptSchema`. */
+export type RecordingReceipt = z.output<typeof RecordingReceiptSchema>;
 
 /** A note about a result: a warning, a deprecation, a coverage figure, an accessibility finding, anything. */
 export const AnnotationSchema = z.looseObject({
@@ -158,6 +272,7 @@ export const AttemptSchema = z.looseObject({
   durationMs: z.number().nonnegative().optional(),
   startedAtMs: z.number().nonnegative().optional(),
   detail: z.string().optional(),
+  scope: EvidenceScopeSchema.optional().describe('What this try\'s evidence shows, when it differs from the other tries (a retry on another device). Overrides the check\'s scope for this try\'s attachments'),
   steps: z.array(StepSchema).optional(),
   attachments: z.array(AttachmentSchema).optional(),
   annotations: z.array(AnnotationSchema).optional(),
@@ -173,6 +288,7 @@ const evidenceShape = {
   links: z.array(LinkSchema).optional(),
   attachments: z.array(AttachmentSchema).optional(),
   annotations: z.array(AnnotationSchema).optional(),
+  scope: EvidenceScopeSchema.optional().describe('What the evidence below this level does and does not show: where it ran, how real its data and dependencies were, whether audio was captured, and what is asserted. Absent: unknown, never assumed live, physical or end to end'),
   extensions: ExtensionsSchema.optional()
 };
 
@@ -191,6 +307,7 @@ export const CheckSchema = z.looseObject({
   specPath: z.string().optional().describe('The spec this check belongs to, relative to the repository, such as specs/join.feature'),
   measurements: z.array(MeasurementSchema).default([]),
   durationMs: z.number().nonnegative().optional().describe('How long the check took, when the producer measured it'),
+  recordingExpectation: z.string().optional().describe('`required`: expect a video of this check, and report whether it was published. `not-applicable`: intentionally unrecorded. Absent: no expectation. Never changes the check\'s status'),
   ...evidenceShape,
   steps: z.array(StepSchema).optional().describe("The check's timeline"),
   attempts: z.array(AttemptSchema).optional().describe('Every try, when the check was retried')
@@ -289,11 +406,13 @@ export const LayerDocumentSchema = z.looseObject({
   environment: z.string().nullable().optional().describe('The client that was checked: desktop-web, mobile-web, ios, android, or any other lowercase name'),
   parameters: z.record(z.string(), z.string()).default({}).describe('Other choices that make a result its own slot, such as a device size'),
   freshness: z.enum(FRESHNESS).optional().describe('`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured'),
+  run: LayerRunSchema.optional().describe('The execution this layer belongs to, when the producer names one (a local or manual run without a CI run URL). Grouping and display only; it never partitions a report or decides a result'),
   specs: z.array(SpecEntrySchema).default([]),
   parts: z.array(ReportPartSchema),
   source: LayerSourceSchema.nullable().default(null),
   recording: RecordingAddressSchema.nullable().default(null),
   bundle: BundleIndexSchema.default({}),
+  recordings: RecordingReceiptSchema.optional().describe('Which expected recordings were published. Absent: the producer expected none, or predates this field; a reader reports Unknown'),
   ...evidenceShape
 });
 /** A layer as a reader holds it: the output of `LayerDocumentSchema`, with defaults applied. */
@@ -315,12 +434,30 @@ function lenientList<T>(value: unknown, schema: z.ZodType<T>, prepare: (item: un
 
 const object = (value: unknown): Record<string, unknown> | null => (typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
 
+/** A scope that cannot be read is no scope: the evidence is kept and its scope is unknown. */
+function lenientScope(holder: Record<string, unknown>): Record<string, unknown> {
+  if (!('scope' in holder)) return holder;
+  const { scope, ...rest } = holder;
+  const parsed = EvidenceScopeSchema.safeParse(scope);
+  return parsed.success ? { ...rest, scope: parsed.data } : rest;
+}
+
+/** An attachment whose `tags` or `scope` cannot be read keeps its file: only the tags that are strings are kept, and an unreadable scope is dropped. */
+function lenientAttachment(item: unknown): unknown {
+  const attachment = object(item);
+  if (!attachment) return item;
+  const { tags, ...rest } = lenientScope(attachment);
+  if (!('tags' in attachment)) return rest;
+  const kept = lenientList(tags, z.string());
+  return kept ? { ...rest, tags: kept } : rest;
+}
+
 function lenientEvidence(holder: Record<string, unknown>, nested: readonly string[] = []): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...holder };
+  const out: Record<string, unknown> = lenientScope(holder);
   const set = (key: string, value: unknown) => { if (value === undefined) delete out[key]; else out[key] = value; };
   if ('tags' in out) set('tags', lenientList(out.tags, z.string()));
   if ('links' in out) set('links', lenientList(out.links, LinkSchema));
-  if ('attachments' in out) set('attachments', lenientList(out.attachments, AttachmentSchema));
+  if ('attachments' in out) set('attachments', lenientList(out.attachments, AttachmentSchema, lenientAttachment));
   if ('annotations' in out) set('annotations', lenientList(out.annotations, AnnotationSchema));
   if ('labels' in out) set('labels', z.record(z.string(), z.string()).safeParse(out.labels).data);
   if ('extensions' in out) set('extensions', ExtensionsSchema.safeParse(out.extensions).data);
@@ -331,6 +468,10 @@ function lenientEvidence(holder: Record<string, unknown>, nested: readonly strin
 
 function lenientLayer(raw: Record<string, unknown>): Record<string, unknown> {
   const layer = lenientEvidence(raw);
+  // A receipt a reader cannot read is no receipt: recording completeness is then Unknown, and the layer is kept.
+  if ('recordings' in layer) { const receipt = RecordingReceiptSchema.safeParse(layer.recordings); if (receipt.success) layer.recordings = receipt.data; else delete layer.recordings; }
+  // The execution only groups and labels: one that cannot be read leaves the layer to the documented grouping, never refuses it.
+  if ('run' in layer && !LayerRunSchema.safeParse(layer.run).success) delete layer.run;
   if (Array.isArray(layer.parts)) {
     layer.parts = layer.parts.map((part) => {
       const found = object(part);
@@ -419,12 +560,14 @@ export const PublishChecksSchema = z.looseObject({
   environment: z.string().nullable().optional(),
   parameters: z.record(z.string(), z.string()).default({}),
   freshness: z.enum(FRESHNESS).optional(),
+  run: LayerRunSchema.optional().describe('Name the execution these checks belong to, so repeated local runs at one commit stay separate runs and shards of one execution stay together'),
   specs: z.array(SpecEntrySchema).default([]),
   tags: evidenceShape.tags,
   labels: evidenceShape.labels,
   links: evidenceShape.links,
   attachments: z.array(AttachmentInputSchema).optional().describe('Attached to the whole layer: a CI log, a coverage report, a trace archive'),
   annotations: evidenceShape.annotations,
+  scope: evidenceShape.scope,
   extensions: evidenceShape.extensions
 });
 /** What a caller passes to `publishChecks`: the input type of `PublishChecksSchema`, before defaults. */
@@ -437,6 +580,28 @@ const CountsSchema = z.object({
   'not-run': z.number().int().nonnegative(),
   total: z.number().int().nonnegative()
 });
+
+/**
+ * Recording completeness across the winning results of a report: `complete` (every expected recording was published),
+ * `incomplete` (at least one is skipped or unresolved), `none-expected` (every layer declared its expectations, and none
+ * required a recording) or `unknown` (a layer has no receipt, so nothing is claimed). Independent of the checks' outcomes.
+ */
+export const RecordingCompletenessSchema = z.looseObject({
+  state: z.enum(['complete', 'incomplete', 'none-expected', 'unknown']),
+  expected: z.number().int().nonnegative(),
+  uploaded: z.number().int().nonnegative(),
+  referenced: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  unresolved: z.number().int().nonnegative(),
+  notApplicable: z.number().int().nonnegative(),
+  layersWithoutReceipt: z.number().int().nonnegative().describe('Layers that contribute results but declared no recording expectations: their completeness is unknown'),
+  gaps: z.array(z.looseObject({
+    spec: z.string().nullable(), check: z.string(), layer: z.string(), environment: z.string().nullable(),
+    state: z.string(), reason: z.string().optional()
+  })).describe('Each expected recording that is skipped or unresolved')
+});
+/** A parsed `RecordingCompletenessSchema` value. */
+export type RecordingCompleteness = z.output<typeof RecordingCompletenessSchema>;
 
 /** The `schemaVersion` of the `ReportStatus` JSON, currently 1. */
 export const REPORT_STATUS_SCHEMA_VERSION = 1;
@@ -480,7 +645,8 @@ export const ReportStatusSchema = z.looseObject({
       runUrl: z.string().nullable(),
       detail: z.string()
     })
-  ).describe('Each slot whose newest completed result failed, or that is still running')
+  ).describe('Each slot whose newest completed result failed, or that is still running'),
+  recordings: RecordingCompletenessSchema.optional().describe('Whether the recordings the producers expected were published, separately from `ok`. It never changes `ok`')
 });
 /** A parsed `ReportStatusSchema` value. */
 export type ReportStatus = z.output<typeof ReportStatusSchema>;

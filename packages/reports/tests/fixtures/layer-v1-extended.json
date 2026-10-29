@@ -32,7 +32,7 @@
           "status": "failed",
           "detail": "expected a receipt",
           "specPath": "specs/checkout.feature",
-          "measurements": [{ "name": "LCP", "value": 2100, "unit": "ms", "limit": 2500, "extensions": { "com.example.p": 75 } }],
+          "measurements": [{ "name": "LCP", "value": 2100, "unit": "ms", "limit": 2500, "extensions": { "com.example.p": 75 } }, { "name": "Confirmation", "value": 500, "unit": "ms", "limit": 800, "kind": "product-latency", "from": "submit pressed", "to": "confirmation visible", "intended": { "to": "receipt printed" }, "source": "app-instrumentation", "outcome": "observed", "instrumentation": "spans-v2", "labels": { "device": "pixel-8", "build": "4821" }, "com.example.future": true }],
           "durationMs": 4200,
           "tags": ["smoke", "payments"],
           "labels": { "owner": "payments-team", "severity": "high" },
@@ -43,7 +43,7 @@
             { "id": "s3", "name": "Pay", "kind": "action", "status": "failed", "offsetMs": 900, "durationMs": 3000, "detail": "timeout", "attachments": [{ "name": "failure.png", "role": "screenshot", "contentType": "image/png", "bundleKey": "attachments/bbbb", "width": 1280, "height": 720 }] }
           ],
           "attachments": [
-            { "id": "v", "name": "run.webm", "role": "video", "contentType": "video/webm", "bundleKey": "attachments/cccc", "durationMs": 4200, "poster": "p", "captions": ["c"] },
+            { "id": "v", "name": "run.webm", "role": "video", "contentType": "video/webm", "bundleKey": "attachments/cccc", "durationMs": 4200, "poster": "p", "captions": ["c"], "tags": ["demo"], "scope": { "surface": "browser", "syntheticData": true, "dependencies": "scripted", "audioCaptured": false, "pacing": "paced", "asserted": ["the receipt is shown"], "limitations": ["No sound"], "declaredBy": "e2e suite", "verified": ["audioCaptured"], "provenance": [{ "url": "https://ci.example.com/runs/42", "rel": "run" }], "com.example.future": true } },
             { "id": "p", "name": "poster.png", "role": "screenshot", "contentType": "image/png", "bundleKey": "attachments/dddd" },
             { "id": "c", "name": "captions.vtt", "role": "captions", "contentType": "text/vtt", "text": "WEBVTT\n" },
             { "name": "dom.html", "role": "snapshot", "contentType": "text/html", "bundleKey": "attachments/eeee", "at": { "step": "s3", "offsetMs": 3900 } },
@@ -66,5 +66,9 @@
   ],
   "source": null,
   "recording": null,
-  "bundle": {}
+  "bundle": {},
+  "recordings": {
+    "expected": 1, "uploaded": 1, "referenced": 0, "skipped": 0, "unresolved": 0, "notApplicable": 0,
+    "items": [{ "check": "specs/checkout.feature > Pays by card", "state": "uploaded", "files": [{ "name": "run.webm", "state": "uploaded", "bytes": 1024, "sha256": "cccc" }] }]
+  }
 }

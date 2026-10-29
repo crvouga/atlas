@@ -15,11 +15,11 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, TestHistorySchema, RunListSchema, RunDetailSchema } from '../../schema/src/api';
-import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema } from '../../schema/src/api';
+import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
-export const API_VERSION = '1.4.0';
+export const API_VERSION = '1.5.0';
 
 /** Who may call an operation: `none` (anyone), or the least role that may (`read` < `publish` < `admin`). */
 export type Role = 'none' | 'read' | 'publish' | 'admin';
@@ -59,12 +59,14 @@ function schemaOf(schema: z.ZodType, io: 'input' | 'output' = 'output'): JsonSch
 const COMPONENTS = {
   LiveRun: [LiveRunSchema, 'output'], LiveRunStart: [LiveRunStartSchema, 'input'], LiveRunUpdate: [LiveRunUpdateSchema, 'input'],
   ServerEditableSettings: [ServerEditableSettingsSchema, 'input'], ServerSettingsSnapshot: [ServerSettingsSnapshotSchema, 'output'],
+  GcPolicy: [GcPolicySchema, 'input'], GcSnapshot: [GcSnapshotSchema, 'output'], GcRunResult: [GcRunResultSchema, 'output'],
   Problem: [ProblemSchema, 'output'], Health: [HealthSchema, 'output'], Ready: [ReadySchema, 'output'], ServerInfo: [ServerInfoSchema, 'output'],
   EffectiveEvidence: [EffectiveEvidenceSchema, 'output'], EffectiveDelta: [EffectiveDeltaSchema, 'output'], ReportStatus: [ReportStatusSchema, 'output'],
   PublishChecks: [PublishChecksSchema.partial({ recordedAtMs: true }), 'input'], ChecksResult: [ChecksResultSchema, 'output'],
   StoreListing: [StoreListingSchema, 'output'], StoreWriteResult: [StoreWriteResultSchema, 'output'],
   Outline: [OutlineSchema, 'output'], EvidencePage: [EvidencePageSchema, 'output'], LayerRows: [LayerRowsSchema, 'output'], CheckDetail: [CheckDetailSchema, 'output'],
-  TestCatalog: [TestCatalogSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], RunList: [RunListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -123,15 +125,33 @@ const BASE_OPERATIONS: readonly Operation[] = [
   },
   {
     route: 'GET /api/settings', path: '/api/settings', operationId: 'getSettings', tag: 'Operations', role: 'admin',
-    summary: 'Read server settings', description: 'Returns editable persisted storage/report settings, active settings, a revision, and configuration precedence. Authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.',
+    summary: 'Read server settings', description: 'Returns the editable report and live-run settings saved in the user state in S3, active settings, a revision, and configuration precedence. Storage and authentication settings are excluded. Requires an admin Bearer token. Embedded applications may manage settings outside this API.',
     responses: { '200': json('Settings and revision.', 'ServerSettingsSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '503': problem('Configuration is managed by the embedding application.') }
   },
   {
     route: 'PUT /api/settings', path: '/api/settings', operationId: 'saveSettings', tag: 'Operations', role: 'admin',
-    summary: 'Save settings for the next restart', description: 'Replaces editable storage/report settings, preserving authentication and other file fields. Atomically persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.',
+    summary: 'Save settings for the next restart', description: 'Replaces the editable report and live-run settings in the user state in S3 (`server/state.json`), preserving the garbage collection policy and other fields. Persists a validated configuration; no report data is moved. Environment variables and flags override these values after restart. Requires an admin Bearer token, same-origin requests in browsers, and a current revision.',
     parameters: [{ name: 'If-Match', in: 'header', required: true, description: 'The quoted revision returned by GET /api/settings.', schema: str }],
-    body: { description: 'Editable fields from ServerConfig, excluding authentication, host, port and site. Maximum 64 KiB.', contentType: 'application/json', required: true, schema: ref('ServerEditableSettings') },
+    body: { description: 'Editable fields from ServerConfig, excluding storage, authentication, host, port and site. Maximum 64 KiB.', contentType: 'application/json', required: true, schema: ref('ServerEditableSettings') },
     responses: { '200': json('Saved settings and new revision. Restart required.', 'ServerSettingsSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('Settings changed; reload before saving.'), '413': problem('Settings exceed the body limit.'), '422': problem('Invalid configuration.'), '428': problem('A quoted settings revision is required.'), '503': problem('Configuration is managed by the embedding application.') }
+  },
+  {
+    route: 'GET /api/settings/gc', path: '/api/settings/gc', operationId: 'getGarbageCollectionPolicy', tag: 'Operations', role: 'admin',
+    summary: 'Read the garbage collection policy', description: 'Returns the policy kept in the user state in S3 (`server/state.json`), or `policy: null, saved: false` when none has been saved yet, in which case garbage collection is off and nothing is deleted. Also returns the revision to send back when saving and the last pass over each project. Requires an admin Bearer token. If the stored user state is unreadable the answer is 503 and the stored object is left untouched.',
+    responses: { '200': json('The policy, its revision and the last passes.', 'GcSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '503': problem('The user state in S3 cannot be read, or settings are managed by the embedding application.') }
+  },
+  {
+    route: 'PUT /api/settings/gc', path: '/api/settings/gc', operationId: 'saveGarbageCollectionPolicy', tag: 'Operations', role: 'admin',
+    summary: 'Save the garbage collection policy', description: 'Replaces the policy in the user state in S3 and leaves the rest of that document alone. The server reads the policy from S3 each time it collects, so the new policy applies at the next pass, without a restart. Requires an admin Bearer token, same-origin requests in browsers, and the current revision.',
+    parameters: [{ name: 'If-Match', in: 'header', required: true, description: 'The quoted revision returned by GET /api/settings/gc.', schema: str }],
+    body: { description: 'The policy. Maximum 16 KiB.', contentType: 'application/json', required: true, schema: ref('GcPolicy') },
+    responses: { '200': json('The saved policy and the new revision.', 'GcSnapshot'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('The state changed; reload before saving.'), '413': problem('The body exceeds the limit.'), '422': problem('Invalid policy.'), '428': problem('A quoted revision is required.'), '503': problem('The user state in S3 cannot be read, or settings are managed by the embedding application.') }
+  },
+  {
+    route: 'POST /api/settings/gc/run', path: '/api/settings/gc/run', operationId: 'runGarbageCollection', tag: 'Operations', role: 'admin',
+    summary: 'Collect garbage now, or preview it', description: 'Applies the policy saved in S3 to every project now, instead of waiting for the schedule. Only report layers that were read and no longer decide any result, older than the policy allows and beyond its `keepLatest`, are deleted, with the captured files only they used. With `dryRun=1` nothing is deleted and each run reports what it would delete (a disabled policy is previewed as if enabled). Answers 409 when no policy has been saved, and, without `dryRun`, when the saved policy is disabled. Requires an admin Bearer token and a same-origin request in browsers.',
+    parameters: [{ name: 'dryRun', in: 'query', required: false, description: '`1` or `true` to only count what would be deleted.', schema: str }],
+    responses: { '200': json('One run per project.', 'GcRunResult'), '401': UNAUTHORIZED, '403': FORBIDDEN, '409': problem('No policy has been saved, or it is disabled.') }
   },
   {
     route: 'GET /healthz', path: '/healthz', operationId: 'getHealth', tag: 'Operations', role: 'none',
@@ -303,6 +323,9 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'domain', in: 'query', description: 'Only tests whose spec is in this domain (`(no spec)` for none). Repeatable or comma-separated.', schema: str },
       { name: 'spec', in: 'query', description: 'Only tests of this spec path. Repeatable or comma-separated.', schema: str, example: 'specs/checkout/pay.feature' },
       { name: 'tag', in: 'query', description: 'Only tests with this tag. Repeatable or comma-separated.', schema: str },
+      { name: 'artifactTag', in: 'query', description: 'Only tests with an attachment tagged this (`demo` and `#demo` are the same tag), not counting tags inherited from a check or run: the exact artifact query. `inherited=1` widens it to the tags inherited from the check and run. Repeatable or comma-separated.', schema: str, example: 'demo' },
+      { name: 'inherited', in: 'query', description: 'With `artifactTag`: `1` also matches the tags an attachment inherits from its check and run, so a recording without a tag of its own under a run tagged `demo` is found. Without it the query is exact.', schema: { type: 'string', enum: ['1', 'true'] } },
+      { name: 'scope', in: 'query', description: 'Only tests with one playable recording that states every one of these producer-declared qualifications: `surface:<value>`, `device:<value>` (`device:physical` and `device:simulator` stay apart), `data:synthetic` or `data:real`, `dependencies:<value>`, `audio:recorded` or `audio:silent`, `pacing:<value>`. All must hold for the same recording. A recording that did not declare a value never matches it, and `unknown` matches only a recording that declared no scope. Repeatable or comma-separated.', schema: str, example: 'device:physical,audio:recorded' },
       { name: 'run', in: 'query', description: 'Only tests recorded in this run (a `key` from `/api/reports/runs`).', schema: str },
       { name: 'sort', in: 'query', description: 'The order: `spec` (default: domain, spec, title), `title`, `recent`, `slowest`, `failures`, `flaky` or `runs`.', schema: { type: 'string', enum: ['spec', 'title', 'recent', 'slowest', 'failures', 'flaky', 'runs'] } },
       { name: 'offset', in: 'query', description: 'Skip this many matching tests.', schema: { type: 'integer', minimum: 0 } },
@@ -310,6 +333,22 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'format', in: 'query', description: '`markdown` for a Markdown report instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': { ...json('The catalog.', 'TestCatalog'), headers: { ETag: { description: 'Changes with the report, its history and the query.', schema: str } } }, '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/tests/health', path: '/api/reports/tests/health', operationId: 'getCatalogHealth', tag: 'Report', role: 'read',
+    summary: 'Why specs, domains and counts disagree',
+    description: [
+      'Diagnoses the report\'s metadata, so a domain filter or a coverage percentage can be trusted or fixed at its source. It reads; it never changes a status, a slot or a winner.',
+      '',
+      '`counts` keeps the denominators apart: spec files, defined specs, specs with an executed test (and those without: the defined coverage gaps), tests, outlines, examples and per-environment observations. `reconciliation` walks from the Specs count to the Tests count. `findings` name ambiguous and unmatched spec paths, identical or same-titled specs, a domain shared by nearly every spec, tests with no spec, checks that fall back to their title as identity and root mappings that matched nothing.',
+      '',
+      'Two paths are one logical spec only when a `root` mapping relates them (`from>to`: paths under `from` are the same specs as paths under `to`; an empty `from` matches every path). Without one, similar paths are reported as ambiguous and never merged. A check\'s label `outline` names the outline its example belongs to. Send `format=markdown` for Markdown.'
+    ].join('\n'),
+    parameters: [
+      { name: 'root', in: 'query', description: 'A root mapping `from>to`, URL-encoded. Repeatable or comma-separated.', schema: str, example: '>specs/' },
+      { name: 'format', in: 'query', description: '`markdown` for a Markdown report instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': { ...json('The diagnostics.', 'CatalogHealth'), headers: { ETag: { description: 'Changes with the report, its history and the mappings.', schema: str } } }, '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/tests/history', path: '/api/reports/tests/history', operationId: 'getTestHistory', tag: 'Report', role: 'read',
@@ -322,19 +361,94 @@ const BASE_OPERATIONS: readonly Operation[] = [
     responses: { '200': json('The test and its history.', 'TestHistory'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('No `key`.'), '401': UNAUTHORIZED, '404': problem('No test in the report has that key.'), '503': NOT_READY }
   },
   {
+    route: 'GET /api/reports/tests/reliability', path: '/api/reports/tests/reliability', operationId: 'getTestReliability', tag: 'Report', role: 'read',
+    summary: 'How reliable one test is in a scope, and how that was counted',
+    description: [
+      'A success rate for one test that says what it counted. The snapshots one run recorded for one producer, environment and parameter set (running, finished, enriched) are one independent execution; its last word counts once with the tries it recorded. `eventual` is the share of executions that passed in the end, `firstAttempt` the share whose first try passed (over executions that recorded their tries; the rest are `unrecordedAttempts`, never assumed to have passed first time).',
+      '',
+      'Choose the scope with `environment`, `producer`, `parameter` (`key=value`), `branch`, `sha`, `specRevision`, `since` and `until`; executions elsewhere never count. By default only the newest recorded spec revision counts and earlier ones appear under `historical`; send `revision=any` to pool them. Only `passed` and `failed` executions are trials: `not-run` and unfinished ones are listed under `excluded` and never counted as a pass. `sample` is `none`, `insufficient` (fewer than `minimumExecutions`) or `sufficient`, a count only: `notes` say when environments, producers or branches are pooled, failed cases were published again, or history is bounded to the newest 100 results. `executions` is the denominator, open to inspection. The interval states its assumptions. This is not a production failure probability. Send `format=markdown` for Markdown.'
+    ].join('\n'),
+    parameters: [
+      { name: 'key', in: 'query', required: true, description: 'The test\'s `key` from `/api/reports/tests`.', schema: str, example: '["specs/checkout/pay.feature","Pay with a card"]' },
+      { name: 'environment', in: 'query', description: 'Environments or devices to count. Comma-separated.', schema: str, example: 'phone' },
+      { name: 'producer', in: 'query', description: 'Producers to count. Comma-separated.', schema: str },
+      { name: 'parameter', in: 'query', description: 'Parameter choices `key=value`; all must match. Comma-separated.', schema: str, example: 'device=small' },
+      { name: 'branch', in: 'query', description: 'Branches to count. Comma-separated.', schema: str },
+      { name: 'sha', in: 'query', description: 'Commits: a full id or a prefix of at least seven characters. Comma-separated.', schema: str },
+      { name: 'specRevision', in: 'query', description: 'Only executions recorded against these spec fingerprints (overrides `revision`). Comma-separated.', schema: str },
+      { name: 'revision', in: 'query', description: '`any` pools every spec revision; otherwise only the newest recorded one counts.', schema: { type: 'string', enum: ['current', 'any'] } },
+      { name: 'since', in: 'query', description: 'Only executions at or after this time: epoch milliseconds or a date.', schema: str, example: '2026-01-01' },
+      { name: 'until', in: 'query', description: 'Only executions at or before this time: epoch milliseconds or a date.', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The reliability of the test in the scope.', 'TestReliability'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('No `key`.'), '401': UNAUTHORIZED, '404': problem('No test in the report has that key.'), '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/artifact-tags', path: '/api/reports/artifact-tags', operationId: 'getArtifactTags', tag: 'Report', role: 'read',
+    summary: 'Reviewer tags of attachments: every recorded edit',
+    description: 'The audit trail of tags that reviewers added to and removed from attachments after upload, oldest first. Each entry says which attachment (`target`), which normalized tags were added and removed, the name of the token that made the edit (`by`, never the token) and when (`atMs`). The layers themselves are never rewritten, so a producer\'s own `tags` on an attachment stay as uploaded; fold the entries (oldest first, the last edit of a tag wins) to get the reviewer tags that stand now. Tags are normalized: `#Demo` and `demo` are `demo`.',
+    responses: { '200': json('The edits.', 'ArtifactTags'), '401': UNAUTHORIZED }
+  },
+  {
+    route: 'POST /api/reports/artifact-tags', path: '/api/reports/artifact-tags', operationId: 'editArtifactTags', tag: 'Report', role: 'publish',
+    summary: 'Tag or untag one attachment after upload',
+    description: 'Records one edit of the reviewer tags of one attachment, by the name of the publish (or admin) token that sends it. It adds an immutable entry to the audit trail and changes nothing else: not the layer, not the movie, not any result. The tags it removes are reviewer tags only; a producer\'s tags are part of the layer and stay. A reader-only token, a browser sign-in box and an anonymous reader are refused. Name the attachment as `artifactRef` does (`id:<id>`, else `key:<bundleKey>`, else `name:<name>`).',
+    body: { description: 'The attachment and the tags to add and remove. At most 20 of each, 64 KiB.', contentType: 'application/json', required: true, schema: ref('ArtifactTagEdit') },
+    responses: { '201': json('The recorded entry.', 'ArtifactTagEntry'), '401': UNAUTHORIZED, '403': FORBIDDEN, '413': problem('Request too large.'), '422': problem('Not a tag edit: a bad target, an empty or over-long tag, or nothing to change.') }
+  },
+  {
     route: 'GET /api/reports/runs', path: '/api/reports/runs', operationId: 'getReportRuns', tag: 'Report', role: 'read',
     summary: 'The runs that recorded the report',
-    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned and up to twenty failures. Send `format=markdown` for Markdown.',
+    description: 'Every run, newest first: layers grouped by their CI run URL (else branch and commit), with their environments, producers, how many tests they recorded, their results by status, the time they spanned, up to twenty failures, their video counts (references, distinct playable recordings, unavailable) and the artifact tags, media types and labels their results carry. Filters narrow the list before `limit`: AND across the parameters, OR within one; `filters` in the answer names those that were applied and `facets` offers each dimension\'s values with counts. A server that does not know a filter ignores it and does not name it in `filters`. Send `format=markdown` for Markdown.',
     parameters: [
       { name: 'limit', in: 'query', description: 'At most this many runs (default 100).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'video', in: 'query', description: '`true` to list only runs that have a playable video recording. Applied to every run before `limit`; `total` counts the matches. A server that does not know it answers with every run.', schema: { type: 'boolean' } },
+      { name: 'artifactTag', in: 'query', description: 'Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\\,` or `\\\\`. OR within the parameter, AND with the other filters.', schema: str },
+      { name: 'inherited', in: 'query', description: '`1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.', schema: { type: 'boolean' } },
+      { name: 'type', in: 'query', description: 'Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer\'s own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.', schema: str },
+      { name: 'label', in: 'query', description: '`key=value`, or `key` for any value.', schema: str },
+      { name: 'environment', in: 'query', description: 'Environments or devices (`ios`, `desktop-web`).', schema: str },
+      { name: 'producer', in: 'query', description: 'Producers.', schema: str },
+      { name: 'branch', in: 'query', description: 'Branches.', schema: str },
+      { name: 'sha', in: 'query', description: 'Revisions: a full commit id or a prefix of at least seven characters.', schema: str },
+      { name: 'outcome', in: 'query', description: 'Statuses: `passed`, `failed`, `running`, `not-run`. A run\'s outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.', schema: str },
+      { name: 'q', in: 'query', description: 'Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.', schema: str },
+      { name: 'since', in: 'query', description: 'Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result\'s recording time; a run\'s end.', schema: str },
+      { name: 'until', in: 'query', description: 'Only records at or before this time (same forms as `since`).', schema: str },
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The runs.', 'RunList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
   },
   {
+    route: 'GET /api/reports/artifacts', path: '/api/reports/artifacts', operationId: 'getReportArtifacts', tag: 'Report', role: 'read',
+    summary: 'Recorded results that carry evidence, across the whole history',
+    description: 'Every recorded result that has attachments (recordings, screenshots, traces), newest first, found in the history and not only among the current winners: a recording tagged `demo` is found with its original run, revision and status even when a later attempt is untagged. Narrow it by artifact tag, media type, label, feature (`domain`, `spec`), environment or device, producer, branch, revision, outcome and time: AND across the parameters, OR within one; with both `artifactTag` and `type`, one artifact must be both. `filters` names the filters that were applied and `facets` offers each dimension\'s values with counts: the count beside a value is what the list would hold if that value alone were chosen in its dimension, every other filter applied. Tags written by reviewers after upload are not searched; only those in the layer are. Send `format=markdown` for Markdown.',
+    parameters: [
+      { name: 'limit', in: 'query', description: 'At most this many results (default 100).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'offset', in: 'query', description: 'Skip this many matches (default 0).', schema: { type: 'integer', minimum: 0 } },
+      { name: 'video', in: 'query', description: '`true` for results with a playable video recording (the same as `type=video`).', schema: { type: 'boolean' } },
+      { name: 'domain', in: 'query', description: 'The feature domain of the result\'s spec.', schema: str },
+      { name: 'spec', in: 'query', description: 'Spec paths.', schema: str },
+      { name: 'artifactTag', in: 'query', description: 'Artifact tags (`demo` and `#demo` are the same), repeatable or comma-separated. A comma or backslash inside a value is written `\\,` or `\\\\`. OR within the parameter, AND with the other filters.', schema: str },
+      { name: 'inherited', in: 'query', description: '`1` with `artifactTag` to also match the tags attachments inherit from their check and run. Default: the exact artifact query.', schema: { type: 'boolean' } },
+      { name: 'type', in: 'query', description: 'Media types as roles (`video`, `image`, `audio`, `snapshot`, `text`, `file`, or a producer\'s own). `video` means a playable recording. With `artifactTag`, one artifact must be both where the report says which videos carry which tags.', schema: str },
+      { name: 'label', in: 'query', description: '`key=value`, or `key` for any value.', schema: str },
+      { name: 'environment', in: 'query', description: 'Environments or devices (`ios`, `desktop-web`).', schema: str },
+      { name: 'producer', in: 'query', description: 'Producers.', schema: str },
+      { name: 'branch', in: 'query', description: 'Branches.', schema: str },
+      { name: 'sha', in: 'query', description: 'Revisions: a full commit id or a prefix of at least seven characters.', schema: str },
+      { name: 'outcome', in: 'query', description: 'Statuses: `passed`, `failed`, `running`, `not-run`. A run\'s outcome is `failed` when any result failed, else `running`, else `passed`, else `not-run`.', schema: str },
+      { name: 'q', in: 'query', description: 'Words that must all appear in the title, id, spec, branch, producer, environment, tags or labels.', schema: str },
+      { name: 'since', in: 'query', description: 'Only records at or after this time: epoch milliseconds or an ISO date (a date alone is UTC). A result\'s recording time; a run\'s end.', schema: str },
+      { name: 'until', in: 'query', description: 'Only records at or before this time (same forms as `since`).', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The matching results and the facets.', 'ArtifactList'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
     route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',
     summary: 'Every test one run recorded',
-    description: 'One run and its last result for every test, environment and producer it recorded, failures first. Send `format=markdown` for Markdown.',
+    description: 'One run and its last result for every test, environment and producer it recorded, failures first, and `layers`: each layer of the run with its backend, how many checks it recorded (zero means evidence only, never a pass) and how many files it carries as a whole. Open a layer\'s files with `/api/reports/evidence/detail/{backend}/{id}`. Send `format=markdown` for Markdown.',
     parameters: [
       { name: 'key', in: 'query', required: true, description: 'The run\'s `key` from `/api/reports/runs`, URL-encoded.', schema: str },
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
@@ -371,7 +485,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
   {
     route: 'GET /api/reports/evidence/detail/:backend/:id', path: '/api/reports/evidence/detail/{backend}/{id}', operationId: 'getCheckDetail', tag: 'Report', role: 'read',
     summary: 'Everything one result carries',
-    description: 'The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run\'s. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.',
+    description: 'The timeline, annotations, retries, attachments and extensions of one check, and what its run carries as a whole. Without `check`, only the run\'s, and `parts`: what each part of the layer that carries files or links of its own holds. Attachment bytes are fetched from `/api/reports/layers/{id}/blobs/{bundleKey}`.',
     parameters: [BACKEND, LAYER_ID, { name: 'check', in: 'query', description: 'The check id.', schema: str }, { name: 'kind', in: 'query', description: 'The kind of the part, when the same id is in several.', schema: str }],
     responses: { '200': json('The detail.', 'CheckDetail'), '401': UNAUTHORIZED, '404': problem('No such layer or check.') }
   },
@@ -437,7 +551,7 @@ const BASE_OPERATIONS: readonly Operation[] = [
   }
 ];
 
-const NODE_OPERATIONS = new Set(['/api/projects', '/api/settings', '/api/server', '/api/openapi.json']);
+const NODE_OPERATIONS = new Set(['/api/projects', '/api/settings', '/api/settings/gc', '/api/settings/gc/run', '/api/server', '/api/openapi.json']);
 const PROJECT_PARAMETER: Param = { name: 'project', in: 'query', description: 'Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.', schema: { type: 'string', pattern: '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$', maxLength: 64 }, example: 'todo-app' };
 /** Every node operation and the same stable report protocol inside each project namespace. */
 export const OPERATIONS: readonly Operation[] = BASE_OPERATIONS.flatMap(operation => {

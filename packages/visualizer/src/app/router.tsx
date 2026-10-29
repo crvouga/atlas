@@ -31,7 +31,12 @@ const SpecSearch = RootSearch.extend({
   check: z.string().min(1).optional().catch(undefined),
   layer: z.string().min(1).optional().catch(undefined),
   view: z.enum(['recording']).optional().catch(undefined),
-  moment: z.coerce.number().int().positive().optional().catch(undefined)
+  moment: z.coerce.number().int().positive().optional().catch(undefined),
+  /** The release evidence is read against: its build, commit and platform, and the evidence filter (see `evidence/applicability.ts`). A build such as `90` is read from a typed link as a number: coerced back to its text. */
+  release: z.coerce.string().min(1).optional().catch(undefined),
+  releaseSha: z.coerce.string().min(1).optional().catch(undefined),
+  releasePlatform: z.coerce.string().min(1).optional().catch(undefined),
+  evidence: z.enum(['stale']).optional().catch(undefined)
 });
 export type SpecSearch = z.infer<typeof SpecSearch>;
 /** A fresh route tree per router, so a test can run its own viewer beside the page's. */

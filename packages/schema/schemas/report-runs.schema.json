@@ -13,7 +13,8 @@
     "total": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "Runs that matched, before `limit`"
     },
     "runs": {
       "type": "array",
@@ -22,7 +23,23 @@
         "properties": {
           "key": {
             "type": "string",
-            "description": "The run URL, or `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+            "description": "`run:<id>` for an execution a producer named, else the run URL, else `branch@sha`. Pass it to `/api/reports/runs/detail?key=` or `/api/reports/tests?run=`"
+          },
+          "runId": {
+            "description": "The execution id the producer named, when it did. Layers that share it are one run however many uploads they took",
+            "type": "string"
+          },
+          "title": {
+            "description": "The human title of the execution (the newest layer's). Presentation only: the key, commit and `freshness` are unaffected",
+            "type": "string"
+          },
+          "freshness": {
+            "description": "`modified` when any layer of the run was recorded from a checkout with uncommitted changes; `unknown` when an origin was not captured; absent when all are clean. Shown beside the commit, never replaced by the title",
+            "type": "string",
+            "enum": [
+              "unknown",
+              "modified"
+            ]
           },
           "runUrl": {
             "type": [
@@ -131,6 +148,70 @@
               ],
               "additionalProperties": {}
             }
+          },
+          "videos": {
+            "description": "Its videos, from its layers and the last result of each test. Absent when it has none or the report carries no video information",
+            "type": "object",
+            "properties": {
+              "references": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Every reference to a video; identical bytes referenced twice count twice"
+              },
+              "recordings": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Distinct playable recordings"
+              },
+              "unavailable": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "References that name no bytes"
+              }
+            },
+            "required": [
+              "references",
+              "recordings",
+              "unavailable"
+            ],
+            "additionalProperties": {}
+          },
+          "attachments": {
+            "description": "Files attached to the run itself, in its layers, not to a check. Absent when there are none",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "artifactTags": {
+            "description": "The normalized tags of the attachments of its results, sorted and distinct. Absent when none is tagged, and in reports of older servers",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "description": "The tags of its checks and layers, which its attachments inherit (what `inherited=1` also matches). Absent when none",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "types": {
+            "description": "The media types (roles) of its attachments, sorted and distinct; `video` only for a playable recording. Absent when it has no attachment",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "labels": {
+            "description": "The `key=value` labels of its results and layers, sorted and distinct. Absent when it has none",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -151,6 +232,205 @@
         ],
         "additionalProperties": {}
       }
+    },
+    "withVideo": {
+      "description": "How many of all runs (before `video` and `limit`) have a playable video recording",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "filters": {
+      "description": "The filter parameters this server applied (`artifactTag`, `type`, `outcome`…). A viewer that asked for one that is missing here knows the server ignored it. Absent on servers that predate filtering",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "facets": {
+      "description": "The values each filter dimension offers, counted over every run. Absent on servers that predate filtering",
+      "type": "object",
+      "properties": {
+        "artifactTags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          },
+          "description": "Values are `key=value`"
+        },
+        "environments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "domains": {
+          "description": "Only for artifacts: runs have no domain",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "value",
+              "count"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "artifactTags",
+        "types",
+        "labels",
+        "environments",
+        "producers",
+        "branches",
+        "outcomes"
+      ],
+      "additionalProperties": {}
     }
   },
   "required": [

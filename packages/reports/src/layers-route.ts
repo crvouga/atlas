@@ -20,7 +20,7 @@ import type { ActiveRun, BackendInfo, EvidencePage, LayerEvidence, LayerHeader, 
 import { isFramePath, isKeySegment } from './keys';
 import { catalogEntries, catalogLayers } from './layer-catalog';
 import { attachmentResponse } from './attachment-response';
-import { checkDetailOf, runEvidence } from './evidence-detail';
+import { checkDetailOf, partsEvidence, runEvidence } from './evidence-detail';
 import { layerEvidence } from './layer-merge';
 import { layerSummary, readLayer } from './layer-store';
 import { readBytes, readUtf8 } from './object-io';
@@ -88,7 +88,8 @@ function archived(id: string): boolean {
  *   runs of this machine. `cursor` is the previous page's; 409 when it no longer matches the listing (refresh).
  *   Any `retry` value re-lists backends that were unavailable now instead of after the wait.
  * - `GET /evidence/rows/:backend/:id` the checks and spec fingerprints of one layer (`LayerRows`).
- * - `GET /evidence/detail/:backend/:id?check=&kind=` the run-level evidence of an immutable layer, or one check's detail.
+ * - `GET /evidence/detail/:backend/:id?check=&kind=` the run-level evidence of an immutable layer (and, as `parts`, what its
+ *   parts carry as a whole), or one check's detail.
  * - `GET /layers/:id/blobs/*` an attachment of an immutable layer by its bundle key, served by `attachmentResponse`.
  * - `GET /layers/:id/*` the recorded `frame.css`, `tests/<test>/report.json` and `tests/<test>/files/<frame>` of a layer.
  * - `GET /live/:source/frame.css` and `GET /live/:source/tests/:testId/*` the same for a run still writing (uncached).
@@ -278,7 +279,11 @@ export function createLayersApp(deps: ReportsAppDeps) {
     if (!layer || !include(layerEvidence(layerSummary(layer), backend.id).layer)) return c.notFound();
     const checkId = c.req.query('check');
     const headers = { 'cache-control': 'public, max-age=31536000, immutable' };
-    if (checkId === undefined) return c.json({ layer: id, run: runEvidence(layer) }, 200, headers);
+    if (checkId === undefined) {
+      // The parts' own evidence is optional: a client that does not know `parts` still has the run's.
+      const parts = partsEvidence(layer as never);
+      return c.json({ layer: id, run: runEvidence(layer), ...(parts.length ? { parts } : {}) }, 200, headers);
+    }
     const detail = checkDetailOf(layer as never, checkId, c.req.query('kind'));
     return detail ? c.json(detail, 200, headers) : c.notFound();
   });

@@ -57,16 +57,74 @@
                     "type": "object",
                     "properties": {
                       "name": {
-                        "type": "string"
+                        "type": "string",
+                        "minLength": 1
                       },
                       "value": {
-                        "type": "number"
+                        "type": "number",
+                        "description": "A finite number"
                       },
                       "unit": {
                         "type": "string"
                       },
                       "limit": {
+                        "description": "The allowance, or budget. A measurement over it is reported, and never fails the check by itself",
                         "type": "number"
+                      },
+                      "kind": {
+                        "description": "What the number is, in an open vocabulary. `product-latency`: a user-visible response time between `from` and `to`. Absent: just a number, never read as product latency",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "from": {
+                        "description": "The event the interval starts at. Without both `from` and `to` a latency is shown but no product claim is made from it",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "to": {
+                        "description": "The event the interval ends at",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "intended": {
+                        "description": "The interval the name of the measurement claims, when what was measured is only part of it. If `intended.to` differs from `to` (or `intended.from` from `from`) the measurement is shown as partial, never as the complete interval",
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "description": "The event the interval starts at: `end of speech`, `submit pressed`",
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "to": {
+                            "description": "The event the interval ends at: `audible response`, `confirmation visible`",
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "additionalProperties": {}
+                      },
+                      "source": {
+                        "description": "How it was measured: `app-instrumentation`, `trace`, `recording-analysis`",
+                        "type": "string"
+                      },
+                      "outcome": {
+                        "description": "`observed` (the default), `timeout` or `failed`. For anything but `observed` the value is how long the observation waited: at least that much, so it counts against a budget and is never dropped",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "instrumentation": {
+                        "description": "The version or method of the measurement. A change of it between two sets of observations is disclosed when they are compared",
+                        "type": "string"
+                      },
+                      "labels": {
+                        "description": "What the observation is comparable with: `device`, `build`, `network`. `device` and `build` group the observations and, when two groups differ in the others, the comparison says so",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -121,12 +179,32 @@
                       "minimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "attemptStatuses": {
+                      "description": "The status of each recorded try, in the order they were made. Absent when no try was recorded, and in reports written before this was recorded: a first try is then unknown, never assumed to have passed",
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      }
+                    },
                     "links": {
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991
                     },
                     "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "artifactTags": {
+                      "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -146,6 +224,150 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "videos": {
+                      "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The attachment name"
+                          },
+                          "owner": {
+                            "type": "string",
+                            "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                          },
+                          "attempt": {
+                            "description": "The retry attempt that holds it, or that holds the step that does",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "step": {
+                            "description": "The name of the step that holds it",
+                            "type": "string"
+                          },
+                          "tags": {
+                            "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "recording": {
+                            "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          },
+                          "scope": {
+                            "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
+                            "type": "object",
+                            "properties": {
+                              "surface": {
+                                "description": "Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "deviceKind": {
+                                "description": "What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "syntheticData": {
+                                "description": "True: the data was made up for the run. False: real data. Absent: unknown",
+                                "type": "boolean"
+                              },
+                              "dependencies": {
+                                "description": "Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "audioCaptured": {
+                                "description": "True: the recording has real audio. False: it is silent. Absent: unknown",
+                                "type": "boolean"
+                              },
+                              "pacing": {
+                                "description": "How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "asserted": {
+                                "description": "The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "limitations": {
+                                "description": "Known limits of what this evidence shows, in the producer's words",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "declaredBy": {
+                                "description": "Who or what made this declaration: a tool, a team, a person",
+                                "type": "string"
+                              },
+                              "verified": {
+                                "description": "The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "verifiedBy": {
+                                "description": "What checked the `verified` fields",
+                                "type": "string"
+                              },
+                              "provenance": {
+                                "description": "Where the declaration comes from and how to check it: a document, a CI step, a device log",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "url": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "rel": {
+                                      "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "url"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "extensions": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "owner",
+                          "available"
+                        ],
+                        "additionalProperties": {}
+                      }
                     }
                   },
                   "required": [
@@ -157,6 +379,22 @@
                     "tags",
                     "labels",
                     "roles"
+                  ],
+                  "additionalProperties": {}
+                },
+                "recording": {
+                  "description": "What became of the check's expected recording: uploaded, referenced, skipped, unresolved or not-applicable. Independent of `status`",
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "state"
                   ],
                   "additionalProperties": {}
                 }
@@ -256,6 +494,36 @@
                   "modified"
                 ]
               },
+              "run": {
+                "description": "The execution the producer named for it (one local or manual invocation). Grouping and display only; never part of the slot",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "The execution's identity within a project, chosen by the producer: a UUID, a timestamped name. Layers with the same id are one run; it never changes after it is recorded"
+                  },
+                  "title": {
+                    "description": "A human name for the run. Presentation only: it is not part of the identity and does not hide the commit or `freshness`",
+                    "type": "string"
+                  },
+                  "startedAtMs": {
+                    "description": "When the execution started, epoch milliseconds",
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "endedAtMs": {
+                    "description": "When the execution ended, epoch milliseconds",
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": {}
+              },
               "recording": {
                 "anyOf": [
                   {},
@@ -317,12 +585,32 @@
                     "minimum": 0,
                     "maximum": 9007199254740991
                   },
+                  "attemptStatuses": {
+                    "description": "The status of each recorded try, in the order they were made. Absent when no try was recorded, and in reports written before this was recorded: a first try is then unknown, never assumed to have passed",
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ]
+                    }
+                  },
                   "links": {
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
                   },
                   "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "artifactTags": {
+                    "description": "Normalized tags of the attachments themselves, sorted and distinct. Absent when no attachment is tagged; never inherited from a check or run",
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -342,6 +630,150 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "videos": {
+                    "description": "Its references to videos and who holds each. Absent when it has none, and in reports written before this was recorded",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "The attachment name"
+                        },
+                        "owner": {
+                          "type": "string",
+                          "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                        },
+                        "attempt": {
+                          "description": "The retry attempt that holds it, or that holds the step that does",
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "step": {
+                          "description": "The name of the step that holds it",
+                          "type": "string"
+                        },
+                        "tags": {
+                          "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "recording": {
+                          "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "boolean",
+                          "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                        },
+                        "scope": {
+                          "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
+                          "type": "object",
+                          "properties": {
+                            "surface": {
+                              "description": "Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "deviceKind": {
+                              "description": "What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "syntheticData": {
+                              "description": "True: the data was made up for the run. False: real data. Absent: unknown",
+                              "type": "boolean"
+                            },
+                            "dependencies": {
+                              "description": "Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "audioCaptured": {
+                              "description": "True: the recording has real audio. False: it is silent. Absent: unknown",
+                              "type": "boolean"
+                            },
+                            "pacing": {
+                              "description": "How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "asserted": {
+                              "description": "The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "limitations": {
+                              "description": "Known limits of what this evidence shows, in the producer's words",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "declaredBy": {
+                              "description": "Who or what made this declaration: a tool, a team, a person",
+                              "type": "string"
+                            },
+                            "verified": {
+                              "description": "The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared",
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "verifiedBy": {
+                              "description": "What checked the `verified` fields",
+                              "type": "string"
+                            },
+                            "provenance": {
+                              "description": "Where the declaration comes from and how to check it: a document, a CI step, a device log",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "url": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "rel": {
+                                    "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "url"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
+                            "extensions": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "owner",
+                        "available"
+                      ],
+                      "additionalProperties": {}
+                    }
                   }
                 },
                 "required": [
@@ -353,6 +785,51 @@
                   "tags",
                   "labels",
                   "roles"
+                ],
+                "additionalProperties": {}
+              },
+              "recordings": {
+                "description": "How many of the recordings the layer expected were published. Absent: the layer declared no expectations, so its completeness is unknown, not complete",
+                "type": "object",
+                "properties": {
+                  "expected": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "uploaded": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "referenced": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "skipped": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "unresolved": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "notApplicable": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "expected",
+                  "uploaded",
+                  "referenced",
+                  "skipped",
+                  "unresolved",
+                  "notApplicable"
                 ],
                 "additionalProperties": {}
               }
