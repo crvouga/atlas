@@ -169,7 +169,7 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991,
-                "description": "References that name no bytes"
+                "description": "References that name no bytes, or bytes the layer does not hold"
               }
             },
             "required": [

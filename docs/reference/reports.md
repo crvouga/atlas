@@ -1694,6 +1694,16 @@ Like {@link summarizeEvidence} for the checks of a part: a video that declares n
 declares none, takes the scope `inherited` from its part or layer (the nearest declaration of the two, see
 `effectiveScope`). Without `inherited` it is the same as `summarizeEvidence`.
 
+#### `summarizeStoredEvidence`
+
+```ts
+export function summarizeStoredEvidence(inherited: EvidenceScope | undefined, unstored: ReadonlySet<string> | undefined, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined
+```
+
+Like {@link summarizeEvidenceIn}, knowing which bundle keys the layer names but does not hold (`unstored`, see
+`unstoredKeys`): a video whose only bytes are such a key is `available: false`, never a recording. Without
+`unstored` it is the same as `summarizeEvidenceIn`.
+
 #### `summarizeLayerEvidence`
 
 ```ts
@@ -1702,6 +1712,14 @@ export function summarizeLayerEvidence(...holders: readonly EvidenceHolder[]): E
 
 Like {@link summarizeEvidence} for a layer and its parts: the same summary, but a video attached to the layer or a
 part is owned by the `layer`, not by a check.
+
+#### `summarizeStoredLayerEvidence`
+
+```ts
+export function summarizeStoredLayerEvidence(unstored: ReadonlySet<string> | undefined, ...holders: readonly EvidenceHolder[]): EvidenceSummary | undefined
+```
+
+Like {@link summarizeLayerEvidence}, knowing which bundle keys the layer names but does not hold (see {@link summarizeStoredEvidence}).
 
 #### `isVideoAttachment`
 
@@ -1803,6 +1821,16 @@ export function bundleKeysOf(holder: EvidenceHolder): string[]
 ```
 
 Every distinct bundle key (`bundleKey`) that the attachments of a holder, its steps and its attempts point to, so a layer's files can be copied. Attachments held by `uri` or inline `text` have none.
+
+#### `unstoredKeys`
+
+```ts
+export function unstoredKeys(layer: EvidenceHolder & { readonly parts: readonly (EvidenceHolder & { readonly checks: readonly EvidenceHolder[] })[]; readonly bundle: Readonly<Record<string, unknown>> }): string[]
+```
+
+The bundle keys that attachments of a layer, its parts and their checks name, but that the layer's `bundle` index does
+not hold: files the producer referenced and never stored. Empty for a layer whose every file is there. This reads only
+the index, never a blob, so it is cheap enough to ask of every layer as it is read.
 
 ### Live evidence from running suites
 
@@ -2109,7 +2137,7 @@ export type VideoRef = {
   readonly tags?: readonly string[];
   /** What identifies the bytes (digest, bundle key or address); references with the same one are the same recording. Absent when `available` is false. */
   readonly recording?: string;
-  /** False when the reference names no bytes at all (no bundle key, address or inline text), so it can never be played. */
+  /** False when the reference names no bytes at all (no bundle key, address or inline text), or a bundle key that the layer's own bundle does not hold, so it can never be played. */
   readonly available: boolean;
   /** What this recording shows, as declared for it: its own `scope`, else its attempt's, check's, part's or layer's. Absent when none declared one: its scope is unknown, not live, physical or audible. */
   readonly scope?: EvidenceScope;
@@ -2128,7 +2156,7 @@ export type VideoCounts = {
   readonly references: number;
   /** Distinct playable recordings: identical bytes referenced twice are one. */
   readonly recordings: number;
-  /** References that name no bytes. A report that predates availability metadata has none of these and none of the others. */
+  /** References that name no bytes, or bytes the layer does not hold. A report that predates availability metadata has none of these and none of the others. */
   readonly unavailable: number;
 };
 ```
@@ -4870,7 +4898,7 @@ Reads one captured file (a screenshot, a frame, a recorded report) of a layer, o
 export function layerSummary(layer: ReportLayer): LayerSummary
 ```
 
-Drops a layer's bundle index, leaving the summary composition reads.
+Drops a layer's bundle index, leaving the summary composition reads, plus the bundle keys its attachments name that the bundle does not hold (`unstored`), so a video that was never stored is not counted as a recording.
 
 ### Layer types
 
@@ -4931,6 +4959,8 @@ export type LayerSummary = LayerExtras & {
   readonly source: SourceRecord | null;
   /** Where the layer's timelines and captured files are read from: its own bundle (`layer`), an older commit-keyed recording (`commit`), or nowhere (`null`). */
   readonly recording: { readonly type: 'layer' } | { readonly type: 'commit'; readonly sha: string; readonly source: string } | null;
+  /** Bundle keys that attachments name but the layer's bundle does not hold, read from the layer's index when its summary was made (see `unstoredKeys`). Absent when there are none. In memory only: never part of the layer document. */
+  readonly unstored?: readonly string[];
 };
 ```
 
