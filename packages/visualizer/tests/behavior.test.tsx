@@ -230,3 +230,16 @@ test('the recording on Watch says what it does and does not show, as its produce
   const notice = document.querySelector('[aria-label="Evidence scope of tour.webm"]')!;
   expect(notice.textContent).toContain('Scripted dependencies');
 });
+
+test('a passing recording beside a failing source says both on Watch instead of leading with Failed alone', async () => {
+  const store = memoryStore();
+  await publishChecks(store, { producer: 'e2e', environment: 'desktop-web', recordedAtMs: 6, branch: 'main', specs: [spec(MINI)], checks: [check('Add an item', { attachments: [video] })] });
+  await publishChecks(store, { producer: 'e2e-api', environment: 'api', recordedAtMs: 5, branch: 'main', specs: [spec(MINI)], checks: [check('Add an item', { status: 'failed', detail: 'no tea' })] });
+  const node = createNode({ stores: [{ id: 'shared', store }], refreshMs: 60_000 });
+  await node.ready;
+  atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: {}, specs: { 'lists/add.feature': MINI }, node });
+  await atlas.sees('1 behavior');
+  await atlas.click('button', 'Add an item');
+  await atlas.until(() => document.querySelector('video') !== null, 'the player');
+  expect(document.querySelector('[data-outcome-headline]')?.textContent).toBe('Selected result passed; another scoped source failed');
+});
