@@ -63,11 +63,9 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
             aria-pressed={filter === entry.id}
             onClick={() => setFilter(entry.id)}
             variant={filter === entry.id ? 'light' : 'subtle'}
+            rightSection={<Text span inherit>{rows.filter((row) => entry.keeps(row.summary)).length}</Text>}
           >
             {entry.label}{' '}
-            <Text span inherit>
-              {rows.filter((row) => entry.keeps(row.summary)).length}
-            </Text>
           </Button>
         ))}
       </Group>

@@ -1,70 +1,95 @@
-/**
- * @module UI catalog filters
- *
- * The controls beside the catalog: words, coverage, profile, area, route, cohort, feature flag, surface, producer and the attributes a producer declared. Each offers
- * the values the catalog has with how many states have them. What is chosen is the address, so copying it or reloading restores
- * the same view; choices combine with AND across the controls and OR within one.
+/** @module Rich catalog search
+ * One keyboard-operated chip input for product terms, recorded facets and sorting, backed by the URL.
  */
-import { UI_COVERAGE, isUiCatalogFiltered, type UiCatalogQuery, type UiFacetValue } from '@crvouga/atlas/reports/ui-catalog';
-import { joinList } from '@crvouga/atlas/reports/artifact-query';
-import { Button, MultiSelect, Stack, TextInput, Title } from '@mantine/core';
-import { useMemo } from 'react';
+import { ActionIcon, Badge, Combobox, Group, Pill, PillsInput, ScrollArea, Stack, Text, useCombobox } from '@mantine/core';
+import { IconSearch, IconX } from '@tabler/icons-react';
+import { useMemo, useRef } from 'react';
+import type { UiCatalog } from '@crvouga/atlas/reports/ui-catalog';
+import { addCatalogTokens, catalogChipLabel, catalogTokens, CLEAR_CATALOG_SEARCH, suggestCatalog } from './query';
+import { useCatalogNavigate } from './search';
 
-import { useUiCatalog } from './provider';
-import { useCatalogNavigate, useCatalogSearch } from './search';
-import { coverageWord } from './words';
-
-type Field = 'coverage' | 'profile' | 'area' | 'route' | 'cohort' | 'flag' | 'surface' | 'producer' | 'attribute';
-
-/** How many options a control draws at once; typing narrows the rest. A catalog may have thousands of routes. */
-const OPTIONS = 100;
-
-function Facet({ field, label, options, query }: { field: Field; label: string; options: readonly UiFacetValue[]; query: UiCatalogQuery }) {
+/** Rich search with live previews; Enter/Tab commits terms and Backspace reopens the last chip for editing. */
+export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues }: { catalog: UiCatalog; expression: string; draft: string; onDraft: (value: string, base?: string) => void; issues: readonly string[] }) {
   const go = useCatalogNavigate();
-  const chosen = (query[field] ?? []) as readonly string[];
-  const data = useMemo(() => options.map((option) => ({ value: option.value, label: `${option.label ?? (field === 'coverage' ? coverageWord(option.value) : option.value)} (${option.count})` })), [options, field]);
-  if (!data.length && !chosen.length) return null;
+  const field = useRef<HTMLInputElement>(null);
+  const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
+  const selected = useMemo(() => catalogTokens(expression), [expression]);
+  const suggestions = useMemo(() => suggestCatalog(catalog, draft, selected), [catalog, draft, selected]);
+  const set = (next: string) => go({ ...CLEAR_CATALOG_SEARCH, find: next || undefined });
+  const add = (value: string) => {
+    set(addCatalogTokens(selected, value));
+    onDraft('');
+    combobox.resetSelectedOption();
+    field.current?.focus();
+  };
+  const remove = (index: number) => set(selected.filter((_, at) => at !== index).map(token => token.raw).join(' '));
   return (
-    <MultiSelect
-      label={label}
-      data={data}
-      value={[...chosen]}
-      searchable
-      limit={OPTIONS}
-      clearable
-      placeholder={chosen.length ? undefined : `Any ${label.toLowerCase()}`}
-      nothingFoundMessage="Nothing found"
-      onChange={(next) => go({ [field]: joinList(next) })}
-    />
-  );
-}
-
-/** The navigation column of the catalog page. */
-export function UiCatalogFilters() {
-  const catalog = useUiCatalog();
-  const { query } = useCatalogSearch();
-  const go = useCatalogNavigate();
-  if (!catalog) return null;
-  const { facets } = catalog;
-  const coverage = UI_COVERAGE.map((value) => facets.coverage.find((facet) => facet.value === value) ?? { value, count: 0 }).filter((facet) => facet.count > 0 || query.coverage?.includes(facet.value as never));
-  return (
-    <Stack component="nav" aria-label="UI catalog filters" p="md" gap="sm">
-      <Title order={2}>Find states</Title>
-      <TextInput label="Search states" description="Id, title, route, fixture, cohort, flag or surface" value={query.q ?? ''} onChange={(event) => go({ q: event.currentTarget.value || undefined }, { replace: true })} />
-      <Facet field="coverage" label="Coverage" options={coverage} query={query} />
-      <Facet field="profile" label="Profile" options={facets.profiles} query={query} />
-      <Facet field="area" label="Area" options={facets.areas} query={query} />
-      <Facet field="route" label="Route" options={facets.routes} query={query} />
-      <Facet field="cohort" label="Cohort" options={facets.cohorts} query={query} />
-      <Facet field="flag" label="Feature flag" options={facets.flags} query={query} />
-      <Facet field="surface" label="Surface" options={facets.surfaces} query={query} />
-      <Facet field="producer" label="Producer" options={facets.producers} query={query} />
-      <Facet field="attribute" label="Attribute" options={facets.attributes ?? []} query={query} />
-      {isUiCatalogFiltered(query) && (
-        <Button type="button" variant="subtle" onClick={() => go({ q: undefined, coverage: undefined, profile: undefined, area: undefined, route: undefined, cohort: undefined, flag: undefined, surface: undefined, producer: undefined, attribute: undefined })}>
-          Clear filters
-        </Button>
-      )}
+    <Stack gap="xs" component="section" aria-label="Catalog search">
+      <Combobox store={combobox} onOptionSubmit={add} withinPortal={false} keepMounted={false}>
+        <Combobox.DropdownTarget>
+          <PillsInput
+            label="Search catalog"
+            description="Combine terms, filters and sorting. Every search term must match. Close spellings and common related terms work too."
+            error={issues.length ? issues.join(' ') : undefined}
+            leftSection={<IconSearch size={16} aria-hidden="true" />}
+            rightSection={(expression || draft) ? <ActionIcon variant="subtle" aria-label="Clear catalog search" onClick={() => { set(''); onDraft(''); field.current?.focus(); }}><IconX size={16} aria-hidden="true" /></ActionIcon> : undefined}
+            onClick={() => { field.current?.focus(); combobox.openDropdown(); }}
+          >
+            <Pill.Group>
+              {selected.map((token, index) => (
+                <Pill key={`${index}:${token.raw}`} withRemoveButton onRemove={() => { remove(index); field.current?.focus(); }} removeButtonProps={{ 'aria-label': `Remove ${catalogChipLabel(catalog, token)}`, 'aria-hidden': false, tabIndex: 0 }}>
+                  {catalogChipLabel(catalog, token)}
+                </Pill>
+              ))}
+              <Combobox.EventsTarget withExpandedAttribute>
+                <PillsInput.Field
+                  ref={field}
+                  aria-label="Search catalog"
+                  aria-autocomplete="list"
+                  value={draft}
+                  placeholder={selected.length ? 'Add another term or filter…' : 'Try appointment error, area:checkout or sort:recent…'}
+                  onFocus={() => combobox.openDropdown()}
+                  onBlur={() => combobox.closeDropdown()}
+                  onChange={event => { onDraft(event.currentTarget.value); combobox.openDropdown(); combobox.resetSelectedOption(); }}
+                  onKeyDown={event => {
+                    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.ctrlKey || event.metaKey || event.altKey || (event.key === 'Tab' && event.shiftKey)) return;
+                    if ((event.key === 'Enter' || event.key === 'Tab') && draft.trim() && combobox.getSelectedOptionIndex() < 0) {
+                      event.preventDefault(); add(draft);
+                    } else if (event.key === 'Tab' && combobox.getSelectedOptionIndex() >= 0 && combobox.dropdownOpened) {
+                      event.preventDefault(); combobox.clickSelectedOption();
+                    } else if (event.key === 'Backspace' && !draft && selected.length) {
+                      event.preventDefault();
+                      const next = selected.slice(0, -1).map(token => token.raw).join(' ');
+                      onDraft(selected.at(-1)!.raw, next); set(next); combobox.openDropdown();
+                    }
+                  }}
+                />
+              </Combobox.EventsTarget>
+            </Pill.Group>
+          </PillsInput>
+        </Combobox.DropdownTarget>
+        <Combobox.Dropdown>
+          <ScrollArea.Autosize mah="40vh" type="auto">
+            <Combobox.Options aria-label="Search suggestions">
+              {draft.trim() && <Combobox.Option value={draft.trim()}><Text>Search for “{draft.trim()}”</Text><Text size="xs" c="dimmed">Add your own words or a complete filter expression</Text></Combobox.Option>}
+              {suggestions.map(suggestion => (
+                <Combobox.Option key={suggestion.value} value={suggestion.value}>
+                  <Group justify="space-between" wrap="nowrap">
+                    <Stack gap={0} miw={0}>
+                      <Text truncate>{suggestion.label}</Text>
+                      <Text size="xs" c="dimmed" truncate>{suggestion.detail}</Text>
+                    </Stack>
+                    {suggestion.count !== undefined && <Badge color="gray">{suggestion.count}</Badge>}
+                  </Group>
+                </Combobox.Option>
+              ))}
+              {!draft.trim() && !suggestions.length && <Combobox.Empty>Type any words to search recorded UI states.</Combobox.Empty>}
+            </Combobox.Options>
+          </ScrollArea.Autosize>
+          <Combobox.Footer><Text size="xs" c="dimmed">Up/Down to choose · Enter or Tab to add · Backspace to edit the last chip · Escape to close</Text></Combobox.Footer>
+        </Combobox.Dropdown>
+      </Combobox>
+      <Text size="xs" c="dimmed">Search recorded names and facts. Try kind:error for product error screens; coverage:failed for failed captures. Type sort: to choose an order.</Text>
     </Stack>
   );
 }

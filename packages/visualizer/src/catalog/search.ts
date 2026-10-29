@@ -18,6 +18,8 @@ const text = z
 
 /** The `/catalog` route's search: the query of `GET /api/reports/ui-catalog` and the state opened. */
 export const CatalogSearchFields = {
+  /** Rich UI-only expression, including free terms, facet chips and sorting. */
+  find: text,
   q: text,
   coverage: text,
   profile: text,

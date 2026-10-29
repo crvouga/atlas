@@ -136,18 +136,12 @@ function CoverageFilter({ listing, coverage }: { listing: Listing; coverage: Cov
         {counts.demonstrated} of {plural(scoped.length, 'behavior', 'behaviors')} demonstrated with a recording of the current spec.
       </Text>
       <Group role="group" aria-label="Coverage state" gap="xs">
-        <Button type="button" aria-pressed={!coverage} variant={coverage ? 'subtle' : 'light'} onClick={() => set(undefined)}>
+        <Button type="button" aria-pressed={!coverage} variant={coverage ? 'subtle' : 'light'} onClick={() => set(undefined)} rightSection={<Text span inherit>{scoped.length}</Text>}>
           All{' '}
-          <Text span inherit>
-            {scoped.length}
-          </Text>
         </Button>
         {COVERAGE_ORDER.filter((state) => state === 'demonstrated' || counts[state] > 0 || coverage === state).map((state) => (
-          <Button key={state} type="button" aria-pressed={coverage === state} variant={coverage === state ? 'light' : 'subtle'} title={COVERAGE[state].meaning} onClick={() => set(coverage === state ? undefined : state)}>
+          <Button key={state} type="button" aria-pressed={coverage === state} variant={coverage === state ? 'light' : 'subtle'} title={COVERAGE[state].meaning} onClick={() => set(coverage === state ? undefined : state)} rightSection={<Text span inherit>{counts[state]}</Text>}>
             {COVERAGE[state].label}{' '}
-            <Text span inherit>
-              {counts[state]}
-            </Text>
           </Button>
         ))}
       </Group>

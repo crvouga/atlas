@@ -30,10 +30,9 @@ export function ModelTrace({ states }: { states: readonly ModelState[] }) {
               aria-pressed={at === index}
               onClick={() => setSelected(index)}
               variant="light"
+              leftSection={<Text span inherit>{index + 1}</Text>}
             >
-              <Text span inherit>
-                {index + 1}
-              </Text>
+              {' '}
               <Text span inherit>
                 {typeof entry['#action'] === 'string' ? entry['#action'] : index === 0 ? 'Start' : 'Step'}
               </Text>

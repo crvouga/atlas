@@ -14,10 +14,31 @@ bun run workspace:run
 ```
 
 Open the `Atlas server ready:` URL printed in the Run terminal. It serves the real API and hot-reloading
-viewer together; `/admin` opens settings. A fresh node starts empty. Publish real results to the printed
+viewer together; `/admin` opens settings. Without S3 environment variables, Run starts a private
+[Mockingbird S3 emulator](https://mockingbird.chrisvouga.dev/) on a free loopback port and creates its bucket.
+No Docker, cloud account or `.env` is needed. The emulator uses strict signed S3 requests and keeps data
+in memory **only until Run stops**; restarting starts empty. Its URL is printed and appears as `s3Url` in status.
+Publish results to the printed
 `ATLAS_STORE` address using the existing [report commands](reference/reports.md).
 
-For UI work with populated specs, statecharts, failures and recordings, run the separate examples target:
+To populate the running server with the complete Todo example, run one command:
+
+```sh
+bun run workspace:populate
+```
+
+It discovers this checkout's running server, uploads the bundled example layers (spec types, versions,
+branches and environments), installs Chromium if needed, uses the project's FFmpeg binary for recordings,
+runs both single- and multi-client journeys plus
+Gherkin and Quint, and publishes specs, completed privacy-checked runs, recordings and document results.
+It also captures seven real Todo UI states at desktop and mobile sizes, publishing plans and PNG screenshots
+to the UI catalog. Open the printed project and catalog URLs. Data goes into the `todo-app` project
+(`ATLAS_PROJECT` overrides it); `ATLAS_SERVER_URL` selects an explicit server and `ATLAS_PUBLISH_TOKEN`
+supplies its upload token when required. Failed checks retain their evidence and make the command exit nonzero;
+other steps still run. Repeat after restarting the ephemeral S3 emulator to refill it. Existing completed
+local runs are included; unfinished or privacy-failed runs are skipped.
+
+For UI work using the separate examples viewer, run:
 
 ```sh
 bun run workspace:preview
@@ -33,10 +54,11 @@ example recordings, use the existing `example:run` command and [statechart guide
 | Command | Behavior |
 | --- | --- |
 | `bun run workspace:setup` | Check the pinned Bun and install with `--frozen-lockfile`; safe to repeat. |
-| `bun run workspace:run` | Run the real node and viewer; repeat the frozen install before starting. |
+| `bun run workspace:run` | Run the real node and viewer with Mockingbird S3 unless S3 is configured; repeat the frozen install first. |
+| `bun run workspace:populate` | Populate the running node with bundled and fresh Todo evidence, recordings and desktop/mobile UI catalog. |
 | `bun run workspace:preview` | Run the populated examples viewer; repeat the same setup first. |
 | `bun run workspace:status` | Print live URLs, mode and readiness as JSON; omit private control credentials. |
-| `bun run workspace:stop` | Stop both targets owned by this checkout; retain all reports. |
+| `bun run workspace:stop` | Stop both owned targets and their emulator; external S3 data is retained, emulator data is discarded. |
 | `bun run workspace:stop server` | Stop only the API/viewer target. `preview` selects only examples. |
 | `bun run workspace:check` | Run documentation, types, tests, package/client builds and consumer smoke. |
 
@@ -59,10 +81,13 @@ bun run workspace:status
 ```
 
 Everything binds to `127.0.0.1`. For remote workspaces, use the IDE's port forwarding. Reports and server
-settings are kept in S3 only, never in the checkout: `workspace:run` needs the required `ATLAS_S3_*` variables
-(copy `.env.example` to `.env`, which Bun loads, or export them) and exits at once, listing every missing one,
-without them. Give each checkout its own bucket or `ATLAS_S3_PREFIX` if their reports must not mix
-(`workspace:setup` and `workspace:preview` need no credentials). Live runtime leases stay in `.atlas-workspace/`.
+settings are accessed through S3 only. Each credential-free Run owns an isolated, ephemeral emulator.
+For durable storage, copy `.env.example` to `.env` (loaded by Bun) or export the required `ATLAS_S3_*`
+variables. **Any supplied `ATLAS_S3_*` variable disables automatic emulation**, including partial or empty
+configuration: missing or invalid settings still fail with the server's diagnostic. Give each checkout its
+own bucket or `ATLAS_S3_PREFIX` if external reports must not mix. Direct `atlas serve` and `atlas dev`
+continue to require S3 configuration; automatic emulation belongs only to this repository's workspace runner.
+`workspace:setup` and `workspace:preview` need no credentials. Live runtime leases stay in `.atlas-workspace/`.
 Keep that directory private to each worktree. Do not share `node_modules`,
 `.atlas-workspace/` or caches across checkouts with different dependencies. Frozen installs use Bun's
 download cache without linking one worktree's dependency tree to another.
@@ -70,7 +95,8 @@ download cache without linking one worktree's dependency tree to another.
 Two simultaneous starts cannot claim the same target's runtime lease. A hard kill may leave metadata:
 run `workspace:stop` before restarting. It removes a stale lease only when its owner PID is gone; if the
 PID is still alive but the control endpoint cannot authenticate, investigate that owner rather than
-assuming it is safe to stop. No reports or settings are deleted by teardown.
+assuming it is safe to stop. External S3 reports and settings are never deleted by teardown; the local
+emulator's in-memory data ends with its owning Run process.
 
 ## Superset
 

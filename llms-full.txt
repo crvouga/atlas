@@ -1774,6 +1774,25 @@ surface, producer and the attributes your collectors declare. The address holds 
 profiles side by side with the declared facts, the failure reason, and for each picture the layer, backend, producer, shard, commit
 and time. *Download the manifest* saves the filtered catalog as JSON.
 
+Use **Search catalog** for free words, facets and sorting. Press Enter or Tab to turn words into chips;
+each term must match, so `appointment` plus `error` finds appointment-related error screens. Search handles
+close spellings, word forms and common related wording such as booking/appointment, unavailable/error and
+preferences/settings. It searches recorded names and facts, including the declared UI state kind.
+An error screen can have a successful capture: `kind:error` selects the product's error states, while
+`coverage:failed` selects captures that failed.
+
+Suggestions offer the catalog's own values, including profiles, routes, attributes and UI kinds. Type
+`area:`, `kind:`, `profile:` or another facet name to explore its values; quote values with spaces
+(`area:"Patient visits"`). Type `sort:` to choose best matches, newest/oldest captures, title order or
+states needing attention. Arrow keys choose a suggestion, Enter/Tab adds it, Escape dismisses suggestions,
+and Backspace in an empty field reopens the last chip for editing. Every chip also has a named,
+keyboard-focusable remove button. The list previews drafts as you type, and committed chips are restored
+from the address, including when returning from an open state or comparison. Values of the same facet are
+alternatives; different facets and free terms combine with AND.
+
+Rich viewer expressions use the optional `find` URL parameter; existing `q` and facet links still work.
+The HTTP API and CLI continue to use their documented literal word and exact facet filters.
+
 ```sh
 curl "$ATLAS_SERVER_URL/api/reports/ui-catalog?coverage=failed,missing&profile=…"   # JSON; add format=markdown for text
 ```
@@ -4877,10 +4896,31 @@ bun run workspace:run
 ```
 
 Open the `Atlas server ready:` URL printed in the Run terminal. It serves the real API and hot-reloading
-viewer together; `/admin` opens settings. A fresh node starts empty. Publish real results to the printed
+viewer together; `/admin` opens settings. Without S3 environment variables, Run starts a private
+[Mockingbird S3 emulator](https://mockingbird.chrisvouga.dev/) on a free loopback port and creates its bucket.
+No Docker, cloud account or `.env` is needed. The emulator uses strict signed S3 requests and keeps data
+in memory **only until Run stops**; restarting starts empty. Its URL is printed and appears as `s3Url` in status.
+Publish results to the printed
 `ATLAS_STORE` address using the existing [report commands](reference/reports.md).
 
-For UI work with populated specs, statecharts, failures and recordings, run the separate examples target:
+To populate the running server with the complete Todo example, run one command:
+
+```sh
+bun run workspace:populate
+```
+
+It discovers this checkout's running server, uploads the bundled example layers (spec types, versions,
+branches and environments), installs Chromium if needed, uses the project's FFmpeg binary for recordings,
+runs both single- and multi-client journeys plus
+Gherkin and Quint, and publishes specs, completed privacy-checked runs, recordings and document results.
+It also captures seven real Todo UI states at desktop and mobile sizes, publishing plans and PNG screenshots
+to the UI catalog. Open the printed project and catalog URLs. Data goes into the `todo-app` project
+(`ATLAS_PROJECT` overrides it); `ATLAS_SERVER_URL` selects an explicit server and `ATLAS_PUBLISH_TOKEN`
+supplies its upload token when required. Failed checks retain their evidence and make the command exit nonzero;
+other steps still run. Repeat after restarting the ephemeral S3 emulator to refill it. Existing completed
+local runs are included; unfinished or privacy-failed runs are skipped.
+
+For UI work using the separate examples viewer, run:
 
 ```sh
 bun run workspace:preview
@@ -4896,10 +4936,11 @@ example recordings, use the existing `example:run` command and [statechart guide
 | Command | Behavior |
 | --- | --- |
 | `bun run workspace:setup` | Check the pinned Bun and install with `--frozen-lockfile`; safe to repeat. |
-| `bun run workspace:run` | Run the real node and viewer; repeat the frozen install before starting. |
+| `bun run workspace:run` | Run the real node and viewer with Mockingbird S3 unless S3 is configured; repeat the frozen install first. |
+| `bun run workspace:populate` | Populate the running node with bundled and fresh Todo evidence, recordings and desktop/mobile UI catalog. |
 | `bun run workspace:preview` | Run the populated examples viewer; repeat the same setup first. |
 | `bun run workspace:status` | Print live URLs, mode and readiness as JSON; omit private control credentials. |
-| `bun run workspace:stop` | Stop both targets owned by this checkout; retain all reports. |
+| `bun run workspace:stop` | Stop both owned targets and their emulator; external S3 data is retained, emulator data is discarded. |
 | `bun run workspace:stop server` | Stop only the API/viewer target. `preview` selects only examples. |
 | `bun run workspace:check` | Run documentation, types, tests, package/client builds and consumer smoke. |
 
@@ -4922,10 +4963,13 @@ bun run workspace:status
 ```
 
 Everything binds to `127.0.0.1`. For remote workspaces, use the IDE's port forwarding. Reports and server
-settings are kept in S3 only, never in the checkout: `workspace:run` needs the required `ATLAS_S3_*` variables
-(copy `.env.example` to `.env`, which Bun loads, or export them) and exits at once, listing every missing one,
-without them. Give each checkout its own bucket or `ATLAS_S3_PREFIX` if their reports must not mix
-(`workspace:setup` and `workspace:preview` need no credentials). Live runtime leases stay in `.atlas-workspace/`.
+settings are accessed through S3 only. Each credential-free Run owns an isolated, ephemeral emulator.
+For durable storage, copy `.env.example` to `.env` (loaded by Bun) or export the required `ATLAS_S3_*`
+variables. **Any supplied `ATLAS_S3_*` variable disables automatic emulation**, including partial or empty
+configuration: missing or invalid settings still fail with the server's diagnostic. Give each checkout its
+own bucket or `ATLAS_S3_PREFIX` if external reports must not mix. Direct `atlas serve` and `atlas dev`
+continue to require S3 configuration; automatic emulation belongs only to this repository's workspace runner.
+`workspace:setup` and `workspace:preview` need no credentials. Live runtime leases stay in `.atlas-workspace/`.
 Keep that directory private to each worktree. Do not share `node_modules`,
 `.atlas-workspace/` or caches across checkouts with different dependencies. Frozen installs use Bun's
 download cache without linking one worktree's dependency tree to another.
@@ -4933,7 +4977,8 @@ download cache without linking one worktree's dependency tree to another.
 Two simultaneous starts cannot claim the same target's runtime lease. A hard kill may leave metadata:
 run `workspace:stop` before restarting. It removes a stale lease only when its owner PID is gone; if the
 PID is still alive but the control endpoint cannot authenticate, investigate that owner rather than
-assuming it is safe to stop. No reports or settings are deleted by teardown.
+assuming it is safe to stop. External S3 reports and settings are never deleted by teardown; the local
+emulator's in-memory data ends with its owning Run process.
 
 ## Superset
 
@@ -5026,6 +5071,9 @@ they preserve evidence semantics, provenance, URL selection, or playback behavio
 
 - Primary action: `Button variant="filled"`. Secondary: default `Button` (light). Quiet: `variant="subtle"`.
   Destructive action: `color="red"`. Icon-only action: `ActionIcon` with an `aria-label`, usually a `Tooltip`.
+- Filter chips put counts and removal icons in Button's `rightSection`; numbered step buttons use `leftSection`.
+  Mantine supplies the gap. Whitespace between a label and a nested span disappears in the flex label, so it
+  cannot supply visual separation. Keep a text space for readable accessible names and copied text.
 - Inputs: Mantine inputs with a visible `label`, `description` when needed, and `error` for validation.
   Use `NativeSelect` for small native option lists; keep form values controlled. Settings validation and
   authorization stay on the server; its optional JSON editor also validates with the shared schema.
@@ -5398,13 +5446,24 @@ Atlas's theme. SVG data plots and statechart arrow markers are geometry, not han
 
 ## Search
 
-All search boxes (finder, test list, Runs tab, an opened run) use `src/find/query.ts` for the query language and
+The finder, test list, Runs tab and an opened run use `src/find/query.ts` for the query language and
 `src/find/rank.ts` for matching; do not add a second matcher or filter on `includes`. Build documents from
 `src/find/behaviors.ts` so a behavior has the same fields and facets everywhere. Match first, then count, filter and sort
 the whole set, then page. Show filters typed in the box as removable chips, show what was not understood
 (`SearchNotes`), show why a result matched and mark exact ones, and say when matching is words only (no embedder, or
 a failed one). A bounded list says it is bounded and offers all results. Selection follows result identity, never a
 position, when results change. The query, filters and sort stay in the address.
+
+The UI catalog uses a full-width Mantine Combobox/PillsInput in the main content, replacing the sidebar's
+separate filter controls. `catalog/query.ts` reuses the shared ranked matcher, intersects every free-text term,
+and adds common product/state vocabulary to recorded facts. Each typed term becomes a removable chip; exact
+facets and sorting are chips too (`kind:error`, `coverage:failed`, `area:"Patient visits"`, `sort:recent`).
+Suggestions come from the catalog's own facts and offer spelling/word-form/related-word matches. Product UI
+kind is distinct from capture coverage. The rich expression is `find` in the URL; old `q` and facet links
+still restore as chips. Keep Enter/Tab to commit, arrow-key suggestions, Escape dismissal, Backspace editing,
+focusable named removal controls, draft previews and bounded suggestions/cards. Compare reuses the same
+expression, except the coverage/profile dimensions it is comparing. The public API's literal query contract
+is unchanged.
 
 ## Accessibility and responsive behavior
 
@@ -5444,13 +5503,19 @@ The narrowly scoped exceptions are:
    No feature CSS, handcrafted code controls or custom syntax color theme is introduced.
 5. **Consumer test fixture:** `examples/todo/app` is the app Atlas tests and records, not an Atlas screen.
    Its intentionally separate implementation and selectors are test inputs; the overhaul does not restyle it.
+6. **Drawer scroll containment:** Mantine's native Drawer scrolls its Paper content, including the header;
+   the shared Paper padding also leaves an exposed strip above that sticky header. Drawer has no prop to
+   give only its body the remaining height and scrolling. The central Drawer Styles API removes the
+   content padding, uses a column layout with a nonshrinking header, and gives the body the remaining
+   height with its own overflow. This keeps scrolled evidence below the header and inside the drawer,
+   including at narrow widths, without changing the shared Paper spacing or stacking order.
 
 ## Inventory and migration boundary
 
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| UI catalog | Captured UI states per profile as cards with coverage badges, filters in the index column, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | AppShell navbar, SimpleGrid, Card, Image, MultiSelect, TextInput, Drawer, Accordion, Table, Badge, Alert |
+| UI catalog | Captured UI states per profile as cards with coverage badges, rich free-form search with forgiving keyboard suggestions and term/facet/sort chips in the main content, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | Combobox, PillsInput, Pill, SimpleGrid, Card, Image, Drawer, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |

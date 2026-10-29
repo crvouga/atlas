@@ -456,11 +456,9 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
               type="button"
               onClick={() => select({ view: 'recording', check: slot.id, layer: earlier || index > 0 ? chosen.layer.id : null })}
               variant="filled"
+              rightSection={<Text span inherit>{plural(moments, 'moment', 'moments')}</Text>}
             >
               Open recording{' '}
-              <Text span inherit>
-                {plural(moments, 'moment', 'moments')}
-              </Text>
             </Button>
           )}
           {chosen.layer.runUrl && (

@@ -2,7 +2,6 @@ import { isStatechartFile } from '@crvouga/atlas/schema';
 import { Alert, Box, Burger, Button, Container, Group, AppShell as MantineAppShell, ScrollArea, Stack, Text } from '@mantine/core';
 import { Outlet, useLocation, useSearch } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { UiCatalogFilters } from '../catalog/UiCatalogFilters';
 import { UiCatalogProvider } from '../catalog/provider';
 import { Header } from '../components/Header';
 import { EvidenceProvider, useEvidence } from '../evidence/evidence-context';
@@ -22,9 +21,8 @@ function Index() {
   const evidence = useEvidence();
   const { pathname } = useLocation();
   const kind = kindOfAddress(pathname);
-  return pathname === '/catalog' ? (
-    <UiCatalogFilters />
-  ) : pathname === '/critiques' ? (
+  if (pathname === '/catalog') return null;
+  return pathname === '/critiques' ? (
     <Box component="nav" aria-label="Critiques" />
   ) : kind ? (
     <SpecIndex kind={kind} />
@@ -57,21 +55,24 @@ function Body() {
 function Layout() {
   const [opened, setOpened] = useState(false);
   const location = useLocation();
+  const catalog = location.pathname === '/catalog';
   useEffect(() => setOpened(false), [location.href]);
   return (
     <UiCatalogProvider enabled={location.pathname === '/catalog'}>
-      <MantineAppShell header={{ height: 64 }} navbar={{ width: 288, breakpoint: 'md', collapsed: { mobile: !opened } }} padding={0}>
+      <MantineAppShell header={{ height: 64 }} navbar={{ width: 288, breakpoint: 'md', collapsed: { mobile: catalog || !opened, desktop: catalog } }} padding={0}>
         <MantineAppShell.Header>
           <Group h="100%" px="md" gap="sm" wrap="nowrap">
-            <Burger
-              aria-expanded={opened}
-              aria-controls="atlas-navigation"
-              opened={opened}
-              onClick={() => setOpened((v) => !v)}
-              hiddenFrom="md"
-              size="sm"
-              aria-label="Toggle navigation"
-            />
+            {!catalog && (
+              <Burger
+                aria-expanded={opened}
+                aria-controls="atlas-navigation"
+                opened={opened}
+                onClick={() => setOpened((v) => !v)}
+                hiddenFrom="md"
+                size="sm"
+                aria-label="Toggle navigation"
+              />
+            )}
             <Header />
           </Group>
         </MantineAppShell.Header>

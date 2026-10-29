@@ -14,6 +14,7 @@ import {
   Card,
   createTheme,
   Drawer,
+  DrawerContent,
   InputWrapper,
   List,
   MantineProvider,
@@ -82,7 +83,17 @@ export const theme = createTheme({
     Modal: Modal.extend({
       defaultProps: { centered: true, size: 'lg', overlayProps: { backgroundOpacity: 0.35 }, transitionProps: { duration: 120 } }
     }),
-    Drawer: Drawer.extend({ defaultProps: { position: 'right', size: 'lg', padding: 'lg', transitionProps: { duration: 120 } } }),
+    Drawer: Drawer.extend({
+      defaultProps: { position: 'right', size: 'lg', padding: 'lg', transitionProps: { duration: 120 } },
+      // Drawer has no body-only scrolling prop; keep Paper padding and scrolled evidence out of its header.
+      // See the drawer containment exception in docs/ui.md.
+      styles: {
+        content: { display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+        header: { flexShrink: 0 },
+        body: { flex: 1, minHeight: 0, overflow: 'auto' }
+      }
+    }),
+    DrawerContent: DrawerContent.extend({ defaultProps: { p: 0 } }),
     Table: Table.extend({ defaultProps: { verticalSpacing: 'sm', horizontalSpacing: 'sm', highlightOnHover: true, tabularNums: true } }),
     Tooltip: Tooltip.extend({ defaultProps: { openDelay: 300, withArrow: true } })
   }

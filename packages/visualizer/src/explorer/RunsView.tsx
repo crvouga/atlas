@@ -198,11 +198,8 @@ function RunVideos({ run, verification }: { run: RunSummary; verification: RunVe
 /** The Has video filter: a toggle named by its meaning and the count of what it matches. */
 function HasVideo({ count, pressed, noun, onToggle }: { count: number; pressed: boolean; noun: [string, string]; onToggle: () => void }) {
   return (
-    <Button type="button" aria-pressed={pressed} aria-label={`Has video: ${plural(count, noun[0], noun[1])}`} onClick={onToggle} variant="light" leftSection={<IconVideo size={16} aria-hidden="true" />}>
+    <Button type="button" aria-pressed={pressed} aria-label={`Has video: ${plural(count, noun[0], noun[1])}`} onClick={onToggle} variant="light" leftSection={<IconVideo size={16} aria-hidden="true" />} rightSection={<Text span inherit>{count}</Text>}>
       Has video{' '}
-      <Text span inherit>
-        {count}
-      </Text>
     </Button>
   );
 }
@@ -678,11 +675,9 @@ function RunDetailView({ runKey }: { runKey: string }) {
             data-status={filter.id || undefined}
             onClick={() => setStatus(filter.id)}
             variant="light"
+            rightSection={<Text span inherit>{filter.id ? narrowedResults.filter((result) => result.status === filter.id).length : narrowedResults.length}</Text>}
           >
             {filter.label}{' '}
-            <Text span inherit>
-              {filter.id ? narrowedResults.filter((result) => result.status === filter.id).length : narrowedResults.length}
-            </Text>
           </Button>
         ))}
       </Flex>

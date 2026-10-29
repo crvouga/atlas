@@ -173,6 +173,25 @@ surface, producer and the attributes your collectors declare. The address holds 
 profiles side by side with the declared facts, the failure reason, and for each picture the layer, backend, producer, shard, commit
 and time. *Download the manifest* saves the filtered catalog as JSON.
 
+Use **Search catalog** for free words, facets and sorting. Press Enter or Tab to turn words into chips;
+each term must match, so `appointment` plus `error` finds appointment-related error screens. Search handles
+close spellings, word forms and common related wording such as booking/appointment, unavailable/error and
+preferences/settings. It searches recorded names and facts, including the declared UI state kind.
+An error screen can have a successful capture: `kind:error` selects the product's error states, while
+`coverage:failed` selects captures that failed.
+
+Suggestions offer the catalog's own values, including profiles, routes, attributes and UI kinds. Type
+`area:`, `kind:`, `profile:` or another facet name to explore its values; quote values with spaces
+(`area:"Patient visits"`). Type `sort:` to choose best matches, newest/oldest captures, title order or
+states needing attention. Arrow keys choose a suggestion, Enter/Tab adds it, Escape dismisses suggestions,
+and Backspace in an empty field reopens the last chip for editing. Every chip also has a named,
+keyboard-focusable remove button. The list previews drafts as you type, and committed chips are restored
+from the address, including when returning from an open state or comparison. Values of the same facet are
+alternatives; different facets and free terms combine with AND.
+
+Rich viewer expressions use the optional `find` URL parameter; existing `q` and facet links still work.
+The HTTP API and CLI continue to use their documented literal word and exact facet filters.
+
 ```sh
 curl "$ATLAS_SERVER_URL/api/reports/ui-catalog?coverage=failed,missing&profile=…"   # JSON; add format=markdown for text
 ```
