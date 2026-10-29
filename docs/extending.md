@@ -34,7 +34,7 @@ carry any of these. Every one is optional.
 | `scope{}` | What the evidence does and does not show: surface, device kind, synthetic data, scripted dependencies, audio, pacing, what was asserted and its limits. Unknown when absent. See [Evidence scope](rich-evidence.md#evidence-scope). |
 | `links[]` | Where to read more: the CI run, the issue, the trace client. |
 | `extensions{}` | Structured data of your own or a tool's, under a name you own. |
-| `measurements[]` | Numbers, with units and an allowance (already part of the contract). |
+| `measurements[]` | Numbers, with units and an allowance (already part of the contract). A measurement of `kind` `product-latency` names a user-visible response time between two events; see [Product latency](rich-evidence.md#product-latency). |
 
 An attachment may carry its own `tags[]` (`demo`): shown as `#demo` and searchable; see
 [Tagging artifacts and demos](rich-evidence.md#tagging-artifacts-and-demos).
