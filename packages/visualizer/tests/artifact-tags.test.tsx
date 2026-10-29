@@ -43,6 +43,8 @@ async function open(node: { fetch: (request: Request) => Promise<Response> }) {
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: {}, specs: { 'lists/add.feature': FEATURE }, node });
   await atlas.sees('1 passed');
   await atlas.click('button', 'Add an item');
+  // The row opens on Watch when there is a recording; the attachments are the technical record.
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('tour.webm');
   return atlas;
 }

@@ -45,6 +45,8 @@ async function open() {
   atlas = await openAtlas({ at: '/specs/gherkin?spec=lists/add.feature', deps: {}, specs: { 'lists/add.feature': FEATURE }, node });
   await atlas.sees('1 passed');
   await atlas.click('button', 'Add an item');
+  // The row opens on Watch (one recording, with its scope); the whole gallery is the technical record.
+  await atlas.click('[role="tab"]', 'Inspect');
   await atlas.sees('script.webm');
   return { view: atlas, node };
 }
