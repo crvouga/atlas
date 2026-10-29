@@ -91,6 +91,14 @@ when Watch is on screen.
   what they know with labels: `build`, `platform`, and `applies-to` with `applies-to-by` (the policy that asserts the
   evidence still holds for those builds; without it the assertion is refused). The "Stale or unverified" filter
   (`evidence=stale`) lists every behavior whose evidence does not apply, including those with none.
+- The test explorer makes the same reading of every test from the catalog (`explorer/applicability.ts`): the catalog
+  carries the spec's fingerprint now (`spec.fingerprint`) and, on each current result, `specRevision`, `freshness` and
+  `provenance` (the labels above), all optional. The same address names (`release`, `releaseSha`, `releasePlatform`,
+  `evidence=stale`) give the "Stale or unverified" button, the "Stale evidence first" sort, a verdict badge on rows
+  (stale always; unknown or none when a release is named or evidence is filtered or sorted), and the summary in test
+  detail. Layers carry no publication time, because a layer's id is the digest of its content and a time of upload in
+  it would make a retried publish a different layer: a producer that knows states `published-at` and `enriched-at`
+  labels, shown apart from "Checks ran", which alone is the age.
 - A recording is always labelled illustrative: it shows one run and does not approve a behavior for production.
   `demo`/`representative` tags only add a "Representative demo" label.
 - The spec index searches titles, paths and declared domains, and can group by the domain from spec metadata (specs with

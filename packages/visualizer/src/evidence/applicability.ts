@@ -13,9 +13,16 @@
  * the app under test was), `platform` (the client family; the environment when absent), `applies-to` (a comma
  * separated list of builds or commits the producer asserts the evidence is still good for) and `applies-to-by`
  * (the policy, person or tool that makes the assertion). An assertion without `applies-to-by` is not accepted.
+ * `published-at` and `enriched-at` say when the evidence was published or enriched (epoch milliseconds or an ISO date).
+ * Layers carry no publication time of their own, because a layer's id is the digest of its content and a time of
+ * upload in it would make a retried publish a different layer; a producer that knows states it as a label. It is shown
+ * apart from when the checks ran and is never the age of the evidence.
+ *
+ * The same reading serves a feature page (from the report's results, {@link assessBehavior}) and the test explorer (from
+ * the catalog's current results, {@link assessTest}).
  */
-import type { LayerHeader } from '@crvouga/atlas/reports/evidence-types';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
+import type { TestResultEntry, TestSummary } from '@crvouga/atlas/reports/test-catalog';
 
 import { compareRevisions, type Behavior, type Revision, type RevisionSource } from './behavior';
 
@@ -58,6 +65,10 @@ export const VERDICTS: Readonly<Record<Verdict, { readonly label: string; readon
 export type EvidenceFacts = {
   /** When the checks ran, epoch milliseconds. The age of evidence counts from here, not from publication or enrichment. */
   readonly executedAtMs: number;
+  /** When the evidence was published, from the `published-at` label, or null when the producer did not say. Never the age of the evidence. */
+  readonly publishedAtMs: number | null;
+  /** When the evidence was enriched (annotated, captioned, re-indexed), from the `enriched-at` label, or null. Never the age of the evidence. */
+  readonly enrichedAtMs: number | null;
   readonly build: string | null;
   readonly sha: string | null;
   /** The `platform` label, else the layer's environment. */
@@ -83,8 +94,10 @@ export type Assessment = {
   readonly assertion: Assertion | null;
   /** Sentences saying why, in the order a reader needs them. Empty when there is nothing to add. */
   readonly reasons: readonly string[];
-  /** The result this reading is of, or null when there is none. */
+  /** The result this reading is of, or null when there is none (or it was read from a test catalog, which holds its layer id instead). */
   readonly result: EvidenceResult | null;
+  /** The id of the layer that recorded the result this reading is of, or null when there is none. */
+  readonly layer: string | null;
   /** How many other completed results were read and set aside for this one. */
   readonly others: number;
 };
@@ -107,28 +120,69 @@ function labelsOf(result: EvidenceResult): Readonly<Record<string, string>> {
   return { ...(result.layer.evidence?.labels ?? {}), ...(result.row.evidence?.labels ?? {}) };
 }
 
-/** What a result's layer and labels say it ran against. */
-export function evidenceFacts(result: EvidenceResult): EvidenceFacts {
-  const labels = labelsOf(result);
-  const layer: LayerHeader = result.layer;
+/** A time a label states: epoch milliseconds or an ISO date. Anything else is no time. */
+function labelTime(value: string | undefined): number | null {
+  const text = value?.trim();
+  if (!text) return null;
+  const at = /^\d{9,}$/.test(text) ? Number(text) : /^\d{4}-\d{2}-\d{2}/.test(text) ? Date.parse(text) : Number.NaN;
+  return Number.isFinite(at) && at > 0 ? at : null;
+}
+
+/** What one result recorded about itself, whether read from the report or from the test catalog. */
+type Recorded = {
+  readonly labels: Readonly<Record<string, string>>;
+  readonly executedAtMs: number;
+  readonly sha: string | null;
+  readonly environment: string | null;
+  readonly freshness: 'modified' | 'unknown' | null;
+};
+
+function factsFrom(recorded: Recorded): EvidenceFacts {
+  const { labels } = recorded;
   return {
-    executedAtMs: layer.recordedAtMs,
+    executedAtMs: recorded.executedAtMs,
+    publishedAtMs: labelTime(labels['published-at']),
+    enrichedAtMs: labelTime(labels['enriched-at']),
     build: labels.build?.trim() || null,
-    sha: layer.sha,
-    platform: labels.platform?.trim() || layer.environment,
-    environment: layer.environment,
-    provenance: layer.freshness ?? null
+    sha: recorded.sha,
+    platform: labels.platform?.trim() || recorded.environment,
+    environment: recorded.environment,
+    provenance: recorded.freshness
   };
 }
 
-/** The assertion a result's labels make, or null when it makes none. */
-export function assertionOf(result: EvidenceResult): Assertion | null {
-  const labels = labelsOf(result);
+function assertionFrom(labels: Readonly<Record<string, string>>): Assertion | null {
   const builds = (labels['applies-to'] ?? '')
     .split(',')
     .map((each) => each.trim())
     .filter(Boolean);
   return builds.length ? { builds, by: labels['applies-to-by']?.trim() || null } : null;
+}
+
+const ofResult = (result: EvidenceResult): Recorded => ({
+  labels: labelsOf(result),
+  executedAtMs: result.layer.recordedAtMs,
+  sha: result.layer.sha,
+  environment: result.layer.environment,
+  freshness: result.layer.freshness ?? null
+});
+
+const ofOutcome = (outcome: TestResultEntry): Recorded => ({
+  labels: outcome.provenance ?? {},
+  executedAtMs: outcome.at,
+  sha: outcome.sha,
+  environment: outcome.environment,
+  freshness: outcome.freshness ?? null
+});
+
+/** What a result's layer and labels say it ran against. */
+export function evidenceFacts(result: EvidenceResult): EvidenceFacts {
+  return factsFrom(ofResult(result));
+}
+
+/** The assertion a result's labels make, or null when it makes none. */
+export function assertionOf(result: EvidenceResult): Assertion | null {
+  return assertionFrom(labelsOf(result));
 }
 
 const RANK: Readonly<Record<Verdict, number>> = { applies: 0, unknown: 1, stale: 2, none: 3 };
@@ -193,11 +247,10 @@ function matchRelease(facts: EvidenceFacts, release: ReleaseIdentity, promise: R
   return { match: 'exact', reasons };
 }
 
-/** One result against the promise and the release. */
-export function assessResult(result: EvidenceResult, revisions: RevisionSource, release: ReleaseIdentity): Assessment {
-  const facts = evidenceFacts(result);
-  const revision = compareRevisions(revisions.current, revisions.recorded(result.layer.id));
-  const assertion = assertionOf(result);
+/** One recorded result against the promise (current and recorded fingerprints) and the release. */
+function read(recorded: Recorded, revision: Revision, release: ReleaseIdentity, source: { result: EvidenceResult | null; layer: string }): Assessment {
+  const facts = factsFrom(recorded);
+  const assertion = assertionFrom(recorded.labels);
   const { match, reasons } = matchRelease(facts, release, revision.match, assertion);
   const promiseReason =
     revision.match === 'different'
@@ -214,9 +267,34 @@ export function assessResult(result: EvidenceResult, revisions: RevisionSource, 
     facts,
     assertion,
     reasons: [...(promiseReason ? [promiseReason] : []), ...reasons],
-    result,
+    result: source.result,
+    layer: source.layer,
     others: 0
   };
+}
+
+/** One result against the promise and the release. */
+export function assessResult(result: EvidenceResult, revisions: RevisionSource, release: ReleaseIdentity): Assessment {
+  const revision = compareRevisions(revisions.current, revisions.recorded(result.layer.id));
+  return read(ofResult(result), revision, release, { result, layer: result.layer.id });
+}
+
+const NOTHING = (release: ReleaseIdentity): Assessment => ({
+  verdict: 'none',
+  promise: 'unknown',
+  release: hasRelease(release) ? 'unknown' : 'not-selected',
+  facts: null,
+  assertion: null,
+  reasons: [],
+  result: null,
+  layer: null,
+  others: 0
+});
+
+/** The reading that best applies (applies, then unknown, then stale; the newest execution among equals), with how many were set aside. */
+function best(readings: Assessment[]): Assessment {
+  readings.sort((a, b) => RANK[a.verdict] - RANK[b.verdict] || b.facts!.executedAtMs - a.facts!.executedAtMs);
+  return { ...readings[0]!, others: readings.length - 1 };
 }
 
 /**
@@ -227,12 +305,29 @@ export function assessResult(result: EvidenceResult, revisions: RevisionSource, 
  */
 export function assessBehavior(behavior: Behavior, revisions: RevisionSource, release: ReleaseIdentity): Assessment {
   const completed = (behavior.slot?.outcomes ?? []).filter((result) => result.row.status === 'passed' || result.row.status === 'failed');
-  if (completed.length === 0) {
-    return { verdict: 'none', promise: 'unknown', release: hasRelease(release) ? 'unknown' : 'not-selected', facts: null, assertion: null, reasons: [], result: null, others: 0 };
-  }
-  const readings = completed.map((result) => assessResult(result, revisions, release));
-  readings.sort((a, b) => RANK[a.verdict] - RANK[b.verdict] || b.facts!.executedAtMs - a.facts!.executedAtMs);
-  return { ...readings[0]!, others: readings.length - 1 };
+  if (completed.length === 0) return NOTHING(release);
+  return best(completed.map((result) => assessResult(result, revisions, release)));
+}
+
+/**
+ * The reading of a test of the catalog from its current results: the spec's fingerprint now (`test.spec.fingerprint`) against
+ * the one each result recorded (`specRevision`), and the build, commit, platform and provenance each states. The same
+ * rules as {@link assessBehavior}; a result without a recorded revision, or a test whose spec has no fingerprint, is unknown.
+ * Only completed results (passed or failed) are read; a test with none has `none`. Statuses are unchanged by this.
+ */
+export function assessTest(test: TestSummary, release: ReleaseIdentity): Assessment {
+  const completed = test.outcomes.filter((outcome) => outcome.status === 'passed' || outcome.status === 'failed');
+  if (completed.length === 0) return NOTHING(release);
+  const current = test.spec?.fingerprint ?? null;
+  return best(completed.map((outcome) => read(ofOutcome(outcome), compareRevisions(current, outcome.specRevision), release, { result: null, layer: outcome.layer })));
+}
+
+/**
+ * The order the explorer lists tests in when sorted by evidence: what needs a look first (stale, then unknown, then
+ * without evidence), evidence that applies last. A rank for sorting only; it is never shown as a status.
+ */
+export function attentionRank(assessment: Assessment): number {
+  return { stale: 0, unknown: 1, none: 2, applies: 3 }[assessment.verdict];
 }
 
 /** Whether a behavior belongs under "stale or unverified": anything but evidence that applies. */
