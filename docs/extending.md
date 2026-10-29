@@ -242,6 +242,7 @@ Annotation `type`: `note`, `warning`, `deprecation`, `issue`, `accessibility`, `
 | A kind of file Atlas has never seen | Attach it with its media type and a `role`. It is stored and offered for download today. |
 | Structured data of your own | Put it in `extensions` under a name you own. It is kept, and shown as raw data. |
 | A new annotation type, role or step kind | Use it. Open vocabularies need no registration. |
+| An automated reviewer's opinion of a captured UI | A [critique](critics.md): a part of kind `critique` with the `atlas.critique` extension. It is never counted and never gates. |
 | Something that should be shown well | Ask for a renderer (below). |
 | A field every tool should have | Open an issue. It is added as an optional field, and the rules above guarantee nothing breaks. |
 

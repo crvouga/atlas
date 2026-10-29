@@ -205,7 +205,7 @@ is said in words and the server does not start. The file has a published
 | How often (seconds) the backends are looked at for layers written by something else | `refreshSeconds` | `--refresh <seconds>` | `ATLAS_REFRESH_SECONDS` | `10` |
 | Let anyone look, not upload | `auth.anonymousRead` | `--anonymous-read` | `ATLAS_ANONYMOUS_READ` | no |
 | Listen publicly with no tokens (something in front signs people in) | `auth.insecure` | `--insecure` | `ATLAS_INSECURE` | no |
-| The admin token (also `ATLAS_PUBLISH_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
+| The admin token (also `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN` and `ATLAS_READ_TOKEN` for the other roles, or `auth.tokens` in the file) | `auth.tokens` |  | `ATLAS_TOKEN` | none: the server is open and listens on this machine only |
 | The configuration file | `(the file itself)` | `--config <file>` | `ATLAS_CONFIG` | `./atlas.server.json` when it exists |
 | Largest uploaded object in MiB | `limits.maxObjectMiB` |  | `ATLAS_MAX_OBJECT_MIB` | `256` |
 | Largest JSON upload in MiB | `limits.maxJsonMiB` |  | `ATLAS_MAX_JSON_MIB` | `32` |
@@ -238,16 +238,18 @@ backend in the client and `/readyz`, and recovers by itself.
 | Role | May |
 | --- | --- |
 | `read` | look: the client, the report, `/api/status` |
+| `critic` | also publish [critiques](critics.md#authentication-and-authorization) and nothing else: blobs and layers whose producer is `critic.<name>` and whose parts are all of kind `critique`. It cannot post test results, start live runs or change settings |
 | `publish` | also upload layers, specs and runs, and remove the scratch objects `atlas report doctor` writes |
 | `admin` | all server operations |
 
 Tokens are at least 12 characters (`openssl rand -hex 24`) and different from one another. Give them as
-`ATLAS_TOKEN` (admin), `ATLAS_PUBLISH_TOKEN`, `ATLAS_READ_TOKEN`, or under `auth.tokens` in the file, preferably
+`ATLAS_TOKEN` (admin), `ATLAS_PUBLISH_TOKEN`, `ATLAS_CRITIC_TOKEN`, `ATLAS_READ_TOKEN`, or under `auth.tokens` in the file, preferably
 with `tokenEnv` so the file holds no secret.
 
 - **Sending a token:** `Authorization: Bearer <token>`. A browser's sign-in box also works for *looking* (any
   user name, the token as the password). **Uploading needs the Bearer header, never the sign-in box**: a browser
   sends those credentials by itself to any page that asks, which would let another site upload with them.
+- **Run critics against a server with tokens.** With no tokens every caller is an administrator, a critic included.
 - **No tokens** means open, and then the server refuses to listen beyond this machine unless told
   `--insecure` (for when a proxy in front does the signing in).
 - `/healthz` and `/readyz` never need a token, so a load balancer can use them.
@@ -459,8 +461,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/store/{key}` | read | Read an object. |
 | `HEAD /api/store/{key}` | read | Does an object exist. |
 | `HEAD /api/projects/{project}/store/{key}` | read | Does an object exist. |
-| `PUT /api/store/{key}` | publish | Upload an object. |
-| `PUT /api/projects/{project}/store/{key}` | publish | Upload an object. |
+| `PUT /api/store/{key}` | critic | Upload an object. |
+| `PUT /api/projects/{project}/store/{key}` | critic | Upload an object. |
 | `DELETE /api/store/{key}` | publish | Remove a scratch object. |
 | `DELETE /api/projects/{project}/store/{key}` | publish | Remove a scratch object. |
 | `GET /api/reports/tests` | read | Every test, with insights, facets and history statistics. |

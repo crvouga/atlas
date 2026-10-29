@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "subject": { "entryKey": "checkout/payment-sheet", "imageSha256": "0000000000000000000000000000000000000000000000000000000000000001", "state": "overlay" },
+  "critic": { "name": "vision-llm", "kind": "llm", "version": "1.0.0" },
+  "model": { "id": "example-model-1", "provider": "example" },
+  "parameters": { "temperature": 0, "rubric": "1111111111111111111111111111111111111111111111111111111111111111" },
+  "verdict": {
+    "score": 0.62, "scale": "0..1, higher is better", "label": "needs-polish", "confidence": 0.7,
+    "relative": { "stateKind": "overlay", "percentile": 18.5, "sampleSize": 27, "previousScore": 0.7, "delta": -0.08 }
+  },
+  "findings": [
+    {
+      "id": "f1", "category": "spacing", "severity": "minor", "confidence": 0.7,
+      "region": { "unit": "px", "x": 24, "y": 612, "w": 342, "h": 48 },
+      "rationale": "Label touches both edges of the button.",
+      "suggestion": "Increase horizontal padding.",
+      "com.example.future": { "kept": true }
+    },
+    { "id": "f2", "category": "vibes", "severity": "catastrophic-but-fun", "rationale": "A category and severity nobody has heard of." }
+  ],
+  "usage": { "inputTokens": 1890, "outputTokens": 240, "latencyMs": 3100, "costUsd": 0.004 },
+  "com.example.future": "kept"
+}

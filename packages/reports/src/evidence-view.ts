@@ -10,7 +10,7 @@
  */
 import type { EvidenceStatus } from './explorer-types';
 import type { LayerEvidence, LayerHeader, LayerRow, StatusCounts } from './evidence-types';
-import { emptyCounts, isDiagnosticKind, slotKey, type CombinedEvidence, type EvidenceResult } from './layer-merge';
+import { emptyCounts, isDiagnosticKind, isOpinionKind, slotKey, type CombinedEvidence, type EvidenceResult } from './layer-merge';
 
 const WORST = { passed: 0, 'not-run': 1, running: 2, failed: 3 } as const;
 
@@ -46,11 +46,13 @@ function newestFirst(a: EvidenceResult, b: EvidenceResult): number {
 /**
  * Groups the combined results (the winners of the slots) by check, in the order the checks were first seen.
  * A check's status is the worst of its non-diagnostic results; if it has only diagnostics (timings), those are its
- * outcomes. The title and id shown are the newest result's.
+ * outcomes. The title and id shown are the newest result's. Opinions (parts of kind `critique`, see `isOpinionKind`) are
+ * not checks and are left out.
  */
 export function checkSlots(results: readonly EvidenceResult[]): CheckSlot[] {
   const groups = new Map<string, EvidenceResult[]>();
   for (const result of results) {
+    if (isOpinionKind(result.row.kind)) continue;
     const group = groups.get(result.slot);
     if (group) group.push(result);
     else groups.set(result.slot, [result]);

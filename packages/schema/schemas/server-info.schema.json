@@ -18,6 +18,7 @@
       "type": "string",
       "enum": [
         "read",
+        "critic",
         "publish",
         "admin"
       ],
