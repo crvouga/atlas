@@ -22,6 +22,7 @@ import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { runName } from './parts';
 import { entriesFromArtifacts } from './playlist-entries';
 import { WatchPlaylist } from './playlist';
+import { RecordingTextSearch } from './RecordingTextSearch';
 import { filtered, filterOf, NO_FILTERS } from './search';
 
 const ARTIFACT_ROWS = 50;
@@ -87,6 +88,7 @@ export function ArtifactsView() {
         </Button>
       )}
       {watching && <WatchPlaylist entries={entries} total={list.total} onClose={() => setWatching(false)} />}
+      {list.results.length > 0 && <RecordingTextSearch entries={entries} total={list.total} />}
       {list.results.length > 0 && (
         <Table.ScrollContainer minWidth={700}>
           <Table data-artifacts>

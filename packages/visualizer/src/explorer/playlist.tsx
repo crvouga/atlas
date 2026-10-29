@@ -28,6 +28,7 @@ import { ScopeNotice } from '../evidence/evidence-scope';
 import { duration, exactTime, plural, statusWord } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { patched } from './navigate';
+import { clock, TEXT_KIND_WORD, type RecordingFocus } from './recording-text';
 import { playableVideo, playlistCounts, RECORDING_STATE_TEXT, recordingState, stepFrom, type PlaylistEntry } from './playlist-entries';
 
 /** Entries listed before "more"; the selected entry is always listed. */
@@ -37,16 +38,29 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 /** Step names are shown with their Gherkin keyword when they have one. */
 const KEYWORDS = new Set(['given', 'when', 'then', 'and', 'but']);
 
-/** The evidence of one entry's check, read when the entry is on screen. */
-function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
-  return useQuery({
-    queryKey: ['evidence-detail', entry.backend ?? '', entry.layer, entry.kind ?? '', entry.check],
-    queryFn: ({ signal }) =>
+/** Where the evidence of an entry's check is read from, or null when the entry names no layer that can be read. */
+export function entryDetailQuery(entry: PlaylistEntry) {
+  if (entry.backend === null || !/^[0-9a-f]{64}$/.test(entry.layer)) return null;
+  const backend = entry.backend;
+  return {
+    queryKey: ['evidence-detail', backend, entry.layer, entry.kind ?? '', entry.check],
+    queryFn: ({ signal }: { signal?: AbortSignal }) =>
       reportJson<CheckDetail>(
-        `/evidence/detail/${encodeURIComponent(entry.backend!)}/${encodeURIComponent(entry.layer)}?check=${encodeURIComponent(entry.check)}${entry.kind ? `&kind=${encodeURIComponent(entry.kind)}` : ''}`,
+        `/evidence/detail/${encodeURIComponent(backend)}/${encodeURIComponent(entry.layer)}?check=${encodeURIComponent(entry.check)}${entry.kind ? `&kind=${encodeURIComponent(entry.kind)}` : ''}`,
         signal
       ),
-    enabled: enabled && entry.backend !== null && /^[0-9a-f]{64}$/.test(entry.layer),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false
+  };
+}
+
+/** The evidence of one entry's check, read when the entry is on screen. */
+function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
+  const query = entryDetailQuery(entry);
+  return useQuery({
+    queryKey: query?.queryKey ?? ['evidence-detail', '', entry.layer, entry.kind ?? '', entry.check],
+    queryFn: query?.queryFn ?? (() => Promise.reject(new Error('no evidence to read'))),
+    enabled: enabled && query !== null,
     staleTime: Number.POSITIVE_INFINITY,
     retry: false
   });
@@ -111,11 +125,39 @@ function Facts({ entry }: { entry: PlaylistEntry }) {
   );
 }
 
+/** Where a search result opened: which words, from what, in which attempt, and whether the player could go to the time. */
+function FoundMoment({ focus, seek }: { focus: RecordingFocus; seek: 'applied' | 'unavailable' | null }) {
+  const timed = focus.startMs !== null && focus.endMs !== null;
+  return (
+    <Alert color="blue" variant="light" title="Found in this recording" role="status" data-found-moment>
+      <Stack gap="xs">
+        <Text component="div">
+          {TEXT_KIND_WORD[focus.kind]}
+          {focus.attemptLabel ? ` · ${focus.attemptLabel}` : ''}
+          {timed ? ` · ${clock(focus.startMs!)}–${clock(focus.endMs!)}` : ''}
+        </Text>
+        <Text component="div">Indexed text: {focus.text}</Text>
+        {focus.generated && (
+          <Text component="div" c="dimmed">
+            Generated text; it may contain errors.
+          </Text>
+        )}
+        {seek === 'unavailable' && (
+          <Text component="div" data-seek-unavailable>
+            Seeking is unavailable: {focus.startMs === null ? 'the text has no usable time' : 'the recording it belongs to or its time could not be reached'}, so the recording is opened at its start and not at a guessed moment.
+          </Text>
+        )}
+      </Stack>
+    </Alert>
+  );
+}
+
 /** The one player. It is keyed by its entry, so a new clip is a fresh element and the previous one is gone. */
 function Clip({
   entry,
   speed,
   autoPlay,
+  focus,
   positions,
   onEnded,
   onFailed,
@@ -125,6 +167,8 @@ function Clip({
   entry: PlaylistEntry;
   speed: number;
   autoPlay: boolean;
+  /** A moment found by searching inside recordings: its video is selected and, when its time is usable, played from there. */
+  focus: RecordingFocus | null;
   positions: Map<string, number>;
   onEnded: () => PlaylistEntry | null;
   onFailed: (id: string) => void;
@@ -137,12 +181,12 @@ function Clip({
   const [failed, setFailed] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [seek, setSeek] = useState<'applied' | 'unavailable' | null>(null);
   const chosen = playableVideo(entry);
   const attachments = useMemo(() => (detail.data ? everyAttachment(detail.data.check) : []), [detail.data]);
-  const movie = useMemo(() => {
-    const videos = attachments.filter(isVideoAttachment);
-    return videos.find((item) => attachmentIdentity(item) === chosen?.recording) ?? videos[0];
-  }, [attachments, chosen]);
+  const videos = useMemo(() => attachments.filter(isVideoAttachment), [attachments]);
+  const found = focus?.recording ? videos.find((item) => attachmentIdentity(item) === focus.recording) : undefined;
+  const movie = useMemo(() => found ?? videos.find((item) => attachmentIdentity(item) === chosen?.recording) ?? videos[0], [found, videos, chosen]);
   const captions = useMemo(
     () => attachments.filter((item) => (item.contentType ?? contentTypeOf(item.name)).toLowerCase().startsWith('text/vtt')),
     [attachments]
@@ -208,6 +252,7 @@ function Clip({
   } else {
     body = (
       <Stack gap="xs">
+        {focus && <FoundMoment focus={focus} seek={seek} />}
         <ScopeNotice scope={chosen?.scope} name={movie!.name} />
         <Box
           key={attempt}
@@ -224,6 +269,14 @@ function Clip({
           onLoadedMetadata={() => {
             const element = video.current!;
             element.playbackRate = speed;
+            if (focus) {
+              // Seek only to a time the track gave and the recording can reach; otherwise open it at the start and say so.
+              const reachable = (found !== undefined || !focus.recording) && focus.startMs !== null && (!Number.isFinite(element.duration) || focus.startMs / 1000 < element.duration);
+              if (reachable) element.currentTime = focus.startMs! / 1000;
+              setSeek(reachable ? 'applied' : 'unavailable');
+              if (autoPlay) play();
+              return;
+            }
             const saved = positions.get(entry.id);
             if (saved !== undefined && saved < (element.duration || Number.POSITIVE_INFINITY)) element.currentTime = saved;
             if (autoPlay) play();
@@ -309,11 +362,14 @@ function Clip({
 
 /**
  * The watch session for `entries`: opens as a modal over the explorer. `total` is how many results matched when the list
- * holds only the newest of them, so the session says it is not the whole set. Closing it discards positions.
+ * holds only the newest of them, so the session says it is not the whole set. `focus` opens it on one found moment: that
+ * result, that attempt's video and, when the time is usable, that time. Closing it discards positions.
  */
-export function WatchPlaylist({ entries, total, onClose }: { entries: readonly PlaylistEntry[]; total?: number; onClose: () => void }) {
+export function WatchPlaylist({ entries, total, focus, onClose }: { entries: readonly PlaylistEntry[]; total?: number; focus?: RecordingFocus; onClose: () => void }) {
   const first = entries.find((entry) => recordingState(entry) === 'playable') ?? entries[0];
-  const [chosen, setChosen] = useState<string | null>(first?.id ?? null);
+  const [chosen, setChosen] = useState<string | null>(focus && entries.some((entry) => entry.id === focus.entryId) ? focus.entryId : (first?.id ?? null));
+  // Selecting anything else leaves the found moment behind: it describes one video and one time.
+  const [moment, setMoment] = useState<RecordingFocus | null>(focus ?? null);
   const [autoPlay, setAutoPlay] = useState(false);
   const [speed, setSpeed] = useState<number>(1);
   const [advance, setAdvance] = useState(true);
@@ -327,6 +383,7 @@ export function WatchPlaylist({ entries, total, onClose }: { entries: readonly P
   const next = stepFrom(entries, active?.id ?? null, 1, repeat);
   const previous = stepFrom(entries, active?.id ?? null, -1, repeat);
   const select = (entry: PlaylistEntry, play: boolean) => {
+    setMoment(null);
     setAutoPlay(play);
     setChosen(entry.id);
   };
@@ -378,6 +435,7 @@ export function WatchPlaylist({ entries, total, onClose }: { entries: readonly P
                 entry={active}
                 speed={speed}
                 autoPlay={autoPlay}
+                focus={moment && moment.entryId === active.id ? moment : null}
                 positions={positions.current}
                 onEnded={() => {
                   const target = advance ? stepFrom(entries, active.id, 1, repeat) : repeat ? active : null;
