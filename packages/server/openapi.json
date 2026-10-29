@@ -4802,6 +4802,942 @@
         }
       }
     },
+    "/api/reports/review-collections": {
+      "get": {
+        "operationId": "listReviewCollections",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Review collections: curated sets of recordings, newest first",
+        "description": "The newest revision of every review collection, in brief: id, revision and how many exist, title, purpose, audience, tags, how many entries and gaps it has, who published it and when. A collection is curation kept beside the report; it is not a layer, a check or a run, and it has no status. Open one with `/api/reports/review-collections/detail?id=`. Its share URL is the viewer's `?tab=collections&collection=<id>` and needs the same read access as the rest of the report.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The collections.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCollectionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "publishReviewCollection",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Publish an immutable review collection (or a new revision of one)",
+        "description": "Freezes an ordered set of references to recorded results as one named collection, recorded under the name of the publish (or admin) token that sends it. Take each entry's `layer` and `check` (and `kind`) from `GET /api/reports/artifacts`, and optionally one of its recordings (`videos[].recording`). The server resolves every entry to the result the report holds and records what the report says about it (status, time, run, commit, environment, tries, videos): the request does not claim them. An entry it cannot resolve refuses the whole request (`422`, naming the entry). The order is yours and is never re-sorted; failed, rejected and incomplete results stay in it beside a later passing replay.\n\nEntries from different runs are never one execution: each keeps its own layer, run and status. A collection has no status of its own, adds no check and cannot change any result or winner. A revision is immutable. To change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest revision (`409` otherwise); the earlier ones stay readable. Notes and reviewed marks are separate (`/reviews`). A reader-only token, a browser sign-in box and an anonymous reader are refused; nothing is shared publicly by default.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The title, optional purpose, audience and tags, the ordered entries, optional gaps, and `basedOn` for a new revision. At most 500 entries and 100 gaps.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCollectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The recorded revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`basedOn` names no collection.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`basedOn.revision` is not the newest.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a collection, or an entry the report does not hold.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/review-collections": {
+      "get": {
+        "operationId": "listReviewCollectionsForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Review collections: curated sets of recordings, newest first",
+        "description": "The newest revision of every review collection, in brief: id, revision and how many exist, title, purpose, audience, tags, how many entries and gaps it has, who published it and when. A collection is curation kept beside the report; it is not a layer, a check or a run, and it has no status. Open one with `/api/reports/review-collections/detail?id=`. Its share URL is the viewer's `?tab=collections&collection=<id>` and needs the same read access as the rest of the report.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The collections.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCollectionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "publishReviewCollectionForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Publish an immutable review collection (or a new revision of one)",
+        "description": "Freezes an ordered set of references to recorded results as one named collection, recorded under the name of the publish (or admin) token that sends it. Take each entry's `layer` and `check` (and `kind`) from `GET /api/reports/artifacts`, and optionally one of its recordings (`videos[].recording`). The server resolves every entry to the result the report holds and records what the report says about it (status, time, run, commit, environment, tries, videos): the request does not claim them. An entry it cannot resolve refuses the whole request (`422`, naming the entry). The order is yours and is never re-sorted; failed, rejected and incomplete results stay in it beside a later passing replay.\n\nEntries from different runs are never one execution: each keeps its own layer, run and status. A collection has no status of its own, adds no check and cannot change any result or winner. A revision is immutable. To change a collection, publish a new revision with `basedOn: { id, revision }` naming the newest revision (`409` otherwise); the earlier ones stay readable. Notes and reviewed marks are separate (`/reviews`). A reader-only token, a browser sign-in box and an anonymous reader are refused; nothing is shared publicly by default.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The title, optional purpose, audience and tags, the ordered entries, optional gaps, and `basedOn` for a new revision. At most 500 entries and 100 gaps.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCollectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The recorded revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`basedOn` names no collection.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`basedOn.revision` is not the newest.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a collection, or an entry the report does not hold.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/review-collections/detail": {
+      "get": {
+        "operationId": "getReviewCollection",
+        "tags": [
+          "Report"
+        ],
+        "summary": "One review collection revision with how its sources stand now",
+        "description": "The revision (the newest without `revision`), every revision number, the review notes and reviewed marks of that revision, and for each entry `availability`: `available` (its layer is held and the report lists the result), `unverified` (the layer is held but the report no longer lists the result or recording) or `unavailable` (the layer is gone, for example deleted by garbage collection), with the reason. An entry whose source is not available stays in its place with its frozen snapshot; it is never removed or replaced. Entries keep the status each layer recorded, with their own times, in the order the curator chose. A reviewed mark is curation: it changes no outcome and is not an approval.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "query",
+            "description": "A collection id from the list.",
+            "example": "rc-0123456789abcdef",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "revision",
+            "in": "query",
+            "description": "A revision number. Default: the newest.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCollectionDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No `id`, or a bad `revision`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such collection or revision.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/review-collections/detail": {
+      "get": {
+        "operationId": "getReviewCollectionForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "One review collection revision with how its sources stand now",
+        "description": "The revision (the newest without `revision`), every revision number, the review notes and reviewed marks of that revision, and for each entry `availability`: `available` (its layer is held and the report lists the result), `unverified` (the layer is held but the report no longer lists the result or recording) or `unavailable` (the layer is gone, for example deleted by garbage collection), with the reason. An entry whose source is not available stays in its place with its frozen snapshot; it is never removed or replaced. Entries keep the status each layer recorded, with their own times, in the order the curator chose. A reviewed mark is curation: it changes no outcome and is not an approval.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "id",
+            "in": "query",
+            "description": "A collection id from the list.",
+            "example": "rc-0123456789abcdef",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "revision",
+            "in": "query",
+            "description": "A revision number. Default: the newest.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCollectionDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No `id`, or a bad `revision`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such collection or revision.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/review-collections/reviews": {
+      "post": {
+        "operationId": "addReviewNote",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Add a note, a time-coded gap note or a reviewed mark to a collection entry",
+        "description": "Records one immutable entry, by the name of the publish (or admin) token and the server's time: a `note` or a `gap` (text required; with `entry` and optionally `timecodeMs`, a moment in that entry's recording), or a `reviewed` / `unreviewed` mark for one entry. It changes no check outcome, no layer, no collection revision and no report winner; a mark is not an acceptance sign-off. The notes of a revision are in its `detail`.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The collection and revision, optionally the entry, the kind and its text.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewNoteInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The recorded note.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewNote"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such collection or revision.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a note: missing text, an unknown entry, or a mark without an entry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/review-collections/reviews": {
+      "post": {
+        "operationId": "addReviewNoteForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Add a note, a time-coded gap note or a reviewed mark to a collection entry",
+        "description": "Records one immutable entry, by the name of the publish (or admin) token and the server's time: a `note` or a `gap` (text required; with `entry` and optionally `timecodeMs`, a moment in that entry's recording), or a `reviewed` / `unreviewed` mark for one entry. It changes no check outcome, no layer, no collection revision and no report winner; a mark is not an acceptance sign-off. The notes of a revision are in its `detail`.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The collection and revision, optionally the entry, the kind and its text.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewNoteInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The recorded note.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewNote"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such collection or revision.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a note: missing text, an unknown entry, or a mark without an entry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/review-collections/export": {
+      "get": {
+        "operationId": "exportReviewCollection",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Portable index (manifest) of one review collection revision",
+        "description": "A manifest an archive can be built from: the collection, each entry with its exact source (layer, check, kind, recording), the status and run it was recorded with, how it stands now, whether it is marked reviewed, and the files it references with their name as recorded, a safe name and path (`files/<position>-<safeName>`), and the recorded `sha256` when the report holds one (`null` is unknown, not verified). A source that cannot be read now is listed under `missing` and its files are marked `missing`; nothing is left out silently. The manifest contains no bytes; recordings are fetched from the attachment routes, which keep their own access control. Sent as an attachment.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "query",
+            "description": "A collection id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "revision",
+            "in": "query",
+            "description": "A revision number. Default: the newest.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The manifest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewManifest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No `id`, or a bad `revision`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such collection or revision.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/review-collections/export": {
+      "get": {
+        "operationId": "exportReviewCollectionForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Portable index (manifest) of one review collection revision",
+        "description": "A manifest an archive can be built from: the collection, each entry with its exact source (layer, check, kind, recording), the status and run it was recorded with, how it stands now, whether it is marked reviewed, and the files it references with their name as recorded, a safe name and path (`files/<position>-<safeName>`), and the recorded `sha256` when the report holds one (`null` is unknown, not verified). A source that cannot be read now is listed under `missing` and its files are marked `missing`; nothing is left out silently. The manifest contains no bytes; recordings are fetched from the attachment routes, which keep their own access control. Sent as an attachment.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "id",
+            "in": "query",
+            "description": "A collection id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "revision",
+            "in": "query",
+            "description": "A revision number. Default: the newest.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The manifest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewManifest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No `id`, or a bad `revision`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such collection or revision.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/runs": {
       "get": {
         "operationId": "getReportRuns",
@@ -16874,6 +17810,1702 @@
         ],
         "additionalProperties": {}
       },
+      "ReviewCollectionRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "purpose": {
+            "description": "Why this review exists",
+            "type": "string",
+            "maxLength": 2000
+          },
+          "audience": {
+            "description": "Who should review it",
+            "type": "string",
+            "maxLength": 500
+          },
+          "tags": {
+            "description": "Tags of the collection, such as `demo` (normalized like artifact tags)",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "entries": {
+            "description": "Ordered. The order is the order of the review; it is never re-sorted by time or status",
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "layer": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$",
+                  "description": "The id of the archived layer that recorded the result"
+                },
+                "check": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "description": "The check's id in that layer"
+                },
+                "kind": {
+                  "description": "The kind of the part holding the check, when the same id exists in several parts",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "recording": {
+                  "description": "One recording of the result (`VideoRef.recording`: `sha256:…`, a bundle key or an address). Absent: the result as a whole",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "caption": {
+                  "description": "What the curator wants the reviewer to look at in this entry",
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "layer",
+                "check"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "gaps": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "note": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "description": "What is missing or unclear"
+                },
+                "after": {
+                  "description": "Place the gap after this many entries (0 or absent: before the first)",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "note"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "frozenFrom": {
+            "description": "The live filtered view the entries were frozen from, as its address query (informational; the entries are what count)",
+            "type": "string",
+            "maxLength": 4000
+          },
+          "basedOn": {
+            "description": "Publish a new revision of this collection. `revision` must be its newest, else 409",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": {}
+      },
+      "ReviewCollection": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "id": {
+            "type": "string",
+            "description": "The collection's stable id, in its share URL"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "1 for the first; every change is a new revision"
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Stable within the collection; notes and reviewed marks refer to it"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "layer": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "The id of the archived layer that recorded the result"
+                    },
+                    "check": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024,
+                      "description": "The check's id in that layer"
+                    },
+                    "kind": {
+                      "description": "The kind of the part holding the check, when the same id exists in several parts",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "recording": {
+                      "description": "One recording of the result (`VideoRef.recording`: `sha256:…`, a bundle key or an address). Absent: the result as a whole",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "layer",
+                    "check"
+                  ],
+                  "additionalProperties": {}
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "snapshot": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "specPath": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ],
+                      "description": "The result's recorded status, as that layer recorded it"
+                    },
+                    "recordedAtMs": {
+                      "type": "number"
+                    },
+                    "environment": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "producer": {
+                      "type": "string"
+                    },
+                    "branch": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sha": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "run": {
+                      "type": "string",
+                      "description": "The key of the run it belongs to"
+                    },
+                    "runUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "backend": {
+                      "description": "The backend the layer was read from",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "testKey": {
+                      "type": "string",
+                      "description": "The test's key, as `GET /api/reports/tests` lists it"
+                    },
+                    "attemptStatuses": {
+                      "description": "The status of each recorded try, in order, when the check was retried. Never collapsed to the last",
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      }
+                    },
+                    "videos": {
+                      "description": "Its references to videos when it was frozen",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The attachment name"
+                          },
+                          "owner": {
+                            "type": "string",
+                            "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                          },
+                          "attempt": {
+                            "description": "The retry attempt that holds it, or that holds the step that does",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "step": {
+                            "description": "The name of the step that holds it",
+                            "type": "string"
+                          },
+                          "tags": {
+                            "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "recording": {
+                            "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          },
+                          "scope": {
+                            "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
+                            "type": "object",
+                            "properties": {
+                              "surface": {
+                                "description": "Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "deviceKind": {
+                                "description": "What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "syntheticData": {
+                                "description": "True: the data was made up for the run. False: real data. Absent: unknown",
+                                "type": "boolean"
+                              },
+                              "dependencies": {
+                                "description": "Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "audioCaptured": {
+                                "description": "True: the recording has real audio. False: it is silent. Absent: unknown",
+                                "type": "boolean"
+                              },
+                              "pacing": {
+                                "description": "How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "asserted": {
+                                "description": "The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "limitations": {
+                                "description": "Known limits of what this evidence shows, in the producer's words",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "declaredBy": {
+                                "description": "Who or what made this declaration: a tool, a team, a person",
+                                "type": "string"
+                              },
+                              "verified": {
+                                "description": "The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "verifiedBy": {
+                                "description": "What checked the `verified` fields",
+                                "type": "string"
+                              },
+                              "provenance": {
+                                "description": "Where the declaration comes from and how to check it: a document, a CI step, a device log",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "url": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "rel": {
+                                      "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "url"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "extensions": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "owner",
+                          "available"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "specPath",
+                    "status",
+                    "recordedAtMs",
+                    "environment",
+                    "producer",
+                    "branch",
+                    "sha",
+                    "run",
+                    "runUrl",
+                    "backend",
+                    "testKey"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "id",
+                "source",
+                "snapshot"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "It sits after this many entries"
+                }
+              },
+              "required": [
+                "id",
+                "note",
+                "after"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "frozenFrom": {
+            "type": "string"
+          },
+          "basedOn": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": {}
+          },
+          "createdBy": {
+            "type": "string",
+            "description": "The name of the token that published it (never the token)"
+          },
+          "createdAtMs": {
+            "type": "number",
+            "description": "When the server recorded it, epoch milliseconds"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "id",
+          "revision",
+          "title",
+          "tags",
+          "entries",
+          "gaps",
+          "createdBy",
+          "createdAtMs"
+        ],
+        "additionalProperties": {}
+      },
+      "ReviewCollectionList": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "revisions": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991,
+                  "description": "How many revisions exist"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "audience": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "entries": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "gaps": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "createdBy": {
+                  "type": "string"
+                },
+                "createdAtMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "revision",
+                "revisions",
+                "title",
+                "tags",
+                "entries",
+                "gaps",
+                "createdBy",
+                "createdAtMs"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "collections"
+        ],
+        "additionalProperties": {}
+      },
+      "ReviewCollectionDetail": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "collection": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "const": 1
+              },
+              "id": {
+                "type": "string",
+                "description": "The collection's stable id, in its share URL"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "1 for the first; every change is a new revision"
+              },
+              "title": {
+                "type": "string"
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "audience": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Stable within the collection; notes and reviewed marks refer to it"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "layer": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$",
+                          "description": "The id of the archived layer that recorded the result"
+                        },
+                        "check": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024,
+                          "description": "The check's id in that layer"
+                        },
+                        "kind": {
+                          "description": "The kind of the part holding the check, when the same id exists in several parts",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "recording": {
+                          "description": "One recording of the result (`VideoRef.recording`: `sha256:…`, a bundle key or an address). Absent: the result as a whole",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        }
+                      },
+                      "required": [
+                        "layer",
+                        "check"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "caption": {
+                      "type": "string"
+                    },
+                    "snapshot": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "specPath": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "running",
+                            "not-run"
+                          ],
+                          "description": "The result's recorded status, as that layer recorded it"
+                        },
+                        "recordedAtMs": {
+                          "type": "number"
+                        },
+                        "environment": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "producer": {
+                          "type": "string"
+                        },
+                        "branch": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "sha": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "run": {
+                          "type": "string",
+                          "description": "The key of the run it belongs to"
+                        },
+                        "runUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "backend": {
+                          "description": "The backend the layer was read from",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "testKey": {
+                          "type": "string",
+                          "description": "The test's key, as `GET /api/reports/tests` lists it"
+                        },
+                        "attemptStatuses": {
+                          "description": "The status of each recorded try, in order, when the check was retried. Never collapsed to the last",
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "running",
+                              "not-run"
+                            ]
+                          }
+                        },
+                        "videos": {
+                          "description": "Its references to videos when it was frozen",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "description": "The attachment name"
+                              },
+                              "owner": {
+                                "type": "string",
+                                "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                              },
+                              "attempt": {
+                                "description": "The retry attempt that holds it, or that holds the step that does",
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "step": {
+                                "description": "The name of the step that holds it",
+                                "type": "string"
+                              },
+                              "tags": {
+                                "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "recording": {
+                                "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                                "type": "string"
+                              },
+                              "available": {
+                                "type": "boolean",
+                                "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                              },
+                              "scope": {
+                                "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
+                                "type": "object",
+                                "properties": {
+                                  "surface": {
+                                    "description": "Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…",
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "deviceKind": {
+                                    "description": "What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately",
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "syntheticData": {
+                                    "description": "True: the data was made up for the run. False: real data. Absent: unknown",
+                                    "type": "boolean"
+                                  },
+                                  "dependencies": {
+                                    "description": "Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown",
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "audioCaptured": {
+                                    "description": "True: the recording has real audio. False: it is silent. Absent: unknown",
+                                    "type": "boolean"
+                                  },
+                                  "pacing": {
+                                    "description": "How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown",
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "asserted": {
+                                    "description": "The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior",
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "limitations": {
+                                    "description": "Known limits of what this evidence shows, in the producer's words",
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "declaredBy": {
+                                    "description": "Who or what made this declaration: a tool, a team, a person",
+                                    "type": "string"
+                                  },
+                                  "verified": {
+                                    "description": "The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared",
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "verifiedBy": {
+                                    "description": "What checked the `verified` fields",
+                                    "type": "string"
+                                  },
+                                  "provenance": {
+                                    "description": "Where the declaration comes from and how to check it: a document, a CI step, a device log",
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "url": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "rel": {
+                                          "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "url"
+                                      ],
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "extensions": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "owner",
+                              "available"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "specPath",
+                        "status",
+                        "recordedAtMs",
+                        "environment",
+                        "producer",
+                        "branch",
+                        "sha",
+                        "run",
+                        "runUrl",
+                        "backend",
+                        "testKey"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "snapshot"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "gaps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "after": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "It sits after this many entries"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "note",
+                    "after"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "frozenFrom": {
+                "type": "string"
+              },
+              "basedOn": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision"
+                ],
+                "additionalProperties": {}
+              },
+              "createdBy": {
+                "type": "string",
+                "description": "The name of the token that published it (never the token)"
+              },
+              "createdAtMs": {
+                "type": "number",
+                "description": "When the server recorded it, epoch milliseconds"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "id",
+              "revision",
+              "title",
+              "tags",
+              "entries",
+              "gaps",
+              "createdBy",
+              "createdAtMs"
+            ],
+            "additionalProperties": {}
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "description": "Every revision that exists, oldest first"
+          },
+          "availability": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entry": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "available",
+                    "unverified",
+                    "unavailable"
+                  ]
+                },
+                "reason": {
+                  "description": "Why it is not `available`, in words",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "entry",
+                "state"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Unique and time-ordered"
+                },
+                "collection": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "entry": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "note",
+                    "gap",
+                    "reviewed",
+                    "unreviewed"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "timecodeMs": {
+                  "type": "number"
+                },
+                "by": {
+                  "type": "string",
+                  "description": "The name of the token that made it (never the token)"
+                },
+                "atMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "collection",
+                "revision",
+                "kind",
+                "by",
+                "atMs"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Notes and marks of this revision, oldest first"
+          },
+          "reviewed": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "by": {
+                  "type": "string"
+                },
+                "atMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "by",
+                "atMs"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Entries whose latest mark is `reviewed`, with who and when"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "collection",
+          "revisions",
+          "availability",
+          "reviews",
+          "reviewed"
+        ],
+        "additionalProperties": {}
+      },
+      "ReviewNoteInput": {
+        "type": "object",
+        "properties": {
+          "collection": {
+            "type": "string",
+            "description": "The collection id"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "entry": {
+            "description": "The entry's id; required for `reviewed`, `unreviewed` and a timecode",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "note",
+              "gap",
+              "reviewed",
+              "unreviewed"
+            ]
+          },
+          "text": {
+            "description": "Required for `note` and `gap`",
+            "type": "string",
+            "maxLength": 4000
+          },
+          "timecodeMs": {
+            "description": "A moment in the entry's recording, in milliseconds",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "collection",
+          "revision",
+          "kind"
+        ],
+        "additionalProperties": {}
+      },
+      "ReviewNote": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique and time-ordered"
+          },
+          "collection": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "entry": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "note",
+              "gap",
+              "reviewed",
+              "unreviewed"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "timecodeMs": {
+            "type": "number"
+          },
+          "by": {
+            "type": "string",
+            "description": "The name of the token that made it (never the token)"
+          },
+          "atMs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "collection",
+          "revision",
+          "kind",
+          "by",
+          "atMs"
+        ],
+        "additionalProperties": {}
+      },
+      "ReviewManifest": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "generatedAtMs": {
+            "type": "number"
+          },
+          "collection": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "title": {
+                "type": "string"
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "audience": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "createdBy": {
+                "type": "string"
+              },
+              "createdAtMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "title",
+              "tags",
+              "createdBy",
+              "createdAtMs"
+            ],
+            "additionalProperties": {}
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "layer": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "The id of the archived layer that recorded the result"
+                    },
+                    "check": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024,
+                      "description": "The check's id in that layer"
+                    },
+                    "kind": {
+                      "description": "The kind of the part holding the check, when the same id exists in several parts",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "recording": {
+                      "description": "One recording of the result (`VideoRef.recording`: `sha256:…`, a bundle key or an address). Absent: the result as a whole",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "layer",
+                    "check"
+                  ],
+                  "additionalProperties": {}
+                },
+                "snapshot": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "specPath": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "running",
+                        "not-run"
+                      ],
+                      "description": "The result's recorded status, as that layer recorded it"
+                    },
+                    "recordedAtMs": {
+                      "type": "number"
+                    },
+                    "environment": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "producer": {
+                      "type": "string"
+                    },
+                    "branch": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sha": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "run": {
+                      "type": "string",
+                      "description": "The key of the run it belongs to"
+                    },
+                    "runUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "backend": {
+                      "description": "The backend the layer was read from",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "testKey": {
+                      "type": "string",
+                      "description": "The test's key, as `GET /api/reports/tests` lists it"
+                    },
+                    "attemptStatuses": {
+                      "description": "The status of each recorded try, in order, when the check was retried. Never collapsed to the last",
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "running",
+                          "not-run"
+                        ]
+                      }
+                    },
+                    "videos": {
+                      "description": "Its references to videos when it was frozen",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The attachment name"
+                          },
+                          "owner": {
+                            "type": "string",
+                            "description": "Who holds it: `layer`, `check`, `attempt` or `step`. An open vocabulary: treat an unknown owner as a check"
+                          },
+                          "attempt": {
+                            "description": "The retry attempt that holds it, or that holds the step that does",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "step": {
+                            "description": "The name of the step that holds it",
+                            "type": "string"
+                          },
+                          "tags": {
+                            "description": "The normalized tags of this attachment itself. Absent when it has none (and in documents of older servers)",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "recording": {
+                            "description": "What identifies the bytes; references with the same value are one recording. Absent when it cannot be played",
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "False when the reference names no bytes (no bundle key, address or inline text)"
+                          },
+                          "scope": {
+                            "description": "What this recording shows as its producer declared it: its own `scope`, else its attempt's, check's, part's or layer's. Absent: the scope is unknown, never live, physical or audible",
+                            "type": "object",
+                            "properties": {
+                              "surface": {
+                                "description": "Where the product ran, in an open vocabulary: `browser`, `native-app`, `api`, `cli`…",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "deviceKind": {
+                                "description": "What it ran on, in an open vocabulary: `simulator`, `emulator`, `physical`, `virtual-machine`, `desktop`… A simulator and a physical phone stay distinct values; they are filtered separately",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "syntheticData": {
+                                "description": "True: the data was made up for the run. False: real data. Absent: unknown",
+                                "type": "boolean"
+                              },
+                              "dependencies": {
+                                "description": "Whether what the product talks to was `scripted` (replies fixed in advance), `live` or `mixed`. An open vocabulary; absent is unknown",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "audioCaptured": {
+                                "description": "True: the recording has real audio. False: it is silent. Absent: unknown",
+                                "type": "boolean"
+                              },
+                              "pacing": {
+                                "description": "How time ran, in an open vocabulary: `paced` (slowed or scripted for a viewer), `real-time`. Absent: unknown",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "asserted": {
+                                "description": "The boundaries the result actually asserts. Activity visible in a recording beyond them is not verified behavior",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "limitations": {
+                                "description": "Known limits of what this evidence shows, in the producer's words",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "declaredBy": {
+                                "description": "Who or what made this declaration: a tool, a team, a person",
+                                "type": "string"
+                              },
+                              "verified": {
+                                "description": "The names of the fields above (`surface`, `deviceKind`, `syntheticData`, `dependencies`, `audioCaptured`, `pacing`) that something independent of the producer checked. Every other field is only declared",
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "verifiedBy": {
+                                "description": "What checked the `verified` fields",
+                                "type": "string"
+                              },
+                              "provenance": {
+                                "description": "Where the declaration comes from and how to check it: a document, a CI step, a device log",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "url": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "rel": {
+                                      "description": "Why it is linked, in an open vocabulary: issue, run, trace, docs, source…",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "url"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "extensions": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "owner",
+                          "available"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "specPath",
+                    "status",
+                    "recordedAtMs",
+                    "environment",
+                    "producer",
+                    "branch",
+                    "sha",
+                    "run",
+                    "runUrl",
+                    "backend",
+                    "testKey"
+                  ],
+                  "additionalProperties": {}
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "available",
+                    "unverified",
+                    "unavailable"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "reviewed": {
+                  "type": "boolean"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "The attachment's name as recorded"
+                      },
+                      "safeName": {
+                        "type": "string",
+                        "description": "A name safe to write to a file system: letters, digits, dot, dash and underscore"
+                      },
+                      "path": {
+                        "type": "string",
+                        "description": "Where a packer should put it: `files/<entry position>-<safeName>`"
+                      },
+                      "recording": {
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "description": "The digest of the bytes when the report recorded one, else null: unknown, not verified",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "missing": {
+                        "type": "boolean",
+                        "description": "True when the source cannot be read now"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "safeName",
+                      "path",
+                      "sha256",
+                      "missing"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "position",
+                "source",
+                "snapshot",
+                "state",
+                "reviewed",
+                "files"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "It sits after this many entries"
+                }
+              },
+              "required": [
+                "id",
+                "note",
+                "after"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entry": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "entry",
+                "reason"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Entries whose sources cannot be read now, and every file that is missing"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "generatedAtMs",
+          "collection",
+          "entries",
+          "gaps",
+          "missing",
+          "notes"
+        ],
+        "additionalProperties": {}
+      },
       "TestCatalog": {
         "type": "object",
         "properties": {
@@ -21245,6 +23877,19 @@
                       "available"
                     ],
                     "additionalProperties": {}
+                  }
+                },
+                "attemptStatuses": {
+                  "description": "The status of each recorded try in order, when the check was retried. Absent when no try was recorded: a first try is then unknown, never assumed to have passed",
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "passed",
+                      "failed",
+                      "running",
+                      "not-run"
+                    ]
                   }
                 }
               },

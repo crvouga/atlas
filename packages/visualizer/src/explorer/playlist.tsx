@@ -309,10 +309,11 @@ function Clip({
 
 /**
  * The watch session for `entries`: opens as a modal over the explorer. `total` is how many results matched when the list
- * holds only the newest of them, so the session says it is not the whole set. Closing it discards positions.
+ * holds only the newest of them, so the session says it is not the whole set. `initial` is the entry to start on and `title` the
+ * heading. Closing it discards positions.
  */
-export function WatchPlaylist({ entries, total, onClose }: { entries: readonly PlaylistEntry[]; total?: number; onClose: () => void }) {
-  const first = entries.find((entry) => recordingState(entry) === 'playable') ?? entries[0];
+export function WatchPlaylist({ entries, total, onClose, initial, title = 'Watch recordings' }: { entries: readonly PlaylistEntry[]; total?: number; onClose: () => void; initial?: string; title?: string }) {
+  const first = entries.find((entry) => entry.id === initial) ?? entries.find((entry) => recordingState(entry) === 'playable') ?? entries[0];
   const [chosen, setChosen] = useState<string | null>(first?.id ?? null);
   const [autoPlay, setAutoPlay] = useState(false);
   const [speed, setSpeed] = useState<number>(1);
@@ -332,7 +333,7 @@ export function WatchPlaylist({ entries, total, onClose }: { entries: readonly P
   };
   const listed = entries.slice(0, Math.max(shown, activeAt + 1));
   return (
-    <Modal opened onClose={onClose} title="Watch recordings" size="xl" centered>
+    <Modal opened onClose={onClose} title={title} size="xl" centered>
       <Stack gap="md">
         <Text role="status" component="div" data-playlist-summary>
           {plural(entries.length, 'result', 'results')}

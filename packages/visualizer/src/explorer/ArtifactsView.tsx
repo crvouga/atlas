@@ -7,22 +7,25 @@
  * untagged. Each row opens that exact result in the test detail. An empty answer for a filter says nothing matches and
  * offers to clear it; it never says the project has nothing recorded.
  */
-import { IconPlayerPlay, IconVideo } from '@tabler/icons-react';
-import { Alert, Anchor, Box, Button, Code, Stack, Table, Text } from '@mantine/core';
+import { IconLock, IconPlayerPlay, IconVideo } from '@tabler/icons-react';
+import { Alert, Anchor, Box, Button, Code, Group, Stack, Table, Text } from '@mantine/core';
 import { videoCounts } from '@crvouga/atlas/reports/evidence-detail';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
+import { staticEvidence } from '../evidence/api';
 import { ago, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { useArtifactList } from './catalog';
+import { FreezeCollection } from './collections';
 import { FilterBar } from './filters';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { runName } from './parts';
 import { entriesFromArtifacts } from './playlist-entries';
 import { WatchPlaylist } from './playlist';
 import { filtered, filterOf, NO_FILTERS } from './search';
+import { filterParams } from '@crvouga/atlas/reports/artifact-query';
 
 const ARTIFACT_ROWS = 50;
 
@@ -36,6 +39,7 @@ export function ArtifactsView() {
   const now = useNow();
   const [shown, setShown] = useState(ARTIFACT_ROWS);
   const [watching, setWatching] = useState(false);
+  const [freezing, setFreezing] = useState(false);
   const entries = useMemo(() => (answer.data && !answer.data.unsupported ? entriesFromArtifacts(answer.data.list.results) : []), [answer.data]);
   if (answer.isPending)
     return (
@@ -82,11 +86,19 @@ export function ArtifactsView() {
         </Stack>
       )}
       {list.results.length > 0 && (
-        <Button type="button" variant="filled" my="sm" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => setWatching(true)}>
-          Watch these {plural(list.results.length, 'result', 'results')}
-        </Button>
+        <Group my="sm" gap="sm">
+          <Button type="button" variant="filled" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => setWatching(true)}>
+            Watch these {plural(list.results.length, 'result', 'results')}
+          </Button>
+          {!staticEvidence && (
+            <Button type="button" leftSection={<IconLock size={16} aria-hidden="true" />} onClick={() => setFreezing(true)}>
+              Freeze as review collection
+            </Button>
+          )}
+        </Group>
       )}
       {watching && <WatchPlaylist entries={entries} total={list.total} onClose={() => setWatching(false)} />}
+      {freezing && <FreezeCollection results={list.results} total={list.total} filterQuery={filterParams(filter).toString()} onClose={() => setFreezing(false)} />}
       {list.results.length > 0 && (
         <Table.ScrollContainer minWidth={700}>
           <Table data-artifacts>

@@ -11,6 +11,7 @@ import {
   ServerConfigSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, UserStateSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema,
   CLI_RESULTS,
   ProblemSchema, ServerInfoSchema, ReadySchema, EffectiveEvidenceSchema, EffectiveDeltaSchema, OutlineSchema, EvidencePageSchema, LayerRowsSchema, CheckDetailSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema,
+  ReviewCollectionSchema, ReviewManifestSchema,
   PublishChecksSchema,
   ManifestEnvelopeSchema,
   PathRecordSchema,
@@ -76,6 +77,8 @@ export const SCHEMAS: Record<string, z.ZodType> = {
   'test-reliability': TestReliabilitySchema,
   'report-runs': RunListSchema,
   'report-run': RunDetailSchema,
+  'review-collection': ReviewCollectionSchema,
+  'review-manifest': ReviewManifestSchema,
   // What `atlas report … --format json` prints (docs/agents.md).
   ...Object.fromEntries(Object.values(CLI_RESULTS).map(result => [result.schemaName, result.schema]))
 };

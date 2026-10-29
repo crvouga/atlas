@@ -60,7 +60,8 @@ export function everyAttachment(holder: EvidenceHolder): Attachment[] {
   return out;
 }
 
-async function readProblem(response: Response): Promise<string> {
+/** The reason a server gave for refusing a change (its problem document's `detail`), or a sentence naming the status. */
+export async function readProblem(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as { detail?: string; error?: string };
     return body.detail ?? body.error ?? `The server refused the change (${response.status}).`;
