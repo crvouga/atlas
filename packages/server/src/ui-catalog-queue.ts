@@ -293,7 +293,7 @@ export class CatalogQueue {
   /**
    * Hand out the most urgent units of a definition that no live claim holds, match `where` and are below the retry limit,
    * or null when there are none. A request repeated with the same idempotency key answers the same claim; once that claim
-   * has ended, a {@link CatalogQueueError} 410. Throws 404 for an unknown definition and 422 for an unknown dimension or value.
+   * has ended, a {@link CatalogQueueError} 410; reusing a live key for another definition, shard or collection throws 409. Throws 404 for an unknown definition and 422 for an unknown dimension or value.
    */
   async claim(input: z.input<typeof UiClaimRequestSchema>, owner: string): Promise<UiClaim | null> {
     await this.ready;
@@ -307,13 +307,16 @@ export class CatalogQueue {
       }
     }
     const answer = await this.change(async () => {
+      await this.reconcile();
       if (request.idempotencyKey) {
         const live = [...this.claims.values()].find(claim => claim.owner === owner && claim.idempotencyKey === request.idempotencyKey);
-        if (live) return { claim: live, fresh: false };
+        if (live) {
+          if (live.definition !== request.definition || live.shard !== request.shard || live.collection !== (request.collection ?? request.definition)) throw new CatalogQueueError(409, 'This idempotency key belongs to another definition, shard or collection. Use a new key.');
+          return { claim: live, fresh: false };
+        }
         const ended = this.state.ended.find(claim => claim.owner === owner && claim.idempotencyKey === request.idempotencyKey);
         if (ended) throw new CatalogQueueError(410, `The claim ${ended.id} made with this idempotency key has ended (${ended.reason}). Claim again with a new key.`);
       }
-      await this.reconcile();
       if (this.claims.size >= MAX_CLAIMS) throw new CatalogQueueError(429, `There are ${MAX_CLAIMS} live claims; retry when some end.`);
       const collection = request.collection ?? request.definition;
       const attempts = this.state.attempts[collection] ?? {};

@@ -243,13 +243,49 @@ import { httpStore } from '@crvouga/atlas/reports/http-store';
 await collectCatalog({
   store: httpStore({ url: process.env.ATLAS_SERVER_URL!, token: process.env.ATLAS_TOKEN }),
   catalog, shard: { id: `ci-${process.env.GITHUB_JOB}-${index}`, where: { deployment: 'development' } }, batchSize: 25,
-  capture: async (unit, signal) => Promise.all(unit.items.map(async item => ({ item: item.key, ...(await captureUiState(page, { id: item.state.id, ready })) })))
+  concurrency: 4, // independent units in this process; default 1
+  capture: async (unit, signal) => {
+    const page = await browser.newPage(); // one isolated page per concurrent unit
+    try {
+      const captures = [];
+      for (const item of unit.items) {
+        signal.throwIfAborted();
+        await prepareState(page, item.state, item.profile); // your navigation, fixtures and profile setup
+        const shot = await captureUiState(page, { id: item.state.id, ready });
+        captures.push({ ...shot, item: item.key });
+      }
+      return captures;
+    } finally { await page.close(); }
+  }
 });
 ```
 
 `signal` aborts when the claim is lost, and what was captured for a lost claim is not published: a shard never publishes work it no
 longer holds. A capture that throws records its items as failed, with the reason, and collection goes on. `captureUiState` stays an
 optional adapter; nothing in the queue imports a collection framework.
+
+### Sharding checklist for integrating agents
+
+Install `@crvouga/atlas` in the consumer project with its existing package manager. Keep its catalog definition, collector,
+fixtures and CI there; no Atlas checkout or Bun installation is needed for a Node consumer. Import `captureUiState` from
+`@crvouga/atlas/playwright` only when using Playwright. The `browser`, `prepareState` and `ready` in the example above are
+owned by your project: `prepareState` must apply the item's profile as well as navigate to its state.
+
+- Give every process a distinct shard id, the same deterministic definition, the same server/project and a shared
+  `collection` id for a CI run. Resolve dynamic discovery against the same revision and inputs on every machine.
+- Use `batchSize` to bound claimed units and buffered screenshots, and `concurrency` to bound simultaneous `capture` calls.
+  Start small; a large claim can leave other shards idle. Concurrency defaults to 1 for existing collectors.
+  `captureBatch` owns its own parallelism and ignores `concurrency`; CLI `--exec` uses this batch interface.
+- Allocate an isolated page/context or device per concurrent unit. Process a unit's items sequentially when they share it.
+  Never navigate or screenshot one mutable page concurrently. Close resources in `finally` and honor `signal`.
+- Groups are indivisible. Every item in a group must match `where`; grouping mobile and desktop together prevents a
+  mobile-only shard from claiming that group. Group only work that truly needs to run together.
+- `maxUnits` bounds claims, including the final partial batch, and those claimed units are still captured. A stop signal
+  prevents starting more units; completed units are published and unfinished units released. Leases stay renewed during
+  uploads too. Choose a lease longer than ordinary network stalls; a dead shard's lease must expire before recovery.
+- An `empty` stop means no work is available **to that shard now**: other shards may still hold claims, or retries may be
+  exhausted. After all workers finish, run `atlas ui-catalog status --format json` as the completeness gate.
+  A successful collector alone does not establish full coverage.
 
 ### The order work is handed out in
 
@@ -274,7 +310,8 @@ A claim is a lease on a batch of units held by one shard: renewed by heartbeat (
 by unit as captures labelled with the claim id (`labels["atlas.claim"]`) arrive, released when the shard is done, and given back to the
 queue when it expires. No unit is ever held by two live claims. A shard that publishes after its claim expired and another shard
 re-claimed the unit leaves two layers, and the newest `recordedAtMs` wins the cell, as always. A claim request retried with the same
-idempotency key returns the same claim, never a second batch.
+idempotency key returns the same live claim, never a second batch. An expired or ended key returns `410`; use a new key.
+Reusing a live key for another definition, shard or collection returns `409`.
 
 Claims are kept by the server in its store (`server/ui-catalog/queue.json`, in S3 like the rest of its state) and written before a claim
 is answered. After a restart they are restored with their leases; those that lapsed meanwhile expire and their units go back to the

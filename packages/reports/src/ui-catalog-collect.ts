@@ -36,7 +36,7 @@ export type CapturedItem = Omit<UiStateCapture, 'id'> & {
   readonly item: string;
 };
 
-/** How one shard collects. Give `capture` (one unit at a time) or `captureBatch` (a whole claim at once). */
+/** How one shard collects. Give `capture` (bounded by `concurrency`, default 1) or `captureBatch` (a whole claim at once). */
 export type CollectOptions = {
   /** The Atlas server, as `httpStore` opens it, with a token that may publish. */
   readonly store: HttpStore;
@@ -46,6 +46,8 @@ export type CollectOptions = {
   readonly shard: { readonly id: string; readonly where?: Readonly<Record<string, string | readonly string[]>> };
   /** Units per claim. Default 25. Small batches keep the priority sharp; large ones keep a warm collector busy. */
   readonly batchSize?: number;
+  /** Concurrent units for `capture`; default 1. Each call must own its browser page or other mutable resources. Not used with `captureBatch`. */
+  readonly concurrency?: number;
   /** The lease of a claim, in seconds; renewed every third of it. Default 120. */
   readonly leaseSeconds?: number;
   /** What retry limits are counted in (a CI run id). Default: the definition version. */
@@ -100,16 +102,6 @@ export type CollectResult = {
 
 const sentence = (error: unknown) => (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').trim();
 
-function anySignal(signals: readonly (AbortSignal | undefined)[]): AbortSignal {
-  const controller = new AbortController();
-  for (const signal of signals) {
-    if (!signal) continue;
-    if (signal.aborted) { controller.abort(signal.reason); break; }
-    signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
-  }
-  return controller.signal;
-}
-
 /**
  * Publish a definition to a server: stored once, and written as plan layers so the catalog expects every item. Returns its
  * version and whether this call stored it. Throws an `AtlasHttpError` when the server refuses it or cannot be reached.
@@ -124,7 +116,8 @@ export async function publishCatalogDefinition(store: HttpStore, catalog: Collec
 /**
  * Collect a UI catalog as one shard of any number: claim, capture, publish, claim again, until nothing is left for this
  * shard or a bound is reached. A capture that throws records every item of its unit as failed with the reason, and the
- * collection goes on; an item the collector returned nothing for is failed too. Throws a `CatalogDefinitionError` for a
+ * collection goes on; an item the collector returned nothing for is failed too. A unit cannot answer another unit's items.
+ * Throws for invalid concurrency before contacting the server, a `CatalogDefinitionError` for a
  * `where` naming an unknown dimension or value, and an `AtlasHttpError` when the server cannot be reached or refuses
  * the definition, before anything is collected.
  *
@@ -133,12 +126,14 @@ export async function publishCatalogDefinition(store: HttpStore, catalog: Collec
  * const result = await collectCatalog({
  *   store: httpStore({ url: process.env.ATLAS_SERVER_URL!, token: process.env.ATLAS_TOKEN }),
  *   catalog, shard: { id: `ci-${process.env.GITHUB_JOB}`, where: { deployment: 'development' } }, batchSize: 25,
- *   capture: async (unit, signal) => Promise.all(unit.items.map(async item => ({ item: item.key, ...(await captureUiState(page, { id: item.state.id, ready })) })))
+ *   capture: async (unit, signal) => captureWithIsolatedPage(unit, signal)
  * });
  * ```
  */
 export async function collectCatalog(options: CollectOptions): Promise<CollectResult> {
   if (!options.capture && !options.captureBatch) throw new Error('collectCatalog needs capture (one unit at a time) or captureBatch (a claim at once)');
+  const concurrency = options.concurrency ?? 1;
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new Error('concurrency must be a positive safe integer');
   const now = options.now ?? Date.now;
   const started = now();
   const where = options.shard.where ? Object.fromEntries(Object.entries(options.shard.where).map(([name, value]) => [name, typeof value === 'string' ? [value] : [...value]])) : undefined;
@@ -157,14 +152,14 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
   let stoppedBy: CollectStop | null = null;
   const due = () => {
     if (options.signal?.aborted) return 'signal' as const;
-    if (options.maxUnits !== undefined && units.claimed >= options.maxUnits) return 'max-units' as const;
     if (options.maxMs !== undefined && now() - started >= options.maxMs) return 'max-minutes' as const;
     return null;
   };
 
   let error: string | undefined;
-  while (!(stoppedBy = due())) {
+  while (!(stoppedBy = due() ?? (options.maxUnits !== undefined && units.claimed >= options.maxUnits ? 'max-units' : null))) {
     let held: string | null = null;
+    let beat: ReturnType<typeof setInterval> | undefined;
     try {
     const size = Math.min(batchSize, options.maxUnits !== undefined ? options.maxUnits - units.claimed : batchSize);
     const idempotencyKey = randomUUID();
@@ -184,33 +179,41 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
 
     // The claim is held while the collector works: renewed every third of its lease, and lost on a 410.
     const lost = new AbortController();
-    const beat = setInterval(() => {
+    beat = setInterval(() => {
       void options.store.call('POST', `/ui-catalog/claims/${claim.claimId}/heartbeat`, { accept: [410] }).then(async answer => {
         if (answer.status === 410) { await answer.body?.cancel(); lost.abort(new Error('The claim was lost: its lease expired or the server took it back')); } else await answer.body?.cancel();
       }, () => { /* the next beat tries again; the server expires the claim if none arrives */ });
     }, Math.max(1000, (leaseSeconds * 1000) / 3));
-    const signal = anySignal([lost.signal, options.signal]);
+    const signal = options.signal ? AbortSignal.any([lost.signal, options.signal]) : lost.signal;
     const captured: CapturedItem[] = [];
-    let collected = 0;
-    try {
+    const done: CollectUnit[] = [];
+    {
       const failAll = (list: readonly CollectUnit[], reason: string) => list.flatMap(unit => unit.items.map(item => ({ item: item.key, status: 'failed' as const, detail: reason })));
       // A collector stopped by the shard's own stop signal did not fail: its unit goes back to the queue instead.
       const stopped = () => lost.signal.aborted || options.signal?.aborted === true;
       if (options.captureBatch) {
-        try { captured.push(...await options.captureBatch(claim.units, { claimId: claim.claimId, signal })); collected = claim.units.length; }
-        catch (error) { if (!stopped()) { captured.push(...failAll(claim.units, `The collector failed: ${sentence(error)}`)); collected = claim.units.length; } }
+        try { captured.push(...await options.captureBatch(claim.units, { claimId: claim.claimId, signal })); done.push(...claim.units); }
+        catch (error) { if (!stopped()) { captured.push(...failAll(claim.units, `The collector failed: ${sentence(error)}`)); done.push(...claim.units); } }
       } else {
-        for (const unit of claim.units) {
-          if (lost.signal.aborted || due()) break;
-          try { captured.push(...await options.capture!(unit, signal)); }
-          catch (error) {
-            if (stopped()) break;
-            captured.push(...failAll([unit], `The collector failed: ${sentence(error)}`));
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(concurrency, claim.units.length) }, async () => {
+          while (next < claim.units.length) {
+            if (lost.signal.aborted || due()) break;
+            const unit = claim.units[next++]!;
+            try {
+              const captures = await options.capture!(unit, signal);
+              // A unit may only answer its own items, even when callbacks finish out of order.
+              const keys = new Set(unit.items.map(item => item.key));
+              captured.push(...captures.filter(capture => keys.has(capture.item)));
+            } catch (error) {
+              if (stopped()) break;
+              captured.push(...failAll([unit], `The collector failed: ${sentence(error)}`));
+            }
+            done.push(unit);
           }
-          collected++;
-        }
+        }));
       }
-    } finally { clearInterval(beat); }
+    }
 
     if (lost.signal.aborted) {
       units.lost += claim.units.length;
@@ -221,18 +224,17 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
 
     // Every item of a collected unit gets a result: what the collector returned, or a failure saying it returned nothing.
     const byKey = new Map(captured.map(capture => [capture.item, capture]));
-    const done = claim.units.slice(0, collected);
     const perProfile = new Map<string, { item: CollectItem; capture: UiStateCapture }[]>();
     for (const unit of done) for (const item of unit.items) {
       const given = byKey.get(item.key);
       const { item: _key, ...rest } = given ?? { item: item.key, status: 'failed' as const, detail: 'The collector returned no capture for this item' };
       const capture: UiStateCapture = { title: item.state.title ?? item.state.id, ...stateFacts(item), ...rest, id: item.state.id, labels: { ...rest.labels, [UI_CLAIM_LABEL]: claim.claimId } };
-      const status = capture.status ?? 'passed';
-      if (status === 'passed') items.captured++; else if (status === 'failed') items.failed++; else items.other++;
       const list = perProfile.get(item.profile.key);
       if (list) list.push({ item, capture }); else perProfile.set(item.profile.key, [{ item, capture }]);
     }
+    const publishedProfiles = new Set<string>();
     for (const entries of perProfile.values()) {
+      if (lost.signal.aborted) break;
       const profile = entries[0]!.item.profile;
       await publishChecks(options.store, uiStateLayer({
         producer, recordedAtMs: now(), ...(profile.environment ? { environment: profile.environment } : {}), profile: profile.parameters, shard: options.shard.id,
@@ -241,8 +243,21 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
         states: entries.map(entry => entry.capture)
       }));
       layers++;
+      publishedProfiles.add(profile.key);
+      for (const { capture } of entries) {
+        const status = capture.status ?? 'passed';
+        if (status === 'passed') items.captured++; else if (status === 'failed') items.failed++; else items.other++;
+      }
     }
-    units.collected += done.length;
+    const completed = done.filter(unit => unit.items.every(item => publishedProfiles.has(item.profile.key))).length;
+    units.collected += completed;
+    if (lost.signal.aborted && completed < claim.units.length) {
+      const count = claim.units.length - completed;
+      units.lost += count;
+      lostClaims.push(claim.claimId);
+      options.onEvent?.({ type: 'lost', claimId: claim.claimId, units: count });
+      continue;
+    }
     options.onEvent?.({ type: 'published', claimId: claim.claimId, items: [...perProfile.values()].reduce((sum, list) => sum + list.length, 0), failed: items.failed });
 
     // Whatever is left of the claim (a stop, a bound) goes back to the queue now, not when the lease expires.
@@ -260,7 +275,7 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
       if (held) await options.store.call('DELETE', `/ui-catalog/claims/${held}`, { accept: [410] }).then(answer => answer.body?.cancel(), () => undefined);
       stoppedBy = 'unreachable';
       break;
-    }
+    } finally { if (beat !== undefined) clearInterval(beat); }
   }
 
   return { ok: items.failed === 0 && error === undefined, definition: published.version, shard: options.shard.id, stoppedBy, claims, units, items, lostClaims, layers, ...(error ? { error } : {}) };

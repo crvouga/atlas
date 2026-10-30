@@ -8287,7 +8287,7 @@
           "UI catalog queue"
         ],
         "summary": "Claim the most urgent UI catalog work units",
-        "description": "Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.\n\nThe claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.\n\nRole needed: `publish`.",
+        "description": "Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.\n\nThe claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same live claim, never a second batch. An expired or ended key returns `410`; retry with a new key. Reusing a live key for another definition, shard or collection returns `409`. No two live claims ever hold one unit.\n\nRole needed: `publish`.",
         "x-atlas-role": "publish",
         "security": [
           {
@@ -8372,6 +8372,16 @@
               }
             }
           },
+          "409": {
+            "description": "The idempotency key belongs to another definition, shard or collection.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "410": {
             "description": "The claim made with this idempotency key has ended.",
             "content": {
@@ -8422,7 +8432,7 @@
           "UI catalog queue"
         ],
         "summary": "Claim the most urgent UI catalog work units",
-        "description": "Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.\n\nThe claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "description": "Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.\n\nThe claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same live claim, never a second batch. An expired or ended key returns `410`; retry with a new key. Reusing a live key for another definition, shard or collection returns `409`. No two live claims ever hold one unit.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
         "x-atlas-role": "publish",
         "security": [
           {
@@ -8499,6 +8509,16 @@
           },
           "404": {
             "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The idempotency key belongs to another definition, shard or collection.",
             "content": {
               "application/problem+json": {
                 "schema": {
