@@ -36,6 +36,7 @@ test('status examples show pending, running and errored catalog cards and truthf
 test('status examples are browsable in Tests, Runs and Gherkin behavior coverage', async () => {
   await open('/catalog', true);
   await atlas!.sees('Example: Pending capture');
+  expect(atlas!.requests.some(request => request.startsWith('/tests?'))).toBe(false);
   await atlas!.click('button', 'Spec type');
   await atlas!.until(() => !!atlas!.find('[role="menuitem"]', /^ Tests$/), 'Tests menu item');
   await atlas!.click('[role="menuitem"]', /^ Tests$/);
@@ -46,9 +47,13 @@ test('status examples are browsable in Tests, Runs and Gherkin behavior coverage
   await atlas!.click('[role="tab"]', 'Runs');
   await atlas!.sees('Status examples');
   expect(atlas!.router.state.location.search.view).toBe('tests');
+  expect(atlas!.requests.filter(request => request.startsWith('/tests?'))).toHaveLength(1);
   await atlas!.go('/behaviors');
   await atlas!.sees('Create a named list');
   for (const label of ['Running', 'Failed', 'Skipped']) expect(atlas!.text()).toContain(label);
+  await atlas!.click('a', /^ Runs$/);
+  await atlas!.sees('Status examples');
+  expect(atlas!.router.state.location.search.view).toBe('tests');
   await atlas!.go('/');
   await atlas!.until(() => atlas!.router.state.location.pathname.startsWith('/chart/'), 'default chart home');
 });

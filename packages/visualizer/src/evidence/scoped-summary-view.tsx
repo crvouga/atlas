@@ -102,7 +102,7 @@ export function ScopedSummary({ behavior }: { behavior: Behavior }) {
         )}
         <Text component="div" c="dimmed">
           These describe the checks Atlas holds, not production. A passing recording is one clip of one run and does not approve the behavior.{' '}
-          <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ test: slot.key, layer: subject.layer.id }} />}>See reliability and latency detail</Anchor>
+          <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', test: slot.key, layer: subject.layer.id }} />}>See reliability and latency detail</Anchor>
         </Text>
       </Stack>
     </Paper>
