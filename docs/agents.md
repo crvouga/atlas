@@ -272,6 +272,12 @@ atlas ui-catalog diff --from <commit> --to <commit> --format json
 atlas ui-catalog export --out catalog.html
 ```
 
+For coordinated parallel collection, declare a catalog matrix and use `atlas ui-catalog collect` on each worker instead of
+assigning slices yourself. The server leases disjoint work units; each worker keeps the same definition and collection id,
+with a unique shard id. The library's `collectCatalog({ concurrency: 4, capture, ... })` also runs independent units in parallel
+within a worker. Each callback must own its page or device. See the [sharding checklist](ui-catalog.md#sharding-checklist-for-integrating-agents)
+for grouping, profile setup, memory bounds, recovery and the final completeness gate.
+
 Reading it, from least to most work: `atlas ui-catalog status --format json` for the summary and the problems;
 `curl "$ATLAS_STORE/api/reports/ui-catalog?coverage=failed,missing&format=markdown"` for text (add `attribute=locale=de-DE`, `profile`, `area`,
 `surface`… and page with `limit` and `offset`); `GET /api/reports/ui-catalog/entries` for a flat, cursor-paged list of pictures to review

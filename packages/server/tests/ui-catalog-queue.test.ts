@@ -226,6 +226,20 @@ describe('claims', () => {
     expect((await claim(call, { definition: version, idempotencyKey: 'k1' })).status).toBe(410);
   });
 
+  test('idempotent retries expire before answering and cannot change definitions or shards', async () => {
+    const { call, clock } = await start();
+    const { version } = await publishDefinition(call, definition(2));
+    const first = await claim(call, { definition: version, idempotencyKey: 'retry', leaseSeconds: 10 });
+    const other = await publishDefinition(call, definition(3));
+    expect((await claim(call, { definition: other.version, idempotencyKey: 'retry' })).status).toBe(409);
+    expect((await claim(call, { definition: version, shard: 'different', idempotencyKey: 'retry' })).status).toBe(409);
+    clock.now += 10_001;
+    expect((await claim(call, { definition: version, idempotencyKey: 'retry' })).status).toBe(410);
+    const next = await claim(call, { definition: version, idempotencyKey: 'new' });
+    expect(next.claim!.claimId).not.toBe(first.claim!.claimId);
+    expect(next.claim!.units.map(unit => unit.key)).toEqual(first.claim!.units.map(unit => unit.key));
+  });
+
   test('another publisher cannot renew or release a claim, and an unknown definition is 404', async () => {
     const { call } = await start();
     const { version } = await publishDefinition(call, definition(1));
@@ -299,6 +313,99 @@ describe('collectCatalog', () => {
     expect(body.summary.coverage).toMatchObject({ captured: 24, missing: 0 });
   });
 
+  test('bounded parallel capture overlaps units, preserves out-of-order completions and isolates failures', async () => {
+    const { url } = await serve();
+    let active = 0, peak = 0;
+    const seen = new Set<string>();
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(6, { maxAttempts: 1 }), shard: { id: 'parallel' },
+      batchSize: 5, maxUnits: 7, concurrency: 3,
+      capture: async unit => {
+        active++; peak = Math.max(peak, active);
+        await new Promise(resolve => setTimeout(resolve, seen.size % 2 ? 1 : 10));
+        active--;
+        expect(seen.has(unit.key)).toBe(false);
+        seen.add(unit.key);
+        if (seen.size === 2) throw new Error('one broken unit');
+        return unit.items.map(item => ({ item: item.key }));
+      }
+    });
+    expect(peak).toBe(3);
+    expect(seen.size).toBe(7);
+    expect(result.units).toEqual({ claimed: 7, collected: 7, lost: 0, released: 0 });
+    expect(result.items).toEqual({ captured: 6, failed: 1, other: 0 });
+  });
+
+  test('a capture cannot overwrite another unit in its batch', async () => {
+    const { url } = await serve();
+    let previous: string | undefined;
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(1), shard: { id: 'isolated' }, maxUnits: 2,
+      capture: async unit => {
+        const own = unit.items.map(item => ({ item: item.key }));
+        if (previous) return [...own, { item: previous, status: 'failed' as const }];
+        previous = unit.items[0]!.key;
+        return own;
+      }
+    });
+    expect(result.items).toEqual({ captured: 2, failed: 0, other: 0 });
+  });
+
+  test('invalid concurrency is rejected before contacting a server', async () => {
+    for (const concurrency of [0, -1, 1.5, NaN, Infinity]) {
+      await expect(collectCatalog({
+        store: httpStore({ url: 'http://127.0.0.1:9', retries: 0 }), catalog: definition(1),
+        shard: { id: 'invalid' }, concurrency, capture: async () => []
+      })).rejects.toThrow('concurrency must be a positive safe integer');
+    }
+  });
+
+  test('the lease is renewed while capture layers are uploading', async () => {
+    const { url } = await serve();
+    const base = httpStore({ url, token: TOKENS[0]!.token });
+    let uploading = false, renewed = false;
+    let resume!: () => void;
+    const heartbeat = new Promise<void>(resolve => { resume = resolve; });
+    const store: typeof base = {
+      ...base,
+      call: async (method, path, init) => {
+        const response = await base.call(method, path, init);
+        if (path.endsWith('/heartbeat') && uploading) { renewed = true; resume(); }
+        return response;
+      },
+      put: async (key, bytes, contentType) => {
+        uploading = true;
+        await heartbeat;
+        await base.put(key, bytes, contentType);
+      }
+    };
+    const result = await collectCatalog({
+      store, catalog: definition(1), shard: { id: 'slow-upload' }, leaseSeconds: 10,
+      capture: async unit => unit.items.map(item => ({ item: item.key }))
+    });
+    expect(renewed).toBe(true);
+    expect(result.units.collected).toBe(2);
+    expect(result.ok).toBe(true);
+  }, 8_000);
+
+  test('a parallel stop publishes completed units and releases the rest', async () => {
+    const { url } = await serve();
+    const stop = new AbortController();
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(5), shard: { id: 'stop-parallel' },
+      batchSize: 10, concurrency: 2, signal: stop.signal,
+      capture: async (unit, signal) => {
+        await Promise.resolve();
+        if (!stop.signal.aborted) { stop.abort(); return unit.items.map(item => ({ item: item.key })); }
+        signal.throwIfAborted();
+        return [];
+      }
+    });
+    expect(result.stoppedBy).toBe('signal');
+    expect(result.units).toEqual({ claimed: 10, collected: 1, lost: 0, released: 9 });
+    expect(result.items.failed).toBe(0);
+  });
+
   test('18, 20: bounds stop claiming; a failing capture is recorded as failed; an unreachable server collects nothing', async () => {
     const { url } = await serve();
     const result = await collectCatalog({
@@ -306,7 +413,7 @@ describe('collectCatalog', () => {
       capture: async unit => { if (unit.items[0]!.state.id === 's00000') throw new Error('never ready'); return unit.items.map(item => ({ item: item.key })); }
     });
     expect(result.stoppedBy).toBe('max-units');
-    expect(result.units.claimed).toBe(6);
+    expect(result.units).toMatchObject({ claimed: 6, collected: 6, released: 0 });
     expect(result.ok).toBe(false);
     expect(result.items.failed).toBeGreaterThan(0);
     await expect(collectCatalog({ store: httpStore({ url: 'http://127.0.0.1:9', token: 'x', retries: 0 }), catalog: definition(1), shard: { id: 'x' }, capture: async () => [] })).rejects.toThrow(/cannot reach/);

@@ -10947,6 +10947,8 @@ export type CollectOptions = {
   readonly shard: { readonly id: string; readonly where?: Readonly<Record<string, string | readonly string[]>> };
   /** Units per claim. Default 25. Small batches keep the priority sharp; large ones keep a warm collector busy. */
   readonly batchSize?: number;
+  /** Concurrent units for `capture`; default 1. Each call must own its browser page or other mutable resources. Not used with `captureBatch`. */
+  readonly concurrency?: number;
   /** The lease of a claim, in seconds; renewed every third of it. Default 120. */
   readonly leaseSeconds?: number;
   /** What retry limits are counted in (a CI run id). Default: the definition version. */
@@ -10973,7 +10975,7 @@ export type CollectOptions = {
 };
 ```
 
-How one shard collects. Give `capture` (one unit at a time) or `captureBatch` (a whole claim at once).
+How one shard collects. Give `capture` (bounded by `concurrency`, default 1) or `captureBatch` (a whole claim at once).
 
 #### `CollectEvent`
 
@@ -11034,7 +11036,8 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
 
 Collect a UI catalog as one shard of any number: claim, capture, publish, claim again, until nothing is left for this
 shard or a bound is reached. A capture that throws records every item of its unit as failed with the reason, and the
-collection goes on; an item the collector returned nothing for is failed too. Throws a `CatalogDefinitionError` for a
+collection goes on; an item the collector returned nothing for is failed too. A unit cannot answer another unit's items.
+Throws for invalid concurrency before contacting the server, a `CatalogDefinitionError` for a
 `where` naming an unknown dimension or value, and an `AtlasHttpError` when the server cannot be reached or refuses
 the definition, before anything is collected.
 
@@ -11044,7 +11047,7 @@ the definition, before anything is collected.
 const result = await collectCatalog({
   store: httpStore({ url: process.env.ATLAS_SERVER_URL!, token: process.env.ATLAS_TOKEN }),
   catalog, shard: { id: `ci-${process.env.GITHUB_JOB}`, where: { deployment: 'development' } }, batchSize: 25,
-  capture: async (unit, signal) => Promise.all(unit.items.map(async item => ({ item: item.key, ...(await captureUiState(page, { id: item.state.id, ready })) })))
+  capture: async (unit, signal) => captureWithIsolatedPage(unit, signal)
 });
 ```
 
