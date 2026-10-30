@@ -425,6 +425,48 @@ focusable named removal controls, draft previews and bounded suggestions/cards. 
 expression, except the coverage/profile dimensions it is comparing. The public API's literal query contract
 is unchanged.
 
+## Catalog image inspection
+
+The catalog has two screens on `/catalog`. The index owns search, filters, sorting and a Grid/List
+layout control (`layout` in the address). Both layouts show the same bounded results with Show more.
+Selecting a title or image opens the focused details gallery (`state` in the address) and replaces the
+index. There is no item drawer. The selected profile (`image` in the address) presents a large image,
+zoom controls, capture coverage, dimensions, failure details and provenance. Item details opens a focused facts dialog; Capture details opens a separate provenance and diagnostics
+dialog for every profile, including those without pictures. Both are URL selections (`panel=facts` or
+`panel=captures`), and Escape closes the dialog without leaving its screen.
+
+Previous/Next item, numbered navigation and Left/Right follow the complete filtered, sorted index,
+including items beyond its card page. A deep link outside those filters names that fact and offers
+return to the index without claiming a position. Selecting from a live draft commits its search so a
+shared details link reproduces the same scope. Back to catalog and Escape preserve the search, filters,
+sort, layout and expanded page, and restore the index opener and scroll position for an in-page visit.
+
+Previous/Next image and Image profile browse captures within the selected item. Zoom in/out, actual
+size and fit-to-screen use intrinsic image dimensions inside a scrollable viewport. Scroll or swipe to
+pan a magnified image; +/− zoom and 0 fits. Each new picture starts fitted. Open full-screen retains the
+image gallery with its own navigation, zoom and a Markdown handoff action; its keys do not move the item
+behind it, and closing restores focus to its trigger. Comparison images retain their before/after
+gallery. Every preview reserves its full width and a fixed display height before loading (240 for
+cards, 120 for list rows, 180 for comparison sides); absent comparison sides use the same frame.
+The focused stage reserves 65dvh with a 360px minimum for every profile, including missing pictures,
+and full-screen inspection fills the space assigned by its gallery layout. Loading and retry/error
+states sit inside these frames; inspection notices overlay the viewport rather than entering its
+scrolling image content. Source changes restart loading without replacing the outer preview frame.
+Images use contain fitting, preserving their aspect ratio without stretching; zoom changes the
+scrollable image dimensions while its surrounding viewport stays fixed. Missing pictures are named explicitly. Coverage
+and profile labels remain visible, including failed captures; a picture never supplies a pass.
+
+Cards, list rows, the focused gallery, details dialogs and full-screen inspection offer Copy as Markdown.
+Share screen opens a dedicated dialog with a viewer link, an agent Markdown link and selectable handoff
+text. Viewer links preserve the project, filters, sort, layout and selected profile; unknown outer query
+parameters and URL credentials are excluded. The handoff includes all known profiles, recorded facts,
+immutable image URLs, provenance and source warnings. It is built on demand from held evidence without
+fetching images. Clipboard success is announced; denial offers manual selection. Modal keys never move
+or zoom the gallery behind the dialog.
+
+Catalog-wide surface coverage and collection status have separate lazy dialogs on the index; opening
+an item does not read collection diagnostics or load every other item's full-size image.
+
 ## Accessibility and responsive behavior
 
 The shell collapses its index below Mantine's `md` breakpoint; its named Burger toggles mobile navigation.
@@ -475,7 +517,7 @@ The narrowly scoped exceptions are:
 | Area | Screens/interactions | Mantine composition |
 | --- | --- | --- |
 | Shared shell | Project switching, spec navigation, run selection, connection status, diagnostics, mobile index | AppShell, Burger, NavLink, Menu, Popover, NativeSelect, Drawer |
-| UI catalog | Captured UI states per profile as cards with coverage badges, rich free-form search with forgiving keyboard suggestions and term/facet/sort chips in the main content, surface coverage, an open state with its profiles side by side and where each picture came from, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | Combobox, PillsInput, Pill, SimpleGrid, Card, Image, Drawer, Accordion, Table, Badge, Alert |
+| UI catalog | Captured UI states per profile as cards with coverage badges, rich free-form search with forgiving keyboard suggestions and term/facet/sort chips in the main content, surface coverage, a focused details gallery with profile selection, zoom, item navigation and integrated provenance, manifest download, a Compare of two commits or profiles (SegmentedControl, NativeSelect, Switch) | Combobox, PillsInput, Pill, SimpleGrid, Card, Image, Modal, ScrollArea, SegmentedControl, Accordion, Table, Badge, Alert |
 | Project home | Tests/runs/artifacts/compare/catalog health tabs, a two-run comparison with promise, outcome, recording and figure tabs per behavior, a run's Artifacts (files of its layers, shared recordings, direct links), Watch playlist of a filtered set, metrics, search, status/environment/domain/artifact-tag filters, run and artifact facets with saved views, grouping, sorting, show more | Container, Tabs, SimpleGrid, Paper, TextInput, MultiSelect, Popover, Button, Accordion, Modal, Grid, Switch |
 | Test detail | Current outcomes, statistics, duration graph, product latency with budgets and baselines, history, artifacts, recording; the `layer` address parameter pins it to one run's result, labelled "This run" against "Latest combined evidence" | Drawer, Table, Badge, Alert, Stage |
 | Specs | All six existing kinds, overview/index with title search and folder or declared-domain grouping, Gherkin rules/scenarios/examples with a coverage summary and Read / Watch / Inspect per behavior, Quint declarations/traces, DMN tables, source text | SpecHeader, Accordion, Tabs, Table, CodeHighlightTabs, ResultRow |

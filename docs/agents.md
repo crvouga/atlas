@@ -298,6 +298,21 @@ What an agent must get right:
 - **Playwright is one adapter.** `captureUiState(page, { id, ready })` from `@crvouga/atlas/playwright` waits for a readiness check,
   photographs the page and returns the capture for `uiStateLayer`; nothing else in the catalog imports a test framework.
 
+### Given a shared screen link or Markdown handoff
+
+Use the exact state ID and selected profile, not the title, to identify the screen. **Share screen** in
+Atlas provides a browser link and a plain-text agent link; **Copy as Markdown** includes facts, image
+URLs, provenance and missing-evidence warnings. `GET /api/reports/ui-catalog/detail?state=<id>&format=markdown`
+reads one exact screen; named projects use `/api/projects/<slug>/reports/ui-catalog/detail`. Omit `format`
+for JSON. Preserve read authorization; a shared link grants none.
+
+A viewer URL puts the screen in its fragment (`#/catalog?state=...&image=...`), which HTTP does not send.
+Decode that query and the outer `project` selector to build the corresponding detail URL, or read the
+server's `/llms.txt` for instructions. Live links may advance to newer evidence; image URLs identify the
+recorded layer. Reproduce the declared fixture and profile in the consumer project, change its product
+code, and rerun its capture workflow with the same stable state ID. Report missing source metadata rather
+than guessing a component filename. A failed or missing capture remains failed or unknown.
+
 ## Standards used
 
 Atlas invents as little as it can. Where a standard exists, that is what is spoken.

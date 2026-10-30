@@ -895,6 +895,14 @@ export const UiCatalogSchema = z.looseObject({
   offset: z.number().int().nonnegative().optional(), limit: z.number().int().nonnegative().optional()
 });
 
+/** One exact UI screen, with report version and read warnings; GET /api/reports/ui-catalog/detail. */
+export const UiCatalogDetailSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string(),
+  state: UiCatalogSchema.shape.states.element,
+  sources: UiCatalogSchema.shape.sources
+});
+
 /** An entry of the catalog as a critic reads it: one captured state in one profile, with the hash of its stored picture and the critiques already made of it. */
 export const CatalogEntrySchema = z.looseObject({
   key: z.string().describe('Stable identity, unique in the catalog: the state id, then `@` and the profile when it has one. A critique names it as `subject.entryKey`'),

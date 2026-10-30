@@ -33,6 +33,12 @@ export const CatalogSearchFields = {
   attribute: text,
   /** The open state: a state id. */
   state: text,
+  /** Index layout, restored on return from an item. */
+  layout: text,
+  /** Selected image profile in the focused item gallery. */
+  image: text,
+  /** Focused screen dialog: facts or captures. */
+  panel: text,
   /** A comparison is open: `commit` (two commits of the same profiles) or `profile` (two profiles of this report). */
   compare: text,
   /** The comparison's before side: a commit id, or a profile key. */
@@ -44,7 +50,7 @@ export const CatalogSearchFields = {
 };
 
 /** The parts of the address that are not filters of the catalog's states. */
-const NOT_FILTERS = ['state', 'compare', 'from', 'to', 'all'];
+const NOT_FILTERS = ['state', 'layout', 'image', 'panel', 'compare', 'from', 'to', 'all'];
 
 /** The address's parts, as the router holds them. */
 export type CatalogSearch = { readonly [K in keyof typeof CatalogSearchFields]?: string | undefined };

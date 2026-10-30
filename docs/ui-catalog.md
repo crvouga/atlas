@@ -390,6 +390,29 @@ A separate process that reviews the pictures (a [critic](critics.md#reading-the-
 `@crvouga/atlas/reports/ui-catalog`), filtered by `q`, `coverage`, `profile`, `area`, `route`, `cohort`, `flag`, `surface`, `producer` and
 `attribute` (`name=value`), paged with `limit` and `offset`, with an ETag. Its picture `path` is relative to `/api/reports`.
 
+## Share a screen with an agent
+
+From a card, list row, focused screen, details dialog or full-screen inspection, **Copy as Markdown**
+copies the exact state ID, selected profile, route, fixture, declared facts, image links and capture
+provenance. Missing pictures, failed captures and unreadable sources stay explicit. The image URLs name
+immutable layer files; the screen and agent links read current evidence and may show a newer capture later.
+Work in the consumer project using its existing capture workflow; do not patch the installed Atlas package.
+
+**Share screen** opens a separate dialog with a viewer link, an **Agent Markdown link**, and selectable
+Markdown for environments that block clipboard access. Viewer links preserve the project, current index
+scope and selected profile. Links grant no additional access and contain no browser authorization token.
+A static viewer can copy a complete handoff but has no live agent endpoint.
+
+The agent link uses `GET /api/reports/ui-catalog/detail?state=<exact URL-encoded ID>&format=markdown`
+(or `/api/projects/<slug>/reports/ui-catalog/detail` for a named project). Omit `format` for JSON; optional
+`image=<profile key>` marks the selected profile in Markdown while retaining every profile. A missing ID
+returns 400, an unavailable exact state returns 404, and protected servers require normal read authorization.
+The response includes report source warnings; absence never proves a pass. The route reads no image bytes.
+
+If handed only a viewer URL, read the server's `/llms.txt`. HTTP never sends a URL fragment: decode `state`
+and `image` from the `#/catalog?...` query and the project from the outer `?project=...`, then request the
+corresponding detail endpoint. A title search is not an exact identity lookup.
+
 ## Comparing two commits or two profiles
 
 The viewer's **Compare** button on `/catalog` (`?compare=commit&from=<commit>&to=<commit>`, or `?compare=profile&from=<profile>&to=<profile>`,

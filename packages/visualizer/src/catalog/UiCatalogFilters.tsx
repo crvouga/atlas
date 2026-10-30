@@ -1,11 +1,11 @@
 /** @module Rich catalog search
  * One keyboard-operated chip input for product terms, recorded facets and sorting, backed by the URL.
  */
-import { ActionIcon, Badge, Combobox, Group, Pill, PillsInput, ScrollArea, Stack, Text, useCombobox } from '@mantine/core';
+import { ActionIcon, Badge, Combobox, Group, Pill, PillsInput, NativeSelect, SimpleGrid, ScrollArea, Stack, Text, useCombobox } from '@mantine/core';
 import { IconSearch, IconX } from '@tabler/icons-react';
 import { useMemo, useRef } from 'react';
 import type { UiCatalog } from '@crvouga/atlas/reports/ui-catalog';
-import { addCatalogTokens, catalogChipLabel, catalogTokens, CLEAR_CATALOG_SEARCH, suggestCatalog } from './query';
+import { addCatalogTokens, catalogChipLabel, catalogTokens, catalogToken, CATALOG_SORTS, CLEAR_CATALOG_SEARCH, suggestCatalog } from './query';
 import { useCatalogNavigate } from './search';
 
 /** Rich search with live previews; Enter/Tab commits terms and Backspace reopens the last chip for editing. */
@@ -22,6 +22,11 @@ export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues }
     combobox.resetSelectedOption();
     field.current?.focus();
   };
+  const choose = (name: string, value: string) => {
+    const rest = selected.filter(token => token.field !== name);
+    set(value ? addCatalogTokens(rest, catalogToken(name, value)) : rest.map(token => token.raw).join(' '));
+  };
+  const chosen = (name: string) => selected.find(token => token.field === name)?.value ?? '';
   const remove = (index: number) => set(selected.filter((_, at) => at !== index).map(token => token.raw).join(' '));
   return (
     <Stack gap="xs" component="section" aria-label="Catalog search">
@@ -89,6 +94,11 @@ export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues }
           <Combobox.Footer><Text size="xs" c="dimmed">Up/Down to choose · Enter or Tab to add · Backspace to edit the last chip · Escape to close</Text></Combobox.Footer>
         </Combobox.Dropdown>
       </Combobox>
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+        <NativeSelect label="Area" value={chosen('area')} onChange={event => choose('area', event.currentTarget.value)} data={[{ value: '', label: 'All areas' }, ...catalog.facets.areas.map(facet => ({ value: facet.value, label: `${facet.label ?? facet.value} (${facet.count})` }))]} />
+        <NativeSelect label="Profile" value={chosen('profile')} onChange={event => choose('profile', event.currentTarget.value)} data={[{ value: '', label: 'All profiles' }, ...catalog.profiles.map(profile => ({ value: profile.key, label: profile.label }))]} />
+        <NativeSelect label="Sort by" value={chosen('sort') || 'relevance'} onChange={event => choose('sort', event.currentTarget.value)} data={Object.entries(CATALOG_SORTS).map(([value, label]) => ({ value, label }))} />
+      </SimpleGrid>
       <Text size="xs" c="dimmed">Search recorded names and facts. Try kind:error for product error screens; coverage:failed for failed captures. Type sort: to choose an order.</Text>
     </Stack>
   );

@@ -143,6 +143,7 @@ export function projectServer(options: AtlasServerOptions, create: (options: Atl
         if (GLOBAL.has(url.pathname)) return problemResponse(404, 'This operation belongs to the Atlas node.');
         url.searchParams.delete('project');
         const forwarded = new Request(url.href, request);
+        if (slug) forwarded.headers.set('x-atlas-project', slug);
         if (url.pathname === '/api/events' && base.events.count + [...children.values()].reduce((sum, child) => sum + child.server.events.count, 0) >= (options.limits?.maxStreams ?? 500)) return problemResponse(503, 'Too many event streams on this Atlas node. Retry later.');
         if (!slug || slug === 'default') return base.fetch(forwarded);
         const writing = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method);

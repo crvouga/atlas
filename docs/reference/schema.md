@@ -572,6 +572,14 @@ export const UiCatalogSchema = …
 `GET /api/reports/ui-catalog`: the UI catalog, computed from the winning results of the `ui-state` and `ui-plan` parts
 of every layer. States are in id order and cells in profile order, so the same layers always give the same document.
 
+#### `UiCatalogDetailSchema`
+
+```ts
+export const UiCatalogDetailSchema = …
+```
+
+One exact UI screen, with report version and read warnings; GET /api/reports/ui-catalog/detail.
+
 #### `CatalogEntrySchema`
 
 ```ts

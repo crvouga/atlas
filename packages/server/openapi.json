@@ -7418,6 +7418,236 @@
         }
       }
     },
+    "/api/reports/ui-catalog/detail": {
+      "get": {
+        "operationId": "getUiCatalogDetail",
+        "tags": [
+          "Report"
+        ],
+        "summary": "One exact screen for a human or agent handoff",
+        "description": "Reads a state by exact ID, with every profile, image reference, declared fact, capture provenance and incomplete-source warnings. Add format=markdown for a portable handoff with viewer and image links that preserve the project. The document describes current evidence; live links may show later captures. No files are read and no capture outcome is changed. Shared links retain ordinary read access requirements.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "state",
+            "in": "query",
+            "description": "Exact state ID, not a title or fuzzy query.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "image",
+            "in": "query",
+            "description": "Profile key to mark selected in Markdown. All profiles remain in the document.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "markdown for plain-text agent context; JSON by default.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The screen and report source warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiCatalogDetail"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          },
+          "400": {
+            "description": "No state ID.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No available state with that exact ID.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/ui-catalog/detail": {
+      "get": {
+        "operationId": "getUiCatalogDetailForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "One exact screen for a human or agent handoff",
+        "description": "Reads a state by exact ID, with every profile, image reference, declared fact, capture provenance and incomplete-source warnings. Add format=markdown for a portable handoff with viewer and image links that preserve the project. The document describes current evidence; live links may show later captures. No files are read and no capture outcome is changed. Shared links retain ordinary read access requirements.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "state",
+            "in": "query",
+            "description": "Exact state ID, not a title or fuzzy query.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "image",
+            "in": "query",
+            "description": "Profile key to mark selected in Markdown. All profiles remain in the document.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "markdown for plain-text agent context; JSON by default.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The screen and report source warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiCatalogDetail"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          },
+          "400": {
+            "description": "No state ID.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No available state with that exact ID.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/ui-catalog/entries": {
       "get": {
         "operationId": "getUiCatalogEntries",
@@ -29202,6 +29432,401 @@
           "states",
           "surfaces",
           "facets",
+          "sources"
+        ],
+        "additionalProperties": {}
+      },
+      "UiCatalogDetail": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "type": "string"
+          },
+          "state": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "route": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fixture": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cohort": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "area": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "description": "The kind of UI state the producers declared (`screen`, `overlay`, `loading`…), or null. Absent from an older server",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "flags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "covers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The surfaces it covers"
+              },
+              "producers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "attributes": {
+                "description": "Facts of the producers' own (`locale`, `brand`…), by name. Absent from an older server, which means none",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "cells": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "profile": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "description": "Identifies the profile across layers: the environment and the sorted parameters"
+                        },
+                        "environment": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "parameters": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "label": {
+                          "type": "string",
+                          "description": "For a person: the client and each parameter's value"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "environment",
+                        "parameters",
+                        "label"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "coverage": {
+                      "type": "string",
+                      "description": "One of `captured`, `failed`, `capturing`, `skipped`, `missing`. `captured` only when the winning capture passed. Every other value, including one a later version adds, means there is no picture to trust"
+                    },
+                    "expected": {
+                      "type": "string",
+                      "description": "One of `declared`, `undeclared`, `unknown`; a value this version does not know is `unknown`. `declared`: a plan expects it. `undeclared`: plans exist and none names it. `unknown`: no plan was published, so nothing is known to be unexpected"
+                    },
+                    "capture": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "passed",
+                                "failed",
+                                "running",
+                                "not-run"
+                              ]
+                            },
+                            "detail": {
+                              "type": "string"
+                            },
+                            "durationMs": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "contentType": {
+                                      "type": "string"
+                                    },
+                                    "width": {
+                                      "type": "number"
+                                    },
+                                    "height": {
+                                      "type": "number"
+                                    },
+                                    "bytes": {
+                                      "type": "number"
+                                    },
+                                    "sha256": {
+                                      "type": "string"
+                                    },
+                                    "bundleKey": {
+                                      "type": "string"
+                                    },
+                                    "uri": {
+                                      "description": "An http(s) address, when the picture lives elsewhere",
+                                      "type": "string"
+                                    },
+                                    "path": {
+                                      "description": "Where the stored bytes are, relative to the reports API root (`/api/reports` on a server): `/layers/<layer>/blobs/attachments/<sha256>`",
+                                      "type": "string"
+                                    },
+                                    "omitted": {
+                                      "description": "Why the producer left the bytes out. A picture that is left out is not a picture that was never taken",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name"
+                                  ],
+                                  "additionalProperties": {}
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "labels": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "type": "string"
+                              },
+                              "description": "What describes the capture without splitting it: a `shard`, a `browser`"
+                            },
+                            "origin": {
+                              "type": "object",
+                              "properties": {
+                                "layer": {
+                                  "type": "string"
+                                },
+                                "backend": {
+                                  "type": "string"
+                                },
+                                "producer": {
+                                  "type": "string"
+                                },
+                                "recordedAtMs": {
+                                  "type": "number"
+                                },
+                                "sha": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "branch": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "runUrl": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "freshness": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unknown",
+                                    "modified"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "layer",
+                                "backend",
+                                "producer",
+                                "recordedAtMs",
+                                "sha",
+                                "branch",
+                                "runUrl"
+                              ],
+                              "additionalProperties": {}
+                            },
+                            "alternatives": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991,
+                              "description": "Other captures of this cell from other producers; the winner is the one the report contract picks"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "detail",
+                            "durationMs",
+                            "image",
+                            "labels",
+                            "origin",
+                            "alternatives"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "planned": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "layer": {
+                              "type": "string"
+                            },
+                            "backend": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "layer",
+                            "backend"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "The plan layer that expects this cell"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "coverage",
+                    "expected",
+                    "capture",
+                    "planned"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "route",
+              "fixture",
+              "cohort",
+              "area",
+              "flags",
+              "covers",
+              "producers",
+              "cells"
+            ],
+            "additionalProperties": {}
+          },
+          "sources": {
+            "type": "object",
+            "properties": {
+              "layers": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "backends": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "live": {
+                      "type": "boolean",
+                      "description": "Always false on a server"
+                    },
+                    "available": {
+                      "type": "boolean",
+                      "description": "False when the backend could not be read; its results are then unknown, never passed"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "live",
+                    "available"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "layers",
+              "backends",
+              "notices"
+            ],
+            "additionalProperties": {},
+            "description": "What was read. A backend that is unavailable, or a layer that could not be read, is named here; what depended on it is not shown as captured"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "version",
+          "state",
           "sources"
         ],
         "additionalProperties": {}

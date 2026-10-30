@@ -12429,6 +12429,49 @@ export function uiCatalogMarkdown(catalog: UiCatalog): string
 The catalog as Markdown for a person or an agent reading text: the summary in words, the surfaces that are not covered, and
 one line per state with its coverage in each profile. Only `captured` is called captured.
 
+#### `UiScreenMarkdownOptions`
+
+```ts
+export type UiScreenMarkdownOptions = {
+  /** Human viewer link for this screen and selected profile. */
+  readonly viewerUrl?: string;
+  /** A plain-text screen document an agent can read without executing JavaScript. */
+  readonly documentUrl?: string;
+  /** Profile key currently selected; other profiles remain in the handoff. */
+  readonly profile?: string;
+  /** Version of the report when this handoff was made. */
+  readonly version?: string;
+  /** Absolute image addresses per profile, resolved by the caller for its live or static deployment. */
+  readonly imageUrls?: Readonly<Record<string, string>>;
+  /** Read failures and unavailable backends. They remain unknown, never passed. */
+  readonly notices?: readonly string[];
+};
+```
+
+Links and context for a portable, read-only screen handoff. The formatter reads no credentials or browser state.
+
+#### `uiScreenMarkdown`
+
+```ts
+export function uiScreenMarkdown(state: UiCatalogState, options: UiScreenMarkdownOptions = {}): string
+```
+
+A specific screen as Markdown for an agent handoff: identity, declared facts, every profile, image links and provenance.
+Missing pictures and unknown coverage stay explicit. Captured text is escaped as evidence, never interpreted as instructions.
+Unsafe or non-HTTP links are omitted. This reads no files and changes no result.
+
+- `state`: The exact catalog state, never a title or fuzzy search match.
+
+- `options`: Deployment-resolved links, selected profile and incomplete-source warnings.
+
+**Returns** A portable Markdown document, ending in a newline.
+
+**Example**
+
+```ts
+uiScreenMarkdown(state, { viewerUrl: 'https://atlas.example/?project=shop#/catalog?state=cart' });
+```
+
 ### UI state conventions
 
 Source: `packages/reports/src/ui-state.ts`. Import: `@crvouga/atlas/reports/ui-state`

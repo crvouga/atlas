@@ -23,6 +23,10 @@ test('the Collection panel shows what is left by tier, the claims being collecte
   expect((await send(`/ui-catalog/definitions/${version}`, 'PUT', definition)).status).toBe(201);
   expect((await send('/ui-catalog/claims', 'POST', { shard: 'ci-shard-1', definition: version, batchSize: 1 })).status).toBe(200);
   atlas = await openAtlas({ at: '/catalog', deps: {}, specs: {}, node, queue: true });
+  await atlas.sees('Collection status');
+  expect(atlas.text()).not.toContain('Collection of web-app');
+  expect(atlas.requests.some(request => request.includes('/ui-catalog/queue'))).toBe(false);
+  await atlas.click('button', 'Collection status');
   await atlas.sees('Collection of web-app');
   expect(atlas.text()).toContain('3 units to collect, 1 being collected');
   expect(atlas.text()).toContain('3 not collected yet');
@@ -36,9 +40,11 @@ test('the Collection panel shows what is left by tier, the claims being collecte
 test('without a published definition the catalog shows no Collection panel', async () => {
   const { node } = await serve();
   atlas = await openAtlas({ at: '/catalog', deps: {}, specs: {}, node, queue: true });
-  await atlas.sees('UI catalog');
+  await atlas.sees('Collection status');
+  await atlas.click('button', 'Collection status');
   // Give the queue request time to answer: with no definition it answers, and nothing is drawn.
   await new Promise(resolve => setTimeout(resolve, 300));
   expect(atlas.text()).not.toContain('Collection of');
+  expect(atlas.text()).toContain('No collection definition has been published');
   node.close();
 });

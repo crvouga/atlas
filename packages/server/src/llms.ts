@@ -89,6 +89,20 @@ curl "${url}/api/projects/$ATLAS_PROJECT/reports/runs/detail?key=<url-encoded ru
 
 A test's \`key\` is \`JSON.stringify([specPath, id])\`; its \`outcomes\` are its current results per environment and \`stats\` its pass rate, flips, flakiness and durations. The evidence of one result (attachments, steps, retries) is at \`/api/reports/evidence/detail/<backend>/<layer>?check=<id>\`, its files at \`/api/reports/layers/<layer>/blobs/<bundleKey>\`.
 
+## Work on a UI screen from a shared link
+
+The catalog viewer uses a hash route. HTTP does not send the fragment to the server.
+For a link like \`${url}/?project=shop#/catalog?state=checkout%2Fpay&image=<profile>\`,
+read the outer \`project\` and decode \`state\` and \`image\` from the hash query with URLSearchParams.
+GET \`/api/projects/shop/reports/ui-catalog/detail?state=checkout%2Fpay&format=markdown\`
+(and optional \`image=<URL-encoded profile key>\`). Without a named project use \`/api/reports/ui-catalog/detail\`.
+This is an exact state lookup, not a fuzzy title search. Omit \`format\` for JSON.
+The document includes image links, every profile, facts, provenance and source warnings without loading a browser.
+The viewer's **Share screen** dialog copies this agent link or a complete **Copy as Markdown** handoff.
+Links need the same read authorization as other report routes and contain no authorization token.
+Work in the consumer project. Preserve the stable state ID, reproduce the selected fixture/profile,
+then publish fresh captures after changes. A missing capture is unknown, and a screenshot is not an approval.
+
 ## Rules worth knowing
 
 - **Layered, never partitioned.** A check is identified by its \`id\` (keep it stable across runs) plus producer, kind, spec, environment and parameters. A layer that re-ran one check leaves every other check as the last layer that ran it.
