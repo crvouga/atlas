@@ -1,7 +1,7 @@
 /**
  * @module Command results (`--format json`)
  *
- * What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, and `atlas critic list`, `setup`, `doctor` and `run`, print on standard output with `--format json` (alias
+ * What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, `atlas ui-catalog plan`, `publish`, `status`, `diff`, `export` and `collect`, and `atlas critic list`, `setup`, `doctor` and `run`, print on standard output with `--format json` (alias
  * `--json`), and what any `atlas` command prints on standard error for a command that was wrong: one JSON document,
  * so an agent or a script never has to parse prose. (`status` and `policy` already print documents:
  * `ReportStatusSchema`, and an IAM policy.) Each is also published as a JSON Schema.
@@ -438,6 +438,26 @@ export const UiCatalogExportResultSchema = z.looseObject({
   warnings: z.array(z.string()).describe('Backends and layers that could not be read, and pictures left out. The page says so too')
 });
 
+/** What `atlas ui-catalog collect --format json` prints: what one shard collected from the shared queue, and why it stopped. */
+export const UiCatalogCollectResultSchema = z.looseObject({
+  ok: z.boolean().describe('True when nothing this shard collected failed and the server kept answering (otherwise the exit code is 1)'),
+  store: z.string().describe('The Atlas server'),
+  definition: z.looseObject({ version: z.string().describe('The SHA-256 of the canonical definition: the same definition is the same version on every shard'), name: z.string() }),
+  shard: z.string(),
+  stoppedBy: z.enum(['empty', 'max-units', 'max-minutes', 'signal', 'unreachable']).describe('`empty`: the queue had nothing left for this shard. `max-units`, `max-minutes`: a bound. `signal`: SIGINT or SIGTERM (the claim was released). `unreachable`: the server stopped answering'),
+  claims: z.number().int().nonnegative(),
+  units: z.looseObject({
+    claimed: z.number().int().nonnegative(), collected: z.number().int().nonnegative(),
+    lost: z.number().int().nonnegative().describe('Units of claims whose lease expired while held; their captures were not published'),
+    released: z.number().int().nonnegative().describe('Units given back to the queue unfinished (on a stop or a bound)')
+  }),
+  items: z.looseObject({ captured: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), other: z.number().int().nonnegative().describe('Published as running or not-run') }),
+  lostClaims: z.array(z.string()),
+  layers: z.number().int().nonnegative().describe('Capture layers published'),
+  warnings: z.array(z.string()).describe('Pictures that could not be read, and the like. Never fatal'),
+  error: z.string().optional().describe('Why the server could not be reached, when `stoppedBy` is `unreachable`')
+});
+
 /**
  * JSON command contracts, shared by schema publication, agent documentation and executable command checks.
  * A new result needs an entry here and a runtime scenario in the documentation contract tests.
@@ -462,5 +482,6 @@ export const CLI_RESULTS = {
   uiCatalogStatus: { command: 'atlas ui-catalog status', schemaName: 'ui-catalog-status', schema: UiCatalogStatusSchema },
   uiCatalogDiff: { command: 'atlas ui-catalog diff', schemaName: 'ui-catalog-diff-result', schema: UiCatalogDiffResultSchema },
   uiCatalogExport: { command: 'atlas ui-catalog export', schemaName: 'ui-catalog-export-result', schema: UiCatalogExportResultSchema },
+  uiCatalogCollect: { command: 'atlas ui-catalog collect', schemaName: 'ui-catalog-collect-result', schema: UiCatalogCollectResultSchema },
   error: { command: 'a command that was wrong (standard error)', schemaName: 'command-error', schema: CommandErrorSchema }
 } as const;

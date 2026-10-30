@@ -182,7 +182,7 @@ test('the todo example shows the same list on each environment, filled by separa
   await atlas.go('/specs/gherkin?spec=share-a-list.feature');
   await atlas.until(() => weekend()?.getAttribute('data-status') === 'failed', 'recorded results for Plans a weekend');
   await atlas.click('button', 'Sources');
-  await atlas.sees('5 of 5 layers contribute');
+  await atlas.sees('12 of 12 layers contribute');
   expect(atlas.text()).toContain('feat/offline');
   expect(atlas.text()).toContain('Device lab');
   await atlas.click('label', 'iOS');

@@ -1,0 +1,71 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-claim-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "shard": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Who is asking, for people: a machine, a CI job. Shards need not know each other"
+    },
+    "definition": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "The version of a published definition"
+    },
+    "batchSize": {
+      "default": 25,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "where": {
+      "description": "Only units whose every item has one of these values in each named dimension",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "additionalProperties": {
+        "minItems": 1,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "leaseSeconds": {
+      "default": 120,
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 3600
+    },
+    "collection": {
+      "description": "What retry limits are counted in (a CI run id). Default: the definition version",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "staleBeforeMs": {
+      "description": "Hand out captured items whose result was recorded before this time, oldest first",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "idempotencyKey": {
+      "description": "Retrying with the same key returns the same claim, never a second batch",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "required": [
+    "shard",
+    "definition"
+  ],
+  "additionalProperties": false
+}

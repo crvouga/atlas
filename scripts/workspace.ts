@@ -4,6 +4,7 @@
  */
 import { mkdir, readFile, unlink, writeFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
+import { populateWorkspace } from './workspace-populate';
 
 type Mode = 'server' | 'preview';
 type Runtime = {
@@ -13,7 +14,8 @@ type Runtime = {
   url: string;
   settingsUrl?: string;
   storeUrl?: string;
-  s3Url?: string;
+  population?: 'running' | 'complete' | 'failed';
+  storage?: { kind: 'mockingbird'; endpoint: string; bucket: string; dataFile: string };
   state: 'starting' | 'running';
   control: string;
   token: string;
@@ -21,18 +23,19 @@ type Runtime = {
 const modes: Mode[] = ['server', 'preview'];
 const stateFile = (root: string, mode: Mode) => path.join(root, '.atlas-workspace', `${mode}.json`);
 const help = `Atlas IDE workspace commands (run from the repository root):
-  bun run workspace:setup     Install the pinned Bun dependencies, without changing the lockfile
-  bun run workspace:run       Start the API, settings and hot-reloading viewer
-  bun run workspace:preview   Start the viewer with bundled example evidence
-  bun run workspace:status    Print runtime URLs and state as JSON
-  bun run workspace:stop      Stop both owned processes (optional: server or preview)
+  bun run dev --setup     Install the pinned Bun dependencies, without changing the lockfile
+  bun run dev  Start services, run the full example workflow and keep the viewer running
+  bun run dev --server       Start the API, settings and hot-reloading viewer without populating
+  bun run dev --preview   Start the viewer with bundled example evidence
+  bun run dev --status    Print runtime URLs and state as JSON
+  bun run dev --stop      Stop both owned processes (optional: server or preview), preserving reports
 
-Run/preview accept --port <0-65535>. ATLAS_PORT, then PORT, also select a port.
+Populate/run/preview accept --port <0-65535>. ATLAS_PORT, then PORT, also select a port.
 Without an explicit port, try 5180 (server) or 5181 (preview), then a free port.
 Each checkout owns .atlas-workspace/. Setup and preview need no IDE CLI or credentials. "run" starts the Atlas server,
-with an isolated Mockingbird S3 emulator and bucket (data lasts until stop). No Docker or credentials needed.
-To use durable S3, set ATLAS_S3_* variables (.env is loaded by Bun). Any supplied S3 variable disables the emulator;
-partial or invalid configuration fails with the server's S3 diagnostic. Direct atlas dev/serve still require S3.
+which keeps all reports and user state in S3 only. With no ATLAS_S3_* configuration, Run starts a persistent local
+Mockingbird S3 service in .atlas-workspace/s3. Set ATLAS_S3_* to use external storage instead; partial or invalid
+configuration still fails. Warm runs reuse installed dependencies when package.json and bun.lock are unchanged.
 `;
 
 /** Require the repository's pinned Bun; do not silently replace a user's runtime. */
@@ -43,9 +46,13 @@ export async function requireBun(root: string): Promise<void> {
   if (Bun.version !== expected) throw new Error(`Atlas requires Bun ${expected}; found ${Bun.version}. Install that version and retry.`);
 }
 
-/** Idempotent setup: frozen install only; no copied secrets, generated source or example runs. */
-export async function setupWorkspace(root: string): Promise<void> {
+/** Frozen install, with a dependency fingerprint that Run can reuse; explicit setup always repairs dependencies. */
+export async function setupWorkspace(root: string, reuse = false): Promise<void> {
   await requireBun(root);
+  const fingerprint = Bun.hash(`${Bun.version}\0${await readFile(path.join(root, 'package.json'), 'utf8')}\0${await readFile(path.join(root, 'bun.lock'), 'utf8')}`).toString(16);
+  const stamp = path.join(root, 'node_modules', '.atlas-workspace-setup');
+  if (reuse && await readFile(stamp, 'utf8').then((value) => value === fingerprint, () => false)) return;
+  await unlink(stamp).catch((error) => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; });
   const install = Bun.spawn([process.execPath, 'install', '--frozen-lockfile'], {
     cwd: root,
     stdin: 'inherit',
@@ -54,6 +61,8 @@ export async function setupWorkspace(root: string): Promise<void> {
   });
   const code = await install.exited;
   if (code !== 0) throw new Error(`Workspace dependency installation failed (${code}).`);
+  await mkdir(path.dirname(stamp), { recursive: true });
+  await writeFile(stamp, fingerprint);
 }
 
 async function held(root: string, mode: Mode): Promise<Runtime | null> {
@@ -143,7 +152,7 @@ export function workspacePort(mode: Mode, value?: string): number {
   return port;
 }
 
-async function app(root: string, mode: Mode, port: number, signal: AbortSignal, serverEnv = process.env) {
+async function app(root: string, mode: Mode, port: number, signal: AbortSignal, storageEnv: Record<string, string> = {}) {
   const source = path.resolve(import.meta.dir, '..');
   const args =
     mode === 'server'
@@ -171,7 +180,7 @@ async function app(root: string, mode: Mode, port: number, signal: AbortSignal, 
   // Use the existing CLI entry points. Examples remain separate from the node's report store.
   const env =
     mode === 'server'
-      ? serverEnv
+      ? { ...process.env, ...storageEnv }
       : {
           ...process.env,
           INIT_CWD: root,
@@ -202,15 +211,24 @@ async function app(root: string, mode: Mode, port: number, signal: AbortSignal, 
 }
 
 /** Foreground IDE Run target with private worktree control and graceful shutdown. */
-export async function runWorkspace(root: string, mode: Mode, portValue?: string): Promise<void> {
+export async function runWorkspace(root: string, mode: Mode, portValue?: string, populate = false): Promise<void> {
   await requireBun(root);
   const existing = await held(root, mode);
   if (existing) {
     console.log(`Atlas ${mode} already running: ${existing.url}`);
+    if (populate) {
+      await setupWorkspace(root, true);
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      process.once('SIGINT', abort);
+      process.once('SIGTERM', abort);
+      try { await populateWorkspace(root, existing.url, controller.signal); }
+      finally { process.removeListener('SIGINT', abort); process.removeListener('SIGTERM', abort); }
+    }
     return;
   }
   // Orca default tabs can start alongside its setup hook. A frozen install is safe to repeat.
-  await setupWorkspace(root);
+  await setupWorkspace(root, true);
   const directory = path.dirname(stateFile(root, mode));
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const controller = new AbortController();
@@ -232,8 +250,9 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string)
   });
   process.once('SIGINT', abort);
   process.once('SIGTERM', abort);
+  let localS3: Awaited<ReturnType<typeof import('./workspace-s3').startWorkspaceS3>> | undefined;
+  let acquired = false;
   let running: Promise<void> | undefined;
-  let storage: Awaited<ReturnType<typeof import('./workspace-s3').workspaceStorage>> | undefined;
   let failure: unknown;
   try {
     const port = workspacePort(mode, portValue);
@@ -252,20 +271,19 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string)
     await writeFile(stateFile(root, mode), JSON.stringify(runtime), { mode: 0o600, flag: 'wx' }).catch((error) => {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST')
         throw new Error(
-          `Atlas ${mode} already has a runtime lease. Check workspace:status; use workspace:stop to clear a stopped owner's lease.`
+          `Atlas ${mode} already has a runtime lease. Check "bun run dev --status"; use "bun run dev --stop" to clear a stopped owner's lease.`
         );
       throw error;
     });
+    acquired = true;
     await chmod(stateFile(root, mode), 0o600);
-    if (mode === 'server') {
-      const { workspaceStorage } = await import('./workspace-s3');
-      storage = await workspaceStorage(process.env);
-      if (storage.url) {
-        runtime.s3Url = storage.url;
-        console.log(`Mockingbird S3: ${storage.url} (isolated local bucket; data is discarded when stopped)`);
-      }
+    // Never mask a configured bucket's outage or mix local data with external data.
+    if (mode === 'server' && !Object.entries(process.env).some(([key, value]) => key.startsWith('ATLAS_S3_') && value !== undefined && value !== '')) {
+      localS3 = await (await import('./workspace-s3')).startWorkspaceS3(root);
+      runtime.storage = localS3.storage;
+      console.log(`Local S3 ready: ${runtime.storage.endpoint} (persistent data: ${runtime.storage.dataFile})`);
     }
-    running = app(root, mode, port, controller.signal, storage?.env).catch((error) => {
+    running = app(root, mode, port, controller.signal, localS3?.env).catch((error) => {
       failure = error;
       abort();
     });
@@ -273,6 +291,7 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string)
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline && !controller.signal.aborted) {
       ready = await fetch(`${url}${mode === 'server' ? '/api/projects' : '/'}`, {
+        headers: process.env.ATLAS_TOKEN || process.env.ATLAS_READ_TOKEN || process.env.ATLAS_PUBLISH_TOKEN ? { authorization: `Bearer ${process.env.ATLAS_TOKEN || process.env.ATLAS_READ_TOKEN || process.env.ATLAS_PUBLISH_TOKEN}` } : {},
         signal: AbortSignal.timeout(500),
         redirect: 'error'
       }).then(
@@ -295,13 +314,29 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string)
       await writeFile(stateFile(root, mode), JSON.stringify(runtime), { mode: 0o600 });
       console.log(`Atlas ${mode} ready: ${url}`);
       if (mode === 'server') console.log(`Settings: ${runtime.settingsUrl}\nPublish reports with ATLAS_STORE=${url}`);
+      if (populate) {
+        runtime.population = 'running';
+        await writeFile(stateFile(root, mode), JSON.stringify(runtime), { mode: 0o600 });
+        try {
+          await populateWorkspace(root, url, controller.signal);
+          if (!controller.signal.aborted) {
+            runtime.population = 'complete';
+            console.log(`Populate complete. Atlas remains ready: ${url}`);
+          }
+        } catch (error) {
+          runtime.population = 'failed';
+          failure = error;
+          console.error(`${error instanceof Error ? error.message : String(error)}. Atlas remains available to inspect the results; stop it when finished.`);
+        }
+        if (!controller.signal.aborted) await writeFile(stateFile(root, mode), JSON.stringify(runtime), { mode: 0o600 });
+      }
     }
     await running;
     if (failure) throw failure;
   } finally {
     abort();
     await running;
-    await storage?.stop();
+    await localS3?.close();
     await control.stop(true);
     process.removeListener('SIGINT', abort);
     process.removeListener('SIGTERM', abort);
@@ -310,26 +345,28 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string)
       (text) => JSON.parse(text) as Runtime,
       () => null
     );
-    if (runtime && saved?.token === runtime.token) await unlink(stateFile(root, mode)).catch(() => {});
+    if (acquired && runtime && saved?.token === runtime.token) await unlink(stateFile(root, mode)).catch(() => {});
   }
 }
 
-if (import.meta.main) {
-  const [command, ...args] = process.argv.slice(2);
-  const root = process.cwd();
+/** Execute the existing lifecycle workflow for the single development entry point. */
+export async function workspaceMain(argv: string[], root = process.cwd()): Promise<number> {
+  const [command, ...args] = argv;
   try {
-    if (command === '--help' || command === '-h' || !command) console.log(help);
+    if (command === '--help' || command === '-h' || !command || args.includes('--help') || args.includes('-h')) console.log(help);
     else if (command === 'setup' && !args.length) await setupWorkspace(root);
     else if (command === 'status' && !args.length) console.log(JSON.stringify(await workspaceStatus(root), null, 2));
     else if (command === 'stop' && (!args.length || (args.length === 1 && modes.includes(args[0] as Mode))))
       await stopWorkspace(root, args.length ? [args[0] as Mode] : modes);
-    else if ((command === 'run' || command === 'preview') && (!args.length || (args.length === 2 && args[0] === '--port')))
-      await runWorkspace(root, command === 'run' ? 'server' : 'preview', args[1] ?? process.env.ATLAS_PORT ?? process.env.PORT);
+    else if ((command === 'run' || command === 'preview' || command === 'populate') && (!args.length || (args.length === 2 && args[0] === '--port')))
+      await runWorkspace(root, command === 'preview' ? 'preview' : 'server', args[1] ?? process.env.ATLAS_PORT ?? process.env.PORT, command === 'populate');
     else throw new Error(`Unknown workspace command or arguments.\n${help}`);
   } catch (error) {
     console.error(`workspace: ${error instanceof Error ? error.message : String(error)}`);
-    process.exitCode = 1;
+    return 1;
   }
   // All owned servers and child processes have finished before this CLI exits.
-  process.exit(process.exitCode ?? 0);
+  return 0;
 }
+
+if (import.meta.main) process.exit(await workspaceMain(process.argv.slice(2)));

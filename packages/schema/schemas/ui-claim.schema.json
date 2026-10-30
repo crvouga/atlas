@@ -1,0 +1,184 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-claim.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "claimId": {
+      "type": "string"
+    },
+    "shard": {
+      "type": "string"
+    },
+    "definition": {
+      "type": "string"
+    },
+    "collection": {
+      "type": "string"
+    },
+    "createdAtMs": {
+      "type": "number"
+    },
+    "expiresAtMs": {
+      "type": "number"
+    },
+    "leaseSeconds": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "failed",
+              "empty",
+              "unknown",
+              "stale",
+              "fresh"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 16384
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "route": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "fixture": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "cohort": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "area": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "kind": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "flags": {
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 2048
+                      }
+                    },
+                    "covers": {
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 2048
+                      }
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                },
+                "profile": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "description": "As a UI catalog profile key: the environment and the sorted parameters"
+                    },
+                    "values": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "environment": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "values",
+                    "environment",
+                    "parameters"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "key",
+                "state",
+                "profile"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "key",
+          "tier",
+          "items"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "claimId",
+    "shard",
+    "definition",
+    "collection",
+    "createdAtMs",
+    "expiresAtMs",
+    "leaseSeconds",
+    "units"
+  ],
+  "additionalProperties": {}
+}

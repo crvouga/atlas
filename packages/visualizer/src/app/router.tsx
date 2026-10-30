@@ -30,7 +30,7 @@ const ChartSearch = RootSearch.extend({
 });
 export type ChartSearch = z.infer<typeof ChartSearch>;
 /** The project home: the test explorer's filters, grouping, order, open test and open run (see `explorer/search.ts`). */
-const HomeSearch = RootSearch.extend(ExplorerSearchFields);
+const HomeSearch = RootSearch.extend({ ...ExplorerSearchFields, view: z.literal('tests').optional().catch(undefined) });
 /** The release evidence is read against: its build, commit and platform, and the evidence filter (see `evidence/applicability.ts`). A build such as `90` is read from a typed link as a number: coerced back to its text. */
 const ReleaseSearch = {
   release: z.coerce.string().min(1).optional().catch(undefined),

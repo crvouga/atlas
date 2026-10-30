@@ -19,7 +19,7 @@ const Finder = lazy(loadFinder);
 if (typeof window !== 'undefined') setTimeout(() => void loadFinder(), 0);
 function Index() {
   const evidence = useEvidence();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const kind = kindOfAddress(pathname);
   if (pathname === '/catalog') return null;
   return pathname === '/critiques' ? (
@@ -28,7 +28,7 @@ function Index() {
     <SpecIndex kind={kind} />
   ) : pathname.startsWith('/specs/') || pathname === '/behaviors' ? (
     <Box component="nav" aria-label="Specs" />
-  ) : evidence.ready && !evidence.files.some(isStatechartFile) ? (
+  ) : (pathname === '/' && search.view === 'tests') || (evidence.ready && !evidence.files.some(isStatechartFile)) ? (
     <ProjectIndex />
   ) : (
     <Gazetteer />
@@ -37,8 +37,8 @@ function Index() {
 function Body() {
   const evidence = useEvidence();
   const { view, spec } = useAtlas();
-  const { pathname } = useLocation();
-  if (pathname === '/' && evidence.ready && !evidence.filesPending && !evidence.files.some(isStatechartFile)) return <Explorer />;
+  const { pathname, search } = useLocation();
+  if (pathname === '/' && (search.view === 'tests' || (evidence.ready && !evidence.filesPending && !evidence.files.some(isStatechartFile)))) return <Explorer />;
   if (!pathname.startsWith('/specs/') && pathname !== '/catalog' && pathname !== '/critiques' && pathname !== '/behaviors' && !view && spec.error)
     return (
       <Container py="xl">

@@ -1,9 +1,9 @@
 scripts:
-  setup: bun run workspace:setup
-  archive: bun run workspace:stop
+  setup: bun run dev --setup
+  archive: bun run dev --stop
 setupAgentStartupPolicy: wait-for-setup
 defaultTabs:
   - title: Agent
-  - title: Atlas
-    command: bun run workspace:run
-# Keep dependencies and .atlas-workspace private to each checkout. Reports live in S3 (copy .env.example to .env).
+  - title: Dev
+    command: bun run dev
+# Keep dependencies and .atlas-workspace private to each checkout. Populate starts local S3 automatically when unconfigured.

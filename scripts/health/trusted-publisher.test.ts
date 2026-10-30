@@ -133,7 +133,7 @@ describe('trustedPublisherReport', () => {
         'GitHub Actions publisher does not allow npm publish (stage only). On the access page, allow npm publish.',
         accessUrl('@crvouga/atlas-stripe'),
         '',
-        'Not on npm yet, so there is no access page until the interactive first publish (bun run release:seed).',
+        'Not on npm yet, so there is no access page until the interactive first publish (bun scripts/release/seed.ts).',
         '@crvouga/atlas-paddle',
         '',
         'npm did not return the trusted publisher for these packages.',

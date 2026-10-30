@@ -13,7 +13,7 @@ test-results/
 # Data owned by the Atlas node, independent of any example project.
 /.atlas-data/
 /atlas-data/
-# Client build output (`atlas client build`, `bun run client:build`).
+# Client build output (`atlas client build`, `bun packages/core/bin/atlas.mjs client build --no-data`).
 /atlas-site/
 # Previously generated example data.
 /examples/todo/.atlas-server/

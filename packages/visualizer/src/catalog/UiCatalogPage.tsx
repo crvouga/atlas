@@ -10,15 +10,16 @@
 import { IconArrowsExchange, IconDownload } from '@tabler/icons-react';
 import type { UiCapture, UiCatalog, UiCatalogState, UiCell } from '@crvouga/atlas/reports/ui-catalog';
 import { UI_COVERAGE } from '@crvouga/atlas/reports/ui-catalog';
-import { Accordion, Alert, Anchor, Badge, Button, Card, Code, Container, Drawer, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Anchor, Badge, Button, Card, Code, Container, Divider, Drawer, Group, Pagination, ScrollArea, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useEvidence } from '../evidence/evidence-context';
 import { ago, exactTime, plural, shortSha, useNow } from '../evidence/format';
 import { EvidenceIncomplete, EvidenceWaiting } from '../evidence/load-state';
 import { StatusMark } from '../evidence/marks';
 import { Picture, imageSource } from './Picture';
+import { CollectionPanel } from './CollectionPanel';
 import { UiCatalogCompare } from './UiCatalogCompare';
 import { useUiCatalog } from './provider';
 import { useCatalogNavigate, useCatalogSearch } from './search';
@@ -114,37 +115,91 @@ function CellColumn({ cell, state, now }: { cell: UiCell; state: UiCatalogState;
 }
 
 /** The open state: every profile side by side, with the facts declared about it and where each picture came from. */
-function StateDetail({ state, onClose }: { state: UiCatalogState; onClose: () => void }) {
+function StateDetail({ state, states, onSelect, onClose }: { state: UiCatalogState | null; states: readonly UiCatalogState[]; onSelect: (id: string) => void; onClose: () => void }) {
+  const navigation = useRef<HTMLDivElement>(null);
+  const viewport = useRef<HTMLDivElement>(null);
+  const index = states.findIndex((item) => item.id === state?.id);
+  const select = (page: number) => {
+    const next = states[page - 1];
+    if (!next || next.id === state?.id) return;
+    // Keep focus inside a stable element even when numbered controls are replaced.
+    navigation.current?.focus();
+    if (viewport.current) viewport.current.scrollTop = 0;
+    onSelect(next.id);
+  };
   const now = useNow();
-  const facts: [string, string][] = [
+  const facts: [string, string][] = state ? [
     ['Route', state.route ?? ''], ['Fixture', state.fixture ?? ''], ['Cohort', state.cohort ?? ''], ['Area', state.area ?? ''],
     ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')],
     ...Object.entries(state.attributes ?? {})
-  ];
+  ] : [];
   return (
-    <Drawer opened onClose={onClose} position="right" size="xl" title={<Title order={2}>{state.title}</Title>} closeButtonProps={{ 'aria-label': 'Close the state' }}>
-      <Stack gap="md">
-        <Text c="dimmed" fz="sm">
-          {state.id}
-        </Text>
-        <Table aria-label="Declared facts" withRowBorders>
-          <Table.Tbody>
-            {facts.map(([name, value]) => (
-              <Table.Tr key={name}>
-                <Table.Th scope="row" w="40%">{name}</Table.Th>
-                <Table.Td>{value || <Text span c="dimmed">Not declared</Text>}</Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-        <Title order={3}>Profiles side by side</Title>
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          {state.cells.map((cell) => (
-            <CellColumn key={cell.profile.key} cell={cell} state={state} now={now} />
-          ))}
-        </SimpleGrid>
-      </Stack>
-    </Drawer>
+    <Drawer.Root opened={!!state} onClose={onClose} position="right" size="xl"
+      onKeyDown={(event) => {
+        if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || index < 0) return;
+        const target = event.target as HTMLElement;
+        if (target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="slider"], [role="combobox"]')) return;
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        event.stopPropagation();
+        select(index + (event.key === 'ArrowLeft' ? 0 : 2));
+      }}
+    >
+      <Drawer.Overlay />
+      <Drawer.Content p={0} h="100%">
+        <Stack h="100%" gap={0}>
+          <Drawer.Header flex="0 0 auto">
+            <Drawer.Title>{state?.title}</Drawer.Title>
+            <Drawer.CloseButton aria-label="Close the state" />
+          </Drawer.Header>
+          {state && <>
+            <ScrollArea flex={1} mih={0} viewportRef={viewport}>
+              <Drawer.Body>
+                <Stack gap="md">
+                  <Text c="dimmed" fz="sm">
+                    {state.id}
+                  </Text>
+                  <Table aria-label="Declared facts" withRowBorders>
+                    <Table.Tbody>
+                      {facts.map(([name, value]) => (
+                        <Table.Tr key={name}>
+                          <Table.Th scope="row" w="40%">{name}</Table.Th>
+                          <Table.Td>{value || <Text span c="dimmed">Not declared</Text>}</Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                  <Title order={3}>Profiles side by side</Title>
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                    {state.cells.map((cell) => (
+                      <CellColumn key={cell.profile.key} cell={cell} state={state} now={now} />
+                    ))}
+                  </SimpleGrid>
+                </Stack>
+              </Drawer.Body>
+            </ScrollArea>
+            <Divider />
+            <Stack gap="xs" component="nav" p="lg" flex="0 0 auto" aria-label="Catalog item navigation" tabIndex={-1} ref={navigation}>
+              <Text role="status" aria-live="polite" aria-atomic="true">
+                {index >= 0 ? `Item ${index + 1} of ${states.length}: ${state.title}` : `${state.title} is outside the current filters.`}
+              </Text>
+              {index >= 0 && (
+                <Pagination
+                  total={states.length}
+                  value={index + 1}
+                  onChange={select}
+                  layout="responsive"
+                  formatLabel={({ page, totalPages }) => `Item ${page} of ${totalPages}`}
+                  getControlProps={(control) => ({ 'aria-label': control === 'previous' ? 'Previous catalog item' : 'Next catalog item' })}
+                  getItemProps={(page) => ({ 'aria-label': `Go to item ${page}: ${states[page - 1]!.title}`, 'aria-current': page === index + 1 ? 'page' : undefined })}
+                />
+              )}
+              <Text c="dimmed" fz="sm">Use Left and Right arrow keys to move between items. Press Escape to close.</Text>
+            </Stack>
+          </>}
+        </Stack>
+      </Drawer.Content>
+    </Drawer.Root>
   );
 }
 
@@ -309,6 +364,7 @@ export function UiCatalogPage() {
           <>
             <Summary catalog={catalog} narrowed={narrowed} />
             <Surfaces catalog={whole} />
+            <CollectionPanel />
             {whole.states.length === 0 && evidence.ready && (
               <Text c="dimmed" role="status" component="div" data-empty>
                 No UI states have been recorded yet. A collector publishes a layer with a part of kind <Code>ui-state</Code>; states appear here the moment it arrives.
@@ -345,7 +401,7 @@ export function UiCatalogPage() {
           </Alert>
         )}
       </Stack>
-      {open && <StateDetail state={open} onClose={() => go({ state: undefined })} />}
+      <StateDetail state={open} states={catalog?.states ?? []} onSelect={(id) => go({ state: id })} onClose={() => go({ state: undefined })} />
     </Container>
   );
 }

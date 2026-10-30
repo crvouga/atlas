@@ -12,6 +12,7 @@ import { createReportsApp, type ReportsAppDeps } from '@crvouga/atlas/reports/re
 import { ObjectStoreWithPrefix } from '@crvouga/atlas/reports/store-prefix';
 
 import { listSpecFiles, resolveRoots } from './atlas-files';
+import { publishStatusExamples } from './example-statuses';
 
 /** The version the example calls current. Older layers stay in the report beside it. */
 export const EXAMPLE_CURRENT = `c0ffee${'1'.repeat(34)}`;
@@ -436,6 +437,9 @@ export async function exampleReports(specs: Readonly<Record<string, string>>): P
   const lab = memoryStore();
   const backends = { local: localStore, shared: store, 'device-lab': lab } as const;
   for (const layer of layers) await publishExampleLayer(backends[layer.backend], producer, layer, specs);
+  if (producer === 'todo' && specs['getting-started.feature']) {
+    await publishStatusExamples(store, { featureText: specs['getting-started.feature'], recordedAtMs: at('2026-10-13T12:00:00Z'), sha: EXAMPLE_CURRENT, branch: 'main' });
+  }
   return {
     store,
     localStore,

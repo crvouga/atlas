@@ -592,7 +592,7 @@ export const CatalogEntriesSchema = …
 
 Source: `packages/schema/src/cli-results.ts`
 
-What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, and `atlas critic list`, `setup`, `doctor` and `run`, print on standard output with `--format json` (alias
+What `atlas report publish`, `stream`, `merge`, `doctor` and `verify-recordings`, `atlas ui-catalog plan`, `publish`, `status`, `diff`, `export` and `collect`, and `atlas critic list`, `setup`, `doctor` and `run`, print on standard output with `--format json` (alias
 `--json`), and what any `atlas` command prints on standard error for a command that was wrong: one JSON document,
 so an agent or a script never has to parse prose. (`status` and `policy` already print documents:
 `ReportStatusSchema`, and an IAM policy.) Each is also published as a JSON Schema.
@@ -837,6 +837,14 @@ export const UiCatalogExportResultSchema = …
 ```
 
 What `atlas ui-catalog export --format json` prints.
+
+#### `UiCatalogCollectResultSchema`
+
+```ts
+export const UiCatalogCollectResultSchema = …
+```
+
+What `atlas ui-catalog collect --format json` prints: what one shard collected from the shared queue, and why it stopped.
 
 #### `CLI_RESULTS`
 
@@ -1186,7 +1194,7 @@ Source: `packages/schema/src/index.ts`. Import: `@crvouga/atlas/schema`
 Re-exports every Zod schema, constant and inferred type of the Atlas contract: the layer format and report status
 (`layer`), the `atlas.critique` evidence of automated UI reviewers (`critique`), the statechart run manifest (`manifest`, `common`), the spec file formats (`spec`), the run index and
 report sources the viewer reads (`runs-index`, `report-sources`) and the server configuration (`server-config`).
-The JSON Schemas shipped in `schemas/` are generated from these by `bun run schemas`.
+The JSON Schemas shipped in `schemas/` are generated from these by `bun run docs`.
 
 See docs/report-contract.md
 
@@ -1587,7 +1595,7 @@ The outcome of `parseLayerDocument`: the layer, or the reason it could not be re
 export function parseLayerDocument(raw: unknown): ParsedLayer
 ```
 
-Reads a layer manifest of any age and returns it, or the reason it cannot be read; it never throws. Layers written
+Reads a layer manifest of any age and returns it, or the reason it cannot be read; it never throws or mutates the input. Layers written
 before `schemaVersion` existed are version 1. A layer of a newer major version is refused by name ("Upgrade
 
 See /report-contract.md
@@ -2583,6 +2591,147 @@ export function isStatechartFile(path: string)
 ```
 
 Whether a spec-relative path (using `/`) matches `STATECHART_FILE_PATTERNS`.
+
+### UI catalog collection queue protocol
+
+Source: `packages/schema/src/ui-catalog-queue.ts`
+
+The documents a server and its collecting shards exchange to share out the collection of a UI catalog: a **definition**
+(the states, the profile matrix the project declares and how items group into work units, resolved and content-addressed),
+a **claim** (a time-limited lease on a batch of work units, handed out in priority order) and the **queue summary** a viewer
+shows. None of them is part of the layer format: results still travel as ordinary `ui-state` layers, and a definition
+becomes ordinary `ui-plan` layers when it is published. Within this version only optional fields are added.
+
+See docs/ui-catalog.md#collecting-with-a-queue
+
+#### `UI_CATALOG_QUEUE_VERSION`
+
+```ts
+export const UI_CATALOG_QUEUE_VERSION = …
+```
+
+The `schemaVersion` of a stored definition, a claim and a queue summary.
+
+#### `UiDimensionValueSchema`
+
+```ts
+export const UiDimensionValueSchema = …
+```
+
+One value of a dimension, with what it contributes to the profile: an `environment` and extra `parameters`.
+
+#### `UiDimensionSchema`
+
+```ts
+export const UiDimensionSchema = …
+```
+
+A dimension of the profile matrix: a name the project chose, and its values. Atlas has no built-in names.
+
+#### `UiDefinitionStateSchema`
+
+```ts
+export const UiDefinitionStateSchema = …
+```
+
+A state the catalog should contain, with the facts declared about it (as in a `ui-plan` entry).
+
+#### `UiCatalogDefinitionSchema`
+
+```ts
+export const UiCatalogDefinitionSchema = …
+```
+
+A catalog definition as it is stored and exchanged: every async part already resolved, so every shard sees the same matrix.
+Its version is the SHA-256 of its canonical JSON, so the same definition is the same version wherever it is resolved.
+
+#### `UiQueueTierSchema`
+
+```ts
+export const UiQueueTierSchema = …
+```
+
+The tiers of the queue, most urgent first. `fresh` is captured and not due; it is never handed out.
+
+#### `UiClaimRequestSchema`
+
+```ts
+export const UiClaimRequestSchema = …
+```
+
+What a shard asks for: a batch of work units of one definition, optionally narrowed to some dimension values.
+
+#### `UiQueueProfileSchema`
+
+```ts
+export const UiQueueProfileSchema = …
+```
+
+One profile of the matrix: the dimension values, and the environment and parameters a result is recorded under.
+
+#### `UiQueueItemSchema`
+
+```ts
+export const UiQueueItemSchema = …
+```
+
+One item of a claimed unit: a state in a profile.
+
+#### `UiClaimSchema`
+
+```ts
+export const UiClaimSchema = …
+```
+
+A claim: the work units a shard holds until `expiresAtMs`, renewed by heartbeat.
+
+#### `UiQueueSummarySchema`
+
+```ts
+export const UiQueueSummarySchema = …
+```
+
+`GET /api/ui-catalog/queue`: what is left to collect, who is collecting it, and how fast.
+
+#### `UiCatalogDefinitionDocument`
+
+```ts
+export type UiCatalogDefinitionDocument = z.output<typeof UiCatalogDefinitionSchema>;
+```
+
+A stored, resolved definition.
+
+#### `UiClaimRequest`
+
+```ts
+export type UiClaimRequest = z.input<typeof UiClaimRequestSchema>;
+```
+
+A claim request as a shard sends it.
+
+#### `UiClaim`
+
+```ts
+export type UiClaim = z.output<typeof UiClaimSchema>;
+```
+
+A claim as the server answers it.
+
+#### `UiQueueTier`
+
+```ts
+export type UiQueueTier = z.output<typeof UiQueueTierSchema>;
+```
+
+A queue tier.
+
+#### `UiQueueSummary`
+
+```ts
+export type UiQueueSummary = z.output<typeof UiQueueSummarySchema>;
+```
+
+The queue summary.
 
 ### User state schema
 

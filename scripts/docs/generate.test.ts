@@ -79,7 +79,7 @@ describe('generated files', () => {
 
   test('CI explicitly gates checked commits and releases on the documentation contracts', () => {
     const workflow = YAML.parse(read('.github/workflows/ci.yml'));
-    const step = workflow.jobs.check.steps.find((step: { run?: string }) => step.run === 'bun run docs:check');
+    const step = workflow.jobs.check.steps.find((step: { run?: string }) => step.run === 'bun run docs --check');
     expect(step).toBeDefined();
     expect(step.if).toBeUndefined();
     expect(step['continue-on-error']).toBeUndefined();

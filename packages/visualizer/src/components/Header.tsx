@@ -111,7 +111,8 @@ function SourcesButton({ onOpen }: { onOpen: () => void }) {
 export function Header() {
   const { view } = useAtlas();
   const evidence = useEvidence();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const testsOpen = pathname === '/' && search.view === 'tests';
   const kind = kindOfAddress(pathname);
   const product = productName(view?.title);
   const hasCharts = evidence.files.some(isStatechartFile);
@@ -160,17 +161,25 @@ export function Header() {
               leftSection={kind ? <SpecLogo kind={kind} /> : undefined}
               rightSection={<ChevronDownIcon aria-hidden="true" size={12} />}
             >
-              {catalogOpen ? 'UI catalog' : critiquesOpen ? 'Needs polish' : behaviorsOpen ? 'Behaviors' : (kind?.label ?? (hasCharts ? 'Statecharts' : evidence.ready && !tabs.length ? 'Tests' : 'Specs'))}
+              {testsOpen ? 'Tests' : catalogOpen ? 'UI catalog' : critiquesOpen ? 'Needs polish' : behaviorsOpen ? 'Behaviors' : (kind?.label ?? (hasCharts ? 'Statecharts' : evidence.ready && !tabs.length ? 'Tests' : 'Specs'))}
             </Button>
           </Menu.Target>
           <Menu.Dropdown>
             <Box component="nav" aria-label="Spec type">
               <Menu.Item
-                aria-current={pathname.startsWith('/specs/') || catalogOpen || behaviorsOpen || critiquesOpen ? undefined : 'page'}
+                aria-current={pathname.startsWith('/specs/') || (testsOpen && hasCharts) || catalogOpen || behaviorsOpen || critiquesOpen ? undefined : 'page'}
                 renderRoot={(props) => <Link {...props} to="/" search={(prev) => runOnly(prev)} />}
               >
                 {hasCharts || !evidence.ready ? 'Statecharts' : 'Tests'}
               </Menu.Item>
+              {hasCharts && (
+                <Menu.Item
+                  aria-current={testsOpen ? 'page' : undefined}
+                  renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests' }} />}
+                >
+                  Tests
+                </Menu.Item>
+              )}
               {tabs.map((tab) => (
                 <Menu.Item
                   key={tab.kind.id}
@@ -247,7 +256,7 @@ export function Header() {
           </Popover.Target>
           <Popover.Dropdown>
             <Stack gap="sm">
-              {!kind && view && <RunPicker view={view} />}
+              {!kind && !testsOpen && view && <RunPicker view={view} />}
               <LiveRuns />
               <SourcesButton
                 onOpen={() => {
@@ -256,7 +265,7 @@ export function Header() {
                   optionsTarget.current?.focus();
                 }}
               />
-              {!kind && view && <DataIssues issues={view.issues} />}
+              {!kind && !testsOpen && view && <DataIssues issues={view.issues} />}
               {runtimeConfig()?.api && <Anchor href={`/admin${project ? `?project=${encodeURIComponent(project)}` : ''}`}>Settings</Anchor>}
               <ProjectNotice />
             </Stack>
@@ -270,7 +279,7 @@ export function Header() {
 function SpecBreadcrumb() {
   const evidence = useEvidence();
   const { view } = useAtlas();
-  const { pathname } = useLocation();
+  const { pathname, search: locationSearch } = useLocation();
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const kind = kindOfAddress(pathname);
@@ -286,7 +295,7 @@ function SpecBreadcrumb() {
         name: item.name,
         running: (evidence.view.specs.get(outlinePath(item.file))?.summary.counts.running ?? 0) > 0
       }));
-  if (!options.length || pathname === '/catalog' || pathname === '/behaviors' || pathname === '/critiques') return null;
+  if (!options.length || (pathname === '/' && locationSearch.view === 'tests') || pathname === '/catalog' || pathname === '/behaviors' || pathname === '/critiques') return null;
   return (
     <NativeSelect
       data-running={options.some((option) => option.running) || undefined}

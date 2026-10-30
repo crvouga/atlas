@@ -46,6 +46,7 @@ import {
 } from '@crvouga/atlas/reports/test-catalog';
 import { isStatechartFile, type RecordingVerification } from '@crvouga/atlas/schema';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useLocation } from '@tanstack/react-router';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { reportJson, ReportsError } from '../evidence/api';
@@ -190,7 +191,8 @@ function usePageHistory(layers: readonly LayerEvidence[] | null): PageHistory | 
 /** Reads the catalog for everything below it: from the server when it has one, else from the page. */
 export function TestCatalogProvider({ children }: { children: ReactNode }) {
   const evidence = useEvidence();
-  const enabled = evidence.ready && !evidence.files.some(isStatechartFile);
+  const { pathname, search } = useLocation();
+  const enabled = evidence.ready && ((pathname === '/' && search.view === 'tests') || !evidence.files.some(isStatechartFile));
   const version = useThrottled(evidence.version, SERVER_REREAD_MS);
   // A server without the catalog routes (an older one) answers 404: stop asking until the page is reloaded.
   const [unsupported, setUnsupported] = useState(false);

@@ -30,13 +30,13 @@ async function evidence(app: { request: (path: string) => Response | Promise<Res
   return { page, layers, outline };
 }
 
-test('atlas viz serves five layers across environments before a run', async () => {
+test('example preview includes persistent status samples across environments before a run', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'atlas-example-reports-'));
   try {
     const { page } = await evidence(await exampleReportsApp(directoryStore(dir)));
-    expect(page.layers).toHaveLength(5);
+    expect(page.layers).toHaveLength(12);
     expect(page.backends.map((backend) => backend.label)).toEqual(['This machine', 'Shared reports', 'Device lab', 'Example run']);
-    expect(new Set(page.layers.map((layer) => layer.environment))).toEqual(new Set(['desktop-web', 'mobile-web', 'ios', 'android']));
+    expect(new Set(page.layers.map((layer) => layer.environment))).toEqual(new Set(['desktop-web', 'mobile-web', 'ios', 'android', 'example-statuses']));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -67,7 +67,7 @@ test('a desktop web example run replaces only the desktop slot it repeated', asy
       }]
     }, (async function* () {})());
     const { page, layers, outline } = await evidence(await exampleReportsApp(directoryStore(dir)));
-    expect(page.layers).toHaveLength(6);
+    expect(page.layers).toHaveLength(13);
     const slot = checkSlots(combineEvidence(outline, layers).specs.find((spec) => spec.spec.path === 'specs/share-a-list.feature')!.results).find((entry) => entry.id === CHECK);
     const desktop = slot?.outcomes.find((outcome) => outcome.layer.environment === 'desktop-web');
     const ios = slot?.outcomes.find((outcome) => outcome.layer.environment === 'ios');

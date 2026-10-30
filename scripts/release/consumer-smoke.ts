@@ -15,8 +15,8 @@
  * cannot resolve, a runtime import missing from `dependencies`, files left out of the tarball, a
  * module with side effects that defeats tree shaking.
  *
- *   bun run build && bun run release:smoke
- *   bun run release:smoke --keep     (leave the installed project behind to inspect)
+ *   bun run build && bun run smoke
+ *   bun run smoke --keep     (leave the installed project behind to inspect)
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

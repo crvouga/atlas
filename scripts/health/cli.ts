@@ -1,8 +1,8 @@
 /**
  * Maintainer health checks. Prints a short list of pages still left to fix.
  *
- *   bun run health
- *   bun run health trusted-publisher
+ *   bun scripts/health/cli.ts
+ *   bun scripts/health/cli.ts trusted-publisher
  */
 import { checks } from './checks.ts';
 import { needsAttention, renderHealth } from './report.ts';
@@ -10,7 +10,7 @@ import { needsAttention, renderHealth } from './report.ts';
 const args = process.argv.slice(2).filter((arg) => arg !== '--');
 
 if (args.includes('--help') || args.includes('-h')) {
-  console.log('bun run health [check…]');
+  console.log('bun scripts/health/cli.ts [check…]');
   console.log('');
   for (const check of checks) console.log(`  ${check.id}  ${check.summary}`);
   process.exit(0);

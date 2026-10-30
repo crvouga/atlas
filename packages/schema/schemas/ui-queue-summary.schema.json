@@ -1,0 +1,291 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-queue-summary.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "definition": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "states": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "profiles": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "units": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "version",
+            "name",
+            "states",
+            "profiles",
+            "items",
+            "units"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Null until a definition is published"
+    },
+    "tiers": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "empty",
+          "unknown",
+          "stale",
+          "fresh"
+        ]
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "required": [
+        "failed",
+        "empty",
+        "unknown",
+        "stale",
+        "fresh"
+      ],
+      "description": "Units by tier. A unit held by a claim is counted in `held`, not here"
+    },
+    "held": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "exhausted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "collection": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit",
+          "attempts",
+          "collection"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "Units that hit the retry limit (at most 100)"
+    },
+    "requeued": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Units that failed, are below the retry limit and are back in the queue"
+    },
+    "unknown": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "At most 50"
+        },
+        "notices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "count",
+        "units",
+        "notices"
+      ],
+      "additionalProperties": {},
+      "description": "Units with no readable result while a backend or layer could not be read: not empty, unknown"
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claimId": {
+            "type": "string"
+          },
+          "shard": {
+            "type": "string"
+          },
+          "units": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "createdAtMs": {
+            "type": "number"
+          },
+          "expiresAtMs": {
+            "type": "number"
+          },
+          "ageMs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "claimId",
+          "shard",
+          "units",
+          "done",
+          "createdAtMs",
+          "expiresAtMs",
+          "ageMs"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "shard": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "idle",
+              "lost"
+            ]
+          },
+          "claims": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "units": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "lastSeenAtMs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "shard",
+          "status",
+          "claims",
+          "units",
+          "done",
+          "failed",
+          "lastSeenAtMs"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "throughput": {
+      "type": "object",
+      "properties": {
+        "unitsPerMinute": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Units finished per minute over the last ten minutes"
+        },
+        "etaMs": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Due units divided by throughput; null when nothing finished lately"
+        }
+      },
+      "required": [
+        "unitsPerMinute",
+        "etaMs"
+      ],
+      "additionalProperties": {}
+    },
+    "time": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "definition",
+    "tiers",
+    "held",
+    "exhausted",
+    "requeued",
+    "unknown",
+    "claims",
+    "shards",
+    "throughput",
+    "time"
+  ],
+  "additionalProperties": {}
+}

@@ -11,11 +11,26 @@ decisions behind it, the command line, and what stays in your project.
 
 **Agents:** the order of work and the mistakes to avoid are in [Capturing and reading the UI catalog](agents.md#capturing-and-reading-the-ui-catalog). This page is the reference.
 
+Developing Atlas itself? `bun run dev` populates the todo example's catalog automatically, alongside its other reports.
+Choose **UI catalog** from the spec-type menu to browse seven states across desktop and mobile profiles, including
+empty, offline and pending-sync states. The collector is
+[`examples/todo/catalog.ts`](https://github.com/crvouga/atlas/blob/main/examples/todo/catalog.ts): it starts its own isolated
+app server, drives the real UI, publishes the expected set and screenshots, and closes its browser and server.
+
+Local development and the example preview also keep three **Status examples** available after collection completes:
+**Example: Pending capture** (planned, not captured yet), **Example: Running capture** (capturing), and
+**Example: Errored capture** (capture failed), each in both profiles. Filter by the **Status examples** area to find them.
+These are labelled, intentional fixtures; the running example leaves no worker or live job active, and none
+claims to have a screenshot. Matching checks appear under the **Example statuses** environment in Tests and Behaviors;
+their layers are grouped in the **Status examples** run. Pending is `not-run` in reports (shown as skipped in behavior
+coverage); running remains current progress and is not counted as a historical completion in Runs.
+
 - [How a state is written](#how-a-state-is-written)
 - [What is expected](#what-is-expected)
 - [Publishing from any collector](#publishing-from-any-collector)
 - [The command line](#the-command-line)
 - [Sharding](#sharding)
+- [Collecting with a queue](#collecting-with-a-queue)
 - [Streaming and loading](#streaming-and-loading)
 - [Exploring it](#exploring-it)
 - [Comparing two commits or two profiles](#comparing-two-commits-or-two-profiles)
@@ -124,6 +139,7 @@ atlas ui-catalog publish --captures captures.json --producer web-capture --envir
 atlas ui-catalog status                          # exit 1 while anything failed, is missing, is still being captured or could not be read
 atlas ui-catalog diff --from 3f9a2c1 --to 8b41d70 # two commits (the whole id, or at least 7 digits)
 atlas ui-catalog export --out public/catalog.html # one file, no server
+atlas ui-catalog collect --catalog atlas.catalog.ts --exec "node ./collect-batch.mjs" # one shard of a shared queue
 ```
 
 `captures.json` is `{"states":[…]}` (or just the list); a state is `{"id","title"?,"status"?,"detail"?,"route"?,"fixture"?,"cohort"?,"area"?,
@@ -150,6 +166,137 @@ layer ([the contract](report-contract.md#guarantees)), which is what the tests p
   shown as captured, and the other shards' cells are unaffected.
 - Atlas does not need the shard count. Completeness is the plan: a cell is expected because a plan says so.
 
+That is all publishing needs. Deciding **what each shard collects next** is the [queue](#collecting-with-a-queue)'s job.
+
+## Collecting with a queue
+
+Publishing needs no coordination, but deciding what to collect does: a static split (`--shard 3/16`) leaves fast shards idle while a
+slow one holds its slice, a shard that dies leaves a hole, the most urgent item can run last, and two runners that start at once collect
+the same items. An Atlas server can instead hand out the work. The project declares its catalog once; any number of shards (local
+processes, CI matrix jobs, a device lab) run the same command, claim the most urgent work, collect it, publish it and claim again until
+nothing is left. They coordinate only through the server, and a shard can join or leave at any time.
+
+### Define the catalog once
+
+```ts
+// atlas.catalog.ts in your project
+import { defineCatalog } from '@crvouga/atlas/reports/ui-catalog-definition';
+
+export default defineCatalog({
+  name: 'web-app',
+  matrix: {
+    // Dimensions and their values are your data: Atlas has no built-in names (locale, tenant, role… work the same).
+    dimensions: {
+      device: { values: ['mobile', 'desktop'], profile: device => ({ environment: `${device}-web`, viewport: device === 'mobile' ? '390x844' : '1440x1000' }) },
+      scheme: { values: ['light', 'dark'] },
+      deployment: { values: async () => loadDeployments() }
+    },
+    exclude: [{ deployment: 'production', scheme: 'dark' }]
+  },
+  states: async () => loadStatesFromMyCollector(),          // ids and declared facts, as a plan entry
+  group: item => `${item.state.id}|${item.profile.device}`,   // optional: what one capture takes together (here both schemes)
+  inventory: async () => loadSurfaceInventory(),              // optional, as `inventory: true` plan entries
+  maxAttempts: 3,                                             // optional: retry limit per collection
+  staleAfterMs: 7 * 24 * 3_600_000                            // optional: recollect a picture older than a week
+});
+```
+
+- **Every combination of values is a profile**, less the exclusions (a partial match). Every dimension value is a profile parameter, so
+  each combination is its own slot, as for any layer. A dimension's `profile(value)` adds what that value contributes: `environment`
+  (the client) and any other key as a parameter.
+- **Ambiguity is refused, never resolved silently**: an exclusion or `--where` naming a dimension or value the matrix does not declare
+  (the message lists the declared ones), two dimensions that both set `environment` for one profile, or set one parameter to different
+  values. A profile that depends on two dimensions is a combined dimension, or an exclusion.
+- **The definition is resolved once.** `values`, `states`, `inventory` and `group` run when it is published; the stored document
+  records the result, so every shard sees the same matrix. Its version is the SHA-256 of its canonical JSON: the same definition is the
+  same version wherever it is resolved, and publishing it twice stores it once.
+- **Publishing it writes ordinary plan layers**: one `ui-plan` layer per profile, by the producer `ui-catalog:<name>`. Adding a value
+  (`tablet`, `staging`) is a one-line change: every state in the new profiles is expected and not captured yet, and goes straight to the
+  front of the queue; results in the other profiles are untouched.
+
+### One command per shard
+
+```sh
+# Each shard runs the same command, once or on forty machines. --store (or ATLAS_STORE) is the server.
+atlas ui-catalog collect --catalog atlas.catalog.ts --exec "node ./collect-batch.mjs"
+
+# A runner that can only do some profiles narrows what it takes, with your own dimension names.
+atlas ui-catalog collect --catalog atlas.catalog.ts --where deployment=development --where device=mobile --exec "…"
+
+# Bounded, for a CI job with a timeout; --stale-before also recollects pictures older than the run.
+atlas ui-catalog collect --catalog atlas.catalog.ts --max-units 200 --max-minutes 40 --stale-before "$RUN_STARTED_AT" --exec "…"
+```
+
+`collect` publishes the definition, claims a batch, runs `--exec` for it, publishes the captures, and claims again until nothing is left
+for this shard (exit `0`, or `1` when anything it collected failed) or a bound is reached. `--exec` runs in a shell with `ATLAS_UI_BATCH`,
+a JSON file with the claim and its `states` (each with its `item` key, its declared facts and its `profile`), and `ATLAS_UI_CAPTURES`,
+where it writes `{"states":[…]}` in the shape `publish --captures` reads, each state naming its `item`, with pictures beside it. An item
+it wrote nothing for is failed. On SIGINT or SIGTERM the claim is released, so its units go back to the queue at once. The result is the
+`ui-catalog-collect-result` document.
+
+A collector that stays in one process (one browser, one warm environment) uses the library instead:
+
+```ts
+import { collectCatalog } from '@crvouga/atlas/reports/ui-catalog-collect';
+import { httpStore } from '@crvouga/atlas/reports/http-store';
+
+await collectCatalog({
+  store: httpStore({ url: process.env.ATLAS_SERVER_URL!, token: process.env.ATLAS_TOKEN }),
+  catalog, shard: { id: `ci-${process.env.GITHUB_JOB}-${index}`, where: { deployment: 'development' } }, batchSize: 25,
+  capture: async (unit, signal) => Promise.all(unit.items.map(async item => ({ item: item.key, ...(await captureUiState(page, { id: item.state.id, ready })) })))
+});
+```
+
+`signal` aborts when the claim is lost, and what was captured for a lost claim is not published: a shard never publishes work it no
+longer holds. A capture that throws records its items as failed, with the reason, and collection goes on. `captureUiState` stays an
+optional adapter; nothing in the queue imports a collection framework.
+
+### The order work is handed out in
+
+| Tier | A unit is here when |
+| --- | --- |
+| **failed** | the newest result of any of its items failed (a readiness timeout is a failed capture) |
+| **empty** | an item was never captured, was skipped, or the unit was claimed and let go of (expired or released) without a new result |
+| **unknown** | an item has no readable result while a backend or a layer could not be read: it may have one, so it is never called empty |
+| **stale** | every item is captured, and the oldest was recorded before the claim's `staleBeforeMs` (or is older than `staleAfterMs`); oldest first |
+| **fresh** | captured and not due: never handed out |
+
+A unit is as urgent as its most urgent item; ties break by unit key, so two servers given the same data give the same order. The order
+is recomputed as results arrive, so an item that fails mid-run goes back near the head, until it has failed `maxAttempts` times in a row
+within one **collection** (the `--collection` id, by default the `--run-id` or `ATLAS_RUN_ID`, else the definition version): then it is
+no longer handed out in that collection, and shows as failed. Claiming reads an index of the newest result per item, built once per
+report version; it never rebuilds the catalog document or lists layers per request. A test claims from 50 000 items with 100 concurrent
+shards.
+
+### Claims
+
+A claim is a lease on a batch of units held by one shard: renewed by heartbeat (every third of `leaseSeconds`, default 120), closed unit
+by unit as captures labelled with the claim id (`labels["atlas.claim"]`) arrive, released when the shard is done, and given back to the
+queue when it expires. No unit is ever held by two live claims. A shard that publishes after its claim expired and another shard
+re-claimed the unit leaves two layers, and the newest `recordedAtMs` wins the cell, as always. A claim request retried with the same
+idempotency key returns the same claim, never a second batch.
+
+Claims are kept by the server in its store (`server/ui-catalog/queue.json`, in S3 like the rest of its state) and written before a claim
+is answered. After a restart they are restored with their leases; those that lapsed meanwhile expire and their units go back to the
+queue, so no unit is lost and none is held forever. One node serves a project's queue. There is no mode without a server: a guessed
+order that other shards cannot see would defeat the point, so `collect` against a directory or a bucket is refused.
+
+| Endpoint | Role | What it does |
+| --- | --- | --- |
+| `PUT /api/ui-catalog/definitions/{version}` | publish | Store a definition and publish its plan layers |
+| `GET /api/ui-catalog/definitions/{version}` | read | Read it back |
+| `POST /api/ui-catalog/claims` | publish | `{ shard, definition, batchSize?, where?, leaseSeconds?, collection?, staleBeforeMs?, idempotencyKey? }` → a claim, or `204` when nothing is due |
+| `POST /api/ui-catalog/claims/{id}/heartbeat` | publish | Renew the lease; `410` once it expired or ended |
+| `DELETE /api/ui-catalog/claims/{id}` | publish | Release it; units without a result go back as empty |
+| `GET /api/ui-catalog/queue` | read | Units by tier, live claims, shards (active, idle or lost), failures re-queued, units at the retry limit, unknown units and why, throughput and time to empty |
+
+Under `/api/projects/{project}/…` each project has its own queue. `/catalog` shows the queue as a **Collection** panel once a definition
+is published: what is left by tier, what is being collected now and by which shard, shards that are active, idle or lost, units that hit
+the retry limit, and throughput.
+
+`atlas ui-catalog status` stays the gate: the plan says what is expected, so a CI job that collected only part of the queue gates on the
+whole catalog, not on its share.
+
 ## Streaming and loading
 
 - **Streaming.** There is no second stream. A viewer holds the report over `/api/events` and reads what changed with
@@ -171,7 +318,10 @@ The viewer's **UI catalog** (`/catalog`, in the menu beside the spec types once 
 state with its picture and a coverage badge per profile, and filters by words, coverage, profile, area, route, cohort, feature flag,
 surface, producer and the attributes your collectors declare. The address holds the filters and the open state, so a link reproduces the view. Opening a state shows its
 profiles side by side with the declared facts, the failure reason, and for each picture the layer, backend, producer, shard, commit
-and time. *Download the manifest* saves the filtered catalog as JSON.
+and time. A persistent bottom bar holds the previous/next arrows and numbered pagination. They move through all states matching the current filters, including states
+beyond the cards currently shown. Left/Right arrow keys navigate while the detail is focused; Escape closes it and returns
+focus to its opener. Navigation stops at either end, announces the current item and total, and keeps the filters in the address.
+A linked state outside the filters still opens, with an explanation instead of an incorrect position. *Download the manifest* saves the filtered catalog as JSON.
 
 Use **Search catalog** for free words, facets and sorting. Press Enter or Tab to turn words into chips;
 each term must match, so `appointment` plus `error` finds appointment-related error screens. Search handles
@@ -319,12 +469,25 @@ The questions the original proposal left open, and how they are answered here. E
 | The event stream | No new stream or events: the existing `report` event and `?since=` deltas. |
 | Sharding | No shard concept in the format; a shard is any publisher. A `shard` label is provenance. Completeness comes from the plan, so Atlas needs no shard count. |
 | What moves | Reading, composing, the viewer, the document and the API, the publish builders, a Playwright capture adapter. Staying with a product: its state declarations, its inventory, its fixtures and its runner. |
-| Where it lives | `@crvouga/atlas/reports/ui-catalog` (model), `…/ui-catalog-publish` (builders), `…/ui-state` (convention); the viewer's `/catalog`; the server's `/api/reports/ui-catalog`; `@crvouga/atlas/playwright`'s `captureUiState`. |
+| Where it lives | `@crvouga/atlas/reports/ui-catalog` (model), `…/ui-catalog-publish` (builders), `…/ui-state` (convention), `…/ui-catalog-definition`, `…/ui-catalog-queue` and `…/ui-catalog-collect` (the queue); the viewer's `/catalog`; the server's `/api/reports/ui-catalog` and `/api/ui-catalog/…`; `@crvouga/atlas/playwright`'s `captureUiState`. |
 | Exploration capabilities | Search, filters, profile comparison, coverage and surface coverage, failure diagnostics, deep links, manifest export. |
 | Static export | Two ways, neither needs a server. The catalog is computed from the layers a viewer holds, so the static site (`atlas client build`) shows it, without streaming. `atlas ui-catalog export` writes it as one self-contained HTML file with a size budget. |
 | Comparing | Two commits (from the layers recorded at each, because the report keeps only the newest) or two profiles; pictures by content hash, never by a pixel measure; one-sided states are not regressions. |
 | Growing without a break | `attributes` for new dimensions; open objects and open words in every reader; a frozen version 1 document that a test holds the code to. See [Stability](#stability-what-may-change-and-what-may-not). |
-| Command line | `atlas ui-catalog plan`, `publish`, `status`, `diff` and `export`, each with `--format json`. Running a collector is not one: that is the product's. |
+| Command line | `atlas ui-catalog plan`, `publish`, `status`, `diff`, `export` and `collect`, each with `--format json`. The collector `collect` runs is the product's. |
+| Who collects what next | A claimable priority queue on the server ([Collecting with a queue](#collecting-with-a-queue)): a definition with a profile matrix the project declares, claims handed out failed, empty, unknown, then stale first, leases renewed by heartbeat. |
+| Where claims live, and concurrency | In the server process, under one lock, and in one JSON document in its store, written before a claim is answered. Restored after a restart; lapsed claims expire. One node serves a project's queue. |
+| Lease and heartbeat | Per claim, chosen by the shard (`leaseSeconds`, default 120, 10 to 3600), renewed every third of it by `collect`. |
+| Batch size | Chosen by the shard (`--batch-size`, default 25, at most 500). |
+| Grouping | Declared by the definition (`group`, a function resolved into the stored document). A group may span any dimension; `where` takes a unit only when every item matches. |
+| What makes a result stale | Its age only: `staleBeforeMs` on a claim (`--stale-before`), or the definition's `staleAfterMs`. Without either, nothing captured is due, so a queue can be empty. |
+| Retry limits | `maxAttempts` (default 3) failures in a row within a collection, counted when captures labelled with a claim arrive; a pass resets it. A collection is the `--collection` id, by default the run id, else the definition version. No backoff. |
+| Fairness | None beyond `where`: a shard takes the batch it asks for. |
+| A mode without a server | None: `collect` needs a server. |
+| A newer definition mid-collection | Claims name their definition and stay valid until they end; new claims use whichever definition they name. Units with the same key are the same unit across versions, so no unit is held twice. |
+| Run identity | The queue is continuous, with no run boundary. `atlas ui-catalog status` gates the whole catalog. |
+| Dimensions and the slot | Every dimension value is a parameter, so it splits the slot; `environment` is set only through a `profile` function. Colliding parameters are refused; a profile that depends on two dimensions is a combined dimension. |
+| Changing a dimension or removing a state | A new definition version. New profiles are expected and empty; results in old profiles, and of removed states, stay readable as they were and are never handed out. The plan layers of the old version are not withdrawn (a layer cannot be), so the catalog keeps showing what it showed. |
 
 ## What stays in your project, and what Atlas does not do
 
@@ -339,7 +502,7 @@ where each now is:
 | 4 | An inventory of the product's surfaces, and reconciliation against it | Reconciliation: `inventory` plan entries and `covers`, the surface coverage table | **The inventory**: the list of surfaces your product has |
 | 5 | A manifest and report builder | `uiCatalog`, the JSON manifest, Markdown, the single HTML file | Nothing |
 | 6 | A viewer: as a single file, as a site, and live | `atlas ui-catalog export`, `atlas client build`, and `/catalog` on `atlas serve` | Nothing |
-| 7 | A command line (list, run, report, publish, watch) | `atlas ui-catalog plan\|publish\|status\|diff\|export`; watching is the live `/catalog` and `atlas report stream` | **Run**: the runner that drives your product to each state |
+| 7 | A command line (list, run, report, publish, watch) | `atlas ui-catalog plan\|publish\|status\|diff\|export\|collect`, the queue that hands out work; watching is the live `/catalog` and `atlas report stream` | **Run**: the collector that drives your product to each state |
 | 8 | A publish step to a hosting platform | Not in Atlas, see below | **The deploy step** of your platform |
 
 What stays is, in one list: the states and profiles to capture, the inventory of surfaces, the fixtures and test data, the runner that

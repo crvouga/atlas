@@ -1068,6 +1068,158 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `200` One page of entries.; `304` Unchanged since the `If-None-Match` ETag.; `400` The cursor is not one this server made.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
+### Publish a UI catalog definition: its states, profile matrix and work units
+
+`PUT /api/ui-catalog/definitions/{version}` · role: publish
+
+Stores a resolved catalog definition (as `resolveCatalog` from `@crvouga/atlas/reports/ui-catalog-definition` makes it) and publishes it as ordinary `ui-plan` layers, one per profile, under the producer `ui-catalog:<name>`, so the catalog expects every state in every profile. The dimensions and values are the project's own data: Atlas has none built in.
+
+The version in the path must be the SHA-256 of the canonical JSON of the body (object keys sorted at every depth), so the same definition is the same version wherever it was resolved. Publishing the definition that is already the latest changes nothing (`200`, `created: false`); two shards that publish it at once store it once. Publishing another stored definition makes it the latest again and publishes its plan anew. A definition whose exclusion names an unknown dimension or value, or in which two dimensions set the environment (or one parameter differently) for a profile, is refused with what is wrong.
+
+- `version` (path, required): The SHA-256 of the canonical JSON of the body: 64 lowercase hex digits.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` Already the latest definition: nothing changed.; `201` Stored, and its plan layers published.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a definition, a version that is not its hash, or a matrix that is ambiguous.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Publish a UI catalog definition: its states, profile matrix and work units
+
+`PUT /api/projects/{project}/ui-catalog/definitions/{version}` · role: publish
+
+Stores a resolved catalog definition (as `resolveCatalog` from `@crvouga/atlas/reports/ui-catalog-definition` makes it) and publishes it as ordinary `ui-plan` layers, one per profile, under the producer `ui-catalog:<name>`, so the catalog expects every state in every profile. The dimensions and values are the project's own data: Atlas has none built in.
+
+The version in the path must be the SHA-256 of the canonical JSON of the body (object keys sorted at every depth), so the same definition is the same version wherever it was resolved. Publishing the definition that is already the latest changes nothing (`200`, `created: false`); two shards that publish it at once store it once. Publishing another stored definition makes it the latest again and publishes its plan anew. A definition whose exclusion names an unknown dimension or value, or in which two dimensions set the environment (or one parameter differently) for a profile, is refused with what is wrong.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `version` (path, required): The SHA-256 of the canonical JSON of the body: 64 lowercase hex digits.
+
+Responses: `200` Already the latest definition: nothing changed.; `201` Stored, and its plan layers published.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `413` Request too large.; `422` Not a definition, a version that is not its hash, or a matrix that is ambiguous.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### A published UI catalog definition
+
+`GET /api/ui-catalog/definitions/{version}` · role: read
+
+The resolved definition with that version, as it was published. It never changes, so it may be kept.
+
+- `version` (path, required): A definition version.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The definition.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.
+
+### A published UI catalog definition
+
+`GET /api/projects/{project}/ui-catalog/definitions/{version}` · role: read
+
+The resolved definition with that version, as it was published. It never changes, so it may be kept.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `version` (path, required): A definition version.
+
+Responses: `200` The definition.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.
+
+### Claim the most urgent UI catalog work units
+
+`POST /api/ui-catalog/claims` · role: publish
+
+Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.
+
+The claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.
+
+- `Idempotency-Key` (header): Instead of `idempotencyKey` in the body.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The claim.; `204` Nothing is due: the queue is empty for this request.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No definition has that version.; `410` The claim made with this idempotency key has ended.; `422` Not a claim request, or `where` names an unknown dimension or value.; `429` Too many live claims.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Claim the most urgent UI catalog work units
+
+`POST /api/projects/{project}/ui-catalog/claims` · role: publish
+
+Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition's `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.
+
+The claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture's `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `Idempotency-Key` (header): Instead of `idempotencyKey` in the body.
+
+Responses: `200` The claim.; `204` Nothing is due: the queue is empty for this request.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No definition has that version.; `410` The claim made with this idempotency key has ended.; `422` Not a claim request, or `where` names an unknown dimension or value.; `429` Too many live claims.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Renew a claim's lease
+
+`POST /api/ui-catalog/claims/{id}/heartbeat` · role: publish
+
+Extends the lease by its length, from the server's time. Only the token that made the claim may renew it. `410` once the claim expired or ended: its unfinished units are back in the queue, so stop collecting them.
+
+- `id` (path, required): The `claimId`.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The new expiry, and how many units of the claim are done.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `410` The claim expired or ended.
+
+### Renew a claim's lease
+
+`POST /api/projects/{project}/ui-catalog/claims/{id}/heartbeat` · role: publish
+
+Extends the lease by its length, from the server's time. Only the token that made the claim may renew it. `410` once the claim expired or ended: its unfinished units are back in the queue, so stop collecting them.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The `claimId`.
+
+Responses: `200` The new expiry, and how many units of the claim are done.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `410` The claim expired or ended.
+
+### Release a claim
+
+`DELETE /api/ui-catalog/claims/{id}` · role: publish
+
+Ends the claim. Its units without a result go back to the queue at once, as empty; results already published stay. Release on exit (including SIGINT and SIGTERM) so nothing waits for the lease to expire.
+
+- `id` (path, required): The `claimId`.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` How many units went back to the queue, and how many were done.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `410` The claim already expired or ended.
+
+### Release a claim
+
+`DELETE /api/projects/{project}/ui-catalog/claims/{id}` · role: publish
+
+Ends the claim. Its units without a result go back to the queue at once, as empty; results already published stay. Release on exit (including SIGINT and SIGTERM) so nothing waits for the lease to expire.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The `claimId`.
+
+Responses: `200` How many units went back to the queue, and how many were done.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `410` The claim already expired or ended.
+
+### What is left to collect, who is collecting it, and how fast
+
+`GET /api/ui-catalog/queue` · role: read
+
+For the latest published definition (or `definition`): units by tier (`failed`, `empty`, `unknown`, `stale`, `fresh`; a unit held by a live claim is counted in `held`), units that hit the retry limit, units re-queued after a failure, unknown units with the notices that make them unknown, the live claims, every shard seen with whether it is `active` (holds a claim), `idle` or `lost` (its last claim expired), and throughput over the last ten minutes with an estimate of the time to empty.
+
+- `definition` (query): A definition version. Default: the latest published.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The queue.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### What is left to collect, who is collecting it, and how fast
+
+`GET /api/projects/{project}/ui-catalog/queue` · role: read
+
+For the latest published definition (or `definition`): units by tier (`failed`, `empty`, `unknown`, `stale`, `fresh`; a unit held by a live claim is counted in `held`), units that hit the retry limit, units re-queued after a failure, unknown units with the notices that make them unknown, the live claims, every shard seen with whether it is `active` (holds a claim), `idle` or `lost` (its last claim expired), and throughput over the last ten minutes with an estimate of the time to empty.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `definition` (query): A definition version. Default: the latest published.
+
+Responses: `200` The queue.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
 ### Every test one run recorded
 
 `GET /api/reports/runs/detail` · role: read

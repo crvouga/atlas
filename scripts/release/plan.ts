@@ -1,8 +1,8 @@
 /**
  * Print which public packages the next release would publish, and at which versions.
  *
- *   bun run release:plan
- *   bun run release:plan --github-output   (also writes has_changes and planned releases to $GITHUB_OUTPUT)
+ *   bun scripts/release/plan.ts
+ *   bun scripts/release/plan.ts --github-output   (also writes has_changes and planned releases to $GITHUB_OUTPUT)
  */
 import { appendFileSync } from 'node:fs';
 

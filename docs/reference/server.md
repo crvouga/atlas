@@ -323,7 +323,7 @@ Source: `packages/server/src/host.ts`
 
 `listen` serves any `(Request) => Promise<Response>` over HTTP: with `Bun.serve` when running on Bun, with a `node:http`
 bridge (streaming bodies in and out, so server-sent events work) everywhere else. The server's behaviour is the same on
-both; `bun run release:smoke` proves it under each. Bodies over `maxBodyBytes` are refused by the runtime before the
+both; `bun run smoke` proves it under each. Bodies over `maxBodyBytes` are refused by the runtime before the
 handler sees them.
 
 #### `RunningServer`
@@ -991,6 +991,99 @@ export function storeApi(options: StoreApiOptions)
 ```
 
 The Hono app of the store protocol, to be mounted at `/api/store`. Reads need role `read`; writes need `publish` through a Bearer token.
+
+### UI catalog collection queue
+
+Source: `packages/server/src/ui-catalog-queue.ts`
+
+The server side of a claimable priority queue for collecting a UI catalog across shards that know nothing about each
+other. A project publishes a definition (`PUT /api/ui-catalog/definitions/{version}`): it is stored, content-addressed,
+and written as ordinary `ui-plan` layers, so the catalog expects every item. A shard asks for work
+(`POST /api/ui-catalog/claims`) and receives the most urgent units ({@link ../../reports/src/ui-catalog-queue}) under a
+lease it renews by heartbeat and releases when done. Results still arrive as ordinary `ui-state` layers; a capture
+labelled with its claim id closes that unit of the claim.
+
+Claims live in this process and in one JSON document in the server's store (`server/ui-catalog/queue.json`, in S3 like
+every other piece of server state), written before a claim is answered. Every change is made under one lock, so no
+unit is ever held by two live claims. After a restart the claims are restored with their leases; those that lapsed
+meanwhile expire, and their units go back to the queue. One node serves a project's queue.
+
+See docs/ui-catalog.md#collecting-with-a-queue
+
+#### `CatalogQueueError`
+
+```ts
+export class CatalogQueueError extends Error
+```
+
+A refused queue request: 403 another shard's claim, 404 an unknown definition, 410 a claim that ended, 422 a bad request, 429 too many claims.
+
+#### `CatalogQueueOptions`
+
+```ts
+export type CatalogQueueOptions = {
+  /** Where definitions and the queue document are kept: the server's store, scoped to the project. */
+  readonly store: ObjectStore;
+  /** The report as it stands, to read results from. */
+  readonly snapshot: () => EffectiveEvidence;
+  /** Publish a definition's plan layers into the report. */
+  readonly publishPlan: (layers: readonly PublishChecksInput[]) => Promise<void>;
+  readonly now?: () => number;
+};
+```
+
+What the queue needs from the server around it.
+
+#### `CatalogQueue`
+
+```ts
+export class CatalogQueue
+```
+
+One project's collection queue. Every method waits for the stored state to be restored, and every change is made under
+one lock and stored before it is answered.
+
+**Example**
+
+```ts
+const queue = new CatalogQueue({ store, snapshot: () => index.snapshot(), publishPlan: async layers => { ... } });
+const claim = await queue.claim({ shard: 'ci-1', definition: version, batchSize: 25 }, owner);
+```
+
+- `readonly ready: Promise<void>;` — Resolves once the stored state is read; rejects when the store cannot be read (each request then retries).
+- `async publish(input: unknown, version: string): Promise<{ readonly version: string; readonly created: boolean; readonly latest: boolean; readonly profiles: number; readonly items: number; readonly units: number; readonly layers: number }>` — Store a definition and publish it as plan layers. The version must be the SHA-256 of the canonical document. Publishing the definition that is already the latest changes nothing; publishing another stored one makes it the latest again and publishes its plan anew. Throws a {@link CatalogQueueError} (422) for a document that cannot be used.
+- `async definition(version: string): Promise<UiCatalogDefinitionDocument | null>` — A stored definition document, or null.
+- `async claim(input: z.input<typeof UiClaimRequestSchema>, owner: string): Promise<UiClaim | null>` — Hand out the most urgent units of a definition that no live claim holds, match `where` and are below the retry limit, or null when there are none. A request repeated with the same idempotency key answers the same claim; once that claim has ended, a {@link CatalogQueueError} 410. Throws 404 for an unknown definition and 422 for an unknown dimension or value.
+- `async heartbeat(id: string, owner: string): Promise<{ readonly expiresAtMs: number; readonly done: number; readonly units: number }>` — Extend a live claim's lease by its length. Throws {@link CatalogQueueError} 410 once it expired or ended, 403 for another publisher's claim.
+- `async release(id: string, owner: string): Promise<{ readonly released: number; readonly done: number }>` — Release a claim: units without a result go back to the queue at once, as empty. Throws {@link CatalogQueueError} 410 when it already ended.
+- `get active(): boolean { return this.claims.size > 0; }` — Whether any claim is live: without one, a change to the report has nothing to close.
+- `async sweep(): Promise<void>` — Expire lapsed claims and close answered units. Called on a timer and when the report changes.
+- `async summary(version?: string): Promise<UiQueueSummary>` — What is left to collect of a definition (default the latest published), who holds what, and how fast it goes.
+
+#### `CatalogQueueDeps`
+
+```ts
+export type CatalogQueueDeps = {
+  readonly queue: CatalogQueue;
+  readonly auth: Auth;
+  /** Is the report read yet? Claims wait for it, because the order depends on it. */
+  readonly ready: () => boolean;
+  readonly maxBytes: number;
+  readonly unauthorized: (verdict: Extract<ReturnType<Auth['check']>, { ok: false }>) => Response;
+};
+```
+
+What the queue routes need from the server around them.
+
+#### `mountCatalogQueue`
+
+```ts
+export function mountCatalogQueue(app: Hono, deps: CatalogQueueDeps): void
+```
+
+Registers the collection queue routes on `app`: `PUT` and `GET /api/ui-catalog/definitions/:version`,
+`POST /api/ui-catalog/claims`, `POST /api/ui-catalog/claims/:id/heartbeat`, `DELETE /api/ui-catalog/claims/:id` and
+`GET /api/ui-catalog/queue`. Changes need a Bearer token with the `publish` role; reading needs a reader.
 
 ### User state in S3
 

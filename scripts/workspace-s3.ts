@@ -1,39 +1,62 @@
-/** @module Workspace S3 emulator
- * Development-only S3 endpoint owned by the workspace runner, never an Atlas storage fallback.
+/** @module Workspace S3 service
+ * Local development storage speaks the real S3 protocol. Mockingbird owns its file-backed
+ * database; Atlas still reads and writes only through its existing S3 store.
  */
-import { signRequest, sha256Hex, amzDate } from '../packages/reports/src/sigv4';
+import { Database, type SQLQueryBindings } from 'bun:sqlite';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { createServer } from '@crvouga/mockingbird-service-s3/server';
+import type { S3RuntimeOptions } from '@crvouga/mockingbird-service-s3';
 
-/** Start an isolated, ephemeral Mockingbird bucket unless any S3 configuration was supplied.
- * Partial external configuration is preserved so the server reports missing or invalid values.
- * Throws on emulator or bucket creation failure; the caller must stop the returned server on teardown.
- */
-export async function workspaceStorage(env: NodeJS.ProcessEnv) {
-  if (Object.keys(env).some((key) => key.startsWith('ATLAS_S3_') && env[key] !== undefined))
-    return { env, url: undefined, stop: async () => {} };
-  const { createRuntime } = await import('@crvouga/mockingbird-service-s3');
-  const credentials = { accessKeyId: 'fixture', secretAccessKey: 'fixture' };
-  const emulator = createRuntime({ authentication: 'strict', credentials: { fixture: 'fixture' } });
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => emulator.fetch(request) });
-  const url = `http://127.0.0.1:${server.port}`;
-  const bucket = 'atlas-local';
+type Sqlite = NonNullable<S3RuntimeOptions['sqlite']>;
+
+/** Adapt Bun's synchronous SQLite transactions and bind values to Mockingbird's documented port. */
+function sqlitePort(db: Database): Sqlite {
+  return {
+    exec: (sql) => { db.exec(sql); },
+    transaction: (fn) => db.transaction(fn)(),
+    prepare(sql) {
+      const statement = db.prepare(sql);
+      const bind = (values: Parameters<ReturnType<Sqlite['prepare']>['run']>) => values.map((value) => typeof value === 'boolean' ? Number(value) : value) as SQLQueryBindings[];
+      return {
+        run: (...values) => statement.run(...bind(values)),
+        all: <T>(...values: Parameters<ReturnType<Sqlite['prepare']>['run']>) => statement.all(...bind(values)) as T[],
+        get: <T>(...values: Parameters<ReturnType<Sqlite['prepare']>['run']>) => (statement.get(...bind(values)) ?? undefined) as T | undefined
+      };
+    }
+  };
+}
+
+/** Start a checkout-private persistent S3 emulator; closing it never deletes its bucket or objects. */
+export async function startWorkspaceS3(root: string) {
+  const directory = path.join(root, '.atlas-workspace', 's3');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const dataFile = path.join(directory, 'storage.sqlite');
+  const db = new Database(dataFile, { create: true });
+  let server: Awaited<ReturnType<typeof createServer>> | undefined;
   try {
-    const at = new Date();
-    const payloadHash = await sha256Hex('');
-    const headers = await signRequest({ method: 'PUT', url: new URL(`${url}/${bucket}`),
-      headers: { 'x-amz-date': amzDate(at).datetime, 'x-amz-content-sha256': payloadHash },
-      payloadHash, credentials, region: 'us-east-1', service: 's3', at });
-    const response = await fetch(`${url}/${bucket}`, { method: 'PUT', headers });
-    if (!response.ok) throw new Error(`Mockingbird bucket creation failed (${response.status}): ${await response.text()}`);
-    await response.body?.cancel();
+    db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;');
+    server = await createServer({
+      host: '127.0.0.1', port: 0, sqlite: sqlitePort(db), buckets: ['atlas-workspace'],
+      credentials: { fixture: 'fixture' }, authentication: 'strict', region: 'us-east-1', virtualHosts: []
+    });
     return {
-      env: { ...env, ATLAS_S3_ENDPOINT: url, ATLAS_S3_BUCKET: bucket, ATLAS_S3_REGION: 'us-east-1',
-        ATLAS_S3_ACCESS_KEY_ID: credentials.accessKeyId, ATLAS_S3_SECRET_ACCESS_KEY: credentials.secretAccessKey,
-        ATLAS_S3_PATH_STYLE: '1' },
-      url,
-      stop: async () => { await server.stop(true); }
+      storage: { kind: 'mockingbird' as const, endpoint: server.url, bucket: 'atlas-workspace', dataFile },
+      env: {
+        ATLAS_S3_ENDPOINT: server.url,
+        ATLAS_S3_BUCKET: 'atlas-workspace',
+        ATLAS_S3_REGION: 'us-east-1',
+        ATLAS_S3_ACCESS_KEY_ID: 'fixture',
+        ATLAS_S3_SECRET_ACCESS_KEY: 'fixture',
+        ATLAS_S3_PATH_STYLE: '1'
+      },
+      async close() {
+        try { await server!.close(); } finally { db.close(); }
+      }
     };
   } catch (error) {
-    await server.stop(true);
+    await server?.close();
+    db.close();
     throw error;
   }
 }

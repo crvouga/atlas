@@ -195,6 +195,10 @@ older server without the route is told so in words.
 
 ## UI catalog
 
+The spec-type menu offers **Tests** even when a project has statecharts. It opens the existing explorer at
+`/?view=tests`; its filters, detail drawers and tabs (including Runs) keep that view in the address.
+The default home and **Statecharts** continue opening the product's chart view.
+
 `/catalog` (`catalog/`) is the viewer's inventory of captured UI states ([the guide](ui-catalog.md)). It is computed in the page from
 the layers the viewer already holds (`catalog/provider.tsx`, only while the page is open), so states appear as results stream in and
 it works without a server. Cards are Mantine `Card`s in a responsive `SimpleGrid`; the filters live in the shell's navigation column
@@ -490,7 +494,7 @@ it lazily bundles the shared React settings entry once, so API-only servers do n
 
 Run `bunx tsc --noEmit -p packages/visualizer`,
 `bun test --cwd packages/visualizer --preload ./tests/preload.ts tests`,
-`bun test scripts/ui-architecture.test.ts`, `bun run client:build`, then `bun run docs` and `bun run docs:check`.
+`bun test scripts/ui-architecture.test.ts`, `bun packages/core/bin/atlas.mjs client build --no-data`, then `bun run docs` and `bun run docs --check`.
 Before pushing, run the full repository checks from `AGENTS.md`, including package build and consumer smoke
 when dependencies change. DOM tests use the same `AtlasThemeProvider` with Mantine's supported `env="test"`.
 Use semantic/product selectors, not Mantine's private class names. Inspect real desktop and narrow layouts,

@@ -1,10 +1,11 @@
 /**
  * @module The `atlas ui-catalog` command
  *
- * `uiCatalogMain` is `atlas ui-catalog plan | publish | status | diff | export`: the UI catalog ({@link ./ui-catalog}) without
+ * `uiCatalogMain` is `atlas ui-catalog plan | publish | status | diff | export | collect`: the UI catalog ({@link ./ui-catalog}) without
  * a script. `plan` and `publish` turn a small JSON file (and the pictures beside it) into the layers of the expected set and of
  * the captures; `status` reads every store and says whether the catalog is complete and free of failures; `diff` sets two
- * commits against each other; `export` writes the catalog as one HTML file that needs no server. Like `atlas report`, it is
+ * commits against each other; `export` writes the catalog as one HTML file that needs no server; `collect` is one shard of
+ * a collection shared through a server's queue ({@link ./ui-catalog-collect}). Like `atlas report`, it is
  * written so it can be called from code and tests: it takes its arguments, environment, working directory, clock and git as
  * parameters and returns the exit code, every command prints a JSON document with `--format json`, and a command that is wrong
  * throws, which `runUiCatalogCommand` turns into a message (or a JSON error) and exit code 2.
@@ -19,11 +20,14 @@
  * @see docs/ui-catalog.md
  * @see docs/agents.md
  */
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { z } from 'zod/v4';
 
-import type { UiCatalogDiffResultSchema, UiCatalogExportResultSchema, UiCatalogPublishResultSchema, UiCatalogStatusSchema } from '../../schema/src/cli-results';
+import type { UiCatalogCollectResultSchema, UiCatalogDiffResultSchema, UiCatalogExportResultSchema, UiCatalogPublishResultSchema, UiCatalogStatusSchema } from '../../schema/src/cli-results';
 import { readAttachmentFiles } from './attachment-files';
 import { backendsOf, layerFilter, value, values, writeStoreOf } from './cli-stores';
 import { readBackendLayers } from './compose';
@@ -37,6 +41,9 @@ import { filterUiCatalog, parseUiCatalogQuery, uiCatalog, uiCatalogMarkdown, typ
 import { uiPlanLayer, uiStateLayer, type UiStateCapture, type UiStatePlan } from './ui-catalog-publish';
 import { diffUiCatalogs, layersAtCommit, uiCatalogCommits, type UiCatalogDiff } from './ui-catalog-diff';
 import { gatherUiPictures, uiCatalogHtml, uiPicturesWanted } from './ui-catalog-export';
+import { AtlasHttpError } from './http-store';
+import { collectCatalog, type CapturedItem, type CollectUnit } from './ui-catalog-collect';
+import { CatalogDefinitionError, checkWhere, parseWhere, resolveCatalog, type CatalogDefinition } from './ui-catalog-definition';
 
 /** The text `atlas ui-catalog --help` prints: every subcommand, its flags, what each does and the exit codes. Also the source of its entry in `docs/reference/cli.md`. */
 export const UI_CATALOG_USAGE = `atlas ui-catalog — a browsable inventory of captured UI states, from any collector
@@ -52,6 +59,10 @@ export const UI_CATALOG_USAGE = `atlas ui-catalog — a browsable inventory of c
                            [--fail-on-change] [--format text|json|markdown]
   atlas ui-catalog export  --out <file.html> [--store …]... [--backends <module>] [filters]
                            [--images inline|none] [--max-mb <n>] [--manifest <file.json>] [--title <t>]
+  atlas ui-catalog collect --catalog <atlas.catalog.ts> --exec "<command>" [--store https://…] [--shard <name>]
+                           [--where dimension=value]... [--batch-size <n>] [--lease-seconds <n>]
+                           [--max-units <n>] [--max-minutes <n>] [--collection <id>] [--stale-before <iso|ms>]
+                           [--producer <name>] [--attach-root <dir>]... [--max-picture-mb <n>]
 
   filters (status, diff, export): --q <words> --coverage a,b --profile <key|label>... --area a --route r --cohort c
                            --flag f --surface s --producer p --attribute name=value
@@ -80,9 +91,21 @@ export const UI_CATALOG_USAGE = `atlas ui-catalog — a browsable inventory of c
             It is the catalog at the moment it was made. --images none leaves the pictures out. --max-mb (default 32) limits
             the embedded pictures; those past it are listed in the page as left out, and the manifest stays complete.
             --manifest writes the catalog's JSON manifest too.
+  collect   Be one shard of a collection that any number of shards share through an Atlas server: publish the catalog's
+            definition (the default export of --catalog, made with defineCatalog; the same definition is the same
+            version), claim the most urgent work units (failed, then empty, then unknown, then stale), run --exec for each
+            claim, publish its captures and claim again until nothing is left or a bound is reached. --exec runs in a shell
+            with ATLAS_UI_BATCH (a JSON file: {"claimId","units",[…],"states":[{"item","id",…facts,"profile":{…}}]}) and
+            ATLAS_UI_CAPTURES (where it writes {"states":[…]} as publish reads it, each state naming its "item"; pictures
+            beside it). An item it wrote nothing for is failed. --where takes the project's own dimension names and
+            values (repeatable; a dimension given twice takes either value); an unknown one is exit 2. --stale-before
+            also collects captured items recorded before that time, oldest first. On SIGINT or SIGTERM the claim is
+            released, so its units go back to the queue at once. Needs a server: there is no order other shards cannot
+            see. Exit 0 when nothing collected failed, 1 when something did or the server could not be reached.
 
   --format json (alias --json)   every subcommand prints one JSON document instead of prose
-                       (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result).
+                       (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result,
+                       ui-catalog-collect-result).
                        A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   A store is a directory, s3://bucket/prefix or an Atlas server (https://…), exactly as for atlas report; select a project
   with --project <slug> or ATLAS_PROJECT. When no --store is given, ATLAS_STORE is used.
@@ -94,6 +117,7 @@ type PublishResult = z.infer<typeof UiCatalogPublishResultSchema>;
 type StatusResult = z.infer<typeof UiCatalogStatusSchema>;
 type DiffResult = z.infer<typeof UiCatalogDiffResultSchema>;
 type ExportResult = z.infer<typeof UiCatalogExportResultSchema>;
+type CollectResultDocument = z.infer<typeof UiCatalogCollectResultSchema>;
 
 const Facts = {
   route: z.string().optional(), fixture: z.string().optional(), cohort: z.string().optional(), area: z.string().optional(),
@@ -109,6 +133,8 @@ const CaptureState = z.strictObject({
   id: z.string().min(1), title: z.string().optional(), status: z.enum(['passed', 'failed', 'running', 'not-run']).optional(), detail: z.string().optional(),
   durationMs: z.number().nonnegative().optional(), labels: z.record(z.string(), z.string()).optional(), tags: z.array(z.string()).optional(), screenshot: Picture.optional(), ...Facts
 });
+const ExecCapture = CaptureState.extend({ id: z.string().min(1).optional(), item: z.string().min(1) });
+const ExecCaptureFile = z.union([z.array(ExecCapture), z.strictObject({ states: z.array(ExecCapture) }).transform(file => file.states)]);
 const PlanFile = z.union([z.array(PlanState), z.strictObject({ states: z.array(PlanState) }).transform(file => file.states)]);
 const CaptureFile = z.union([z.array(CaptureState), z.strictObject({ states: z.array(CaptureState) }).transform(file => file.states)]);
 
@@ -168,6 +194,38 @@ async function layersOf(rest: readonly string[], base: string, env: Readonly<Rec
 
 const sentence = (text: string) => text.replace(/\s+/g, ' ').trim();
 
+/**
+ * Captures read from a file, with each picture it names read from beside the file or an attach root. A `passed` state whose
+ * picture cannot be read becomes `failed`, with the reason: a state without its picture is never shown as captured.
+ */
+async function withPictures<T extends Omit<z.infer<typeof CaptureState>, 'id'> & { readonly id?: string; readonly item?: string }>(parsed: readonly T[], roots: readonly string[], maxBytes: number): Promise<{ states: (Omit<T, 'screenshot'> & UiStateCapture)[]; warnings: string[]; pictures: number; pictureBytes: number }> {
+  const states: (Omit<T, 'screenshot'> & UiStateCapture)[] = [];
+  const warnings: string[] = [];
+  let pictures = 0, pictureBytes = 0;
+  for (const state of parsed) {
+    const { screenshot, ...kept } = state;
+    let capture = kept as Omit<T, 'screenshot'> & UiStateCapture;
+    type Given = { path?: string; uri?: string; name?: string; contentType?: string; width?: number; height?: number };
+    const picture: Given | undefined = typeof screenshot === 'string' ? { path: screenshot } : screenshot;
+    if (picture?.uri !== undefined) capture = { ...capture, screenshot: { uri: picture.uri, ...(picture.contentType ? { contentType: picture.contentType } : {}), ...(picture.width ? { width: picture.width } : {}), ...(picture.height ? { height: picture.height } : {}) } };
+    else if (picture?.path !== undefined) {
+      const name = picture.name ?? path.basename(picture.path);
+      const read = await readAttachmentFiles({ attachments: [{ name, role: 'screenshot', path: picture.path, ...(picture.contentType ? { contentType: picture.contentType } : {}) }] }, roots, { maxBytes });
+      const data = (read.value.attachments as { data?: Uint8Array; contentType?: string }[])[0];
+      if (data?.data) {
+        pictures += 1; pictureBytes += data.data.length;
+        capture = { ...capture, screenshot: { name, data: data.data, ...(data.contentType ? { contentType: data.contentType } : {}), ...(picture.width ? { width: picture.width } : {}), ...(picture.height ? { height: picture.height } : {}) } };
+      } else {
+        warnings.push(...read.warnings.map(warning => `${state.id ?? state.item}: ${warning}`));
+        // A state whose picture is missing is not a capture: it is shown as failed, never as captured without a picture.
+        if ((capture.status ?? 'passed') === 'passed') capture = { ...capture, status: 'failed', detail: sentence(`The picture could not be read: ${read.warnings[0] ?? picture.path}${capture.detail ? `. ${capture.detail}` : ''}`) };
+      }
+    }
+    states.push(capture);
+  }
+  return { states, warnings, pictures, pictureBytes };
+}
+
 /** `atlas ui-catalog …`. Returns the exit code. Throws on a mistake in the command (see {@link runUiCatalogCommand}). */
 export async function uiCatalogMain(argv: readonly string[], io: ReportIo = { out: text => process.stdout.write(text) }): Promise<number> {
   const [command, ...rest] = argv;
@@ -196,27 +254,10 @@ export async function uiCatalogMain(argv: readonly string[], io: ReportIo = { ou
     } else {
       const parsed = parseWith(CaptureFile, given.json, file);
       const roots = [path.dirname(given.at), ...values(rest, 'attach-root').map(root => path.resolve(base, root))];
-      const maxBytes = Number(value(rest, 'max-picture-mb') ?? 64) * 1024 * 1024;
-      const states: UiStateCapture[] = [];
-      for (const state of parsed) {
-        const { screenshot, ...kept } = state;
-        let capture: UiStateCapture = kept;
-        const picture = typeof screenshot === 'string' ? { path: screenshot } : screenshot;
-        if (picture?.uri !== undefined) capture = { ...capture, screenshot: { uri: picture.uri, ...(picture.contentType ? { contentType: picture.contentType } : {}), ...(picture.width ? { width: picture.width } : {}), ...(picture.height ? { height: picture.height } : {}) } };
-        else if (picture?.path !== undefined) {
-          const read = await readAttachmentFiles({ attachments: [{ name: picture.name ?? path.basename(picture.path), role: 'screenshot', path: picture.path, ...(picture.contentType ? { contentType: picture.contentType } : {}) }] }, roots, { maxBytes });
-          const data = (read.value.attachments as { data?: Uint8Array; contentType?: string }[])[0];
-          if (data?.data) {
-            counts.pictures += 1; counts.pictureBytes += data.data.length;
-            capture = { ...capture, screenshot: { name: picture.name ?? path.basename(picture.path), data: data.data, ...(data.contentType ? { contentType: data.contentType } : {}), ...(picture.width ? { width: picture.width } : {}), ...(picture.height ? { height: picture.height } : {}) } };
-          } else {
-            warnings.push(...read.warnings.map(warning => `${state.id}: ${warning}`));
-            // A state whose picture is missing is not a capture: it is shown as failed, never as captured without a picture.
-            if ((capture.status ?? 'passed') === 'passed') capture = { ...capture, status: 'failed', detail: sentence(`The picture could not be read: ${read.warnings[0] ?? picture.path}${capture.detail ? `. ${capture.detail}` : ''}`) };
-          }
-        }
-        states.push(capture);
-      }
+      const read = await withPictures(parsed, roots, Number(value(rest, 'max-picture-mb') ?? 64) * 1024 * 1024);
+      const states = read.states;
+      warnings.push(...read.warnings);
+      counts = { ...counts, pictures: read.pictures, pictureBytes: read.pictureBytes };
       counts = { ...counts, states: states.length, captured: states.filter(state => (state.status ?? 'passed') === 'passed').length, failed: states.filter(state => state.status === 'failed').length };
       input = uiStateLayer({ ...layerFields, states });
     }
@@ -339,8 +380,117 @@ export async function uiCatalogMain(argv: readonly string[], io: ReportIo = { ou
     return 0;
   }
 
+  if (command === 'collect') return collect(rest, base, env, json, io);
+
   io.out(UI_CATALOG_USAGE);
   return command && command !== '--help' && command !== '-h' ? 2 : 0;
+}
+
+const positive = (rest: readonly string[], name: string): number | undefined => {
+  const given = value(rest, name);
+  if (given === undefined) return undefined;
+  const number = Number(given);
+  if (!Number.isFinite(number) || number <= 0) throw new Error(`--${name} takes a positive number (got "${given}")`);
+  return number;
+};
+
+/** `atlas ui-catalog collect`: one shard of a collection shared through a server. */
+async function collect(rest: readonly string[], base: string, env: Readonly<Record<string, string | undefined>>, json: boolean, io: ReportIo): Promise<number> {
+  const catalogFile = value(rest, 'catalog');
+  if (!catalogFile) throw new Error('collect needs --catalog <atlas.catalog.ts>: a module whose default export is a defineCatalog(...) definition');
+  const command = value(rest, 'exec');
+  if (!command) throw new Error('collect needs --exec "<command>": the collector that captures each batch (see atlas ui-catalog --help)');
+  const target = writeStoreOf(value(rest, 'store'), base, env);
+  if (!target.server) throw new Error(`collect needs an Atlas server (--store https://… or ATLAS_STORE), not ${target.label}: shards coordinate only through a server`);
+  const where = parseWhere(values(rest, 'where'));
+  const batchSize = positive(rest, 'batch-size');
+  const leaseSeconds = positive(rest, 'lease-seconds');
+  const maxUnits = positive(rest, 'max-units');
+  const maxMinutes = positive(rest, 'max-minutes');
+  const maxPictureMb = positive(rest, 'max-picture-mb') ?? 64;
+  const staleBeforeMs = parseTime(value(rest, 'stale-before')) ?? undefined;
+  const roots = values(rest, 'attach-root').map(root => path.resolve(base, root));
+  let loaded: { default?: unknown; catalog?: unknown };
+  try { loaded = await import(pathToFileURL(path.resolve(base, catalogFile)).href) as typeof loaded; }
+  catch (error) { throw new Error(`Cannot load ${catalogFile}: ${error instanceof Error ? error.message : String(error)}`); }
+  const definition = (loaded.default ?? loaded.catalog) as CatalogDefinition | undefined;
+  if (!definition || typeof definition !== 'object') throw new Error(`${catalogFile} has no default export: export default defineCatalog({ name, matrix, states })`);
+  let resolved: Awaited<ReturnType<typeof resolveCatalog>>;
+  try {
+    resolved = await resolveCatalog(definition);
+    if (Object.keys(where).length) checkWhere(resolved.document, where);
+  } catch (error) {
+    if (error instanceof CatalogDefinitionError) throw new Error(error.message);
+    throw error;
+  }
+  const origin = detectOrigin(env, io.git);
+  const run = executionOf(rest, env);
+  const shard = value(rest, 'shard') ?? `${hostname()}-${process.pid}`;
+  const warnings: string[] = [];
+  const childEnv = Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined));
+  const captureBatch = async (units: readonly CollectUnit[], context: { readonly claimId: string; readonly signal: AbortSignal }): Promise<CapturedItem[]> => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'atlas-ui-batch-'));
+    try {
+      const batch = path.join(dir, 'batch.json'), captures = path.join(dir, 'captures.json');
+      const states = units.flatMap(unit => unit.items.map(item => ({ item: item.key, unit: unit.key, ...item.state, profile: item.profile })));
+      await writeFile(batch, `${JSON.stringify({ claimId: context.claimId, definition: resolved.version, units, states }, null, 2)}\n`);
+      // The collector's own output goes to standard error, so standard output stays one JSON document.
+      const code = await new Promise<number>((resolve, reject) => {
+        const child = spawn(command, { shell: true, cwd: base, env: { ...childEnv, ATLAS_UI_BATCH: batch, ATLAS_UI_CAPTURES: captures, ATLAS_UI_CLAIM: context.claimId, ATLAS_UI_DIR: dir }, stdio: ['ignore', 2, 2], signal: context.signal });
+        child.on('error', reject);
+        child.on('exit', exit => resolve(exit ?? 1));
+      });
+      let written: unknown = null;
+      try { written = JSON.parse(await readFile(captures, 'utf8')); } catch { /* nothing written, or not JSON: every item is failed below */ }
+      const read = written === null ? { states: [], warnings: [] } : await withPictures(parseWith(ExecCaptureFile, written, 'the captures --exec wrote'), [dir, ...roots], maxPictureMb * 1024 * 1024);
+      warnings.push(...read.warnings);
+      const given = read.states.map(({ id: _id, ...state }) => state as unknown as CapturedItem);
+      const answered = new Set(given.map(state => state.item));
+      const reason = code !== 0 ? `The collector exited with code ${code}` : written === null ? 'The collector wrote no captures file' : 'The collector wrote no capture for this item';
+      return [...given, ...states.filter(state => !answered.has(state.item)).map(state => ({ item: state.item, status: 'failed' as const, detail: reason }))];
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  };
+
+  const stop = new AbortController();
+  const onSignal = () => stop.abort();
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  let document: CollectResultDocument;
+  try {
+    const result = await collectCatalog({
+      store: target.server, catalog: resolved, shard: { id: shard, ...(Object.keys(where).length ? { where } : {}) }, signal: stop.signal, captureBatch,
+      ...(batchSize !== undefined ? { batchSize: Math.floor(batchSize) } : {}), ...(leaseSeconds !== undefined ? { leaseSeconds: Math.floor(leaseSeconds) } : {}),
+      ...(maxUnits !== undefined ? { maxUnits: Math.floor(maxUnits) } : {}), ...(maxMinutes !== undefined ? { maxMs: maxMinutes * 60_000 } : {}),
+      ...(staleBeforeMs !== undefined ? { staleBeforeMs } : {}), ...(value(rest, 'collection') ?? run?.id ? { collection: (value(rest, 'collection') ?? run?.id)! } : {}),
+      ...(value(rest, 'producer') ? { producer: value(rest, 'producer')! } : {}),
+      origin: { sha: value(rest, 'sha') ?? origin.sha, branch: value(rest, 'branch') ?? origin.branch, runUrl: value(rest, 'run-url') ?? origin.runUrl, ...(run ? { run: { id: run.id, ...(run.title ? { title: run.title } : {}) } } : {}) },
+      onEvent: event => {
+        if (json) return;
+        if (event.type === 'claim') io.out(`Claimed ${event.units} unit${event.units === 1 ? '' : 's'} (${event.claimId.slice(0, 8)})\n`);
+        else if (event.type === 'lost') io.out(`! Lost claim ${event.claimId.slice(0, 8)}: its lease expired, so its ${event.units} units were not published\n`);
+      },
+      ...(io.clock ? { now: io.clock } : {})
+    });
+    const { ok, definition: _version, ...done } = result;
+    document = { ...done, lostClaims: [...done.lostClaims], ok, store: target.label, definition: { version: resolved.version, name: resolved.document.name }, warnings };
+  } catch (error) {
+    if (!(error instanceof AtlasHttpError)) throw error;
+    document = {
+      ok: false, store: target.label, definition: { version: resolved.version, name: resolved.document.name }, shard, stoppedBy: 'unreachable', claims: 0,
+      units: { claimed: 0, collected: 0, lost: 0, released: 0 }, items: { captured: 0, failed: 0, other: 0 }, lostClaims: [], layers: 0, warnings, error: error.message
+    };
+  } finally {
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+  }
+  if (json) io.out(`${JSON.stringify(document, null, 2)}\n`);
+  else {
+    const stops = { empty: 'nothing is left for this shard', 'max-units': '--max-units reached', 'max-minutes': '--max-minutes reached', signal: 'stopped by a signal', unreachable: 'the server could not be reached' } as const;
+    if (document.error) io.out(`! ${document.error}\n`);
+    io.out(`Collected ${document.units.collected} unit${document.units.collected === 1 ? '' : 's'} in ${document.claims} claim${document.claims === 1 ? '' : 's'} as "${shard}": ${document.items.captured} captured, ${document.items.failed} failed. Stopped: ${stops[document.stoppedBy]}.\n`);
+    for (const warning of warnings) io.out(`! ${warning}\n`);
+  }
+  return document.ok ? 0 : 1;
 }
 
 /**

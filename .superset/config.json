@@ -1,5 +1,5 @@
 {
-  "setup": ["bun run workspace:setup"],
-  "run": ["bun run workspace:run"],
-  "teardown": ["bun run workspace:stop"]
+  "setup": ["bun run dev --setup"],
+  "run": ["bun run dev"],
+  "teardown": ["bun run dev --stop"]
 }

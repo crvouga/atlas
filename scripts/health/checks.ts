@@ -1,6 +1,6 @@
 /**
  * Health checks a maintainer runs by hand. Each one prints only the pages still
- * left to fix. Append a check here to extend `bun run health`.
+ * left to fix. Append a check here to extend `bun scripts/health/cli.ts`.
  */
 import type { HealthCheck } from './report.ts';
 import { runTrustedPublisher } from './trusted-publisher.ts';

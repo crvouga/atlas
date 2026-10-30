@@ -331,7 +331,7 @@ export function initialPackageBlocker(published: string[], runMode: { inCi: bool
   return [
     'package does not exist on npm yet, and Trusted Publishing (OIDC) cannot create packages.',
     'First-publish it with an interactive maintainer login, attach this workflow as its Trusted',
-    'Publisher, then re-run CI: bun run release:seed'
+    'Publisher, then re-run CI: bun scripts/release/seed.ts'
   ];
 }
 
@@ -353,7 +353,7 @@ export function seedSummary(outcome: { needsSeed: string[]; needsTrust: string[]
     );
   }
   const others = failed === needsSeed.length + needsTrust.length;
-  lines.push(`${others ? 'Every other package was released. ' : ''}Run bun run release:seed, then retry CI.`);
+  lines.push(`${others ? 'Every other package was released. ' : ''}Run bun scripts/release/seed.ts, then retry CI.`);
   return lines;
 }
 

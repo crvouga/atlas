@@ -104,13 +104,13 @@ fix. Commit messages are checked by a `commit-msg` hook locally and by the Commi
 requests. While Atlas is at `0.x`, a breaking change still takes it to `1.0.0`; mark a commit
 breaking only when projects have to change their code.
 
-## The one manual step: `bun run release:seed`
+## The one manual step: `bun scripts/release/seed.ts`
 
 OIDC can publish a new version of a package, but it cannot create a package that is not on npm yet.
 So a maintainer runs one command, once, with their own npm login:
 
 ```sh
-bun run release:seed
+bun scripts/release/seed.ts
 ```
 
 It runs `npm login` if you are not logged in, builds `origin/main` in a kept worktree beside the
@@ -148,7 +148,7 @@ Tree shaking depends on three things, and the consumer smoke checks the result w
 
 To add an entry point, add its source folder under `packages/`, then its path to both `exports`
 and `publishConfig.exports`. To ship a file that is not compiled, add it to `files`.
-`bun run build && bun run release:smoke` proves the result installs, imports and shakes from a tarball.
+`bun run build && bun run smoke` proves the result installs, imports and shakes from a tarball.
 
 Runtime dependencies of every part are `dependencies` of the one package. A tool only some projects
 drive (`playwright`, `detox`) is an optional peer dependency instead, so nobody installs a browser
@@ -157,22 +157,22 @@ toolchain they do not use.
 ## Commands
 
 ```sh
-bun run release:plan                # what the next push to main would release
-bun run release:publish --dry-run   # plan + pack the tarball, no side effects
-bun run release:smoke               # install the packed tarball into a clean project (after bun run build)
-bun run release:seed --dry-run      # what the seed would publish, from origin/main
-bun run release:seed                # first publish, and attach the Trusted Publisher
-bun run health                      # whether the Trusted Publisher still needs fixing, with its link
+bun scripts/release/plan.ts                # what the next push to main would release
+bun scripts/release/publish.ts --dry-run   # plan + pack the tarball, no side effects
+bun run smoke               # install the packed tarball into a clean project (after bun run build)
+bun scripts/release/seed.ts --dry-run      # what the seed would publish, from origin/main
+bun scripts/release/seed.ts                # first publish, and attach the Trusted Publisher
+bun scripts/health/cli.ts                      # whether the Trusted Publisher still needs fixing, with its link
 ```
 
 ## When a release fails
 
 | The Release job says | Do |
 | --- | --- |
-| `initial npm package(s) need an interactive local seed` | `bun run release:seed` |
-| `rejected by npm Trusted Publishing` | `bun run release:seed` (it re-attaches the publisher); `bun run health` shows what is still wrong |
+| `initial npm package(s) need an interactive local seed` | `bun scripts/release/seed.ts` |
+| `rejected by npm Trusted Publishing` | `bun scripts/release/seed.ts` (it re-attaches the publisher); `bun scripts/health/cli.ts` shows what is still wrong |
 | `GitHub release(s) still missing` | nothing: the next run creates them. To do it now, `gh workflow run ci.yml` |
-| `names entry points the tarball does not contain` | `exports`, `bin` or `files` in `package.json` is wrong; `bun run build && bun run release:smoke` reproduces it |
+| `names entry points the tarball does not contain` | `exports`, `bin` or `files` in `package.json` is wrong; `bun run build && bun run smoke` reproduces it |
 | `check` failed, so Release did not run | fix `main`; the next green commit releases everything that is pending |
 
 ### Trusted Publisher settings
@@ -196,7 +196,7 @@ name. Docs: <https://docs.npmjs.com/trusted-publishers>
 | npm Trusted Publisher (OIDC) | the package on npm | CI publish (attached by the seed) |
 | `GITHUB_TOKEN` | built into GitHub Actions | tags, GitHub Releases, issue comments |
 | `GITHUB_TOKEN` with `packages: write` | built into GitHub Actions, Server image job | personal GHCR image publish |
-| Your npm login | your machine (`npm login`) | `bun run release:seed` and `bun run health` only |
+| Your npm login | your machine (`npm login`) | `bun scripts/release/seed.ts` and `bun scripts/health/cli.ts` only |
 
 Publishing is the one job Bun does not do here: npm Trusted Publishing and provenance need the npm
 CLI, so the Release job and the seed call `npm publish` on the tarball that `bun pm pack` made.

@@ -14,12 +14,13 @@
  */
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
+import { UiCatalogDefinitionSchema, UiClaimRequestSchema, UiClaimSchema, UiQueueSummarySchema } from '../../schema/src/ui-catalog-queue';
 
 import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, CatalogEntriesSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema, RecordingVerificationSchema, RecordingVerifyRequestSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
-export const API_VERSION = '1.7.0';
+export const API_VERSION = '1.8.0';
 
 /** Who may call an operation: `none` (anyone), or the least role that may (`read` < `critic` < `publish` < `admin`). */
 export type Role = 'none' | 'read' | 'critic' | 'publish' | 'admin';
@@ -69,6 +70,7 @@ const COMPONENTS = {
   ReviewCollectionRequest: [ReviewCollectionRequestSchema, 'input'], ReviewCollection: [ReviewCollectionSchema, 'output'], ReviewCollectionList: [ReviewCollectionListSchema, 'output'], ReviewCollectionDetail: [ReviewCollectionDetailSchema, 'output'], ReviewNoteInput: [ReviewNoteInputSchema, 'input'], ReviewNote: [ReviewNoteSchema, 'output'], ReviewManifest: [ReviewManifestSchema, 'output'],
   RecordingVerification: [RecordingVerificationSchema, 'output'], RecordingVerifyRequest: [RecordingVerifyRequestSchema, 'input'],
   TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], CatalogEntries: [CatalogEntriesSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  UiCatalogDefinition: [UiCatalogDefinitionSchema, 'input'], UiClaimRequest: [UiClaimRequestSchema, 'input'], UiClaim: [UiClaimSchema, 'output'], UiQueueSummary: [UiQueueSummarySchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -554,6 +556,62 @@ const BASE_OPERATIONS: readonly Operation[] = [
     responses: { '200': json('One page of entries.', 'CatalogEntries'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '400': problem('The cursor is not one this server made.'), '401': UNAUTHORIZED, '503': NOT_READY }
   },
   {
+    route: 'PUT /api/ui-catalog/definitions/:version', path: '/api/ui-catalog/definitions/{version}', operationId: 'publishUiCatalogDefinition', tag: 'UI catalog queue', role: 'publish',
+    summary: 'Publish a UI catalog definition: its states, profile matrix and work units',
+    description: [
+      'Stores a resolved catalog definition (as `resolveCatalog` from `@crvouga/atlas/reports/ui-catalog-definition` makes it) and publishes it as ordinary `ui-plan` layers, one per profile, under the producer `ui-catalog:<name>`, so the catalog expects every state in every profile. The dimensions and values are the project\'s own data: Atlas has none built in.',
+      '',
+      'The version in the path must be the SHA-256 of the canonical JSON of the body (object keys sorted at every depth), so the same definition is the same version wherever it was resolved. Publishing the definition that is already the latest changes nothing (`200`, `created: false`); two shards that publish it at once store it once. Publishing another stored definition makes it the latest again and publishes its plan anew. A definition whose exclusion names an unknown dimension or value, or in which two dimensions set the environment (or one parameter differently) for a profile, is refused with what is wrong.'
+    ].join('\n'),
+    parameters: [{ name: 'version', in: 'path', required: true, description: 'The SHA-256 of the canonical JSON of the body: 64 lowercase hex digits.', schema: { type: 'string', pattern: '^[0-9a-f]{64}$' } }],
+    body: { description: 'The resolved definition.', contentType: 'application/json', required: true, schema: ref('UiCatalogDefinition') },
+    responses: {
+      '200': { description: 'Already the latest definition: nothing changed.', contentType: 'application/json', schema: { type: 'object', properties: { version: str, created: { type: 'boolean' }, latest: { type: 'boolean' }, profiles: { type: 'integer' }, items: { type: 'integer' }, units: { type: 'integer' }, layers: { type: 'integer' } }, required: ['version', 'created', 'latest', 'profiles', 'items', 'units', 'layers'] } },
+      '201': { description: 'Stored, and its plan layers published.', contentType: 'application/json', schema: { type: 'object', properties: { version: str, created: { type: 'boolean' }, latest: { type: 'boolean' }, profiles: { type: 'integer' }, items: { type: 'integer' }, units: { type: 'integer' }, layers: { type: 'integer' } }, required: ['version', 'created', 'latest', 'profiles', 'items', 'units', 'layers'] } },
+      '401': UNAUTHORIZED, '403': FORBIDDEN, '413': problem('Request too large.'), '422': problem('Not a definition, a version that is not its hash, or a matrix that is ambiguous.'), '503': NOT_READY
+    }
+  },
+  {
+    route: 'GET /api/ui-catalog/definitions/:version', path: '/api/ui-catalog/definitions/{version}', operationId: 'getUiCatalogDefinition', tag: 'UI catalog queue', role: 'read',
+    summary: 'A published UI catalog definition',
+    description: 'The resolved definition with that version, as it was published. It never changes, so it may be kept.',
+    parameters: [{ name: 'version', in: 'path', required: true, description: 'A definition version.', schema: { type: 'string', pattern: '^[0-9a-f]{64}$' } }],
+    responses: { '200': json('The definition.', 'UiCatalogDefinition'), '401': UNAUTHORIZED, '404': problem('No definition has that version.'), '422': problem('Not a version.') }
+  },
+  {
+    route: 'POST /api/ui-catalog/claims', path: '/api/ui-catalog/claims', operationId: 'claimUiCatalogWork', tag: 'UI catalog queue', role: 'publish',
+    summary: 'Claim the most urgent UI catalog work units',
+    description: [
+      'Hands out up to `batchSize` work units of a published definition that no live claim holds, in priority order: units with a failed item, then empty ones (never captured, skipped, or let go of by a claim that ended without a result), then unknown ones (no readable result while a backend or layer could not be read), then stale ones (captured before `staleBeforeMs`, or older than the definition\'s `staleAfterMs`; oldest first). Ties break by unit key. `where` keeps only units whose every item has one of the named values in each named dimension; an unknown dimension or value is `422`. A unit that failed `maxAttempts` times in a row within the `collection` is no longer handed out in it.',
+      '',
+      'The claim is a lease: renew it with `POST /api/ui-catalog/claims/{id}/heartbeat` well within `leaseSeconds`, and release it with `DELETE` when done. Put the claim id in each capture\'s `atlas.claim` label: a unit whose every item has a result with that label is closed at once. A unit of an expired or released claim goes back to the queue as empty. Send an `idempotencyKey` (or an `Idempotency-Key` header) to retry safely: the same key answers the same claim, never a second batch. No two live claims ever hold one unit.'
+    ].join('\n'),
+    parameters: [{ name: 'Idempotency-Key', in: 'header', description: 'Instead of `idempotencyKey` in the body.', schema: str }],
+    body: { description: 'Who asks, which definition, how many units, and optionally `where`, `leaseSeconds`, `collection`, `staleBeforeMs`.', contentType: 'application/json', required: true, schema: ref('UiClaimRequest') },
+    responses: { '200': json('The claim.', 'UiClaim'), '204': { description: 'Nothing is due: the queue is empty for this request.' }, '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('No definition has that version.'), '410': problem('The claim made with this idempotency key has ended.'), '422': problem('Not a claim request, or `where` names an unknown dimension or value.'), '429': problem('Too many live claims.'), '503': NOT_READY }
+  },
+  {
+    route: 'POST /api/ui-catalog/claims/:id/heartbeat', path: '/api/ui-catalog/claims/{id}/heartbeat', operationId: 'heartbeatUiCatalogClaim', tag: 'UI catalog queue', role: 'publish',
+    summary: 'Renew a claim\'s lease',
+    description: 'Extends the lease by its length, from the server\'s time. Only the token that made the claim may renew it. `410` once the claim expired or ended: its unfinished units are back in the queue, so stop collecting them.',
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The `claimId`.', schema: str }],
+    responses: { '200': { description: 'The new expiry, and how many units of the claim are done.', contentType: 'application/json', schema: { type: 'object', properties: { expiresAtMs: { type: 'number' }, done: { type: 'integer' }, units: { type: 'integer' } }, required: ['expiresAtMs', 'done', 'units'] } }, '401': UNAUTHORIZED, '403': FORBIDDEN, '410': problem('The claim expired or ended.') }
+  },
+  {
+    route: 'DELETE /api/ui-catalog/claims/:id', path: '/api/ui-catalog/claims/{id}', operationId: 'releaseUiCatalogClaim', tag: 'UI catalog queue', role: 'publish',
+    summary: 'Release a claim',
+    description: 'Ends the claim. Its units without a result go back to the queue at once, as empty; results already published stay. Release on exit (including SIGINT and SIGTERM) so nothing waits for the lease to expire.',
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The `claimId`.', schema: str }],
+    responses: { '200': { description: 'How many units went back to the queue, and how many were done.', contentType: 'application/json', schema: { type: 'object', properties: { released: { type: 'integer' }, done: { type: 'integer' } }, required: ['released', 'done'] } }, '401': UNAUTHORIZED, '403': FORBIDDEN, '410': problem('The claim already expired or ended.') }
+  },
+  {
+    route: 'GET /api/ui-catalog/queue', path: '/api/ui-catalog/queue', operationId: 'getUiCatalogQueue', tag: 'UI catalog queue', role: 'read',
+    summary: 'What is left to collect, who is collecting it, and how fast',
+    description: 'For the latest published definition (or `definition`): units by tier (`failed`, `empty`, `unknown`, `stale`, `fresh`; a unit held by a live claim is counted in `held`), units that hit the retry limit, units re-queued after a failure, unknown units with the notices that make them unknown, the live claims, every shard seen with whether it is `active` (holds a claim), `idle` or `lost` (its last claim expired), and throughput over the last ten minutes with an estimate of the time to empty.',
+    parameters: [{ name: 'definition', in: 'query', description: 'A definition version. Default: the latest published.', schema: { type: 'string', pattern: '^[0-9a-f]{64}$' } }],
+    responses: { '200': json('The queue.', 'UiQueueSummary'), '401': UNAUTHORIZED, '404': problem('No definition has that version.'), '422': problem('Not a version.'), '503': NOT_READY }
+  },
+  {
     route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',
     summary: 'Every test one run recorded',
     description: 'One run and its last result for every test, environment and producer it recorded, failures first, and `layers`: each layer of the run with its backend, how many checks it recorded (zero means evidence only, never a pass) and how many files it carries as a whole. Open a layer\'s files with `/api/reports/evidence/detail/{backend}/{id}`. Send `format=markdown` for Markdown.',
@@ -738,6 +796,7 @@ export function openApiDocument(options: { readonly serverUrl?: string } = {}): 
       { name: 'Report', description: 'The combined report, and the gate.' },
       { name: 'Live', description: 'Server-sent events.' },
       { name: 'Upload', description: 'The simplest way in: one JSON request.' },
+      { name: 'UI catalog queue', description: 'Share out the collection of a UI catalog: publish its definition, claim the most urgent work, renew and release claims, and watch the queue.' },
       { name: 'Store protocol', description: 'The `ObjectStore` interface over HTTP: what `atlas report publish`, `stream`, `merge` and `httpStore` use.' },
       { name: 'Viewer data', description: 'Specs and runs, laid out the way the viewer reads a static host.' }
     ],

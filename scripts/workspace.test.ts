@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parse } from 'yaml';
@@ -42,7 +42,7 @@ async function start(root: string, mode = 'run', mockingbird = false) {
   buckets.push(bucket);
   const env = { ...process.env, ...S3_TEST_ENV, ATLAS_S3_ENDPOINT: bucket.url, ATLAS_CONFIG: undefined, ATLAS_PORT: undefined, PORT: undefined };
   if (mockingbird) for (const key of Object.keys(env)) if (key.startsWith('ATLAS_S3_')) delete env[key as keyof typeof env];
-  const child = Bun.spawn([process.execPath, cli, mode, '--port', '0'], {
+  const child = Bun.spawn([process.execPath, path.join(import.meta.dir, 'dev.ts'), ...(mode === 'populate' ? [] : [mode === 'preview' ? '--preview' : '--server']), '--port', '0'], {
     cwd: root,
     stdout: 'ignore',
     stderr: 'pipe',
@@ -52,7 +52,7 @@ async function start(root: string, mode = 'run', mockingbird = false) {
   children.push(child);
   for (let attempt = 0; attempt < 300; attempt++) {
     const runtime = (await workspaceStatus(root)).runtimes.find(
-      (item) => item.mode === (mode === 'run' ? 'server' : 'preview') && item.state === 'running'
+      (item) => item.mode === (mode === 'preview' ? 'preview' : 'server') && item.state === 'running'
     );
     if (runtime) return { child, runtime };
     if (child.exitCode !== null) throw new Error(await errors);
@@ -64,30 +64,32 @@ async function start(root: string, mode = 'run', mockingbird = false) {
 test('credential-free Run owns Mockingbird and shuts its S3 endpoint down with the app', async () => {
   const root = await fixture();
   const { child, runtime } = await start(root, 'run', true);
-  expect(runtime.s3Url).toMatch(/^http:\/\/127\.0\.0\.1:/);
+  expect(runtime.storage?.endpoint).toMatch(/^http:\/\/127\.0\.0\.1:/);
   expect((await fetch(`${runtime.url}/api/settings`)).status).toBe(200);
   expect((await fetch(`${runtime.url}/api/projects`)).status).toBe(200);
   await stopWorkspace(root);
   expect(await child.exited).toBe(0);
-  await expect(fetch(runtime.s3Url!)).rejects.toThrow();
+  await expect(fetch(runtime.storage!.endpoint)).rejects.toThrow();
 }, 60_000);
 
 test('all three IDEs call shared lifecycle commands; Orca reserves its first tab for the agent', async () => {
   const superset = JSON.parse(await readFile(path.join(repo, '.superset/config.json'), 'utf8'));
   const engineering = JSON.parse(await readFile(path.join(repo, '.super.engineering/config.json'), 'utf8'));
   const orca = parse(await readFile(path.join(repo, 'orca.yaml'), 'utf8'));
-  expect(superset).toEqual({ setup: ['bun run workspace:setup'], run: ['bun run workspace:run'], teardown: ['bun run workspace:stop'] });
+  expect(superset).toEqual({ setup: ['bun run dev --setup'], run: ['bun run dev'], teardown: ['bun run dev --stop'] });
   expect(engineering.setup).toEqual(superset.setup);
   expect(engineering.teardown).toEqual(superset.teardown);
   expect(engineering.run.find((item: { default?: boolean }) => item.default)).toMatchObject({
-    name: 'Atlas',
+    name: 'Dev',
     commands: superset.run,
-    stop_commands: ['bun run workspace:stop server']
+    stop_commands: ['bun run dev --stop server']
   });
-  expect(orca.scripts).toEqual({ setup: 'bun run workspace:setup', archive: 'bun run workspace:stop' });
+  expect(engineering.run.map((item: { name: string }) => item.name).sort()).toEqual(['Build', 'Check', 'Dev', 'Docs', 'Smoke', 'Test']);
+  expect(engineering.commands).toEqual([]);
+  expect(orca.scripts).toEqual({ setup: 'bun run dev --setup', archive: 'bun run dev --stop' });
   expect(orca.setupAgentStartupPolicy).toBe('wait-for-setup');
   expect(orca.defaultTabs[0].command).toBeUndefined();
-  expect(orca.defaultTabs[1].command).toBe('bun run workspace:run');
+  expect(orca.defaultTabs[1].command).toBe('bun run dev');
 });
 
 test('setup is repeatable in a fresh directory with spaces and requires the pinned Bun', async () => {
@@ -187,3 +189,129 @@ test('the explicit examples target serves bundled specs and stops independently 
   await stopWorkspace(root);
   expect(await server.child.exited).toBe(0);
 }, 60_000);
+
+
+test('partial external S3 configuration fails without starting or creating a local store', async () => {
+  const root = await fixture();
+  const clean = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('ATLAS_S3_')));
+  const child = Bun.spawn([process.execPath, cli, 'run', '--port', '0'], { cwd: root, stdout: 'pipe', stderr: 'pipe', env: { ...clean, ATLAS_S3_BUCKET: 'explicit-bucket' } });
+  children.push(child);
+  const errors = new Response(child.stderr).text();
+  const output = new Response(child.stdout).text();
+  expect(await child.exited).toBe(1);
+  expect(`${await output} ${await errors}`).toContain('ATLAS_S3_ENDPOINT');
+  expect(await Bun.file(path.join(root, '.atlas-workspace/s3/storage.sqlite')).exists()).toBe(false);
+  expect((await workspaceStatus(root)).runtimes).toEqual([]);
+}, 30_000);
+
+test('warm Run skips installation while changed manifests and removed node_modules trigger frozen setup', async () => {
+  const root = await fixture();
+  await setupWorkspace(root);
+  const marker = path.join(root, 'node_modules/.atlas-workspace-setup');
+  const original = await readFile(marker, 'utf8');
+  await utimes(marker, new Date(0), new Date(0));
+  await setupWorkspace(root, true);
+  expect((await Bun.file(marker).stat()).mtimeMs).toBe(0);
+  // A changed manifest must install; failure must invalidate the previous successful stamp.
+  const pkgFile = path.join(root, 'package.json');
+  const pkg = JSON.parse(await readFile(pkgFile, 'utf8'));
+  await writeFile(pkgFile, JSON.stringify({ ...pkg, scripts: { preinstall: 'exit 23' } }));
+  await expect(setupWorkspace(root, true)).rejects.toThrow('installation failed');
+  expect(await Bun.file(marker).exists()).toBe(false);
+  await writeFile(pkgFile, JSON.stringify(pkg));
+  await setupWorkspace(root, true);
+  expect(await readFile(marker, 'utf8')).toBe(original);
+  await rm(path.join(root, 'node_modules'), { recursive: true });
+  await setupWorkspace(root, true);
+  expect(await readFile(marker, 'utf8')).toBe(original);
+}, 30_000);
+
+
+async function populationFixture(root: string, body: string) {
+  const file = path.join(root, 'package.json');
+  const pkg = JSON.parse(await readFile(file, 'utf8'));
+  await mkdir(path.join(root, 'scripts'), { recursive: true });
+  await writeFile(file, JSON.stringify(pkg));
+  await writeFile(path.join(root, 'scripts/media.ts'), "await Bun.write('prepared.txt', 'ready');");
+  await writeFile(path.join(root, 'scripts/examples.ts'), body);
+}
+
+async function untilPopulation(root: string, state: string) {
+  for (let i = 0; i < 300; i++) {
+    const runtime = (await workspaceStatus(root)).runtimes.find((item) => item.mode === 'server');
+    if (runtime?.population === state) return runtime;
+    await Bun.sleep(50);
+  }
+  throw new Error(`Population never became ${state}`);
+}
+
+test('populate starts services before the full workflow, uses the selected URL, and leaves the viewer running', async () => {
+  const root = await fixture();
+  await populationFixture(root, `
+    if (await Bun.file('prepared.txt').text() !== 'ready') throw new Error('Preparation skipped');
+    const response = await fetch(process.env.ATLAS_SERVER_URL + '/api/projects');
+    if (!response.ok) throw new Error('Server unavailable during population');
+    await Bun.write('populated.json', JSON.stringify({ url: process.env.ATLAS_SERVER_URL, store: process.env.ATLAS_STORE, project: process.env.ATLAS_PROJECT, ffmpeg: await Bun.spawn(['ffmpeg', '-version'], { stdout: 'ignore', stderr: 'ignore' }).exited }));
+  `);
+  const { child, runtime } = await start(root, 'populate');
+  await untilPopulation(root, 'complete');
+  expect(JSON.parse(await readFile(path.join(root, 'populated.json'), 'utf8'))).toEqual({ url: runtime.url, store: runtime.url, project: 'todo-app', ffmpeg: 0 });
+  expect(child.exitCode).toBeNull();
+  expect((await fetch(`${runtime.url}/api/projects`)).status).toBe(200);
+  await stopWorkspace(root);
+  expect(await child.exited).toBe(0);
+}, 60_000);
+
+test('a failed populate workflow is reported and its viewer remains available for inspecting evidence', async () => {
+  const root = await fixture();
+  await populationFixture(root, 'process.exit(7);');
+  const { child, runtime } = await start(root, 'populate');
+  await untilPopulation(root, 'failed');
+  expect((await fetch(`${runtime.url}/api/projects`)).status).toBe(200);
+  await stopWorkspace(root);
+  expect(await child.exited).toBe(1);
+}, 60_000);
+
+test('populate can reuse an existing server without stopping its owner', async () => {
+  const root = await fixture();
+  await populationFixture(root, "await Bun.write('reused.txt', process.env.ATLAS_SERVER_URL!);");
+  const { child: owner, runtime } = await start(root);
+  const child = Bun.spawn([process.execPath, cli, 'populate'], { cwd: root, stdout: 'ignore', stderr: 'pipe' });
+  children.push(child);
+  const errors = new Response(child.stderr).text();
+  expect(await child.exited, await errors).toBe(0);
+  expect(await readFile(path.join(root, 'reused.txt'), 'utf8')).toBe(runtime.url);
+  expect(owner.exitCode).toBeNull();
+}, 60_000);
+
+test('stopping populate cancels an in-progress workflow and closes its application service', async () => {
+  const root = await fixture();
+  await populationFixture(root, `
+    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('example') });
+    await Bun.write('example-url.txt', server.url.href);
+    setInterval(() => {}, 1000);
+  `);
+  const { child } = await start(root, 'populate');
+  const file = path.join(root, 'example-url.txt');
+  for (let i = 0; i < 300 && !(await Bun.file(file).exists()); i++) await Bun.sleep(50);
+  const url = await readFile(file, 'utf8');
+  expect((await fetch(url)).status).toBe(200);
+  await stopWorkspace(root);
+  expect(await child.exited).toBe(0);
+  for (let i = 0; i < 50; i++) {
+    if (!(await fetch(url, { signal: AbortSignal.timeout(200) }).then(() => true, () => false))) break;
+    await Bun.sleep(50);
+  }
+  expect(await fetch(url, { signal: AbortSignal.timeout(200) }).then(() => true, () => false)).toBe(false);
+}, 60_000);
+
+
+test('populate help describes the workflow without starting services', async () => {
+  const root = await fixture();
+  const child = Bun.spawn([process.execPath, cli, 'populate', '--help'], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
+  children.push(child);
+  const output = new Response(child.stdout).text();
+  expect(await child.exited).toBe(0);
+  expect(await output).toContain('bun run dev');
+  expect((await workspaceStatus(root)).runtimes).toEqual([]);
+});

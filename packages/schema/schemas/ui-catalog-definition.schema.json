@@ -1,0 +1,215 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-catalog-definition.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The catalog. Its plan layers are published as the producer `ui-catalog:<name>`"
+    },
+    "dimensions": {
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "values": {
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "environment": {
+                  "description": "The client this value sets (`mobile-web`…). At most one dimension may set it for any profile",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "parameters": {
+                  "default": {},
+                  "description": "Extra profile parameters this value contributes (`{ \"viewport\": \"390x844\" }`)",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                }
+              },
+              "required": [
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "name",
+          "values"
+        ],
+        "additionalProperties": false
+      },
+      "description": "The profile matrix, in the order the project declared it. Every combination of values is a profile"
+    },
+    "exclude": {
+      "default": [],
+      "description": "Combinations no item is expected for, each a partial match on dimension values",
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "additionalProperties": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "states": {
+      "maxItems": 200000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "route": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "fixture": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "cohort": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "area": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "flags": {
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          },
+          "covers": {
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "inventory": {
+      "default": [],
+      "description": "Surfaces of the product, as `inventory: true` plan entries",
+      "maxItems": 100000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "groups": {
+      "description": "The work unit of every item, state by state and profile by profile. Absent: every item is its own unit",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      }
+    },
+    "options": {
+      "default": {
+        "maxAttempts": 3
+      },
+      "type": "object",
+      "properties": {
+        "maxAttempts": {
+          "default": 3,
+          "description": "A unit whose capture failed this many times in a row within one collection is no longer handed out in it",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "staleAfterMs": {
+          "description": "A captured item is handed out again once its result is older than this. Absent: only when a claim names `staleBeforeMs`",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "name",
+    "dimensions",
+    "states"
+  ],
+  "additionalProperties": false
+}

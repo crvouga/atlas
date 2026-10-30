@@ -83,12 +83,12 @@ sets how often the site checks for new runs (default 60 s, plus when the tab reg
 ### Inside this repository
 
 ```sh
-bun client:dev                          # the full coffee example, charts and layered report
+bun run dev                             # services, full example workflow and hot-reloading viewer
 bun test packages/visualizer/src packages/visualizer/vite   # parsing, composition, statuses, every fixture
-bun client:fixtures                     # regenerate the fixtures (needs ImageMagick, cwebp, ffmpeg)
+bun packages/visualizer/scripts/make-fixtures.ts                     # regenerate the fixtures (needs ImageMagick, cwebp, ffmpeg)
 ```
 
-`bun client:publish-data` and `bun client:build` do the same as the CLI, writing to `public/data` (or
+`bun packages/visualizer/scripts/publish-data.ts` and `bun packages/core/bin/atlas.mjs client build` do the same as the CLI, writing to `public/data` (or
 `ATLAS_OUT`) and `dist`. `ATLAS_SOURCES_FILE` supplies additional sources, and
 `VITE_ATLAS_SOURCES_URL` can point a hosted client at a separate source descriptor file.
 
@@ -199,7 +199,7 @@ Beside the statechart map, every other kind of spec has its own tab: Gherkin fea
 
 Results come from the Atlas reports API (`/api/reports` in dev, `VITE_ATLAS_REPORTS_URL` when hosted elsewhere) or from a static `data/evidence` export. They combine across backends, branches, versions, environments and layers; **Sources** in the header switches any of them off. While a spec suite is running, the header says so and each finished test appears within a couple of seconds. See [Atlas reports](../reports/README.md) for the API and host configuration.
 
-`bun atlas` starts a project-agnostic node. The Todo example publishes into project `todo-app` through `bun example:run`; it never configures the server. A project without specs or reports stays empty. Bundled coffee fixtures are available only through explicit `atlas client` fixture options for client development and tests.
+`bun scripts/atlas.mjs` starts a project-agnostic node. The Todo example publishes into project `todo-app` through `bun scripts/examples.ts run`; it never configures the server. A project without specs or reports stays empty. Bundled coffee fixtures are available only through explicit `atlas client` fixture options for client development and tests.
 
 The header title is the product's name, taken from `atlas.yaml`'s `title` up to its first dash or colon, or "Atlas".
 

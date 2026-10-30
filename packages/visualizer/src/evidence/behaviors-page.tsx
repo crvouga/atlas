@@ -246,8 +246,8 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
             Everything the project's features say should happen, found by its words. Read what should happen, watch a recording of it, and inspect the record behind it.
           </Text>
           <Group component="nav" aria-label="Where the evidence is" gap="md" mt="xs">
-            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ tab: 'runs' } as never} />}>Runs</Anchor>
-            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ tab: 'artifacts' } as never} />}>Videos and artifacts</Anchor>
+            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', tab: 'runs' } as never} />}>Runs</Anchor>
+            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', tab: 'artifacts' } as never} />}>Videos and artifacts</Anchor>
           </Group>
         </Box>
         <TextInput

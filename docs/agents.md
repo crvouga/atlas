@@ -179,6 +179,7 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas ui-catalog status` | `ui-catalog-status` |
 | `atlas ui-catalog diff` | `ui-catalog-diff-result` |
 | `atlas ui-catalog export` | `ui-catalog-export-result` |
+| `atlas ui-catalog collect` | `ui-catalog-collect-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 
@@ -319,8 +320,8 @@ The reference is generated from the doc comments next to the code, so it cannot 
 - **Server settings.** The table in [the Atlas server](server.md), from `SERVER_SETTINGS`; a test proves every row.
 - **Guides** (these files) are written by hand, and tests hold their links, and the commands in them that matter, to the code.
 
-`bun run docs` regenerates docs **and JSON Schemas**. `bun run docs -- --check` detects stale, missing and obsolete
-outputs. `bun run docs:check` is the broader CI gate: it also checks documentation coverage, links (including the
+`bun run docs` regenerates docs **and JSON Schemas**. `bun scripts/docs/generate.ts --check` detects stale, missing and obsolete
+outputs. `bun run docs --check` is the broader CI gate: it also checks documentation coverage, links (including the
 generated references), required block markers, real CLI help, every registered JSON command result, the local
 walkthrough, and the commands generated into consumer `AGENTS.md` files against a failing suite and its later fix.
 The packed-package smoke repeats both consumer flows under Bun and Node.
@@ -331,7 +332,7 @@ commands in this repository's `AGENTS.md` come from CI. Add a required block to 
 `scripts/docs/generate.ts` when introducing another factual table; missing, malformed or duplicate markers fail.
 
 In this repository, change the source comment, registry, schema or manifest first, run `bun run docs`, then
-`bun run docs:check`, and commit the generated result with the source change. Hand-written explanations still
+`bun run docs --check`, and commit the generated result with the source change. Hand-written explanations still
 need review and behaviour tests: these checks cannot prove arbitrary prose true. When behaviour changes, update
 its guide and add or extend an executable scenario that proves the explanation.
 

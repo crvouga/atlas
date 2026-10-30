@@ -4,7 +4,7 @@
  * Re-exports every Zod schema, constant and inferred type of the Atlas contract: the layer format and report status
  * (`layer`), the `atlas.critique` evidence of automated UI reviewers (`critique`), the statechart run manifest (`manifest`, `common`), the spec file formats (`spec`), the run index and
  * report sources the viewer reads (`runs-index`, `report-sources`) and the server configuration (`server-config`).
- * The JSON Schemas shipped in `schemas/` are generated from these by `bun run schemas`.
+ * The JSON Schemas shipped in `schemas/` are generated from these by `bun run docs`.
  *
  * @see docs/report-contract.md
  */
@@ -22,3 +22,4 @@ export * from './cli-results';
 
 export * from './live-run';
 export * from './project';
+export * from './ui-catalog-queue';
