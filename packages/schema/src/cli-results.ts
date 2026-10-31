@@ -444,7 +444,10 @@ export const UiCatalogCollectResultSchema = z.looseObject({
   store: z.string().describe('The Atlas server'),
   definition: z.looseObject({ version: z.string().describe('The SHA-256 of the canonical definition: the same definition is the same version on every shard'), name: z.string() }),
   shard: z.string(),
-  stoppedBy: z.enum(['empty', 'max-units', 'max-minutes', 'signal', 'unreachable']).describe('`empty`: the queue had nothing left for this shard. `max-units`, `max-minutes`: a bound. `signal`: SIGINT or SIGTERM (the claim was released). `unreachable`: the server stopped answering'),
+  stoppedBy: z.enum(['empty', 'max-units', 'max-minutes', 'signal', 'unreachable', 'infrastructure']).describe('`infrastructure`: explicitly classified collector failure. `empty`: the queue had nothing left for this shard. `max-units`, `max-minutes`: a bound. `signal`: SIGINT or SIGTERM (the claim was released). `unreachable`: the server stopped answering'),
+  diagnostics: z.array(z.looseObject({
+    message: z.string(), phase: z.string(), retryable: z.boolean(), fingerprint: z.string().optional(), attempt: z.number().int().positive()
+  })).optional().describe('Explicit collector infrastructure incidents, including recovered retries; never product-state failures'),
   claims: z.number().int().nonnegative(),
   units: z.looseObject({
     claimed: z.number().int().nonnegative(), collected: z.number().int().nonnegative(),

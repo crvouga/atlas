@@ -10939,6 +10939,22 @@ export type CapturedItem = Omit<UiStateCapture, 'id'> & {
 
 What a collector returns for one item: a capture as `uiStateLayer` takes it, naming the item by its key instead of an id.
 
+#### `CollectorInfrastructureError`
+
+```ts
+export class CollectorInfrastructureError extends Error
+```
+
+Explicit collector infrastructure failure; ordinary exceptions retain their historical item-failure behavior.
+
+#### `CollectorDiagnostic`
+
+```ts
+export type CollectorDiagnostic = { readonly message: string; readonly phase: string; readonly retryable: boolean; readonly fingerprint?: string; readonly attempt: number };
+```
+
+One infrastructure incident, separate from product-state failures.
+
 #### `CollectOptions`
 
 ```ts
@@ -10961,7 +10977,7 @@ export type CollectOptions = {
   readonly staleBeforeMs?: number;
   /** Stop claiming after this many units. */
   readonly maxUnits?: number;
-  /** Stop claiming after this many milliseconds; a claim still held then is released. */
+  /** Stop at this deadline, abort active callbacks and release unfinished work. JavaScript callbacks must cooperate to stop their own resources; late results are ignored. Completed uploads have no grace past the deadline. */
   readonly maxMs?: number;
   /** Stop at once: publish what is captured, release the claim. */
   readonly signal?: AbortSignal;
@@ -10973,18 +10989,25 @@ export type CollectOptions = {
   readonly capture?: (unit: CollectUnit, signal: AbortSignal) => Promise<readonly CapturedItem[]>;
   /** Capture every unit of a claim at once (one process for a batch). */
   readonly captureBatch?: (units: readonly CollectUnit[], context: { readonly claimId: string; readonly signal: AbortSignal }) => Promise<readonly CapturedItem[]>;
-  /** Told what happens, for a log line. */
-  readonly onEvent?: (event: CollectEvent) => void;
-  readonly now?: () => number;
-};
+  /** Stream completed units with backpressure: each yield is published before requesting the next. Never yield a unit twice. Array callbacks remain supported. */
+  readonly captureStream?: (units: readonly CollectUnit[], context: { readonly claimId: string; readonly signal: AbortSignal }) => AsyncIterable<{ readonly unit: string; readonly captures: readonly CapturedItem[] }>;
+  /** Maximum bytes returned per unit. Streaming defaults to 64 MiB. Existing per-unit/array callbacks retain their limits unless this is supplied; array batches retain whole-claim buffering. */
+  readonly maxBufferedBytes?: number;
+  /** Initialize consumer resources before any work is claimed. A failure is infrastructure failure, never an item result. */
+  readonly preflight?: (signal: AbortSignal) => Promise<void>;
+  /** Retries for explicitly retryable infrastructure errors; default 0. No failed product result is emitted for these errors. */
+  readonly infrastructureRetries?: number;
+  /** Stop the shard after this many unrecovered infrastructure incidents; default 1. */
+  …
 ```
 
-How one shard collects. Give `capture` (bounded by `concurrency`, default 1) or `captureBatch` (a whole claim at once).
+How one shard collects. Per-unit callbacks publish before taking another unit; stream yields wait for publication. With a buffer budget, returned captures are bounded by concurrency × maxBufferedBytes. Producers must bound their own allocation. Legacy array batches retain whole-claim buffering.
 
 #### `CollectEvent`
 
 ```ts
 export type CollectEvent =
+  | { readonly type: 'infrastructure'; readonly diagnostic: CollectorDiagnostic }
   | { readonly type: 'definition'; readonly version: string; readonly created: boolean }
   | { readonly type: 'claim'; readonly claimId: string; readonly units: number }
   | { readonly type: 'published'; readonly claimId: string; readonly items: number; readonly failed: number }
@@ -10992,12 +11015,12 @@ export type CollectEvent =
   | { readonly type: 'released'; readonly claimId: string; readonly units: number };
 ```
 
-What `collectCatalog` tells `onEvent`.
+What `collectCatalog` tells `onEvent`. Published item/failure counters describe only that publication, so events can be summed.
 
 #### `CollectStop`
 
 ```ts
-export type CollectStop = 'empty' | 'max-units' | 'max-minutes' | 'signal' | 'unreachable';
+export type CollectStop = 'empty' | 'max-units' | 'max-minutes' | 'signal' | 'unreachable' | 'infrastructure';
 ```
 
 Why a shard stopped: the queue had nothing left for it, a bound, a stop signal, or the server stopped answering.
@@ -11007,6 +11030,8 @@ Why a shard stopped: the queue had nothing left for it, a bound, a stop signal, 
 ```ts
 export type CollectResult = {
   readonly ok: boolean;
+  /** Infrastructure incidents, including recovered retries; absent in older collectors. */
+  readonly diagnostics?: readonly CollectorDiagnostic[];
   readonly definition: string;
   readonly shard: string;
   readonly stoppedBy: CollectStop;

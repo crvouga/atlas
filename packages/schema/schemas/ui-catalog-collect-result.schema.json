@@ -38,9 +38,43 @@
         "max-units",
         "max-minutes",
         "signal",
-        "unreachable"
+        "unreachable",
+        "infrastructure"
       ],
-      "description": "`empty`: the queue had nothing left for this shard. `max-units`, `max-minutes`: a bound. `signal`: SIGINT or SIGTERM (the claim was released). `unreachable`: the server stopped answering"
+      "description": "`infrastructure`: explicitly classified collector failure. `empty`: the queue had nothing left for this shard. `max-units`, `max-minutes`: a bound. `signal`: SIGINT or SIGTERM (the claim was released). `unreachable`: the server stopped answering"
+    },
+    "diagnostics": {
+      "description": "Explicit collector infrastructure incidents, including recovered retries; never product-state failures",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "attempt": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "message",
+          "phase",
+          "retryable",
+          "attempt"
+        ],
+        "additionalProperties": {}
+      }
     },
     "claims": {
       "type": "integer",

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 
 import { httpStore } from '../../reports/src/http-store';
 import { publishChecks } from '../../reports/src/publish-checks';
-import { collectCatalog } from '../../reports/src/ui-catalog-collect';
+import { collectCatalog, CollectorInfrastructureError } from '../../reports/src/ui-catalog-collect';
 import { resolveCatalog, type CatalogDefinition } from '../../reports/src/ui-catalog-definition';
 import { uiStateLayer } from '../../reports/src/ui-catalog-publish';
 import { UI_CLAIM_LABEL } from '../../reports/src/ui-catalog-queue';
@@ -295,6 +295,215 @@ describe('collectCatalog', () => {
     closers.push(() => http.close(100));
     return { server, url: `http://127.0.0.1:${http.port}` };
   }
+
+  test('#98: published counters are local to each publication', async () => {
+    const { url } = await serve();
+    const events: { items: number; failed: number }[] = [];
+    let calls = 0;
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(2, { maxAttempts: 1 }),
+      shard: { id: 'counts' }, batchSize: 1,
+      capture: async unit => unit.items.map(item => ({ item: item.key, status: calls++ < 2 ? 'failed' : 'passed' })),
+      onEvent: event => { if (event.type === 'published') events.push(event); }
+    });
+    expect(events.map(event => event.failed)).toEqual([1, 1, 0, 0]);
+    expect(events.reduce((sum, event) => sum + event.failed, 0)).toBe(result.items.failed);
+  });
+
+  for (const batch of [false, true]) test(`#99: deadline aborts and releases a non-cooperative ${batch ? 'batch' : 'unit'}`, async () => {
+    const { url, server } = await serve();
+    let signal: AbortSignal | undefined;
+    const blocked = async (_: unknown, context: AbortSignal | { signal: AbortSignal }) => {
+      signal = context instanceof AbortSignal ? context : context.signal;
+      return new Promise<never>(() => {});
+    };
+    const began = Date.now();
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(1),
+      shard: { id: 'deadline' }, maxMs: 100,
+      ...(batch ? { captureBatch: blocked } : { capture: blocked })
+    });
+    expect(Date.now() - began).toBeLessThan(1500);
+    expect(signal?.aborted).toBe(true);
+    expect(result.stoppedBy).toBe('max-minutes');
+    expect(result.items.failed).toBe(0);
+    expect(result.units.released).toBe(2);
+    const queue = await (await server.fetch(new Request('http://atlas.test/api/ui-catalog/queue', { headers: publisher() }))).json() as UiQueueSummary;
+    expect(queue.held).toBe(0);
+  }, 2000);
+
+  test('#97: completed units publish while a sibling is blocked, and survive cancellation', async () => {
+    const { url, server } = await serve();
+    const stop = new AbortController();
+    let started = 0;
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(1),
+      shard: { id: 'incremental' }, concurrency: 2, signal: stop.signal,
+      capture: async unit => {
+        if (++started === 2) return new Promise<never>(() => {});
+        return unit.items.map(item => ({ item: item.key }));
+      },
+      onEvent: event => { if (event.type === 'published') stop.abort(); }
+    });
+    expect(result.items).toEqual({ captured: 1, failed: 0, other: 0 });
+    expect(result.units).toMatchObject({ collected: 1, released: 1 });
+    const body = await (await server.fetch(new Request('http://atlas.test/api/reports/ui-catalog', { headers: publisher() }))).json() as { summary: { coverage: { captured: number } } };
+    expect(body.summary.coverage.captured).toBe(1);
+  });
+
+  test('#97: stream publication applies backpressure before requesting the next unit', async () => {
+    const { url } = await serve();
+    let published = 0;
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(2),
+      shard: { id: 'stream' },
+      captureStream: async function* (units) {
+        for (const [index, unit] of units.entries()) {
+          expect(published).toBe(index);
+          yield { unit: unit.key, captures: unit.items.map(item => ({ item: item.key })) };
+        }
+      },
+      onEvent: event => { if (event.type === 'published') published++; }
+    });
+    expect(result.items.captured).toBe(4);
+    expect(result.units.collected).toBe(4);
+  });
+
+  test('#99: a blocked upload cannot publish its index after the deadline', async () => {
+    const { url } = await serve();
+    const base = httpStore({ url, token: TOKENS[0]!.token });
+    let resume!: () => void;
+    const blocked = new Promise<void>(resolve => { resume = resolve; });
+    const writes: string[] = [];
+    const result = await collectCatalog({
+      store: { ...base, put: async (key, bytes, contentType) => { writes.push(key); await blocked; await base.put(key, bytes, contentType); } },
+      catalog: definition(1), shard: { id: 'upload-deadline' }, maxMs: 100,
+      capture: async unit => unit.items.map(item => ({ item: item.key, screenshot: { data: new Uint8Array([1, 2, 3]) } }))
+    });
+    expect(result.stoppedBy).toBe('max-minutes');
+    expect(result.items.captured).toBe(0);
+    const count = writes.length;
+    resume();
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(writes).toHaveLength(count);
+    expect(writes.some(key => key.startsWith('layers/index/'))).toBe(false);
+  });
+
+  test('#92: preflight failure records diagnostics without claiming or failing product states', async () => {
+    const { url } = await serve();
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(2), shard: { id: 'preflight' },
+      preflight: async () => { throw new Error('compiler unavailable'); }, capture: async () => { throw new Error('must not run'); }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.stoppedBy).toBe('infrastructure');
+    expect(result.claims).toBe(0);
+    expect(result.items.failed).toBe(0);
+    expect(result.diagnostics?.[0]).toMatchObject({ phase: 'preflight', message: 'compiler unavailable' });
+  });
+
+  test('#92: classified failures release work; recovered retries preserve diagnostic history', async () => {
+    const { url } = await serve();
+    let calls = 0;
+    const common = { store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(2), shard: { id: 'infra' } };
+    const failed = await collectCatalog({ ...common,
+      capture: async () => { throw new CollectorInfrastructureError('fixture service down', { phase: 'bootstrap', fingerprint: 'fixtures', retryable: true }); }
+    });
+    expect(failed.stoppedBy).toBe('infrastructure');
+    expect(failed.items.failed).toBe(0);
+    expect(failed.units.released).toBe(4);
+    const recovered = await collectCatalog({ ...common, infrastructureRetries: 1,
+      capture: async unit => {
+        if (++calls === 1) throw new CollectorInfrastructureError('temporary', { phase: 'bootstrap', retryable: true });
+        return unit.items.map(item => ({ item: item.key }));
+      }
+    });
+    expect(recovered.ok).toBe(true);
+    expect(recovered.items.captured).toBe(4);
+    expect(recovered.diagnostics).toHaveLength(1);
+  });
+
+  test('#99: cooperative captures see cancellation and successful runs clear their deadline timer', async () => {
+    const { url } = await serve();
+    let signal: AbortSignal | undefined;
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(1), shard: { id: 'timer-cleanup' }, maxMs: 100,
+      capture: async (unit, given) => { signal = given; return unit.items.map(item => ({ item: item.key })); }
+    });
+    expect(result.ok).toBe(true);
+    // Completed claims intentionally abort their lifetime signal on cleanup.
+    expect(signal?.aborted).toBe(true);
+    const stopped = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(2), shard: { id: 'cooperative' }, maxMs: 30,
+      capture: async (_, given) => new Promise((_, reject) => given.addEventListener('abort', () => reject(given.reason), { once: true }))
+    });
+    expect(stopped.stoppedBy).toBe('max-minutes');
+    expect(stopped.items.failed).toBe(0);
+  });
+
+  test('#97: grouped stream units require all items and oversized buffers cannot pass', async () => {
+    const { url } = await serve();
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }),
+      catalog: definition(2, { group: item => item.state.id, maxAttempts: 1 }), shard: { id: 'group-stream' },
+      captureStream: async function* (units) {
+        for (const unit of units) yield { unit: unit.key, captures: [{ item: unit.items[0]!.key }] };
+      }
+    });
+    expect(result.items).toEqual({ captured: 2, failed: 2, other: 0 });
+    const oversized = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(1, { maxAttempts: 1 }),
+      collection: 'size', shard: { id: 'size' }, maxBufferedBytes: 2, staleBeforeMs: Date.now() + 1000, maxUnits: 1,
+      capture: async unit => unit.items.map(item => ({ item: item.key, screenshot: { data: new Uint8Array(3) } }))
+    });
+    expect(oversized.ok).toBe(false);
+    expect(oversized.items.failed).toBe(1);
+  });
+
+  test('#92: parallel infrastructure failures abort siblings before releasing the claim', async () => {
+    const { url } = await serve();
+    let late!: () => void;
+    const result = await collectCatalog({
+      store: httpStore({ url, token: TOKENS[0]!.token }), catalog: definition(2),
+      shard: { id: 'parallel-infra' }, concurrency: 2,
+      capture: async unit => {
+        if (unit.items[0]!.state.id === 's00000') throw new CollectorInfrastructureError('bootstrap down', { phase: 'bootstrap' });
+        await new Promise<void>(resolve => { late = resolve; });
+        return unit.items.map(item => ({ item: item.key }));
+      }
+    });
+    late?.();
+    expect(result.stoppedBy).toBe('infrastructure');
+    expect(result.items).toEqual({ captured: 0, failed: 0, other: 0 });
+    expect(result.units.released).toBe(4);
+  });
+
+  test('#99: a late claim response is released without mutating the returned counters', async () => {
+    const { url, server } = await serve();
+    const base = httpStore({ url, token: TOKENS[0]!.token });
+    let resume!: () => void;
+    const blocked = new Promise<void>(resolve => { resume = resolve; });
+    const result = await collectCatalog({
+      store: { ...base, call: async (method, path, init) => {
+        const response = await base.call(method, path, init);
+        if (path === '/ui-catalog/claims') await blocked;
+        return response;
+      } },
+      catalog: definition(1), shard: { id: 'late-claim' }, maxMs: 50,
+      capture: async () => { throw new Error('must not run'); }
+    });
+    expect(result.stoppedBy).toBe('max-minutes');
+    const snapshot = JSON.stringify(result);
+    resume();
+    for (let i = 0; i < 30; i++) {
+      const queue = await (await server.fetch(new Request('http://atlas.test/api/ui-catalog/queue', { headers: publisher() }))).json() as UiQueueSummary;
+      if (queue.held === 0) break;
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    const queue = await (await server.fetch(new Request('http://atlas.test/api/ui-catalog/queue', { headers: publisher() }))).json() as UiQueueSummary;
+    expect(queue.held).toBe(0);
+    expect(JSON.stringify(result)).toBe(snapshot);
+  });
 
   test('three shards drain the queue together, each unit collected once, and the catalog is complete', async () => {
     const { url, server } = await serve();

@@ -273,9 +273,15 @@ owned by your project: `prepareState` must apply the item's profile as well as n
 
 - Give every process a distinct shard id, the same deterministic definition, the same server/project and a shared
   `collection` id for a CI run. Resolve dynamic discovery against the same revision and inputs on every machine.
-- Use `batchSize` to bound claimed units and buffered screenshots, and `concurrency` to bound simultaneous `capture` calls.
+- Use `batchSize` to bound claimed units, and `concurrency` to bound simultaneous `capture` calls.
   Start small; a large claim can leave other shards idle. Concurrency defaults to 1 for existing collectors.
-  `captureBatch` owns its own parallelism and ignores `concurrency`; CLI `--exec` uses this batch interface.
+  Each completed unit is published before that worker takes another. Fast siblings become visible while slow ones run.
+  Optional `maxBufferedBytes` refuses an oversized returned unit; retained returned captures are bounded by
+  concurrency times that budget. Existing callbacks retain their publication limits unless a budget is supplied. Callbacks must bound their own allocations. Groups remain indivisible work units.
+  For batch processes, `captureStream(units, { claimId, signal })` can yield `{ unit: unit.key, captures }` once per
+  completed unit (default buffer budget 64 MiB per yield). Atlas awaits publication before asking for another yield, providing backpressure. A duplicate or
+  unknown unit is an error. The existing array `captureBatch` still buffers its whole claim and owns its parallelism;
+  CLI `--exec` uses this compatibility interface. Published events have publication-local item and failure counts.
 - Allocate an isolated page/context or device per concurrent unit. Process a unit's items sequentially when they share it.
   Never navigate or screenshot one mutable page concurrently. Close resources in `finally` and honor `signal`.
 - Groups are indivisible. Every item in a group must match `where`; grouping mobile and desktop together prevents a
@@ -286,6 +292,21 @@ owned by your project: `prepareState` must apply the item's profile as well as n
 - An `empty` stop means no work is available **to that shard now**: other shards may still hold claims, or retries may be
   exhausted. After all workers finish, run `atlas ui-catalog status --format json` as the completeness gate.
   A successful collector alone does not establish full coverage.
+
+The API `maxMs` deadline aborts capture signals, ignores late callback results, stops new upload writes and releases
+unfinished work. An in-flight request may finish; a late claim response is released, and a blocked attachment write cannot
+start a later layer-index write. Release cleanup gets up to one second; if the server cannot answer, its lease remains the
+fallback. There is no flush grace beyond the deadline. External cancellation preserves already completed units. Arbitrary
+JavaScript cannot be forcibly stopped: callbacks must honor the signal and close their pages/processes in `finally`.
+
+For shared bootstrap/fixture failures, throw `CollectorInfrastructureError(message, { phase, retryable, fingerprint })`
+from the reports collector module. These failures release unfinished units without recording product-state failures or
+consuming their failure retry budget. Optional `preflight(signal)` runs before the first claim; any preflight exception is
+infrastructure failure. `infrastructureRetries` defaults to zero and retries only explicitly retryable infrastructure
+errors; recovered incidents remain in `result.diagnostics` and `infrastructure` events. The
+`infrastructureFailureLimit` (default one unrecovered incident) stops the shard with `stoppedBy: 'infrastructure'` and
+`ok: false`. Ordinary unclassified callback exceptions retain the existing item-failure behavior; Atlas does not infer
+product blame from their text. These are shard diagnostics; a healthy shard result is still not a refresh-completeness gate.
 
 ### The order work is handed out in
 
