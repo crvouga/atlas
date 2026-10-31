@@ -471,8 +471,8 @@ async function collect(rest: readonly string[], base: string, env: Readonly<Reco
       },
       ...(io.clock ? { now: io.clock } : {})
     });
-    const { ok, definition: _version, ...done } = result;
-    document = { ...done, lostClaims: [...done.lostClaims], ok, store: target.label, definition: { version: resolved.version, name: resolved.document.name }, warnings };
+    const { ok, definition: _version, diagnostics, ...done } = result;
+    document = { ...done, ...(diagnostics ? { diagnostics: [...diagnostics] } : {}), lostClaims: [...done.lostClaims], ok, store: target.label, definition: { version: resolved.version, name: resolved.document.name }, warnings };
   } catch (error) {
     if (!(error instanceof AtlasHttpError)) throw error;
     document = {
