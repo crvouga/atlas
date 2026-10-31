@@ -1,3 +1,4 @@
+import { PageCommandPalette } from '../find/PageCommandPalette';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { ServerEditableSettingsSchema } from '@crvouga/atlas/schema';
 /** @module Server settings interface
@@ -324,12 +325,12 @@ export function SettingsPage() {
             </Anchor>
             <Text c="dimmed">Settings</Text>
           </Group>
-          <Anchor href={back}>
+          <Group><PageCommandPalette /><Anchor href={back}>
             <Group gap="xs">
               <IconArrowLeft size={16} aria-hidden="true" />
               Back to reports
             </Group>
-          </Anchor>
+          </Anchor></Group>
         </Group>
       </AppShell.Header>
       <AppShell.Main>

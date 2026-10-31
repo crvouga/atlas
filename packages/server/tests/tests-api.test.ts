@@ -383,3 +383,31 @@ describe('GET /api/reports/tests?scope=', () => {
     expect(detail.test.outcomes[0]!.evidence.videos[0]!.scope.verified).toEqual(['deviceKind']);
   });
 });
+
+test('an agent can follow scoped failure evidence and recover the full diagnostic', async () => {
+  const store = memoryStore();
+  const id = 'checkout / card? #支付';
+  const detail = `Build failed\n${'stack trace line\n'.repeat(70)}Root cause at the end`;
+  const node = createNode({ stores: [{ id: 'main', label: 'Main', store }] });
+  nodes.push(node);
+  await node.ready;
+  const upload = await node.fetch(new Request('http://atlas/api/projects/agent-project/checks', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ producer: 'agent-fixture', recordedAtMs: 100, checks: [{ id, title: 'Card checkout', status: 'failed', detail }] })
+  }));
+  expect(upload.status).toBe(201);
+  const base = '/api/projects/agent-project/reports/';
+  const catalog = TestCatalogSchema.parse(await (await get(node, `${base}tests?status=failed&limit=1`)).json());
+  const result = catalog.tests[0]!.outcomes[0]!;
+  expect(result.detailTruncated).toBe(true);
+  expect(result.detail.length).toBe(500);
+  const evidence = await get(node, `${base}${result.evidencePath}`);
+  expect(evidence.status).toBe(200);
+  expect((await evidence.json()).check).toMatchObject({ id, detail, status: 'failed' });
+  const history = TestHistorySchema.parse(await (await get(node, `${base}tests/history?${new URLSearchParams({ key: catalog.tests[0]!.key })}`)).json());
+  expect(history.history[0]!.evidencePath).toBe(result.evidencePath);
+  const markdown = await (await get(node, `${base}tests?status=failed&format=markdown&limit=1`)).text();
+  expect(markdown).toContain('Build failed');
+  expect(markdown).toContain('Preview truncated');
+  expect(markdown).toContain(result.evidencePath!);
+});

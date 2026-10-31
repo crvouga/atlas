@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { act } from 'react';
 
+import { commandPortalTarget } from '../src/find/commands';
 import { setFinderOpen, setHelpOpen } from '../src/find/open';
 
 class FinderResizeObserver {
@@ -26,7 +27,7 @@ function finder() {
 }
 
 function finderInput() {
-  const input = document.querySelector<HTMLInputElement>('input[aria-label="Find a flow"]');
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="Search and commands"]');
   expect(input).not.toBeNull();
   return input!;
 }
@@ -143,8 +144,97 @@ test('recording keys stay put while the finder is open', async () => {
 test('the header opens and closes Spotlight under the application’s StrictMode', async () => {
   atlas = await openAtlas({ at: '/', deps: {}, strict: true });
   await atlas.sees('Gherkin');
-  await atlas.click('button[aria-label="Find a flow"]', 'Find a flow');
-  await atlas.until(() => !!document.querySelector('input[aria-label="Find a flow"]'), 'finder opened from header');
+  await atlas.click('button[aria-label="Search and commands"]', 'Search and commands');
+  await atlas.until(() => !!document.querySelector('input[aria-label="Search and commands"]'), 'finder opened from header');
   await act(async () => finderInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await atlas.until(() => finder() === null, 'finder dismissed');
+});
+
+async function runPaletteCommand(query: string) {
+  await typeQuery(query);
+  await act(async () => finderInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })));
+}
+
+test('IDE command shortcut navigates to every destination, including notation names, without a mouse', async () => {
+  atlas = await openAtlas({ at: '/', deps: {} });
+  await atlas.sees('Gherkin');
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })));
+  await atlas.until(() => finderInput().value === '>', 'command-only mode');
+  await runPaletteCommand('> go to UI catalog');
+  await atlas.until(() => atlas!.router.state.location.pathname === '/catalog', 'catalog command');
+  expect(finder()).toBeNull();
+  await openFinder();
+  await runPaletteCommand('> open Gherkin');
+  await atlas.until(() => atlas!.router.state.location.pathname === '/specs/gherkin', 'notation command');
+});
+
+test('palette invokes current controls, respects disabled/hidden actions, and focuses fields without copying their values', async () => {
+  atlas = await openAtlas({ at: '/', deps: {} });
+  await atlas.sees('Gherkin');
+  const group = document.createElement('section');
+  group.innerHTML = '<label for="command-secret">Private input</label><input id="command-secret" type="password" value="never-index-this-secret"><button>Run local action</button><button disabled>Unavailable action</button><button hidden>Hidden action</button>';
+  atlas.host.append(group);
+  let calls = 0;
+  group.querySelector('button')!.onclick = () => calls++;
+  await openFinder();
+  expect(finder()!.textContent).not.toContain('never-index-this-secret');
+  await typeQuery('> unavailable action');
+  expect(finder()!.querySelectorAll('[role="option"]')).toHaveLength(0);
+  await typeQuery('> hidden action');
+  expect(finder()!.querySelectorAll('[role="option"]')).toHaveLength(0);
+  await runPaletteCommand('> run local action');
+  await atlas.until(() => calls === 1, 'page action called once');
+  await openFinder();
+  await runPaletteCommand('> focus private input');
+  await atlas.until(() => document.activeElement === group.querySelector('input'), 'focus returned to chosen field');
+  expect(group.querySelector('input')!.value).toBe('never-index-this-secret');
+  group.remove();
+});
+
+test('commands open inside a dialog and Escape closes only the palette, restoring the original dialog', async () => {
+  atlas = await openAtlas({ at: '/', deps: {} });
+  await atlas.sees('Gherkin');
+  await openFinder();
+  await runPaletteCommand('> show evidence sources');
+  await atlas.until(() => !!document.querySelector('button[aria-label="Close sources"]'), 'sources dialog');
+  const parent = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find(dialog => dialog.textContent?.includes('Sources'))!;
+  expect(parent).toBeDefined();
+  const close = parent.querySelector<HTMLButtonElement>('button[aria-label="Close sources"]')!;
+  await act(async () => { close.focus(); close.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })); });
+  await atlas.until(() => finder() !== null, 'palette from a dialog control');
+  // Mantine disables portals in env="test"; the browser uses this target for the nested trap.
+  expect(commandPortalTarget()).toBe(parent);
+  await act(async () => finderInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  await atlas.until(() => !finder(), 'only palette closed');
+  expect(parent.isConnected).toBe(true);
+  await atlas.until(() => document.activeElement === close, 'focus restored inside parent dialog');
+});
+
+test('global palette shortcuts work from fields and buttons without stealing text entry or IME composition', async () => {
+  atlas = await openAtlas({ at: '/', deps: {} });
+  await atlas.sees('Gherkin');
+  const field = document.createElement('input');
+  field.setAttribute('aria-label', 'Keyboard fixture');
+  field.value = 'draft text';
+  atlas.host.append(field);
+  for (const key of ['/', '?']) {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    await act(async () => { field.focus(); field.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(false);
+    expect(finder()).toBeNull();
+  }
+  const composing = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, isComposing: true, bubbles: true, cancelable: true });
+  await act(async () => field.dispatchEvent(composing));
+  expect(composing.defaultPrevented).toBe(false);
+  expect(finder()).toBeNull();
+  field.onkeydown = event => event.stopPropagation();
+  await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })));
+  await atlas.until(() => !!finder(), 'palette shortcut before field propagation stops');
+  await act(async () => finderInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  await atlas.until(() => !finder(), 'palette dismissed');
+  expect(field.value).toBe('draft text');
+  const button = atlas.find('button', 'Spec type')!;
+  await act(async () => { button.focus(); button.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })); });
+  await atlas.until(() => !!finder(), 'slash shortcut from a button');
+  field.remove();
 });

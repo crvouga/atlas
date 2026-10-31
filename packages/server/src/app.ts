@@ -34,7 +34,7 @@ import { listRunSummaries, readRunFile } from '../../reports/src/run-bundle';
 import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
 import { catalogHealth, healthMarkdown, parseRootMapping, parseRootMappings, type RootMapping } from '../../reports/src/catalog-health';
 import { parseArtifactFilter } from '../../reports/src/artifact-query';
-import { filterUiCatalog, pageUiCatalog, parseUiCatalogQuery, uiCatalog, uiCatalogMarkdown } from '../../reports/src/ui-catalog';
+import { filterUiCatalog, pageUiCatalog, parseUiCatalogQuery, uiCatalog, uiCatalogMarkdown, uiScreenMarkdown } from '../../reports/src/ui-catalog';
 import { catalogEntries, pageCatalogEntries, parseCatalogEntriesQuery, CATALOG_ENTRIES_VERSION, type CatalogEntrySet } from '../../reports/src/ui-catalog-entries';
 import { parseReliabilityScope, reliability, reliabilityMarkdown } from '../../reports/src/reliability';
 import { artifactList, artifactsMarkdown, catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
@@ -541,6 +541,35 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const whole = uiModel.value;
     const document = () => pageUiCatalog(filterUiCatalog(whole, parseUiCatalogQuery(search)), { limit: number('limit', 200), offset: number('offset', 0) });
     return answer(c, snapshot.version, document, () => uiCatalogMarkdown(document()), `ui-catalog|${search.toString()}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/ui-catalog/detail', async c => {
+    if (!index.ready) return notReady(c);
+    const id = c.req.query('state');
+    if (!id) return problemResponse(400, 'Name an exact state ID with ?state=.');
+    const snapshot = index.snapshot();
+    if (uiModel?.version !== snapshot.version) uiModel = { version: snapshot.version, value: uiCatalog(snapshot.layers, { version: snapshot.version, backends: snapshot.backends, notices: snapshot.notices }) };
+    const state = uiModel.value.states.find(state => state.id === id);
+    if (!state) return problemResponse(404, 'That state is not available in this project. Check report source warnings; absence is not a pass.');
+    const document = { schemaVersion: 1, version: snapshot.version, state, sources: uiModel.value.sources };
+    const url = new URL(c.req.url);
+    const project = c.req.header('x-atlas-project');
+    const reports = `${url.origin}/api${project ? `/projects/${encodeURIComponent(project)}` : ''}/reports`;
+    const detail = new URL(`${reports}/ui-catalog/detail`);
+    detail.searchParams.set('state', id); detail.searchParams.set('format', 'markdown');
+    const profile = c.req.query('image');
+    if (profile) detail.searchParams.set('image', profile);
+    const viewer = new URL('/', url);
+    if (project) viewer.searchParams.set('project', project);
+    viewer.hash = `/catalog?${new URLSearchParams({ state: id, ...(profile ? { image: profile } : {}) })}`;
+    const images = Object.fromEntries(state.cells.flatMap(cell => {
+      const image = cell.capture?.image;
+      const source = image?.path ? `${reports}${image.path}` : image?.uri;
+      return source ? [[cell.profile.key, source]] : [];
+    }));
+    const notices = [...document.sources.notices, ...document.sources.backends.filter(backend => !backend.available).map(backend => `Backend ${backend.id} is unavailable; its evidence is unknown.`)];
+    return answer(c, snapshot.version, () => document, () => uiScreenMarkdown(state, {
+      viewerUrl: viewer.href, documentUrl: detail.href, profile, version: snapshot.version, imageUrls: images, notices
+    }), `ui-screen|${detail.href}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/ui-catalog/entries', async c => {
     if (!index.ready) return notReady(c);

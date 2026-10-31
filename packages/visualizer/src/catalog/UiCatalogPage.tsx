@@ -7,30 +7,32 @@
  * capture exists; a backend or layer that could not be read is named, and nothing that depended on it is shown as captured.
  * Pictures are loaded lazily, only for the cards on screen.
  */
-import { IconArrowsExchange, IconDownload } from '@tabler/icons-react';
-import type { UiCapture, UiCatalog, UiCatalogState, UiCell } from '@crvouga/atlas/reports/ui-catalog';
+import { IconArrowsExchange, IconDownload, IconLayoutGrid, IconList } from '@tabler/icons-react';
+import type { UiCatalog, UiCatalogState, UiCell } from '@crvouga/atlas/reports/ui-catalog';
 import { UI_COVERAGE } from '@crvouga/atlas/reports/ui-catalog';
-import { Accordion, Alert, Anchor, Badge, Button, Card, Code, Container, Divider, Drawer, Group, Pagination, ScrollArea, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Anchor, Badge, Button, Card, Code, Container, Box, Flex, Group, Modal, SegmentedControl, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useEvidence } from '../evidence/evidence-context';
-import { ago, exactTime, plural, shortSha, useNow } from '../evidence/format';
+import { plural } from '../evidence/format';
 import { EvidenceIncomplete, EvidenceWaiting } from '../evidence/load-state';
 import { StatusMark } from '../evidence/marks';
-import { Picture, imageSource } from './Picture';
+import { Picture } from './Picture';
+import { ScreenActions } from './ScreenActions';
+import { StateGallery } from './StateGallery';
 import { CollectionPanel } from './CollectionPanel';
 import { UiCatalogCompare } from './UiCatalogCompare';
 import { useUiCatalog } from './provider';
-import { useCatalogNavigate, useCatalogSearch } from './search';
+import { useCatalogNavigate, useCatalogSearch, type CatalogSearch } from './search';
 import { coverageStatus, coverageWord } from './words';
 import { UiCatalogFilters } from './UiCatalogFilters';
 import { catalogExpression, CLEAR_CATALOG_SEARCH, searchCatalog } from './query';
 
 /** How many state cards are drawn before "Show more". */
-const CARDS = 48;
+const CARDS = 24;
 /** How many rows of the surface table are drawn before "Show more". */
-const SURFACES = 100;
+const SURFACES = 20;
 
 function CoverageBadge({ cell }: { cell: UiCell }) {
   return (
@@ -40,17 +42,22 @@ function CoverageBadge({ cell }: { cell: UiCell }) {
   );
 }
 
-function StateCard({ state, shown }: { state: UiCatalogState; shown: UiCell }) {
+function StateCard({ state, shown, list, selection, onRemember, onSelect }: {
+  state: UiCatalogState; shown: UiCell; list: boolean; selection: CatalogSearch;
+  onRemember: (id: string, kind: 'a' | 'button') => void; onSelect: () => void;
+}) {
   return (
     <Card withBorder role="listitem" data-state={state.id}>
-      <Card.Section p="sm">
-        <Picture cell={shown} title={state.title} height={160} />
-      </Card.Section>
-      <Stack gap="xs" mt="sm">
+      <Flex direction={{ base: 'column', sm: list ? 'row' : 'column' }} gap="md">
+      <Box w={{ base: '100%', sm: list ? 160 : '100%' }} flex="0 0 auto">
+      <Picture cell={shown} title={state.title} height={list ? 120 : 240} onInspect={() => { onRemember(state.id, 'button'); onSelect(); }} />
+      </Box>
+      <Stack gap="xs" flex={1} miw={0}>
         <Anchor
           fw={700}
+          onClick={() => onRemember(state.id, 'a')}
           aria-label={`Open ${state.title}`}
-          renderRoot={(props) => <Link {...props} to="/catalog" search={((prev: Record<string, unknown>) => ({ ...prev, state: state.id })) as never} resetScroll={false} />}
+          renderRoot={(props) => <Link {...props} to="/catalog" search={((prev: Record<string, unknown>) => ({ ...prev, ...selection })) as never} resetScroll={false} />}
         >
           {state.title}
         </Anchor>
@@ -59,147 +66,15 @@ function StateCard({ state, shown }: { state: UiCatalogState; shown: UiCell }) {
           {state.route ? ` · ${state.route}` : ''}
         </Text>
         <Group gap="xs" aria-label={`${state.title} by profile`}>
-          {state.cells.map((cell) => (
+          {state.cells.slice(0, 2).map((cell) => (
             <CoverageBadge key={cell.profile.key} cell={cell} />
           ))}
+          {state.cells.length > 2 && <Text size="xs" c="dimmed">+{state.cells.length - 2} more profiles · Open to inspect</Text>}
         </Group>
+        <ScreenActions state={state} cell={shown} selection={selection} />
       </Stack>
+      </Flex>
     </Card>
-  );
-}
-
-function Origin({ capture, now }: { capture: UiCapture; now: number }) {
-  const { origin } = capture;
-  const sha = shortSha(origin.sha);
-  return (
-    <Text c="dimmed" fz="xs" component="div">
-      From layer <Code>{origin.layer.slice(0, 12)}</Code> in backend <Code>{origin.backend}</Code>, producer {origin.producer}
-      {capture.labels.shard ? `, shard ${capture.labels.shard}` : ''}
-      {origin.branch ? `, ${origin.branch}` : ''}
-      {sha ? <> at <Code>{sha}</Code></> : ''}
-      {', '}
-      <time dateTime={new Date(origin.recordedAtMs).toISOString()} title={exactTime(origin.recordedAtMs)}>
-        {ago(origin.recordedAtMs, now)}
-      </time>
-      {origin.freshness === 'modified' ? ', recorded with local changes' : origin.freshness === 'unknown' ? ', origin not captured' : ''}
-      {capture.alternatives > 0 ? `, ${plural(capture.alternatives, 'other capture', 'other captures')} from other producers` : ''}
-    </Text>
-  );
-}
-
-function CellColumn({ cell, state, now }: { cell: UiCell; state: UiCatalogState; now: number }) {
-  const source = cell.coverage === 'captured' || cell.coverage === 'failed' ? imageSource(cell.capture?.image) : null;
-  return (
-    <Stack gap="xs" component="section" aria-label={`${state.title} in ${cell.profile.label}`}>
-      <Title order={3}>{cell.profile.label}</Title>
-      <Group gap="xs">
-        <StatusMark status={coverageStatus(cell.coverage)} size={16} />
-        <Text fw={600}>{coverageWord(cell.coverage)}</Text>
-        {cell.expected === 'undeclared' && <Badge variant="outline">Not in the expected set</Badge>}
-        {cell.expected === 'declared' && cell.coverage !== 'captured' && <Badge variant="outline">Expected</Badge>}
-      </Group>
-      <Picture cell={cell} title={state.title} />
-      {source && (
-        <Anchor href={source} target="_blank" rel="noreferrer noopener" fz="sm">
-          Open the picture{cell.capture?.image?.width && cell.capture.image.height ? ` (${cell.capture.image.width}×${cell.capture.image.height})` : ''}
-        </Anchor>
-      )}
-      {cell.capture?.detail && (
-        <Text fz="sm" role="note">
-          {cell.capture.detail}
-        </Text>
-      )}
-      {cell.capture ? <Origin capture={cell.capture} now={now} /> : cell.planned ? <Text c="dimmed" fz="xs">Expected by plan layer <Code>{cell.planned.layer.slice(0, 12)}</Code> in backend <Code>{cell.planned.backend}</Code>. Nothing has been captured.</Text> : null}
-    </Stack>
-  );
-}
-
-/** The open state: every profile side by side, with the facts declared about it and where each picture came from. */
-function StateDetail({ state, states, onSelect, onClose }: { state: UiCatalogState | null; states: readonly UiCatalogState[]; onSelect: (id: string) => void; onClose: () => void }) {
-  const navigation = useRef<HTMLDivElement>(null);
-  const viewport = useRef<HTMLDivElement>(null);
-  const index = states.findIndex((item) => item.id === state?.id);
-  const select = (page: number) => {
-    const next = states[page - 1];
-    if (!next || next.id === state?.id) return;
-    // Keep focus inside a stable element even when numbered controls are replaced.
-    navigation.current?.focus();
-    if (viewport.current) viewport.current.scrollTop = 0;
-    onSelect(next.id);
-  };
-  const now = useNow();
-  const facts: [string, string][] = state ? [
-    ['Route', state.route ?? ''], ['Fixture', state.fixture ?? ''], ['Cohort', state.cohort ?? ''], ['Area', state.area ?? ''],
-    ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')],
-    ...Object.entries(state.attributes ?? {})
-  ] : [];
-  return (
-    <Drawer.Root opened={!!state} onClose={onClose} position="right" size="xl"
-      onKeyDown={(event) => {
-        if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || index < 0) return;
-        const target = event.target as HTMLElement;
-        if (target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="slider"], [role="combobox"]')) return;
-        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-        event.preventDefault();
-        event.stopPropagation();
-        select(index + (event.key === 'ArrowLeft' ? 0 : 2));
-      }}
-    >
-      <Drawer.Overlay />
-      <Drawer.Content p={0} h="100%">
-        <Stack h="100%" gap={0}>
-          <Drawer.Header flex="0 0 auto">
-            <Drawer.Title>{state?.title}</Drawer.Title>
-            <Drawer.CloseButton aria-label="Close the state" />
-          </Drawer.Header>
-          {state && <>
-            <ScrollArea flex={1} mih={0} viewportRef={viewport}>
-              <Drawer.Body>
-                <Stack gap="md">
-                  <Text c="dimmed" fz="sm">
-                    {state.id}
-                  </Text>
-                  <Table aria-label="Declared facts" withRowBorders>
-                    <Table.Tbody>
-                      {facts.map(([name, value]) => (
-                        <Table.Tr key={name}>
-                          <Table.Th scope="row" w="40%">{name}</Table.Th>
-                          <Table.Td>{value || <Text span c="dimmed">Not declared</Text>}</Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                  <Title order={3}>Profiles side by side</Title>
-                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                    {state.cells.map((cell) => (
-                      <CellColumn key={cell.profile.key} cell={cell} state={state} now={now} />
-                    ))}
-                  </SimpleGrid>
-                </Stack>
-              </Drawer.Body>
-            </ScrollArea>
-            <Divider />
-            <Stack gap="xs" component="nav" p="lg" flex="0 0 auto" aria-label="Catalog item navigation" tabIndex={-1} ref={navigation}>
-              <Text role="status" aria-live="polite" aria-atomic="true">
-                {index >= 0 ? `Item ${index + 1} of ${states.length}: ${state.title}` : `${state.title} is outside the current filters.`}
-              </Text>
-              {index >= 0 && (
-                <Pagination
-                  total={states.length}
-                  value={index + 1}
-                  onChange={select}
-                  layout="responsive"
-                  formatLabel={({ page, totalPages }) => `Item ${page} of ${totalPages}`}
-                  getControlProps={(control) => ({ 'aria-label': control === 'previous' ? 'Previous catalog item' : 'Next catalog item' })}
-                  getItemProps={(page) => ({ 'aria-label': `Go to item ${page}: ${states[page - 1]!.title}`, 'aria-current': page === index + 1 ? 'page' : undefined })}
-                />
-              )}
-              <Text c="dimmed" fz="sm">Use Left and Right arrow keys to move between items. Press Escape to close.</Text>
-            </Stack>
-          </>}
-        </Stack>
-      </Drawer.Content>
-    </Drawer.Root>
   );
 }
 
@@ -242,16 +117,16 @@ function Summary({ catalog, narrowed }: { catalog: UiCatalog; narrowed: boolean 
   );
 }
 
-function Surfaces({ catalog }: { catalog: UiCatalog }) {
+function Surfaces({ catalog, onSelect }: { catalog: UiCatalog; onSelect: () => void }) {
   const [rows, setRows] = useState(SURFACES);
-  if (!catalog.surfaces.length) return null;
-  const open = catalog.summary.uncoveredSurfaces;
+  if (!catalog.surfaces.length) return <Text role="status" c="dimmed">No product surfaces have been declared yet.</Text>;
+  const uncovered = catalog.summary.uncoveredSurfaces;
   const inventoried = catalog.surfaces.some((surface) => surface.inventoried);
   return (
-    <Accordion variant="contained" defaultValue={open ? 'surfaces' : null}>
+    <Accordion variant="contained" defaultValue="surfaces">
       <Accordion.Item value="surfaces">
         <Accordion.Control>
-          Coverage of the product&rsquo;s surfaces: {plural(catalog.surfaces.length, 'surface', 'surfaces')}, {open === 0 ? 'all with a captured state' : `${open} without one`}
+          Coverage of the product&rsquo;s surfaces: {plural(catalog.surfaces.length, 'surface', 'surfaces')}, {uncovered === 0 ? 'all with a captured state' : `${uncovered} without one`}
         </Accordion.Control>
         <Accordion.Panel>
           <Table.ScrollContainer minWidth={420}>
@@ -269,6 +144,7 @@ function Surfaces({ catalog }: { catalog: UiCatalog }) {
                   <Table.Tr key={surface.id} data-surface={surface.id}>
                     <Table.Td>
                       <Anchor
+                        onClick={onSelect}
                         renderRoot={(props) => <Link {...props} to="/catalog" search={((prev: Record<string, unknown>) => ({ ...prev, surface: surface.id })) as never} resetScroll={false} />}
                       >
                         {surface.id}
@@ -301,39 +177,34 @@ export function UiCatalogPage() {
   const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const [shown, setShown] = useState(CARDS);
+  const [detailsOpened, setDetailsOpened] = useState<'surfaces' | 'collection' | null>(null);
+  const indexHeading = useRef<HTMLHeadingElement>(null);
+  const wasFocused = useRef(!!search.state);
+  const returning = useRef<{ id: string; kind: 'a' | 'button'; scroll: number } | null>(null);
+  const remember = (id: string, kind: 'a' | 'button') => { returning.current = { id, kind, scroll: window.scrollY }; };
+  useEffect(() => {
+    if (search.state) { wasFocused.current = true; return; }
+    if (!wasFocused.current) return;
+    wasFocused.current = false;
+    if (!returning.current) { indexHeading.current?.focus(); return; }
+    const saved = returning.current;
+    returning.current = null;
+    const card = [...document.querySelectorAll<HTMLElement>('[data-state]')].find(card => card.dataset.state === saved.id);
+    card?.querySelector<HTMLElement>(saved.kind)?.focus({ preventScroll: true });
+    window.scrollTo(0, saved.scroll);
+  }, [search.state]);
   const expression = catalogExpression(search);
   const [pending, setPending] = useState({ expression, text: '' });
   const draft = pending.expression === expression ? pending.text : '';
   const setDraft = (text: string, base = expression) => setPending({ expression: base, text });
-  useEffect(() => setShown(CARDS), [expression, draft]);
+  useEffect(() => { if (!search.state) setShown(CARDS); }, [expression, draft]);
   const committed = useMemo(() => whole ? searchCatalog(whole, expression) : null, [whole, expression]);
   const result = useMemo(() => draft && whole ? searchCatalog(whole, `${expression} ${draft}`) : committed, [whole, expression, draft, committed]);
   const catalog = result?.catalog;
   const narrowed = Boolean(expression || draft);
   const unavailable = evidence.backends.filter((backend) => !backend.available);
   const open = catalog && search.state ? whole?.states.find((state) => state.id === search.state) ?? null : null;
-  return (
-    <Container size="xl" w="100%" py="xl" component="article" aria-label="UI catalog">
-      <Stack gap="md">
-        <Group justify="space-between" align="flex-start">
-          <Stack gap={4}>
-            <Title order={1}>UI catalog</Title>
-            <Text c="dimmed">Each state of the product&rsquo;s interface, captured once per profile, with where every picture came from.</Text>
-          </Stack>
-          {catalog && catalog.states.length > 0 && (
-            <Group gap="sm">
-              {!search.compare && (
-                <Button type="button" variant="default" leftSection={<IconArrowsExchange size={16} aria-hidden="true" />} onClick={() => go({ compare: 'commit' })}>
-                  Compare
-                </Button>
-              )}
-              <Button type="button" leftSection={<IconDownload size={16} aria-hidden="true" />} onClick={() => download(catalog)}>
-                Download the manifest
-              </Button>
-            </Group>
-          )}
-        </Group>
-        {whole && <UiCatalogFilters catalog={whole} expression={expression} draft={draft} onDraft={setDraft} issues={committed?.issues ?? []} />}
+  const notices = <>
         {evidence.unavailable && (
           <Alert role="alert" color="red" title="Recorded results cannot be read">
             <Group gap="sm">
@@ -359,12 +230,58 @@ export function UiCatalogPage() {
             Reading {plural(evidence.pending, 'more layer', 'more layers')}; states appear here as they arrive.
           </Text>
         )}
+  </>;
+  const close = () => go({ state: undefined, image: undefined, panel: undefined });
+  const matching = catalog?.states.find(state => state.id === open?.id);
+  const initialProfile = matching?.cells.find(cell => cell.coverage === 'captured')?.profile.key ?? matching?.cells[0]?.profile.key;
+  if (search.state) return (
+    <Container size="xl" w="100%" py="xl" component="article" aria-label="UI catalog">
+      <Stack gap="md">
+        {notices}
+        {open ? <StateGallery state={open} states={catalog?.states ?? []} scope={expression} profile={search.image ?? initialProfile}
+          onProfile={image => go({ image }, { replace: true })} onSelect={state => go({ state, image: undefined, panel: undefined })} onClose={close} />
+          : <>
+            <Button variant="subtle" onClick={close}>Back to catalog</Button>
+            {evidence.ready && evidence.pending === 0 && <Alert role="status" color="gray" title="That state is not in the catalog">
+              <Text span inherit>{search.state}</Text> has no recorded capture or plan yet. It appears here if a layer that holds it arrives.
+            </Alert>}
+          </>}
+      </Stack>
+    </Container>
+  );
+  return (
+    <Container size="xl" w="100%" py="xl" component="article" aria-label="UI catalog">
+      <Stack gap="md">
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={4}>
+            <Title order={1} ref={indexHeading} tabIndex={-1}>UI catalog</Title>
+            <Text c="dimmed">Explore the product through its screens. Search, filter and sort the catalog, then open a screen to inspect its images and details.</Text>
+          </Stack>
+          <Group gap="sm">
+            {whole && <>
+              <Button variant="subtle" onClick={() => setDetailsOpened('surfaces')}>Surface coverage</Button>
+              <Button variant="subtle" onClick={() => setDetailsOpened('collection')}>Collection status</Button>
+            </>}
+            {catalog && catalog.states.length > 0 && (
+              <>
+              {!search.compare && (
+                <Button type="button" variant="default" leftSection={<IconArrowsExchange size={16} aria-hidden="true" />} onClick={() => go({ compare: 'commit' })}>
+                  Compare
+                </Button>
+              )}
+              <Button type="button" leftSection={<IconDownload size={16} aria-hidden="true" />} onClick={() => download(catalog)}>
+                Download the manifest
+              </Button>
+              </>
+            )}
+          </Group>
+        </Group>
+        {whole && <UiCatalogFilters catalog={whole} expression={expression} draft={draft} onDraft={setDraft} issues={committed?.issues ?? []} />}
+        {notices}
         {catalog && whole && search.compare && <UiCatalogCompare whole={whole} expression={`${expression} ${draft}`} />}
         {catalog && whole && !search.compare && (
           <>
             <Summary catalog={catalog} narrowed={narrowed} />
-            <Surfaces catalog={whole} />
-            <CollectionPanel />
             {whole.states.length === 0 && evidence.ready && (
               <Text c="dimmed" role="status" component="div" data-empty>
                 No UI states have been recorded yet. A collector publishes a layer with a part of kind <Code>ui-state</Code>; states appear here the moment it arrives.
@@ -380,10 +297,20 @@ export function UiCatalogPage() {
             )}
             {catalog.states.length > 0 && (
               <>
-                <SimpleGrid role="list" cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md" aria-label="States">
-                  {catalog.states.slice(0, shown).map((state) => (
-                    <StateCard key={state.id} state={state} shown={state.cells.find((cell) => cell.coverage === 'captured') ?? state.cells[0]!} />
-                  ))}
+                <Group justify="space-between">
+                <Text role="status">Showing {Math.min(shown, catalog.states.length)} of {catalog.states.length} matching states. Open a screen to inspect its images and details.</Text>
+                <SegmentedControl aria-label="Catalog layout" value={search.layout === 'list' ? 'list' : 'grid'} onChange={layout => go({ layout })}
+                  data={[
+                    { value: 'grid', label: <Group gap="xs" wrap="nowrap"><IconLayoutGrid size={16} aria-hidden="true" />Grid</Group> },
+                    { value: 'list', label: <Group gap="xs" wrap="nowrap"><IconList size={16} aria-hidden="true" />List</Group> }
+                  ]} />
+                </Group>
+                <SimpleGrid role="list" cols={search.layout === 'list' ? 1 : { base: 1, sm: 2, lg: 3 }} spacing="md" aria-label="States">
+                  {catalog.states.slice(0, shown).map(state => {
+                    const cell = state.cells.find(cell => cell.coverage === 'captured') ?? state.cells[0]!;
+                    const selection = { state: state.id, image: cell.profile.key, ...(draft ? { ...CLEAR_CATALOG_SEARCH, find: `${expression} ${draft}`.trim() } : {}) };
+                    return <StateCard key={state.id} state={state} shown={cell} list={search.layout === 'list'} selection={selection} onRemember={remember} onSelect={() => go(selection)} />;
+                  })}
                 </SimpleGrid>
                 {catalog.states.length > shown && (
                   <Button type="button" variant="subtle" onClick={() => setShown(shown + CARDS)}>
@@ -394,14 +321,11 @@ export function UiCatalogPage() {
             )}
           </>
         )}
-        {search.state && catalog && !open && evidence.ready && evidence.pending === 0 && (
-          <Alert role="status" color="gray" title="That state is not in the catalog">
-            <Text span inherit>{search.state}</Text> has no recorded capture or plan yet. It appears here if a layer that holds it arrives.{' '}
-            <Anchor renderRoot={(props) => <Link {...props} to="/catalog" search={((prev: Record<string, unknown>) => ({ ...prev, state: undefined })) as never} />}>Back to the catalog</Anchor>
-          </Alert>
-        )}
       </Stack>
-      <StateDetail state={open} states={catalog?.states ?? []} onSelect={(id) => go({ state: id })} onClose={() => go({ state: undefined })} />
+      <Modal opened={!!detailsOpened} onClose={() => setDetailsOpened(null)} title={detailsOpened === 'collection' ? 'Collection status' : 'Surface coverage'} size="xl" closeButtonProps={{ 'aria-label': 'Close catalog details' }}>
+        {detailsOpened === 'surfaces' && whole && <Surfaces catalog={whole} onSelect={() => setDetailsOpened(null)} />}
+        {detailsOpened === 'collection' && <CollectionPanel standalone />}
+      </Modal>
     </Container>
   );
 }

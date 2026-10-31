@@ -873,6 +873,14 @@
                   "type": "string",
                   "description": "Why it has its status, at most 500 characters"
                 },
+                "detailTruncated": {
+                  "description": "Whether the detail preview was shortened; fetch evidencePath for the complete check",
+                  "type": "boolean"
+                },
+                "evidencePath": {
+                  "description": "Path relative to the project reports base (/api/projects/<slug>/reports/ or /api/reports/), with encoded check and kind selectors; preserves project scope when resolved against that base",
+                  "type": "string"
+                },
                 "specRevision": {
                   "description": "The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match",
                   "type": "string"

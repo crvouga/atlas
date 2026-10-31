@@ -8,9 +8,19 @@
  */
 import { STATUS_CODES } from 'node:http';
 
+const RECOVERY: Readonly<Record<number, string>> = {
+  400: 'Correct the request using /api/openapi.json; /llms.txt explains the agent workflow.',
+  401: 'Send Authorization: Bearer <read-token> for reads or a publish token for uploads. See /llms.txt.',
+  403: 'Check the token role and request origin. Do not retry unchanged; see /llms.txt.',
+  404: 'Check the project at /api/projects and the endpoint at /api/openapi.json. Missing evidence is unknown, never passed.',
+  413: 'Reduce the upload size or split it into smaller layers before retrying.',
+  429: 'Wait for Retry-After when provided, then retry with backoff.',
+  503: 'The report or storage is unavailable. Check /readyz and retry with backoff; do not treat this as an empty or passing report.'
+};
+
 /** A response for a problem, built directly (used where no handler is involved, such as authentication). */
 export function problemResponse(status: number, detail: string, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify({ type: 'about:blank', title: STATUS_CODES[status] ?? 'Error', status, detail, error: detail }), {
+  return new Response(JSON.stringify({ type: 'about:blank', title: STATUS_CODES[status] ?? 'Error', status, detail, error: detail, ...(RECOVERY[status] ? { hint: RECOVERY[status] } : {}) }), {
     status,
     headers: { 'content-type': 'application/problem+json', ...headers }
   });
@@ -30,5 +40,5 @@ export async function asProblem(response: Response): Promise<Response> {
   const headers = new Headers(response.headers);
   headers.set('content-type', 'application/problem+json');
   headers.delete('content-length');
-  return new Response(JSON.stringify({ type: 'about:blank', title: STATUS_CODES[response.status] ?? 'Error', status: response.status, detail: error, error, ...rest }), { status: response.status, headers });
+  return new Response(JSON.stringify({ type: 'about:blank', title: STATUS_CODES[response.status] ?? 'Error', status: response.status, detail: error, error, ...(RECOVERY[response.status] ? { hint: RECOVERY[response.status] } : {}), ...rest }), { status: response.status, headers });
 }

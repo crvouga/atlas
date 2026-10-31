@@ -545,6 +545,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
 | `GET /api/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
 | `GET /api/projects/{project}/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
+| `GET /api/reports/ui-catalog/detail` | read | One exact screen for a human or agent handoff. |
+| `GET /api/projects/{project}/reports/ui-catalog/detail` | read | One exact screen for a human or agent handoff. |
 | `GET /api/reports/ui-catalog/entries` | read | The UI catalog as a list a critic iterates: captured states with their picture hash and critiques. |
 | `GET /api/projects/{project}/reports/ui-catalog/entries` | read | The UI catalog as a list a critic iterates: captured states with their picture hash and critiques. |
 | `PUT /api/ui-catalog/definitions/{version}` | publish | Publish a UI catalog definition: its states, profile matrix and work units. |

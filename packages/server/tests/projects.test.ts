@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { createAtlasServer, type AtlasServer } from '../src/app';
 import { memoryStore } from '../../reports/tests/memory-store';
 import { httpStore } from '../../reports/src/http-store';
+import { uiStateLayer } from '../../reports/src/ui-catalog-publish';
 import { publishChecks } from '../../reports/src/publish-checks';
 import { publishSpecSet } from '../../reports/src/spec-set';
 import { listen, type RunningServer } from '../src/host';
@@ -100,4 +101,21 @@ test('an execution id names a run over the API, and the same id in two projects 
   expect(detail.run).toMatchObject({ runId: 'demo-1', title: 'Alpha demo' });
   expect(detail.results.map(result => result.status)).toEqual(['failed']);
   expect((await req(server, '/api/projects/alpha/checks', body('passed', 1, { id: '' }))).status).toBe(422);
+});
+
+
+test('screen handoff links retain their project and never read a similarly named screen from another project', async () => {
+  const store = memoryStore();
+  const server = createAtlasServer({ backends: [{ id: 'data', store }], write: 'data' }); servers.push(server); await server.ready;
+  const http = await listen(server.fetch, { port: 0, host: '127.0.0.1', maxBodyBytes: 32 << 20 }); listeners.push(http);
+  const url = `http://127.0.0.1:${http.port}`;
+  for (const project of ['alpha', 'beta']) await publishChecks(httpStore({ url, project }), uiStateLayer({ producer: 'screens', recordedAtMs: 1, states: [{ id: 'same/screen', title: `${project} screen`, screenshot: { data: new TextEncoder().encode(project) } }] }));
+  const response = await req(server, '/api/projects/alpha/reports/ui-catalog/detail?state=same%2Fscreen&format=markdown');
+  expect(response.status).toBe(200);
+  const text = await response.text();
+  expect(text).toContain('alpha screen');
+  expect(text).not.toContain('beta screen');
+  expect(text).toContain('/api/projects/alpha/reports/layers/');
+  expect(text).toContain('?project=alpha#/catalog?');
+  expect(text).toContain('/api/projects/alpha/reports/ui-catalog/detail?');
 });

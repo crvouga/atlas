@@ -16,7 +16,7 @@ import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 import { UiCatalogDefinitionSchema, UiClaimRequestSchema, UiClaimSchema, UiQueueSummarySchema } from '../../schema/src/ui-catalog-queue';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, CatalogEntriesSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema, RecordingVerificationSchema, RecordingVerifyRequestSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, UiCatalogDetailSchema, CatalogEntriesSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema, RecordingVerificationSchema, RecordingVerifyRequestSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
@@ -69,7 +69,7 @@ const COMPONENTS = {
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
   ReviewCollectionRequest: [ReviewCollectionRequestSchema, 'input'], ReviewCollection: [ReviewCollectionSchema, 'output'], ReviewCollectionList: [ReviewCollectionListSchema, 'output'], ReviewCollectionDetail: [ReviewCollectionDetailSchema, 'output'], ReviewNoteInput: [ReviewNoteInputSchema, 'input'], ReviewNote: [ReviewNoteSchema, 'output'], ReviewManifest: [ReviewManifestSchema, 'output'],
   RecordingVerification: [RecordingVerificationSchema, 'output'], RecordingVerifyRequest: [RecordingVerifyRequestSchema, 'input'],
-  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], CatalogEntries: [CatalogEntriesSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], UiCatalogDetail: [UiCatalogDetailSchema, 'output'], CatalogEntries: [CatalogEntriesSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   UiCatalogDefinition: [UiCatalogDefinitionSchema, 'input'], UiClaimRequest: [UiClaimRequestSchema, 'input'], UiClaim: [UiClaimSchema, 'output'], UiQueueSummary: [UiQueueSummarySchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
@@ -537,6 +537,17 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
     responses: { '200': json('The catalog.', 'UiCatalog'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/ui-catalog/detail', path: '/api/reports/ui-catalog/detail', operationId: 'getUiCatalogDetail', tag: 'Report', role: 'read',
+    summary: 'One exact screen for a human or agent handoff',
+    description: 'Reads a state by exact ID, with every profile, image reference, declared fact, capture provenance and incomplete-source warnings. Add format=markdown for a portable handoff with viewer and image links that preserve the project. The document describes current evidence; live links may show later captures. No files are read and no capture outcome is changed. Shared links retain ordinary read access requirements.',
+    parameters: [
+      { name: 'state', in: 'query', required: true, description: 'Exact state ID, not a title or fuzzy query.', schema: str },
+      { name: 'image', in: 'query', description: 'Profile key to mark selected in Markdown. All profiles remain in the document.', schema: str },
+      { name: 'format', in: 'query', description: 'markdown for plain-text agent context; JSON by default.', schema: str }
+    ],
+    responses: { '200': json('The screen and report source warnings.', 'UiCatalogDetail'), '304': { description: 'Unchanged since the If-None-Match ETag.' }, '400': problem('No state ID.'), '401': UNAUTHORIZED, '404': problem('No available state with that exact ID.'), '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/ui-catalog/entries', path: '/api/reports/ui-catalog/entries', operationId: 'getUiCatalogEntries', tag: 'Report', role: 'read',

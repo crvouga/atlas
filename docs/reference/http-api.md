@@ -1028,6 +1028,34 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 
 Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
+### One exact screen for a human or agent handoff
+
+`GET /api/reports/ui-catalog/detail` · role: read
+
+Reads a state by exact ID, with every profile, image reference, declared fact, capture provenance and incomplete-source warnings. Add format=markdown for a portable handoff with viewer and image links that preserve the project. The document describes current evidence; live links may show later captures. No files are read and no capture outcome is changed. Shared links retain ordinary read access requirements.
+
+- `state` (query, required): Exact state ID, not a title or fuzzy query.
+- `image` (query): Profile key to mark selected in Markdown. All profiles remain in the document.
+- `format` (query): markdown for plain-text agent context; JSON by default.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The screen and report source warnings.; `304` Unchanged since the If-None-Match ETag.; `400` No state ID.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No available state with that exact ID.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### One exact screen for a human or agent handoff
+
+`GET /api/projects/{project}/reports/ui-catalog/detail` · role: read
+
+Reads a state by exact ID, with every profile, image reference, declared fact, capture provenance and incomplete-source warnings. Add format=markdown for a portable handoff with viewer and image links that preserve the project. The document describes current evidence; live links may show later captures. No files are read and no capture outcome is changed. Shared links retain ordinary read access requirements.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `state` (query, required): Exact state ID, not a title or fuzzy query.
+- `image` (query): Profile key to mark selected in Markdown. All profiles remain in the document.
+- `format` (query): markdown for plain-text agent context; JSON by default.
+
+Responses: `200` The screen and report source warnings.; `304` Unchanged since the If-None-Match ETag.; `400` No state ID.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No available state with that exact ID.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
 ### The UI catalog as a list a critic iterates: captured states with their picture hash and critiques
 
 `GET /api/reports/ui-catalog/entries` · role: read

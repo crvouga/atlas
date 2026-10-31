@@ -1,5 +1,5 @@
 import { SpecLogo } from './SpecLogo';
-import { IconDots, IconLayoutGrid, IconListSearch, IconSparkles } from '@tabler/icons-react';
+import { IconDots, IconFlask, IconLayoutGrid, IconListSearch, IconSparkles, IconTopologyStar } from '@tabler/icons-react';
 import { isUiKind } from '@crvouga/atlas/reports/ui-state';
 import { isStatechartFile } from '@crvouga/atlas/schema';
 import { ActionIcon, Anchor, Badge, Box, Button, Group, Menu, NativeSelect, Popover, Stack, Tooltip } from '@mantine/core';
@@ -167,6 +167,7 @@ export function Header() {
           <Menu.Dropdown>
             <Box component="nav" aria-label="Spec type">
               <Menu.Item
+                leftSection={hasCharts || !evidence.ready ? <IconTopologyStar size={16} aria-hidden="true" /> : <IconFlask size={16} aria-hidden="true" />}
                 aria-current={pathname.startsWith('/specs/') || (testsOpen && hasCharts) || catalogOpen || behaviorsOpen || critiquesOpen ? undefined : 'page'}
                 renderRoot={(props) => <Link {...props} to="/" search={(prev) => runOnly(prev)} />}
               >
@@ -174,6 +175,7 @@ export function Header() {
               </Menu.Item>
               {hasCharts && (
                 <Menu.Item
+                  leftSection={<IconFlask size={16} aria-hidden="true" />}
                   aria-current={testsOpen ? 'page' : undefined}
                   renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests' }} />}
                 >
@@ -235,8 +237,8 @@ export function Header() {
         <Box visibleFrom="sm">
           <ServerConnection />
         </Box>
-        <Tooltip label="Search (⌘K / Ctrl+K)">
-          <ActionIcon aria-label="Find a flow" aria-keyshortcuts="Meta+K Control+K" onClick={() => setFinderOpen(true)}>
+        <Tooltip label="Search and commands (⌘K / Ctrl+K)">
+          <ActionIcon aria-label="Search and commands" aria-keyshortcuts="Meta+K Control+K Meta+Shift+P Control+Shift+P" onClick={() => setFinderOpen(true)}>
             <SearchIcon aria-hidden="true" size={18} />
           </ActionIcon>
         </Tooltip>

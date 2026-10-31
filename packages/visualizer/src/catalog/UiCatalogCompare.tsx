@@ -16,7 +16,8 @@ import { useMemo, useState } from 'react';
 
 import { useEvidence } from '../evidence/evidence-context';
 import { ago, plural, shortSha, useNow } from '../evidence/format';
-import { Picture } from './Picture';
+import { Picture, galleryImage } from './Picture';
+import { GalleryProvider } from './Gallery';
 import { useCommitCatalog, useLayerHeaders } from './history';
 import { useCatalogNavigate, useCatalogSearch } from './search';
 import { coverageWord } from './words';
@@ -75,9 +76,7 @@ function Entry({ entry, before, after }: { entry: UiDiffEntry; before: string; a
                   </Text>
                 </>
               ) : (
-                <Text c="dimmed" fz="sm">
-                  Not on this side
-                </Text>
+                <Picture cell={null} title={entry.title} label={`${side.toLowerCase()}, ${name}`} height={180} emptyMessage="Not on this side" />
               )}
             </Stack>
           ))}
@@ -94,6 +93,7 @@ function Results({ diff, before, after }: { diff: UiCatalogDiff; before: string;
   const all = search.all === '1';
   const entries = all ? diff.entries : changedUiEntries(diff);
   return (
+    <GalleryProvider images={entries.flatMap(entry => ([['before', before, entry.before], ['after', after, entry.after]] as const).flatMap(([side, name, cell]) => { const image = cell ? galleryImage(cell, entry.title, `${side}, ${name}`) : null; return image ? [image] : []; }))}>
     <Stack gap="md">
       <Group gap="xs" role="status" aria-label="Comparison summary">
         {UI_CELL_CHANGES.map((name) =>
@@ -124,6 +124,7 @@ function Results({ diff, before, after }: { diff: UiCatalogDiff; before: string;
         </Button>
       )}
     </Stack>
+    </GalleryProvider>
   );
 }
 

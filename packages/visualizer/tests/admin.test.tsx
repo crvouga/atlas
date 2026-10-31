@@ -177,3 +177,23 @@ test('load has a busy state while a request is pending and recovers after comple
   expect(document.getElementById('load')!.getAttribute('data-loading')).toBeNull();
   expect(document.getElementById('load')!.textContent).toBe('Reload settings');
 });
+
+test('settings actions and fields are reachable through the keyboard command palette', async () => {
+  server();
+  await open();
+  const { setFinderOpen } = await import('../src/find/open');
+  try {
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })));
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Settings commands"]')!;
+    expect(input).not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'focus admin token');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(document.querySelector('[aria-label="Settings actions"]')?.textContent).toContain('Focus');
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })));
+    for (let index = 0; index < 20 && document.activeElement !== document.getElementById('token'); index++) await act(async () => new Promise(resolve => setTimeout(resolve, 5)));
+    expect(document.activeElement).toBe(document.getElementById('token'));
+    expect(document.querySelector('[aria-label="Settings actions"]')).toBeNull();
+  } finally { await act(async () => setFinderOpen(false)); }
+});

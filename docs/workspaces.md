@@ -61,6 +61,10 @@ The existing development workflows are modes of that same command:
 | `bun run dev --stop` | Stop owned services, retaining their data. Add `server` or `preview` to stop one target. |
 | `bun run dev --help` | Show modes and usage without starting services. |
 
+The viewer gives each development configuration its own Vite dependency cache under this checkout's
+`node_modules/.vite/atlas/`. The server target, consumer directory and preview inputs identify the configuration.
+Server, preview and test viewers can run together without overwriting a live viewer's optimized React modules.
+
 The preview reads `examples/todo/specs` and the existing example-evidence adapter. Existing recordings appear when
 present; preview and setup do not run browsers, model checkers or generate recordings. Setup never launches agents,
 changes their permissions or installs another Bun version.

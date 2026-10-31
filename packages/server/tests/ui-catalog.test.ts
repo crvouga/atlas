@@ -142,3 +142,36 @@ describe('a contract that grows', () => {
     expect((await catalogAt(url, '?sort=newest&coverage=quarantined&view=grid')).states).toHaveLength(2);
   });
 });
+
+test('one-screen documents use exact IDs and preserve images, warnings, Markdown negotiation and ETags', async () => {
+  const { url, store } = await start();
+  await publishChecks(store, uiStateLayer({ producer: 'capture', recordedAtMs: 1, environment: 'desktop', states: [shot('pay'), shot('pay/extra')] }));
+  const path = `${url}/api/reports/ui-catalog/detail?state=pay`;
+  const response = await fetch(path);
+  expect(response.status).toBe(200);
+  const detail = await response.json();
+  expect(detail.state.id).toBe('pay');
+  expect(detail.state.cells[0].capture.origin.layer).toHaveLength(64);
+  expect(detail.sources.notices).toEqual([]);
+  const cached = await fetch(path, { headers: { 'if-none-match': response.headers.get('etag')! } });
+  expect(cached.status).toBe(304);
+  const markdown = await fetch(path, { headers: { accept: 'text/markdown' } });
+  expect(markdown.headers.get('content-type')).toContain('text/markdown');
+  const text = await markdown.text();
+  expect(text).toContain('Read screen Markdown');
+  expect(text).toContain('/reports/layers/');
+  expect(text).not.toContain('pay/extra');
+  expect((await fetch(`${url}/api/reports/ui-catalog/detail`)).status).toBe(400);
+  expect((await fetch(`${url}/api/reports/ui-catalog/detail?state=pa`)).status).toBe(404);
+});
+
+test('agent screen documents retain read authorization', async () => {
+  const server = createAtlasServer({ backends: [{ id: 'data', store: memoryStore() }], write: 'data', tokens: [{ name: 'reader', role: 'read', token: 'reader-token' }] });
+  await server.ready;
+  try {
+    const response = await server.fetch(new Request('http://atlas.test/api/reports/ui-catalog/detail?state=pay&format=markdown'));
+    expect(response.status).toBe(401);
+    const authorized = await server.fetch(new Request('http://atlas.test/api/reports/ui-catalog/detail?state=pay&format=markdown', { headers: { authorization: 'Bearer reader-token' } }));
+    expect(authorized.status).toBe(404);
+  } finally { server.close(); }
+});

@@ -46,8 +46,8 @@ function useQueue() {
   });
 }
 
-/** The Collection panel of `/catalog`: nothing at all unless a queue is in use. */
-export function CollectionPanel() {
+/** Collection status; standalone dialogs also explain loading, missing definitions and static viewers. */
+export function CollectionPanel({ standalone = false }: { standalone?: boolean } = {}) {
   const queue = useQueue();
   const now = useNow(5000);
   if (queue.isError && !queue.data) {
@@ -61,17 +61,20 @@ export function CollectionPanel() {
     );
   }
   const summary = queue.data;
-  if (!summary?.definition) return null;
+  if (standalone && !runtimeConfig()?.api) return <Text role="status" c="dimmed">Collection status is available when connected to an Atlas server.</Text>;
+  if (standalone && queue.isPending) return <Text role="status">Loading collection status…</Text>;
+  if (!summary?.definition) return standalone ? <Text role="status" c="dimmed">No collection definition has been published for this project.</Text> : null;
   const due = summary.tiers.failed + summary.tiers.empty + summary.tiers.unknown + summary.tiers.stale;
   const active = summary.shards.filter(shard => shard.status === 'active').length;
   return (
-    <Accordion variant="contained" defaultValue="collection">
+    <Accordion variant="contained" defaultValue={standalone ? 'collection' : null}>
       <Accordion.Item value="collection">
         <Accordion.Control>
           Collection of {summary.definition.name}: {due === 0 && summary.held === 0 ? 'nothing left to collect' : `${plural(due, 'unit', 'units')} to collect, ${summary.held} being collected`}, {plural(active, 'active shard', 'active shards')}
         </Accordion.Control>
         <Accordion.Panel>
           <Stack gap="md" aria-label="Collection">
+            {queue.isError && <Alert color="orange" title="Collection status may be out of date">The last refresh failed. <Button variant="subtle" onClick={() => void queue.refetch()}>Try again</Button></Alert>}
             <Group gap="xs" role="status" aria-label="Queue by tier">
               {TIERS.map(({ tier, label, color }) => (
                 <Badge key={tier} variant="light" color={color}>{summary.tiers[tier]} {label}</Badge>

@@ -1,4 +1,5 @@
 import '@mantine/core/styles.css';
+import '@mantine/spotlight/styles.css';
 import { createRoot } from 'react-dom/client';
 import { AtlasThemeProvider } from '../ui/theme';
 import { SettingsPage } from './SettingsPage';

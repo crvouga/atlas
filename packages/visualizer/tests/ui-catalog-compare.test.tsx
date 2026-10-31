@@ -56,6 +56,11 @@ test('two commits are compared from the layers of each, though the report holds 
   await atlas!.sees('Screen moved');
   // Differences are listed; what did not change is not, until asked for.
   expect(entries()).toEqual({ broke: 'coverage', fresh: 'added', gone: 'removed', moved: 'picture' });
+  const frames = [...document.querySelectorAll<HTMLElement>('[aria-label="Differences"] [role="group"][aria-label$=": image frame"]')];
+  expect(frames).toHaveLength(8);
+  expect(frames.filter(frame => frame.textContent?.includes('Not on this side'))).toHaveLength(2);
+  expect(frames.some(frame => frame.textContent?.includes('Capture failed'))).toBe(true);
+
   expect(atlas!.text()).toContain('Captured → Capture failed');
   expect(atlas!.text()).toContain('1 picture changed');
   // A picture that differs says what that means, and that it is not about pixels.

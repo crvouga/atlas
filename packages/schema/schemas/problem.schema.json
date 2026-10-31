@@ -25,6 +25,10 @@
     "error": {
       "type": "string",
       "description": "The same as `detail`. Kept for clients that read `error`"
+    },
+    "hint": {
+      "description": "Recovery guidance for the HTTP status; detail describes this particular failure",
+      "type": "string"
     }
   },
   "required": [
