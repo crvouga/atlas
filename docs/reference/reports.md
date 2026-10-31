@@ -10080,6 +10080,10 @@ export type TestResultEntry = {
   readonly backend: string;
   /** Why it has its status: the first 500 characters of the check's detail. */
   readonly detail: string;
+  /** Whether the detail preview was shortened. Absent on older servers; fetch evidencePath for the complete check. */
+  readonly detailTruncated?: boolean;
+  /** URL path relative to the project's reports base (`/api/projects/<slug>/reports/`, or `/api/reports/`). Includes encoded check and kind selectors. */
+  readonly evidencePath?: string;
   /** The fingerprint of its spec text the layer recorded, when it recorded one: results with different revisions were recorded against different promises. Absent means not recorded, never "the same". */
   readonly specRevision?: string;
   /** `modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, and on results other than a test's current ones. Advisory; never changes a status. */

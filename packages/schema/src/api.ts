@@ -30,7 +30,8 @@ export const ProblemSchema = z.looseObject({
   title: z.string().describe('The status in words, such as "Unauthorized"'),
   status: z.number().int().describe('The HTTP status code'),
   detail: z.string().describe('What went wrong and what to do about it, in a sentence an agent or a person can act on'),
-  error: z.string().describe('The same as `detail`. Kept for clients that read `error`')
+  error: z.string().describe('The same as `detail`. Kept for clients that read `error`'),
+  hint: z.string().optional().describe('Recovery guidance for the HTTP status; detail describes this particular failure')
 });
 
 /** What `GET /healthz` answers: the process is up. */
@@ -528,6 +529,8 @@ export const TestResultEntrySchema = z.looseObject({
   layer: z.string().describe('The id of the layer that recorded it'),
   backend: z.string(),
   detail: z.string().describe('Why it has its status, at most 500 characters'),
+  detailTruncated: z.boolean().optional().describe('Whether the detail preview was shortened; fetch evidencePath for the complete check'),
+  evidencePath: z.string().optional().describe('Path relative to the project reports base (/api/projects/<slug>/reports/ or /api/reports/), with encoded check and kind selectors; preserves project scope when resolved against that base'),
   specRevision: z.string().optional().describe('The fingerprint of its spec text that the layer recorded, when it recorded one. Two results with different revisions were recorded against different promises. Absent: not recorded, never assumed to match'),
   freshness: z.enum(['modified', 'unknown']).optional().describe('`modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, on results other than a test\'s current ones, and from an older server. Advisory; never changes a status'),
   provenance: z.record(z.string(), z.string()).optional().describe('The labels of its layer and check that say what it ran against and who vouches for it: `build`, `platform`, `applies-to`, `applies-to-by`, `published-at`, `enriched-at`. Present on a test\'s current results when it has any, and absent from an older server. Never decides a result'),

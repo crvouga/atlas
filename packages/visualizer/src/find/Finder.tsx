@@ -1,3 +1,4 @@
+import { IconCommand } from '@tabler/icons-react';
 import { Badge, Button, Group, Kbd, List, Modal, Stack, Text } from '@mantine/core';
 import { Spotlight, useSpotlight } from '@mantine/spotlight';
 import { useNavigate, useSearch } from '@tanstack/react-router';
@@ -9,10 +10,13 @@ import { useEvidence } from '../evidence/evidence-context';
 import { plural } from '../evidence/format';
 import { useSpecTexts } from '../evidence/spec-texts';
 import { StatusMark } from '../evidence/marks';
-import { kindOfFile } from '../spec-kind';
+import { currentProject, runtimeConfig } from '../runtime';
+import { useUiStore } from '../state/ui-store';
+import { commandDocuments, commandPortalTarget, searchCommands, pageCommands, type AppCommand } from './commands';
+import { kindOfFile, SPEC_KINDS } from '../spec-kind';
 import { describeHit } from './behaviors';
 import { corpusFrom } from './corpus';
-import { finderStore, isHelpOpen, setFinderOpen, setHelpOpen, toggleFinder, useFinderOpen, useHelpOpen } from './open';
+import { finderStore, isCommandsOnly, isFinderOpen, isHelpOpen, setFinderOpen, setHelpOpen, toggleFinder, useFinderOpen, useHelpOpen } from './open';
 import { parseSearch, passesFilters } from './query';
 import { FIND_GROUPS, indexCorpus, notationOf, rankIndex, splitQuery, type FindKind, type FindTarget, type Ranked } from './rank';
 import { applySemantic } from './semantic';
@@ -34,8 +38,10 @@ const SHORTCUTS: readonly {
   readonly keys: string;
   readonly does: string;
 }[] = [
-  { keys: '⌘K  or  Ctrl+K', does: 'Find a flow' },
-  { keys: '/', does: 'Find a flow' },
+  { keys: '⌘K  or  Ctrl+K', does: 'Search content and run commands' },
+  { keys: '⌘⇧P  or  Ctrl+Shift+P', does: 'Open commands only (or type > in search)' },
+  { keys: 'Tab  Shift+Tab', does: 'Move between controls; Enter/Space activates; arrows adjust fields' },
+  { keys: '/', does: 'Open search and commands outside editable fields' },
   { keys: '↑  ↓', does: 'Move through the list' },
   { keys: 'Enter', does: 'Open' },
   { keys: 'Shift+Enter', does: 'See all results of the search' },
@@ -48,7 +54,7 @@ const SHORTCUTS: readonly {
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
-  return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A';
+  return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!target.closest('[role="textbox"],[role="combobox"],[contenteditable="true"]');
 }
 export function Finder() {
   const open = useFinderOpen();
@@ -57,13 +63,17 @@ export function Finder() {
   const evidence = useEvidence();
   const navigate = useNavigate();
   const routeSearch = useSearch({ strict: false });
+  const [query, setQuery] = useState('');
+  useEffect(() => { if (open && isCommandsOnly()) setQuery('>'); }, [open]);
+  const commandsOnly = query.trimStart().startsWith('>');
+  const commandQuery = commandsOnly ? query.trimStart().slice(1).trim() : query;
   const readable = useMemo(() => evidence.files.filter((file) => kindOfFile(file)), [evidence.files]);
   // Reading every spec's text is for search, and a focused page needs its own spec first: start only once search is wanted.
   const [wanted, setWanted] = useState(false);
   useEffect(() => {
-    if (open) setWanted(true);
-  }, [open]);
-  const { texts, pending, total: specTotal, read, failed } = useSpecTexts(readable, wanted, open);
+    if (open && !commandsOnly && !isCommandsOnly()) setWanted(true);
+  }, [open, commandsOnly]);
+  const { texts, pending, total: specTotal, read, failed } = useSpecTexts(readable, wanted, open && !commandsOnly);
   const catalog = useTestCatalog();
   const tests = useMemo(() => (catalog.model ? new Map(catalog.model.tests.map((test) => [test.key, test] as const)) : undefined), [catalog.model]);
   const docs = useMemo(
@@ -79,15 +89,48 @@ export function Finder() {
       : !evidence.ready && !evidence.unavailable
         ? 'Recorded results are still loading'
         : '';
-  const [query, setQuery] = useState('');
+  const captured = useMemo(() => open ? pageCommands() : [], [open]);
+  const commands = useMemo<AppCommand[]>(() => {
+    const go = (action: () => void) => () => { useUiStore.getState().setSourcesOpen(false); action(); };
+    const destinations: AppCommand[] = [
+      { id: 'command:home', title: view && view.charts.size > 0 ? 'Go to Statecharts' : 'Go to project home', description: 'Navigate to the project home and graph', run: go(() => { void navigate({ to: '/', search: {} }); }) },
+      { id: 'command:tests', title: 'Go to Tests', description: 'Browse test outcomes and failures', run: go(() => { void navigate({ to: '/', search: { view: 'tests' } }); }) },
+      ...(['runs', 'artifacts', 'collections', 'compare', 'health'] as const).map(tab => ({
+        id: `command:${tab}`, title: `Go to ${tab === 'health' ? 'Catalog health' : tab[0]!.toUpperCase() + tab.slice(1)}`,
+        description: 'Navigate to the test explorer', run: go(() => { void navigate({ to: '/', search: { view: 'tests', tab } }); })
+      })),
+      { id: 'command:catalog', title: 'Go to UI catalog', description: 'Browse interface screens and captured images', run: go(() => { void navigate({ to: '/catalog', search: {} }); }) },
+      { id: 'command:behaviors', title: 'Go to Behaviors', description: 'Read and watch product behavior', run: go(() => { void navigate({ to: '/behaviors', search: {} }); }) },
+      { id: 'command:critiques', title: 'Go to Needs polish', description: 'Review critic feedback', run: go(() => { void navigate({ to: '/critiques', search: {} }); }) },
+      ...SPEC_KINDS.map(kind => ({ id: `command:spec:${kind.id}`, title: `Go to ${kind.label}`, description: 'Browse specifications', run: go(() => { void navigate({ to: '/specs/$kind', params: { kind: kind.id }, search: {} }); }) })),
+      { id: 'command:refresh', title: 'Refresh report', description: 'Retry reading report data and evidence', run: evidence.retry },
+      { id: 'command:sources', title: 'Show evidence sources', description: 'Choose backends, branches, builds and environments', run: () => useUiStore.getState().setSourcesOpen(true) },
+      { id: 'command:help', title: 'Show keyboard shortcuts', description: 'Keyboard help and command palette shortcuts', run: () => setHelpOpen(true) },
+      { id: 'command:main', title: 'Focus main content', description: 'Skip navigation and focus the current page', run: () => document.querySelector<HTMLElement>('main')?.focus() }
+    ];
+    if (runtimeConfig()?.api) destinations.push({ id: 'command:settings', title: 'Go to Settings', description: 'Server settings and garbage collection', run: () => { window.location.href = `/admin${currentProject() ? `?project=${encodeURIComponent(currentProject()!)}` : ''}`; } });
+    return [...destinations, ...captured];
+  }, [captured, navigate, view?.charts.size, evidence.retry]);
+  const commandIndex = useMemo(() => indexCorpus(commandDocuments(commandsOnly ? commands : commands.filter(command => !command.contentLink))), [commands, commandsOnly]);
+  const commandMatches = useMemo(() => searchCommands(commandIndex, commandQuery), [commandIndex, commandQuery]);
+  const pendingCommand = useRef<AppCommand | null>(null);
+  const actionStarted = useRef(false);
+  useEffect(() => { if (open) actionStarted.current = false; }, [open]);
+  const runCommand = (command: AppCommand) => { actionStarted.current = true; pendingCommand.current = command; setFinderOpen(false); };
+  const finishCommand = () => {
+    const command = pendingCommand.current;
+    pendingCommand.current = null;
+    if (command?.run() === false) { setFinderOpen(true, true); setNotice('That action is no longer available. Choose an action from the current page.'); }
+  };
+  useEffect(() => { if (!open && pendingCommand.current) queueMicrotask(finishCommand); }, [open]);
   const [showAll, setShowAll] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const store = finderStore;
   const spotlightState = useSpotlight(store);
 
-  const parsed = useMemo(() => parseSearch(query), [query]);
+  const parsed = useMemo(() => parseSearch(commandsOnly ? '' : query), [query, commandsOnly]);
   // Every match, best first: the list below is the first FINDER_LIMIT of it, and says so when there are more.
-  const everything = useMemo(() => rankIndex(index, query, Number.POSITIVE_INFINITY), [index, query]);
+  const everything = useMemo(() => commandsOnly ? [] : rankIndex(index, query, Number.POSITIVE_INFINITY), [index, query, commandsOnly]);
   const lexical = useMemo(() => (showAll ? everything : everything.slice(0, FINDER_LIMIT)), [everything, showAll]);
   const searchable = useMemo(() => {
     const notations = splitQuery(parsed.words).notations;
@@ -95,12 +138,14 @@ export function Finder() {
   }, [docs, parsed]);
   const lexicalDocs = useMemo(() => lexical.map((hit) => hit.doc), [lexical]);
   const literal = parsed.phrases.length + parsed.identifiers.length > 0;
-  const semantic = useSemantic(open && parsed.words.length > 0 && !literal, parsed.words, searchable, lexicalDocs);
-  const shown = useMemo<Ranked[]>(
-    () => (semantic.queryVector ? applySemantic(searchable, lexical, semantic.queryVector, semantic.vectors, showAll ? Number.POSITIVE_INFINITY : FINDER_LIMIT) : lexical),
-    [semantic.queryVector, searchable, lexical, semantic.vectors, showAll]
+  const semantic = useSemantic(open && !commandsOnly && parsed.words.length > 0 && !literal, parsed.words, searchable, lexicalDocs);
+  const contentShown = useMemo<Ranked[]>(
+    () => commandsOnly ? [] : (semantic.queryVector ? applySemantic(searchable, lexical, semantic.queryVector, semantic.vectors, showAll ? Number.POSITIVE_INFINITY : FINDER_LIMIT) : lexical),
+    [semantic.queryVector, searchable, lexical, semantic.vectors, showAll, commandsOnly]
   );
-  const ordered = useMemo(() => FIND_GROUPS.flatMap((group) => shown.filter((hit) => hit.doc.group === group)), [shown]);
+  const shown = useMemo(() => [...contentShown, ...(showAll ? commandMatches : commandMatches.slice(0, FINDER_LIMIT))], [contentShown, commandMatches, showAll]);
+  const groups = useMemo(() => !query.trim() || commandsOnly ? ['Commands' as const, ...FIND_GROUPS] : [...FIND_GROUPS, 'Commands' as const], [query, commandsOnly]);
+  const ordered = useMemo(() => groups.flatMap(group => shown.filter(hit => hit.doc.group === group)), [shown, groups]);
   const total = everything.length;
   const bounded = !showAll && total > FINDER_LIMIT;
   const orderedRef = useRef(ordered);
@@ -148,13 +193,19 @@ export function Finder() {
   }, [open]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing) return;
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'p' && !event.altKey) {
+        event.preventDefault(); setFinderOpen(true, true); setQuery('>'); return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !event.altKey && !event.shiftKey) {
         event.preventDefault();
         toggleFinder();
         return;
       }
+      if (event.key === 'Escape' && isFinderOpen()) { event.preventDefault(); event.stopImmediatePropagation(); setFinderOpen(false); return; }
       if (event.key === 'Escape' && isHelpOpen()) {
         event.preventDefault();
+        event.stopImmediatePropagation();
         setHelpOpen(false);
         return;
       }
@@ -169,8 +220,8 @@ export function Finder() {
         setFinderOpen(true);
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, []);
   const openTarget = (target: FindTarget) => {
     const run = typeof routeSearch.run === 'string' ? routeSearch.run : undefined;
@@ -196,7 +247,7 @@ export function Finder() {
   // The full results of a search: the explorer's list when the project has one (it filters, counts and sorts everything),
   // else every result in this list.
   const seeAll = () => {
-    if (catalog.model && query.trim()) {
+    if (!commandsOnly && catalog.model && query.trim()) {
       const run = typeof routeSearch.run === 'string' ? routeSearch.run : undefined;
       void navigate({ to: '/', search: { run, q: query.trim() } });
       setFinderOpen(false);
@@ -213,7 +264,7 @@ export function Finder() {
     event.preventDefault();
     event.stopPropagation();
     const hit = ordered[Math.max(0, store.getState().selected)];
-    if (hit) openTarget(hit.doc.recording ?? hit.doc.target);
+    if (hit) { const command = commands.find(command => command.id === hit.doc.id); if (command) runCommand(command); else openTarget(hit.doc.recording ?? hit.doc.target); }
   };
   return (
     <>
@@ -222,26 +273,30 @@ export function Finder() {
         shortcut={null}
         query={query}
         onQueryChange={setQuery}
-        title="Find"
-        attributes={{ content: { 'aria-label': 'Find' } }}
+        title="Search and commands"
+        returnFocus={!actionStarted.current}
+        portalProps={{ target: commandPortalTarget() }}
+        attributes={{ content: { 'aria-label': 'Find', 'data-atlas-command-palette': true } }}
         onKeyDownCapture={onCommandKey}
+        onKeyDown={event => { if (event.key !== 'Tab') event.stopPropagation(); }}
         scrollable
         maxHeight="60vh"
       >
         {/* Spotlight updates selection silently; notify its public store after keyboard handling so ARIA follows it. */}
         <Spotlight.Search
           onKeyDown={() => queueMicrotask(() => store.setState(store.getState()))}
+          data-mantine-stop-propagation="true"
           role="combobox"
           aria-expanded={open}
           aria-controls="atlas-finder-actions"
           aria-activedescendant={ordered[Math.max(0, spotlightState.selected)]?.doc.id}
-          aria-label="Find a flow"
-          placeholder='Try "add a todo" or "gherkin"'
+          aria-label="Search and commands"
+          placeholder='Search Atlas or type > for commands…'
         />
-        <Spotlight.ActionsList id="atlas-finder-actions" role="listbox" aria-label="Flows, specs and runs">
+        <Spotlight.ActionsList id="atlas-finder-actions" role="listbox" aria-label="Commands, flows, specs and runs">
           {shown.length === 0 && (
             <Spotlight.Empty>
-              {!query.trim()
+              {commandsOnly ? 'No commands match. Open a section to reveal its actions, then reopen the palette.' : !query.trim()
                 ? 'Type what someone does. For example, add a todo.'
                 : unindexed
                   ? `No match yet. ${unindexed}, so this is not the final answer.`
@@ -250,7 +305,7 @@ export function Finder() {
                     : 'Nothing close to that.'}
             </Spotlight.Empty>
           )}
-          {FIND_GROUPS.map((group) => {
+          {groups.map((group) => {
             const hits = shown.filter((hit) => hit.doc.group === group);
             return hits.length ? (
               <Spotlight.ActionsGroup key={group} label={group}>
@@ -261,18 +316,20 @@ export function Finder() {
                     ref={(node) => {
                       if (node) node.id = hit.doc.id;
                     }}
+                    data-command={hit.doc.group === 'Commands' || undefined}
+                    data-mantine-stop-propagation="true"
                     role="option"
                     data-selected={ordered[Math.max(0, spotlightState.selected)]?.doc.id === hit.doc.id || undefined}
                     aria-selected={ordered[Math.max(0, spotlightState.selected)]?.doc.id === hit.doc.id}
-                    onClick={() => openTarget(hit.doc.target)}
+                    onClick={() => { const command = commands.find(command => command.id === hit.doc.id); if (command) runCommand(command); else openTarget(hit.doc.target); }}
                     label={hit.doc.title}
                     description={[hit.snippet !== hit.doc.subtitle ? hit.snippet : '', hit.doc.subtitle, query.trim() ? describeHit(hit) : ''].filter(Boolean).join(' · ')}
-                    leftSection={hit.doc.status ? <StatusMark status={hit.doc.status} size={16} /> : undefined}
+                    leftSection={hit.doc.group === 'Commands' ? <IconCommand size={16} aria-hidden="true" /> : hit.doc.status ? <StatusMark status={hit.doc.status} size={16} /> : undefined}
                     rightSection={
                       <Group gap="xs" wrap="nowrap">
                         {hit.exact && <Badge color="blue">Exact</Badge>}
                         {hit.partial && <Badge color="gray" variant="outline">Partial</Badge>}
-                        <Badge color="gray">{KIND_WORD[hit.doc.kind]}</Badge>
+                        <Badge color="gray">{hit.doc.group === 'Commands' ? 'Command' : KIND_WORD[hit.doc.kind]}</Badge>
                       </Group>
                     }
                   />
@@ -285,13 +342,13 @@ export function Finder() {
           <Group gap="md" justify="space-between" align="flex-start">
             <Stack gap={0}>
               <Text role="status" size="xs" c="dimmed">
-                {query.trim() && total > 0
+                {commandsOnly ? `${commandMatches.length} commands available for this search.` : query.trim() && total > 0
                   ? bounded
-                    ? `Showing the first ${shown.length} of ${total} results, not all of them.`
+                    ? `Showing the first ${contentShown.length} of ${total} results, not all of them.`
                     : `${total} ${total === 1 ? 'result' : 'results'}.`
                   : '↑↓ move'}
               </Text>
-              {(unindexed || failed > 0) && (
+              {!commandsOnly && (unindexed || failed > 0) && (
                 <Text role="status" size="xs" c="dimmed">
                   {unindexed ? `Searching what is read so far: ${unindexed}` : `${plural(failed, 'spec', 'specs')} could not be read and ${failed === 1 ? 'is' : 'are'} not searched`}
                 </Text>
@@ -301,16 +358,17 @@ export function Finder() {
                   {notice}
                 </Text>
               )}
-              <SearchNotes issues={parsed.issues} semantic={query.trim() ? semantic.status : 'idle'} />
+              <SearchNotes issues={parsed.issues} semantic={!commandsOnly && query.trim() ? semantic.status : 'idle'} />
             </Stack>
             <Group gap="xs" wrap="wrap" justify="flex-end">
+              {!showAll && commandMatches.length > FINDER_LIMIT && <Button data-mantine-stop-propagation="true" size="compact-xs" onClick={() => setShowAll(true)}>Show all {commandMatches.length} commands</Button>}
               {bounded && (
-                <Button size="compact-xs" variant="light" onClick={seeAll}>
+                <Button data-mantine-stop-propagation="true" size="compact-xs" variant="light" onClick={seeAll}>
                   See all {total} results
                 </Button>
               )}
               <Text size="xs" c="dimmed">
-                ↵ open · ⇧↵ all results · esc close
+                ↵ run/open · &gt; commands · ⇧↵ all results · esc close
               </Text>
             </Group>
           </Group>
@@ -320,7 +378,10 @@ export function Finder() {
         opened={help}
         onClose={() => setHelpOpen(false)}
         title="Keyboard shortcuts"
-        attributes={{ content: { 'aria-label': 'Keyboard shortcuts' } }}
+        portalProps={{ target: commandPortalTarget() }}
+        onKeyDown={event => { if (event.key !== 'Tab') event.stopPropagation(); }}
+        attributes={{ content: { 'aria-label': 'Keyboard shortcuts', 'data-atlas-command-palette': true, 'data-mantine-stop-propagation': true } }}
+        closeButtonProps={{ 'aria-label': 'Close keyboard shortcuts', ...{ 'data-mantine-stop-propagation': true } }}
       >
         <List spacing="md" listStyleType="none">
           {SHORTCUTS.map((shortcut) => (

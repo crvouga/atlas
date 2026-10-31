@@ -74,6 +74,10 @@ export type TestResultEntry = {
   readonly backend: string;
   /** Why it has its status: the first 500 characters of the check's detail. */
   readonly detail: string;
+  /** Whether the detail preview was shortened. Absent on older servers; fetch evidencePath for the complete check. */
+  readonly detailTruncated?: boolean;
+  /** URL path relative to the project's reports base (`/api/projects/<slug>/reports/`, or `/api/reports/`). Includes encoded check and kind selectors. */
+  readonly evidencePath?: string;
   /** The fingerprint of its spec text the layer recorded, when it recorded one: results with different revisions were recorded against different promises. Absent means not recorded, never "the same". */
   readonly specRevision?: string;
   /** `modified`: recorded from a checkout with uncommitted changes. `unknown`: origin not captured. Absent for a clean checkout, and on results other than a test's current ones. Advisory; never changes a status. */
@@ -497,7 +501,7 @@ function completed(status: EvidenceStatus): boolean {
 }
 
 function entryOf(layer: LayerHeader, row: LayerRow, backend: string, fingerprints: Readonly<Record<string, string>> = {}): TestResultEntry {
-  return materialize({ o: originOf(layer, backend), s: row.status, d: row.durationMs, k: row.kind, t: row.detail, e: row.evidence, m: productLatency(row.measurements), f: row.specPath ? fingerprints[row.specPath] : undefined });
+  return materialize({ o: originOf(layer, backend), s: row.status, d: row.durationMs, k: row.kind, t: row.detail, e: row.evidence, m: productLatency(row.measurements), f: row.specPath ? fingerprints[row.specPath] : undefined }, row.id);
 }
 
 /**
@@ -521,11 +525,13 @@ function originOf(layer: LayerHeader, backend: string): Origin {
   };
 }
 
-function materialize(held: Held): TestResultEntry {
+function materialize(held: Held, checkId?: string): TestResultEntry {
   const { o } = held;
   return {
     at: o.at, status: held.s, durationMs: held.d, environment: o.environment, producer: o.producer, kind: held.k, parameters: o.parameters,
     branch: o.branch, sha: o.sha, runUrl: o.runUrl, run: o.run, layer: o.layer, backend: o.backend, detail: shortDetail(held.t),
+    detailTruncated: held.t.length > 500,
+    ...(checkId === undefined ? {} : { evidencePath: `evidence/detail/${encodeURIComponent(o.backend)}/${encodeURIComponent(o.layer)}?${new URLSearchParams({ check: checkId, kind: held.k })}` }),
     ...(held.f ? { specRevision: held.f } : {}),
     ...(held.e ? { evidence: held.e } : {}),
     ...(held.m ? { latency: held.m } : {}),
@@ -688,7 +694,10 @@ export class TestHistory {
 
   /** The recorded results of one test (by `TestSummary.key`), newest first. Empty when none. */
   of(key: string): readonly TestResultEntry[] {
-    return (this.#bySlot.get(key) ?? []).map(materialize);
+    const entries = this.#bySlot.get(key) ?? [];
+    if (!entries.length) return [];
+    const id = (JSON.parse(key) as [string, string])[1];
+    return entries.map(held => materialize(held, id));
   }
 
   /** How many runs it knows of. */
@@ -1283,6 +1292,15 @@ export function catalogMarkdown(catalog: TestCatalog): string {
     '|---|---|---|---|---:|---:|---:|---|',
     ...catalog.tests.map(t => `| ${t.status}${t.stats.flaky ? ' (flaky)' : ''} | ${cell(t.title)} | ${cell(t.spec ? `${t.spec.title} (${t.spec.path})` : '—')} | ${cell(t.outcomes.map(o => `${o.environment ?? '—'}: ${o.status}`).join(', '))} | ${formatMs(t.stats.durations?.avgMs)} | ${t.stats.passRate === null ? '—' : `${Math.round(t.stats.passRate * 100)}%`} | ${t.stats.runs} | ${iso(t.lastRecordedAtMs)} |`),
   );
+  const failures = catalog.tests.flatMap(test => test.outcomes.filter(outcome => outcome.status === 'failed').map(outcome => ({ test, outcome })));
+  if (failures.length) lines.push('', '## Failure diagnostics (listed tests)', '',
+    ...failures.flatMap(({ test, outcome }) => [
+      `### ${cell(test.title)} — ${cell(outcome.environment ?? 'no environment')}`,
+      `Check: ${cell(test.id)}; kind: ${cell(outcome.kind)}; producer: ${cell(outcome.producer)}; parameters: ${cell(JSON.stringify(outcome.parameters))}.`,
+      '', ...outcome.detail.split('\n').map(line => `> ${line}`), '',
+      ...(outcome.detailTruncated ? ['Preview truncated; retrieve the complete check using the evidence path below.'] : []),
+      `Evidence path (relative to the project's reports base): ${outcome.evidencePath ?? 'unavailable'}`, ''
+    ]));
   if (catalog.total > catalog.offset + catalog.tests.length) lines.push('', `More: ask again with offset=${catalog.offset + catalog.tests.length}.`);
   return `${lines.join('\n')}\n`;
 }

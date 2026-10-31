@@ -79,9 +79,9 @@ async function openFinder() {
   await act(async () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }));
   });
-  await atlas!.until(() => document.querySelector('input[aria-label="Find a flow"]') !== null, 'the finder');
+  await atlas!.until(() => document.querySelector('input[aria-label="Search and commands"]') !== null, 'the finder');
 }
-const options = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+const options = () => [...document.querySelectorAll<HTMLElement>('[role="option"]:not([data-command])')];
 
 test('the finder and the test list make the same behaviors eligible for a misspelled query', async () => {
   const store = memoryStore();
@@ -96,7 +96,7 @@ test('the finder and the test list make the same behaviors eligible for a misspe
   expect(rows()[0]).toContain('close spelling');
 
   await openFinder();
-  const field = document.querySelector<HTMLInputElement>('input[aria-label="Find a flow"]')!;
+  const field = document.querySelector<HTMLInputElement>('input[aria-label="Search and commands"]')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, 'savde answer');
     field.dispatchEvent(new Event('input', { bubbles: true }));
@@ -200,7 +200,7 @@ test('a quick finder that is bounded says so and opens every result', async () =
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore: store } });
   await atlas.until(() => titles().length > 0, 'the tests');
   await openFinder();
-  const field = document.querySelector<HTMLInputElement>('input[aria-label="Find a flow"]')!;
+  const field = document.querySelector<HTMLInputElement>('input[aria-label="Search and commands"]')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, 'invoice');
     field.dispatchEvent(new Event('input', { bubbles: true }));
@@ -266,7 +266,7 @@ test('results that re-rank under the cursor keep the selected result selected, a
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore: store } });
   await atlas.until(() => titles().length === 4, 'the tests');
   await openFinder();
-  const field = document.querySelector<HTMLInputElement>('input[aria-label="Find a flow"]')!;
+  const field = document.querySelector<HTMLInputElement>('input[aria-label="Search and commands"]')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, 'saved');
     field.dispatchEvent(new Event('input', { bubbles: true }));
@@ -323,7 +323,7 @@ test('a result that leaves the list under the cursor is announced, and Enter ope
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore: store } });
   await atlas.until(() => titles().length === 4, 'the tests');
   await openFinder();
-  const field = document.querySelector<HTMLInputElement>('input[aria-label="Find a flow"]')!;
+  const field = document.querySelector<HTMLInputElement>('input[aria-label="Search and commands"]')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, 'saved');
     field.dispatchEvent(new Event('input', { bubbles: true }));

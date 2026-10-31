@@ -37,6 +37,7 @@ they preserve evidence semantics, provenance, URL selection, or playback behavio
   `Modal` for modal content, and `Spotlight` for search. Let Mantine own dismissal, focus and keyboard behavior.
   When an action opens a drawer from a popover, close and disable the parent popover during the drawer's lifetime;
   return focus to its persistent trigger. Do not fix overlapping focus traps by raising z-index values.
+- Every Spec type menu item has a decorative icon beside its visible label: connected nodes for Statecharts, a flask for Tests, sourced `SpecLogo` marks for notations, and Tabler glyphs for the other destinations.
 - Use `Tabs` for view modes and `Accordion` for disclosure. URL-backed selections stay in the existing router.
 - Render typed router links with Mantine's `renderRoot={props => <Link {...props} ... />}`.
   This keeps route/search type inference and native navigation semantics.
@@ -406,6 +407,25 @@ Atlas's theme. SVG data plots and statechart arrow markers are geometry, not han
 
 ## Search
 
+**Cmd/Ctrl+K** opens search and commands from any focused control, including form fields. **Cmd/Ctrl+Shift+P**
+opens commands only; typing `>` in search selects that mode too. Arrows choose, Enter runs/opens, and Escape
+closes the palette and restores focus. Plain `/` opens search and `?` shows shortcut help outside editable fields;
+these shortcuts never consume text entry or IME composition. Recording shortcuts remain suspended while search or help is open.
+
+The palette combines content results with navigation to every viewer destination and a snapshot of the enabled,
+visible semantic controls on the current screen (`find/commands.ts`). Page actions invoke their controls' own
+handlers, preserving validation, confirmations and authorization. Field commands focus the native control for
+keyboard editing; they never read or index its value. Disabled, hidden and stale controls cannot run. Open a
+section/dialog first to reveal its context-specific commands, then reopen the palette. Long command lists are
+bounded with Show all / Show more, and commands remain searchable without loading report content.
+
+Commands inside a dialog, popover or menu mount within it so the parent focus trap yields; Escape closes the palette alone.
+An action runs after the palette closes, with focus handed to the chosen control. **Focus main content** skips
+navigation. All new product actions need named semantic controls (buttons, links, tabs, labelled form fields)
+so both ordinary Tab navigation and the palette can reach them. Do not add click-only divs or unnamed icon actions.
+The independent Settings app has the same command inventory and shortcuts through **Commands** in its header.
+
+
 The finder, test list, Runs tab and an opened run use `src/find/query.ts` for the query language and
 `src/find/rank.ts` for matching; do not add a second matcher or filter on `includes`. Build documents from
 `src/find/behaviors.ts` so a behavior has the same fields and facets everywhere. Match first, then count, filter and sort
@@ -527,6 +547,8 @@ The narrowly scoped exceptions are:
 | Recordings | Pictures/video/timeline, actor selection, moments, failure jumps, timing, model-state differences | Tabs, Slider, Button, ScrollArea, Table, Progress |
 | Search/help | Ranked, filterable and semantic search across behaviors, runs and results; complete results; shortcut help, recording shortcuts | Spotlight, TextInput, NativeSelect, Button chips, Alert, Modal, Kbd |
 | Administration | Token access, S3 storage notice, garbage collection policy (saved in S3), live timeouts, report rules, limits, raw JSON, conflicts | Same provider/theme, Fieldset, Mantine inputs, Accordion, Alert |
+
+The catalog keeps browsing first: Area, Profile and Sort controls complement the rich search; cards show at most two profile badges and name the remaining count. The gallery opens every profile. Only 24 cards render initially, with Show more. Surface coverage and collection diagnostics live in the **Catalog details** drawer, opened by a quiet header button. They are not rendered on the browsing page; the collection queue is read only while the drawer is open. Surface tables start with 20 rows and retain Show more.
 
 The hash routes (`/`, `/chart/$chartId`, `/specs/$kind`), query contracts, project scoping, streaming,
 report APIs and data adapters remain the migration boundary. `/admin` still serves an independent document:

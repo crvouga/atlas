@@ -1,9 +1,13 @@
 import { createSpotlight } from '@mantine/spotlight';
 import { useSyncExternalStore } from 'react';
+import { capturePageCommands } from './commands';
 
 /** The application's finder and Mantine Spotlight share one store, including under React StrictMode. */
 export const [finderStore, finderControls] = createSpotlight();
 let help = false;
+let commandsOnly = false;
+/** Whether the palette was requested in command-only mode. */
+export const isCommandsOnly = () => commandsOnly;
 const listeners = new Set<() => void>();
 function emit() {
   for (const listener of listeners) listener();
@@ -26,8 +30,10 @@ export function isHelpOpen() {
 export function finderBlocksKeys() {
   return isFinderOpen() || help;
 }
-export function setFinderOpen(value: boolean) {
+export function setFinderOpen(value: boolean, onlyCommands = false) {
   if (value) {
+    if (!isFinderOpen()) capturePageCommands();
+    commandsOnly = onlyCommands;
     help = false;
     finderControls.open();
   } else finderControls.close();
@@ -37,6 +43,7 @@ export function toggleFinder() {
   setFinderOpen(!isFinderOpen());
 }
 export function setHelpOpen(value: boolean) {
+  if (value) capturePageCommands();
   help = value;
   if (value) finderControls.close();
   emit();

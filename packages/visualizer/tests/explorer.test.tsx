@@ -466,8 +466,8 @@ test('the finder opens a recorded test in the explorer', async () => {
   await act(async () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }));
   });
-  await atlas.until(() => document.querySelector('input[aria-label="Find a flow"]') !== null, 'the finder');
-  const input = document.querySelector<HTMLInputElement>('input[aria-label="Find a flow"]')!;
+  await atlas.until(() => document.querySelector('input[aria-label="Search and commands"]') !== null, 'the finder');
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="Search and commands"]')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'refund a payment');
     input.dispatchEvent(new Event('input', { bubbles: true }));

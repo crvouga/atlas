@@ -81,7 +81,7 @@ function Layout() {
             <Index />
           </ScrollArea>
         </MantineAppShell.Navbar>
-        <MantineAppShell.Main>
+        <MantineAppShell.Main tabIndex={-1} id="atlas-main-content">
           <Body />
         </MantineAppShell.Main>
         <SourcesPanel />

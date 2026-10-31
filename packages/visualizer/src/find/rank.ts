@@ -47,7 +47,7 @@ const FIELD_NAMES = Object.keys(FIELD_WEIGHT) as FieldName[];
 /** One searchable text of a document and where it comes from. */
 export type FindField = { readonly name: FieldName; readonly text: string };
 
-export type FindGroup = 'Flows' | 'Specs' | 'Runs';
+export type FindGroup = 'Flows' | 'Specs' | 'Runs' | 'Commands';
 
 export const FIND_GROUPS: readonly FindGroup[] = ['Flows', 'Specs', 'Runs'];
 

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+import { viewerCacheDir } from './vite/cache';
 import { resolveRoots } from './vite/atlas-files';
 import { servesExampleReports } from './vite/example-reports';
 import { reportsDevPlugin } from './vite/reports-dev-plugin';
@@ -20,6 +21,8 @@ const reportsModule = serverUrl ? '' : process.env.ATLAS_REPORTS_MODULE || (serv
 
 export default defineConfig({
   base: './',
+  cacheDir: viewerCacheDir(appRoot, [process.cwd(), process.env.INIT_CWD, serverUrl, reportsModule,
+    process.env.ATLAS_SPECS_ROOT, process.env.ATLAS_RUNS_ROOT, process.env.ATLAS_FIXTURE]),
   plugins: serverUrl
     ? [react(), atlasServerPage()]
     : [react(), atlasDevPlugin(), ...(reportsModule ? [reportsDevPlugin({ repoRoot: process.env.INIT_CWD || process.cwd(), appModule: reportsModule })] : [])],
