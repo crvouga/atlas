@@ -29,10 +29,10 @@ LABEL org.opencontainers.image.source="https://github.com/crvouga/atlas" \
 COPY --from=build /app/runtime-package.json ./package.json
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/packages/core/bin ./packages/core/bin
-# The standalone admin page bundles these shared React/Mantine sources on first request.
+# Settings bundles shared viewer modules on first request, including the command palette.
+# Keep the complete source tree so adding a shared import cannot break the runtime image.
 COPY --from=build /app/packages/visualizer/bin ./packages/visualizer/bin
-COPY --from=build /app/packages/visualizer/src/admin ./packages/visualizer/src/admin
-COPY --from=build /app/packages/visualizer/src/ui/theme.tsx ./packages/visualizer/src/ui/theme.tsx
+COPY --from=build /app/packages/visualizer/src ./packages/visualizer/src
 COPY --from=build /app/site ./site
 # Leave ATLAS_PORT unset: Railway supplies PORT, and Atlas already defaults to 8080 otherwise.
 ENV ATLAS_HOST=0.0.0.0 ATLAS_SITE=/app/site
