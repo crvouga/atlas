@@ -471,8 +471,8 @@ async function collect(rest: readonly string[], base: string, env: Readonly<Reco
       },
       ...(io.clock ? { now: io.clock } : {})
     });
-    const { ok, definition: _version, ...done } = result;
-    document = { ...done, lostClaims: [...done.lostClaims], ok, store: target.label, definition: { version: resolved.version, name: resolved.document.name }, warnings };
+    const { ok, definition: _version, diagnostics, ...done } = result;
+    document = { ...done, ...(diagnostics ? { diagnostics: [...diagnostics] } : {}), lostClaims: [...done.lostClaims], ok, store: target.label, definition: { version: resolved.version, name: resolved.document.name }, warnings };
   } catch (error) {
     if (!(error instanceof AtlasHttpError)) throw error;
     document = {
@@ -485,7 +485,7 @@ async function collect(rest: readonly string[], base: string, env: Readonly<Reco
   }
   if (json) io.out(`${JSON.stringify(document, null, 2)}\n`);
   else {
-    const stops = { empty: 'nothing is left for this shard', 'max-units': '--max-units reached', 'max-minutes': '--max-minutes reached', signal: 'stopped by a signal', unreachable: 'the server could not be reached' } as const;
+    const stops = { infrastructure: 'collector infrastructure failed', empty: 'nothing is left for this shard', 'max-units': '--max-units reached', 'max-minutes': '--max-minutes reached', signal: 'stopped by a signal', unreachable: 'the server could not be reached' } as const;
     if (document.error) io.out(`! ${document.error}\n`);
     io.out(`Collected ${document.units.collected} unit${document.units.collected === 1 ? '' : 's'} in ${document.claims} claim${document.claims === 1 ? '' : 's'} as "${shard}": ${document.items.captured} captured, ${document.items.failed} failed. Stopped: ${stops[document.stoppedBy]}.\n`);
     for (const warning of warnings) io.out(`! ${warning}\n`);

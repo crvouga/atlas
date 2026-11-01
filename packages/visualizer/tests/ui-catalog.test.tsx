@@ -414,10 +414,10 @@ test('full-screen image navigation stays in the item and closing it preserves th
   node.close();
 });
 
-test('surface diagnostics are bounded inside details and choosing a surface returns to the grid', async () => {
+test('#85: large surface inventory keeps collection controls and no-match recovery reachable', async () => {
   const store = memoryStore();
   await publishChecks(store, uiPlanLayer({ producer: 'planner', recordedAtMs: 1, ...light, states: [
-    ...Array.from({ length: 30 }, (_, index) => ({ id: `surface-${index}`, inventory: true })),
+    ...Array.from({ length: 120 }, (_, index) => ({ id: `surface-${index}`, inventory: true })),
     { id: 'home', covers: ['surface-0'] }
   ] }));
   await open([store]);
@@ -426,11 +426,15 @@ test('surface diagnostics are bounded inside details and choosing a surface retu
   await atlas!.click('button', 'Surface coverage');
   expect(document.querySelectorAll('[data-surface]')).toHaveLength(20);
   await atlas!.click('button', 'Show more surfaces');
-  expect(document.querySelectorAll('[data-surface]')).toHaveLength(30);
-  await act(async () => document.querySelector<HTMLAnchorElement>('[data-surface="surface-0"] a')!.click());
+  expect(document.querySelectorAll('[data-surface]')).toHaveLength(40);
+  await act(async () => document.querySelector<HTMLAnchorElement>('[data-surface="surface-1"] a')!.click());
   await atlas!.until(() => !document.querySelector('[data-surface]'), 'surface selection closes details');
+  expect(cards()).toEqual([]);
+  await atlas!.sees('Nothing matches these filters');
+  await atlas!.sees('Collection status');
+  await atlas!.click('button', 'Clear filters');
   expect(cards()).toEqual(['home']);
-  expect(atlas!.router.state.location.search).toMatchObject({ surface: 'surface-0' });
+  expect(atlas!.router.state.location.search.surface).toBeUndefined();
 });
 
 test('grid/list links and focused item navigation preserve filtered sort order and return focus to the index', async () => {

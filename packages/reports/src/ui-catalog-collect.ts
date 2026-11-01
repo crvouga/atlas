@@ -36,7 +36,18 @@ export type CapturedItem = Omit<UiStateCapture, 'id'> & {
   readonly item: string;
 };
 
-/** How one shard collects. Give `capture` (bounded by `concurrency`, default 1) or `captureBatch` (a whole claim at once). */
+/** Explicit collector infrastructure failure; ordinary exceptions retain their historical item-failure behavior. */
+export class CollectorInfrastructureError extends Error {
+  constructor(message: string, readonly diagnostic: { readonly phase: string; readonly retryable?: boolean; readonly fingerprint?: string }) {
+    super(message);
+    this.name = 'CollectorInfrastructureError';
+  }
+}
+
+/** One infrastructure incident, separate from product-state failures. */
+export type CollectorDiagnostic = { readonly message: string; readonly phase: string; readonly retryable: boolean; readonly fingerprint?: string; readonly attempt: number };
+
+/** How one shard collects. Per-unit callbacks publish before taking another unit; stream yields wait for publication. With a buffer budget, returned captures are bounded by concurrency × maxBufferedBytes. Producers must bound their own allocation. Legacy array batches retain whole-claim buffering. */
 export type CollectOptions = {
   /** The Atlas server, as `httpStore` opens it, with a token that may publish. */
   readonly store: HttpStore;
@@ -56,7 +67,7 @@ export type CollectOptions = {
   readonly staleBeforeMs?: number;
   /** Stop claiming after this many units. */
   readonly maxUnits?: number;
-  /** Stop claiming after this many milliseconds; a claim still held then is released. */
+  /** Stop at this deadline, abort active callbacks and release unfinished work. JavaScript callbacks must cooperate to stop their own resources; late results are ignored. Completed uploads have no grace past the deadline. */
   readonly maxMs?: number;
   /** Stop at once: publish what is captured, release the claim. */
   readonly signal?: AbortSignal;
@@ -68,13 +79,24 @@ export type CollectOptions = {
   readonly capture?: (unit: CollectUnit, signal: AbortSignal) => Promise<readonly CapturedItem[]>;
   /** Capture every unit of a claim at once (one process for a batch). */
   readonly captureBatch?: (units: readonly CollectUnit[], context: { readonly claimId: string; readonly signal: AbortSignal }) => Promise<readonly CapturedItem[]>;
+  /** Stream completed units with backpressure: each yield is published before requesting the next. Never yield a unit twice. Array callbacks remain supported. */
+  readonly captureStream?: (units: readonly CollectUnit[], context: { readonly claimId: string; readonly signal: AbortSignal }) => AsyncIterable<{ readonly unit: string; readonly captures: readonly CapturedItem[] }>;
+  /** Maximum bytes returned per unit. Streaming defaults to 64 MiB. Existing per-unit/array callbacks retain their limits unless this is supplied; array batches retain whole-claim buffering. */
+  readonly maxBufferedBytes?: number;
+  /** Initialize consumer resources before any work is claimed. A failure is infrastructure failure, never an item result. */
+  readonly preflight?: (signal: AbortSignal) => Promise<void>;
+  /** Retries for explicitly retryable infrastructure errors; default 0. No failed product result is emitted for these errors. */
+  readonly infrastructureRetries?: number;
+  /** Stop the shard after this many unrecovered infrastructure incidents; default 1. */
+  readonly infrastructureFailureLimit?: number;
   /** Told what happens, for a log line. */
   readonly onEvent?: (event: CollectEvent) => void;
   readonly now?: () => number;
 };
 
-/** What `collectCatalog` tells `onEvent`. */
+/** What `collectCatalog` tells `onEvent`. Published item/failure counters describe only that publication, so events can be summed. */
 export type CollectEvent =
+  | { readonly type: 'infrastructure'; readonly diagnostic: CollectorDiagnostic }
   | { readonly type: 'definition'; readonly version: string; readonly created: boolean }
   | { readonly type: 'claim'; readonly claimId: string; readonly units: number }
   | { readonly type: 'published'; readonly claimId: string; readonly items: number; readonly failed: number }
@@ -82,11 +104,13 @@ export type CollectEvent =
   | { readonly type: 'released'; readonly claimId: string; readonly units: number };
 
 /** Why a shard stopped: the queue had nothing left for it, a bound, a stop signal, or the server stopped answering. */
-export type CollectStop = 'empty' | 'max-units' | 'max-minutes' | 'signal' | 'unreachable';
+export type CollectStop = 'empty' | 'max-units' | 'max-minutes' | 'signal' | 'unreachable' | 'infrastructure';
 
 /** What one shard did. */
 export type CollectResult = {
   readonly ok: boolean;
+  /** Infrastructure incidents, including recovered retries; absent in older collectors. */
+  readonly diagnostics?: readonly CollectorDiagnostic[];
   readonly definition: string;
   readonly shard: string;
   readonly stoppedBy: CollectStop;
@@ -131,9 +155,33 @@ export async function publishCatalogDefinition(store: HttpStore, catalog: Collec
  * ```
  */
 export async function collectCatalog(options: CollectOptions): Promise<CollectResult> {
-  if (!options.capture && !options.captureBatch) throw new Error('collectCatalog needs capture (one unit at a time) or captureBatch (a claim at once)');
+  if (!options.capture && !options.captureBatch && !options.captureStream) throw new Error('collectCatalog needs capture, captureBatch or captureStream');
   const concurrency = options.concurrency ?? 1;
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new Error('concurrency must be a positive safe integer');
+  if (options.maxMs !== undefined && (!Number.isFinite(options.maxMs) || options.maxMs < 0)) throw new Error('maxMs must be finite and nonnegative');
+  const maxBufferedBytes = options.maxBufferedBytes ?? 64 * 1024 * 1024;
+  if (!Number.isSafeInteger(maxBufferedBytes) || maxBufferedBytes < 1) throw new Error('maxBufferedBytes must be a positive safe integer');
+  const infrastructureRetries = options.infrastructureRetries ?? 0;
+  const infrastructureFailureLimit = options.infrastructureFailureLimit ?? 1;
+  if (!Number.isSafeInteger(infrastructureRetries) || infrastructureRetries < 0 || !Number.isSafeInteger(infrastructureFailureLimit) || infrastructureFailureLimit < 1) throw new Error('Invalid infrastructure retry/limit settings');
+  const diagnostics: CollectorDiagnostic[] = [];
+  let infrastructureFailures = 0;
+  const infrastructure = new AbortController();
+  const incident = (failure: CollectorInfrastructureError, attempt: number) => {
+    const diagnostic = { message: sentence(failure), ...failure.diagnostic, retryable: failure.diagnostic.retryable === true, attempt };
+    diagnostics.push(diagnostic);
+    options.onEvent?.({ type: 'infrastructure', diagnostic });
+  };
+  const retry = async <T>(work: () => Promise<T>, signal: AbortSignal): Promise<T> => {
+    for (let attempt = 0; ; attempt++) {
+      try { return await untilStopped(work(), signal); }
+      catch (failure) {
+        if (signal.aborted || !(failure instanceof CollectorInfrastructureError)) throw failure;
+        incident(failure, attempt + 1);
+        if (!failure.diagnostic.retryable || attempt >= infrastructureRetries) throw failure;
+      }
+    }
+  };
   const now = options.now ?? Date.now;
   const started = now();
   const where = options.shard.where ? Object.fromEntries(Object.entries(options.shard.where).map(([name, value]) => [name, typeof value === 'string' ? [value] : [...value]])) : undefined;
@@ -152,133 +200,203 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
   let stoppedBy: CollectStop | null = null;
   const due = () => {
     if (options.signal?.aborted) return 'signal' as const;
+    if (infrastructure.signal.aborted) return 'infrastructure' as const;
     if (options.maxMs !== undefined && now() - started >= options.maxMs) return 'max-minutes' as const;
     return null;
   };
 
+  const releaseHeld = async (id: string, count = true) => {
+    const body = await untilStopped(options.store.call('DELETE', `/ui-catalog/claims/${id}`, { accept: [410] }).then(async response => {
+      if (response.status === 200) return await response.json() as { released?: number };
+      await response.body?.cancel();
+      return {};
+    }), AbortSignal.timeout(1000)).catch(() => ({} as { released?: number }));
+    if (!count) return;
+    units.released += body.released ?? 0;
+    if (body.released) options.onEvent?.({ type: 'released', claimId: id, units: body.released });
+  };
   let error: string | undefined;
-  while (!(stoppedBy = due() ?? (options.maxUnits !== undefined && units.claimed >= options.maxUnits ? 'max-units' : null))) {
+  if (options.preflight) {
+    const signal = AbortSignal.any([...(options.signal ? [options.signal] : []), ...(options.maxMs !== undefined ? [AbortSignal.timeout(Math.max(0, Math.ceil(options.maxMs - (now() - started))))] : [])]);
+    try { await retry(async () => {
+      try { await options.preflight!(signal); }
+      catch (failure) { throw failure instanceof CollectorInfrastructureError ? failure : new CollectorInfrastructureError(sentence(failure), { phase: 'preflight' }); }
+    }, signal); }
+    catch { if (!signal.aborted) infrastructure.abort(); else stoppedBy = due() ?? 'signal'; }
+  }
+  while (!stoppedBy && !(stoppedBy = due() ?? (options.maxUnits !== undefined && units.claimed >= options.maxUnits ? 'max-units' : null))) {
     let held: string | null = null;
-    let beat: ReturnType<typeof setInterval> | undefined;
-    try {
-    const size = Math.min(batchSize, options.maxUnits !== undefined ? options.maxUnits - units.claimed : batchSize);
-    const idempotencyKey = randomUUID();
-    const response = await options.store.call('POST', '/ui-catalog/claims', {
-      accept: [204],
-      json: {
-        shard: options.shard.id, definition: published.version, batchSize: size, leaseSeconds, idempotencyKey,
-        ...(where ? { where } : {}), ...(options.collection ? { collection: options.collection } : {}), ...(options.staleBeforeMs !== undefined ? { staleBeforeMs: options.staleBeforeMs } : {})
-      }
-    });
-    if (response.status === 204) { await response.body?.cancel(); stoppedBy = 'empty'; break; }
-    const claim = await response.json() as UiClaim;
-    held = claim.claimId;
-    claims++;
-    units.claimed += claim.units.length;
-    options.onEvent?.({ type: 'claim', claimId: claim.claimId, units: claim.units.length });
-
-    // The claim is held while the collector works: renewed every third of its lease, and lost on a 410.
+    let activeClaim: UiClaim | undefined;
+    let collectedInClaim = 0;
     const lost = new AbortController();
-    beat = setInterval(() => {
-      void options.store.call('POST', `/ui-catalog/claims/${claim.claimId}/heartbeat`, { accept: [410] }).then(async answer => {
-        if (answer.status === 410) { await answer.body?.cancel(); lost.abort(new Error('The claim was lost: its lease expired or the server took it back')); } else await answer.body?.cancel();
-      }, () => { /* the next beat tries again; the server expires the claim if none arrives */ });
-    }, Math.max(1000, (leaseSeconds * 1000) / 3));
-    const signal = options.signal ? AbortSignal.any([lost.signal, options.signal]) : lost.signal;
-    const captured: CapturedItem[] = [];
-    const done: CollectUnit[] = [];
-    {
-      const failAll = (list: readonly CollectUnit[], reason: string) => list.flatMap(unit => unit.items.map(item => ({ item: item.key, status: 'failed' as const, detail: reason })));
-      // A collector stopped by the shard's own stop signal did not fail: its unit goes back to the queue instead.
-      const stopped = () => lost.signal.aborted || options.signal?.aborted === true;
-      if (options.captureBatch) {
-        try { captured.push(...await options.captureBatch(claim.units, { claimId: claim.claimId, signal })); done.push(...claim.units); }
-        catch (error) { if (!stopped()) { captured.push(...failAll(claim.units, `The collector failed: ${sentence(error)}`)); done.push(...claim.units); } }
-      } else {
-        let next = 0;
-        await Promise.all(Array.from({ length: Math.min(concurrency, claim.units.length) }, async () => {
-          while (next < claim.units.length) {
-            if (lost.signal.aborted || due()) break;
-            const unit = claim.units[next++]!;
-            try {
-              const captures = await options.capture!(unit, signal);
-              // A unit may only answer its own items, even when callbacks finish out of order.
-              const keys = new Set(unit.items.map(item => item.key));
-              captured.push(...captures.filter(capture => keys.has(capture.item)));
-            } catch (error) {
-              if (stopped()) break;
-              captured.push(...failAll([unit], `The collector failed: ${sentence(error)}`));
-            }
-            done.push(unit);
+    let beat: ReturnType<typeof setInterval> | undefined;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new AbortController();
+    const lifetime = new AbortController();
+    if (options.maxMs !== undefined) deadlineTimer = setTimeout(() => deadline.abort(new Error('Collection deadline reached')), Math.max(0, options.maxMs - (now() - started)));
+    try {
+      const size = Math.min(batchSize, options.maxUnits !== undefined ? options.maxUnits - units.claimed : batchSize);
+      const idempotencyKey = randomUUID();
+      const claiming = options.store.call('POST', '/ui-catalog/claims', {
+        accept: [204],
+        json: {
+          shard: options.shard.id, definition: published.version, batchSize: size, leaseSeconds, idempotencyKey,
+          ...(where ? { where } : {}), ...(options.collection ? { collection: options.collection } : {}), ...(options.staleBeforeMs !== undefined ? { staleBeforeMs: options.staleBeforeMs } : {})
+        }
+      }).then(async response => {
+        if (response.status === 204) { await response.body?.cancel(); return null; }
+        return await response.json() as UiClaim;
+      });
+      // A request already accepted by the server can finish after our deadline. Release
+      // that late claim instead of leaving it held until its lease expires.
+      const claim = await untilStopped(claiming, AbortSignal.any([deadline.signal, ...(options.signal ? [options.signal] : [])])).catch(failure => {
+        void claiming.then(async claim => { if (claim) await releaseHeld(claim.claimId, false); }).catch(() => undefined);
+        throw failure;
+      });
+      if (!claim) { stoppedBy = 'empty'; break; }
+      activeClaim = claim;
+      held = claim.claimId;
+      claims++;
+      units.claimed += claim.units.length;
+      options.onEvent?.({ type: 'claim', claimId: claim.claimId, units: claim.units.length });
+
+      // The claim is held while the collector works: renewed every third of its lease, and lost on a 410.
+      beat = setInterval(() => {
+        void options.store.call('POST', `/ui-catalog/claims/${claim.claimId}/heartbeat`, { accept: [410] }).then(async answer => {
+          if (answer.status === 410) { await answer.body?.cancel(); lost.abort(new Error('The claim was lost: its lease expired or the server took it back')); } else await answer.body?.cancel();
+        }, () => { /* the next beat tries again; the server expires the claim if none arrives */ });
+      }, Math.max(1000, (leaseSeconds * 1000) / 3));
+      const signal = AbortSignal.any([lost.signal, deadline.signal, lifetime.signal, infrastructure.signal, ...(options.signal ? [options.signal] : [])]);
+      const publishSignal = AbortSignal.any([lost.signal, deadline.signal, lifetime.signal]);
+      // Guard every write as well as the overall publish. A blocked write may finish, but
+      // subsequent writes (especially the visible layer index) cannot start after cancellation.
+      const publishingStore = { ...options.store, put: async (...args: Parameters<HttpStore['put']>) => {
+        publishSignal.throwIfAborted();
+        await untilStopped(options.store.put(...args), publishSignal);
+      } };
+      const flush = async (finished: readonly CollectUnit[], captures: readonly CapturedItem[]) => {
+        // Every item of a collected unit gets a result: what the collector returned, or a failure saying it returned nothing.
+        const byKey = new Map(captures.map(capture => [capture.item, capture]));
+        const perProfile = new Map<string, { item: CollectItem; capture: UiStateCapture }[]>();
+        for (const unit of finished) for (const item of unit.items) {
+          const given = byKey.get(item.key);
+          const { item: _key, ...rest } = given ?? { item: item.key, status: 'failed' as const, detail: 'The collector returned no capture for this item' };
+          const capture: UiStateCapture = { title: item.state.title ?? item.state.id, ...stateFacts(item), ...rest, id: item.state.id, labels: { ...rest.labels, [UI_CLAIM_LABEL]: claim.claimId } };
+          const list = perProfile.get(item.profile.key);
+          if (list) list.push({ item, capture }); else perProfile.set(item.profile.key, [{ item, capture }]);
+        }
+        const publishedProfiles = new Set<string>();
+        let publishedFailures = 0;
+        for (const entries of perProfile.values()) {
+          if (lost.signal.aborted || deadline.signal.aborted) break;
+          const profile = entries[0]!.item.profile;
+          await untilStopped(publishChecks(publishingStore, uiStateLayer({
+            producer, recordedAtMs: now(), ...(profile.environment ? { environment: profile.environment } : {}), profile: profile.parameters, shard: options.shard.id,
+            ...(options.origin?.sha !== undefined ? { sha: options.origin.sha } : {}), ...(options.origin?.branch !== undefined ? { branch: options.origin.branch } : {}),
+            ...(options.origin?.runUrl !== undefined ? { runUrl: options.origin.runUrl } : {}), ...(options.origin?.run ? { run: options.origin.run } : {}),
+            states: entries.map(entry => entry.capture)
+          })), publishSignal);
+          layers++;
+          publishedProfiles.add(profile.key);
+          for (const { capture } of entries) {
+            const status = capture.status ?? 'passed';
+            if (status === 'passed') items.captured++; else if (status === 'failed') { items.failed++; publishedFailures++; } else items.other++;
           }
-        }));
+        }
+        const completed = finished.filter(unit => unit.items.every(item => publishedProfiles.has(item.profile.key))).length;
+        units.collected += completed;
+        collectedInClaim += completed;
+        options.onEvent?.({ type: 'published', claimId: claim.claimId, items: [...perProfile.values()].filter(entries => publishedProfiles.has(entries[0]!.item.profile.key)).reduce((sum, list) => sum + list.length, 0), failed: publishedFailures });
+      };
+      {
+        const failAll = (list: readonly CollectUnit[], reason: string) => list.flatMap(unit => unit.items.map(item => ({ item: item.key, status: 'failed' as const, detail: reason })));
+        // A collector stopped by the shard's own stop signal did not fail: its unit goes back to the queue instead.
+        const stopped = () => signal.aborted;
+        const checkBytes = (captures: readonly CapturedItem[]) => {
+          const bytes = captures.reduce((sum, capture) => sum + (capture.screenshot?.data?.byteLength ?? 0) + Math.ceil((capture.screenshot?.base64?.length ?? 0) * 3 / 4), 0);
+          if (bytes > maxBufferedBytes) throw new Error(`Captured unit exceeds maxBufferedBytes (${bytes} > ${maxBufferedBytes})`);
+        };
+        if (options.captureStream) {
+          const iterator = options.captureStream(claim.units, { claimId: claim.claimId, signal })[Symbol.asyncIterator]();
+          const remaining = new Map(claim.units.map(unit => [unit.key, unit]));
+          try {
+            while (!signal.aborted) {
+              const next = await untilStopped(iterator.next(), signal);
+              if (next.done) break;
+              const unit = remaining.get(next.value.unit);
+              if (!unit) throw new Error('captureStream returned an unknown or duplicate unit');
+              checkBytes(next.value.captures);
+              await flush([unit], next.value.captures);
+              remaining.delete(unit.key);
+            }
+            if (!signal.aborted && remaining.size) await flush([...remaining.values()], failAll([...remaining.values()], 'The collector returned no capture for this unit'));
+          } finally {
+            // Do not wait for a non-cooperative generator to unwind.
+            try { void iterator.return?.().catch(() => undefined); } catch { /* a producer's cleanup cannot override the collection result */ }
+          }
+        } else if (options.captureBatch) {
+          let captures: readonly CapturedItem[] = [];
+          try { captures = await retry(() => options.captureBatch!(claim.units, { claimId: claim.claimId, signal }), signal); }
+          catch (error) { if (error instanceof CollectorInfrastructureError) throw error; if (!stopped()) captures = failAll(claim.units, `The collector failed: ${sentence(error)}`); }
+          if (!signal.aborted) await flush(claim.units, captures);
+        } else {
+          let next = 0;
+          await Promise.all(Array.from({ length: Math.min(concurrency, claim.units.length) }, async () => {
+            while (next < claim.units.length) {
+              if (lost.signal.aborted || due()) break;
+              const unit = claim.units[next++]!;
+              let captures: readonly CapturedItem[];
+              try {
+                captures = await retry(() => options.capture!(unit, signal), signal);
+                if (options.maxBufferedBytes !== undefined) checkBytes(captures);
+              } catch (error) {
+                if (error instanceof CollectorInfrastructureError) throw error;
+                if (stopped()) break;
+                captures = failAll([unit], `The collector failed: ${sentence(error)}`);
+              }
+              const keys = new Set(unit.items.map(item => item.key));
+              await flush([unit], captures.filter(capture => keys.has(capture.item)));
+            }
+          }));
+        }
       }
-    }
 
-    if (lost.signal.aborted) {
-      units.lost += claim.units.length;
-      lostClaims.push(claim.claimId);
-      options.onEvent?.({ type: 'lost', claimId: claim.claimId, units: claim.units.length });
-      continue;
-    }
-
-    // Every item of a collected unit gets a result: what the collector returned, or a failure saying it returned nothing.
-    const byKey = new Map(captured.map(capture => [capture.item, capture]));
-    const perProfile = new Map<string, { item: CollectItem; capture: UiStateCapture }[]>();
-    for (const unit of done) for (const item of unit.items) {
-      const given = byKey.get(item.key);
-      const { item: _key, ...rest } = given ?? { item: item.key, status: 'failed' as const, detail: 'The collector returned no capture for this item' };
-      const capture: UiStateCapture = { title: item.state.title ?? item.state.id, ...stateFacts(item), ...rest, id: item.state.id, labels: { ...rest.labels, [UI_CLAIM_LABEL]: claim.claimId } };
-      const list = perProfile.get(item.profile.key);
-      if (list) list.push({ item, capture }); else perProfile.set(item.profile.key, [{ item, capture }]);
-    }
-    const publishedProfiles = new Set<string>();
-    for (const entries of perProfile.values()) {
-      if (lost.signal.aborted) break;
-      const profile = entries[0]!.item.profile;
-      await publishChecks(options.store, uiStateLayer({
-        producer, recordedAtMs: now(), ...(profile.environment ? { environment: profile.environment } : {}), profile: profile.parameters, shard: options.shard.id,
-        ...(options.origin?.sha !== undefined ? { sha: options.origin.sha } : {}), ...(options.origin?.branch !== undefined ? { branch: options.origin.branch } : {}),
-        ...(options.origin?.runUrl !== undefined ? { runUrl: options.origin.runUrl } : {}), ...(options.origin?.run ? { run: options.origin.run } : {}),
-        states: entries.map(entry => entry.capture)
-      }));
-      layers++;
-      publishedProfiles.add(profile.key);
-      for (const { capture } of entries) {
-        const status = capture.status ?? 'passed';
-        if (status === 'passed') items.captured++; else if (status === 'failed') items.failed++; else items.other++;
+      if (lost.signal.aborted) {
+        held = null;
+        units.lost += claim.units.length - collectedInClaim;
+        lostClaims.push(claim.claimId);
+        options.onEvent?.({ type: 'lost', claimId: claim.claimId, units: claim.units.length - collectedInClaim });
+        continue;
       }
-    }
-    const completed = done.filter(unit => unit.items.every(item => publishedProfiles.has(item.profile.key))).length;
-    units.collected += completed;
-    if (lost.signal.aborted && completed < claim.units.length) {
-      const count = claim.units.length - completed;
-      units.lost += count;
-      lostClaims.push(claim.claimId);
-      options.onEvent?.({ type: 'lost', claimId: claim.claimId, units: count });
-      continue;
-    }
-    options.onEvent?.({ type: 'published', claimId: claim.claimId, items: [...perProfile.values()].reduce((sum, list) => sum + list.length, 0), failed: items.failed });
 
-    // Whatever is left of the claim (a stop, a bound) goes back to the queue now, not when the lease expires.
-    const release = await options.store.call('DELETE', `/ui-catalog/claims/${claim.claimId}`, { accept: [410] }).catch(() => null);
-    if (release?.status === 200) {
-      const body = await release.json() as { released?: number };
-      units.released += body.released ?? 0;
-      if (body.released) options.onEvent?.({ type: 'released', claimId: claim.claimId, units: body.released });
-    } else await release?.body?.cancel();
-    held = null;
+      // Whatever is left of the claim (a stop, a bound) goes back to the queue now, not when the lease expires.
+      await releaseHeld(claim.claimId);
+      held = null;
     } catch (failure) {
+      lifetime.abort(failure);
       // A server that stops answering mid-collection ends it with what was done; a held claim is let go of if it can be.
+      if (lost.signal.aborted && activeClaim) {
+        const count = activeClaim.units.length - collectedInClaim;
+        units.lost += count;
+        lostClaims.push(activeClaim.claimId);
+        options.onEvent?.({ type: 'lost', claimId: activeClaim.claimId, units: count });
+        continue;
+      }
+      if (held) await releaseHeld(held);
+      if (failure instanceof CollectorInfrastructureError) {
+        if (++infrastructureFailures >= infrastructureFailureLimit) infrastructure.abort(failure);
+        continue;
+      }
+      if (deadline.signal.aborted) { stoppedBy = 'max-minutes'; break; }
+      if (options.signal?.aborted) { stoppedBy = 'signal'; break; }
       if (!(failure instanceof AtlasHttpError)) throw failure;
       error = failure.message;
-      if (held) await options.store.call('DELETE', `/ui-catalog/claims/${held}`, { accept: [410] }).then(answer => answer.body?.cancel(), () => undefined);
       stoppedBy = 'unreachable';
       break;
-    } finally { if (beat !== undefined) clearInterval(beat); }
+    } finally { lifetime.abort(); if (beat !== undefined) clearInterval(beat); if (deadlineTimer !== undefined) clearTimeout(deadlineTimer); }
   }
 
-  return { ok: items.failed === 0 && error === undefined, definition: published.version, shard: options.shard.id, stoppedBy, claims, units, items, lostClaims, layers, ...(error ? { error } : {}) };
+  return { ok: items.failed === 0 && error === undefined && infrastructureFailures === 0 && !infrastructure.signal.aborted, definition: published.version, shard: options.shard.id, stoppedBy, claims, units, items, lostClaims, layers, ...(diagnostics.length ? { diagnostics } : {}), ...(error ? { error } : {}) };
 }
 
 function stateFacts(item: CollectItem): Partial<UiStateCapture> {
@@ -286,3 +404,15 @@ function stateFacts(item: CollectItem): Partial<UiStateCapture> {
   return facts;
 }
 
+
+// Observe late rejections and remove the listener on every path. A callback can keep running,
+// but it cannot hand late values back to the collector after cancellation.
+async function untilStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  let stop: (() => void) | undefined;
+  try {
+    return await Promise.race([work, new Promise<never>((_, reject) => {
+      stop = () => { queueMicrotask(() => reject(signal.reason)); };
+      if (signal.aborted) stop(); else signal.addEventListener('abort', stop, { once: true });
+    })]);
+  } finally { if (stop) signal.removeEventListener('abort', stop); }
+}
