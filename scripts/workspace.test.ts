@@ -72,7 +72,7 @@ test('credential-free Run owns Mockingbird and shuts its S3 endpoint down with t
   await expect(fetch(runtime.storage!.endpoint)).rejects.toThrow();
 }, 60_000);
 
-test('all three IDEs call shared lifecycle commands; Orca reserves its first tab for the agent', async () => {
+test('all three file-configured IDEs call shared lifecycle commands; Orca reserves its first tab for the agent', async () => {
   const superset = JSON.parse(await readFile(path.join(repo, '.superset/config.json'), 'utf8'));
   const engineering = JSON.parse(await readFile(path.join(repo, '.super.engineering/config.json'), 'utf8'));
   const orca = parse(await readFile(path.join(repo, 'orca.yaml'), 'utf8'));
@@ -90,6 +90,25 @@ test('all three IDEs call shared lifecycle commands; Orca reserves its first tab
   expect(orca.setupAgentStartupPolicy).toBe('wait-for-setup');
   expect(orca.defaultTabs[0].command).toBeUndefined();
   expect(orca.defaultTabs[1].command).toBe('bun run dev');
+});
+
+test('T3 Code project scripts call the shared lifecycle and work on any machine', async () => {
+  const t3 = JSON.parse(await readFile(path.join(repo, '.t3code/project.json'), 'utf8'));
+  type Script = { id: string; name: string; command: string; icon: string; runOnWorktreeCreate: boolean; async?: boolean; runOnSettle?: boolean };
+  const scripts: Script[] = t3.scripts;
+  expect(t3.defaultThreadEnvMode).toBe('worktree');
+  expect(new Set(scripts.map((item) => item.id)).size).toBe(scripts.length);
+  for (const item of scripts) {
+    expect(['play', 'test', 'lint', 'configure', 'build', 'debug']).toContain(item.icon);
+    // No machine-specific paths, hostnames or tools: the same file serves every machine.
+    expect(item.command).not.toMatch(/\/Users\/|\/Volumes\/|\/home\/|ts\.net|tailscale/);
+  }
+  // Setup runs, and finishes, before an agent starts in a new worktree; a settled thread releases its services.
+  expect(scripts.filter((item) => item.runOnWorktreeCreate)).toEqual([expect.objectContaining({ command: 'bun run dev --setup', async: false })]);
+  expect(scripts.filter((item) => item.runOnSettle).map((item) => item.command)).toEqual(['bun run dev --stop']);
+  const commands = scripts.map((item) => item.command);
+  for (const shared of ['bun run dev', 'bun run dev --share', 'bun run dev --unshare', 'bun run dev --status', 'bun run dev --doctor', 'bun run dev --verify', 'bun run check', 'bun run test', 'bun run build', 'bun run smoke', 'bun run docs --check'])
+    expect(commands).toContain(shared);
 });
 
 test('setup is repeatable in a fresh directory with spaces and requires the pinned Bun', async () => {
