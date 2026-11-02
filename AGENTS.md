@@ -58,17 +58,17 @@ or publish a second package.
 
 ## Agent IDE workspaces
 
-Read [workspace development](docs/workspaces.md) for Superset, super.engineering and Orca. Shared
+Read [workspace development](docs/workspaces.md) for Superset, super.engineering, Orca and T3 Code (`.t3code/project.json`). Shared
 commands are `bun run dev` (the only development command), `check`, `test`, `build`, `docs` and `smoke`.
 `dev` starts services, runs the full example workflow and keeps the viewer available. Use its flags
-`--setup`, `--server`, `--preview`, `--status` and `--stop` for the existing lifecycle and development modes.
+`--setup`, `--server`, `--preview`, `--status`, `--stop`, `--share`, `--unshare` and `--doctor` for the existing lifecycle and development modes.
 Discover the actual URL with `bun run dev --status`; default ports may be busy.
 Keep `.atlas-workspace/` and dependencies private to each checkout. Setup needs no
 credentials and must stay idempotent; `dev` automatically starts persistent Mockingbird S3 when no
 `ATLAS_S3_*` configuration is set. Explicit external S3 settings retain their validation and failure behavior; the
 standalone server still requires them. Atlas keeps all reports and user state in S3 only; the development emulator
-owns its database under `.atlas-workspace/s3/`. Preserve the three IDE configs when changing lifecycle commands;
-run `bun test scripts/workspace.test.ts`. Use documented IDE CLIs for app-owned configuration. Setup
+owns its database under `.atlas-workspace/s3/`. Preserve the IDE configs when changing lifecycle commands;
+run `bun test scripts/workspace.test.ts scripts/workspace-share.test.ts`. Use documented IDE CLIs for app-owned configuration. Setup
 must not launch agents, change their permissions or silently install a different Bun version.
 
 ## UI changes: React and Mantine

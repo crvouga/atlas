@@ -18,8 +18,8 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url));
 // build gets, so the viewer cannot tell the two apart. Without a server, the viewer reads the working tree.
 const serverUrl = process.env.ATLAS_API_URL || '';
 // Hostnames the dev server answers to besides localhost, for viewing it through a private tunnel such as
-// `tailscale serve`. Opt-in and comma-separated; a leading dot allows subdomains (`.ts.net`). Unset, Vite's
-// localhost-only check stays in place, which is what stops DNS rebinding.
+// `tailscale serve`. Comma-separated; a leading dot allows subdomains. `bun run dev` sets it to this machine's own
+// tailnet name; unset or empty, Vite's localhost-only check, which stops DNS rebinding, is all that applies.
 const allowedHosts = (process.env.ATLAS_DEV_ALLOWED_HOSTS ?? '').split(',').map((host) => host.trim()).filter(Boolean);
 const reportsModule = serverUrl ? '' : process.env.ATLAS_REPORTS_MODULE || (servesExampleReports(resolveRoots().specs) ? path.join(appRoot, 'vite/example-reports.ts') : '');
 

@@ -5,6 +5,8 @@
 import { mkdir, readFile, unlink, writeFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { populateWorkspace } from './workspace-populate';
+import { devAllowedHosts, sharedLinks, sharePorts, unsharePorts } from './workspace-share';
+import { diagnoseWorkspace, formatFindings } from './workspace-doctor';
 
 type Mode = 'server' | 'preview';
 type Runtime = {
@@ -29,8 +31,11 @@ const help = `Atlas IDE workspace commands (run from the repository root):
   bun run dev --preview   Start the viewer with bundled example evidence
   bun run dev --status    Print runtime URLs and state as JSON
   bun run dev --stop      Stop both owned processes (optional: server or preview), preserving reports
+  bun run dev --share     Put this checkout's running targets on a private tailnet HTTPS link (starts Dev if none)
+  bun run dev --unshare   Remove those tailnet links
+  bun run dev --doctor    Check this machine is ready to run and share Atlas (--json for JSON)
 
-Populate/run/preview accept --port <0-65535>. ATLAS_PORT, then PORT, also select a port.
+Populate/run/preview accept --port <0-65535> and --share. ATLAS_PORT, then PORT, also select a port.
 Without an explicit port, try 5180 (server) or 5181 (preview), then a free port.
 Each checkout owns .atlas-workspace/. Setup and preview need no IDE CLI or credentials. "run" starts the Atlas server,
 which keeps all reports and user state in S3 only. With no ATLAS_S3_* configuration, Run starts a persistent local
@@ -47,11 +52,17 @@ export async function requireBun(root: string): Promise<void> {
 }
 
 /** Frozen install, with a dependency fingerprint that Run can reuse; explicit setup always repairs dependencies. */
-export async function setupWorkspace(root: string, reuse = false): Promise<void> {
-  await requireBun(root);
+async function dependencyFingerprint(root: string) {
   const fingerprint = Bun.hash(`${Bun.version}\0${await readFile(path.join(root, 'package.json'), 'utf8')}\0${await readFile(path.join(root, 'bun.lock'), 'utf8')}`).toString(16);
   const stamp = path.join(root, 'node_modules', '.atlas-workspace-setup');
-  if (reuse && await readFile(stamp, 'utf8').then((value) => value === fingerprint, () => false)) return;
+  const current = await readFile(stamp, 'utf8').then((value) => value === fingerprint, () => false);
+  return { fingerprint, stamp, current };
+}
+
+export async function setupWorkspace(root: string, reuse = false): Promise<void> {
+  await requireBun(root);
+  const { fingerprint, stamp, current } = await dependencyFingerprint(root);
+  if (reuse && current) return;
   await unlink(stamp).catch((error) => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; });
   const install = Bun.spawn([process.execPath, 'install', '--frozen-lockfile'], {
     cwd: root,
@@ -220,11 +231,12 @@ async function app(root: string, mode: Mode, port: number, signal: AbortSignal, 
 }
 
 /** Foreground IDE Run target with private worktree control and graceful shutdown. */
-export async function runWorkspace(root: string, mode: Mode, portValue?: string, populate = false): Promise<void> {
+export async function runWorkspace(root: string, mode: Mode, portValue?: string, populate = false, share = false): Promise<void> {
   await requireBun(root);
   const existing = await held(root, mode);
   if (existing) {
     console.log(`Atlas ${mode} already running: ${existing.url}`);
+    if (share) await announceShare([Number(new URL(existing.url).port)]);
     if (populate) {
       await setupWorkspace(root, true);
       const controller = new AbortController();
@@ -297,6 +309,9 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string,
       runtime.storage = localS3.storage;
       console.log(`Local S3 ready: ${runtime.storage.endpoint} (persistent data: ${runtime.storage.dataFile})`);
     }
+    // Accept this machine's private tailnet name, so a shared link reaches the viewer.
+    const allowedHosts = await devAllowedHosts();
+    if (allowedHosts) process.env.ATLAS_DEV_ALLOWED_HOSTS = allowedHosts;
     running = app(root, mode, port, controller.signal, localS3?.env).catch((error) => {
       failure = error;
       abort();
@@ -328,6 +343,7 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string,
       await writeFile(stateFile(root, mode), JSON.stringify(runtime), { mode: 0o600 });
       console.log(`Atlas ${mode} ready: ${url}`);
       if (mode === 'server') console.log(`Settings: ${runtime.settingsUrl}\nPublish reports with ATLAS_STORE=${url}`);
+      if (share) await announceShare([port]);
       if (populate) {
         runtime.population = 'running';
         await writeFile(stateFile(root, mode), JSON.stringify(runtime), { mode: 0o600 });
@@ -352,6 +368,8 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string,
     await running;
     await localS3?.close();
     await control.stop(true);
+    // A tailnet link to a stopped server would only fail; remove the one pointing at this target's port.
+    if (runtime) await unsharePorts([Number(new URL(runtime.url).port)]).catch(() => []);
     process.removeListener('SIGINT', abort);
     process.removeListener('SIGTERM', abort);
     // Do not remove a replacement owner's metadata.
@@ -363,17 +381,54 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string,
   }
 }
 
+const runningPorts = async (root: string) => (await workspaceStatus(root)).runtimes.map((item) => Number(new URL(item.url).port));
+
+/** Share ports and print the links; a sharing problem is reported but never stops a running server. */
+async function announceShare(ports: number[]): Promise<boolean> {
+  try {
+    for (const link of await sharePorts(ports)) console.log(`Shared on your tailnet: ${link}`);
+    return true;
+  } catch (error) {
+    console.error(`Not shared: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
 /** Execute the existing lifecycle workflow for the single development entry point. */
 export async function workspaceMain(argv: string[], root = process.cwd()): Promise<number> {
   const [command, ...args] = argv;
   try {
     if (command === '--help' || command === '-h' || !command || args.includes('--help') || args.includes('-h')) console.log(help);
     else if (command === 'setup' && !args.length) await setupWorkspace(root);
-    else if (command === 'status' && !args.length) console.log(JSON.stringify(await workspaceStatus(root), null, 2));
+    else if (command === 'status' && !args.length) {
+      const status = await workspaceStatus(root);
+      const links = await sharedLinks(status.runtimes.map((item) => Number(new URL(item.url).port)));
+      const runtimes = status.runtimes.map((item) => {
+        const shareUrl = links.get(Number(new URL(item.url).port));
+        return shareUrl ? { ...item, shareUrl } : item;
+      });
+      console.log(JSON.stringify({ ...status, runtimes }, null, 2));
+    } else if (command === 'share' && !args.length) {
+      const ports = await runningPorts(root);
+      if (ports.length) {
+        if (!(await announceShare(ports))) return 1;
+      } else await runWorkspace(root, 'server', process.env.ATLAS_PORT ?? process.env.PORT, true, true);
+    } else if (command === 'unshare' && !args.length) {
+      const removed = await unsharePorts(await runningPorts(root));
+      console.log(removed.length ? `Stopped sharing port ${removed.join(', ')}.` : 'Nothing from this checkout is shared.');
+    } else if (command === 'doctor' && (!args.length || (args.length === 1 && args[0] === '--json'))) {
+      const findings = await diagnoseWorkspace(root, await runningPorts(root), (await dependencyFingerprint(root).catch(() => ({ current: false }))).current);
+      console.log(args[0] === '--json' ? JSON.stringify({ root, findings }, null, 2) : formatFindings(findings));
+      if (findings.some((item) => item.level === 'fail')) return 1;
+    }
     else if (command === 'stop' && (!args.length || (args.length === 1 && modes.includes(args[0] as Mode))))
       await stopWorkspace(root, args.length ? [args[0] as Mode] : modes);
-    else if ((command === 'run' || command === 'preview' || command === 'populate') && (!args.length || (args.length === 2 && args[0] === '--port')))
-      await runWorkspace(root, command === 'preview' ? 'preview' : 'server', args[1] ?? process.env.ATLAS_PORT ?? process.env.PORT, command === 'populate');
+    else if (command === 'run' || command === 'preview' || command === 'populate') {
+      const share = args.includes('--share');
+      const rest = args.filter((item) => item !== '--share');
+      if (!(!rest.length || (rest.length === 2 && rest[0] === '--port'))) throw new Error(`Unknown workspace command or arguments.\n${help}`);
+      await runWorkspace(root, command === 'preview' ? 'preview' : 'server', rest[1] ?? process.env.ATLAS_PORT ?? process.env.PORT, command === 'populate', share);
+    }
     else throw new Error(`Unknown workspace command or arguments.\n${help}`);
   } catch (error) {
     console.error(`workspace: ${error instanceof Error ? error.message : String(error)}`);

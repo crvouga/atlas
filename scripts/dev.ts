@@ -11,8 +11,21 @@ const help = `Usage: bun run dev [--port <port>]
   --setup       Install or repair the pinned dependencies
   --status      Print this checkout's live URLs and population state
   --stop [server|preview]  Stop owned services, retaining their data
+  --share       Share running services on a private tailnet HTTPS link (starts Dev first if nothing runs)
+  --unshare     Remove this checkout's tailnet links
+  --doctor [--json]  Check this machine is ready to run and share Atlas
+  Add --share after the default, --server or --preview to share once ready.
 `;
-const modes: Record<string, string> = { '--server': 'run', '--preview': 'preview', '--setup': 'setup', '--status': 'status', '--stop': 'stop' };
+const modes: Record<string, string> = {
+  '--server': 'run',
+  '--preview': 'preview',
+  '--setup': 'setup',
+  '--status': 'status',
+  '--stop': 'stop',
+  '--share': 'share',
+  '--unshare': 'unshare',
+  '--doctor': 'doctor'
+};
 if (args.includes('--help') || args.includes('-h')) console.log(help);
 else {
   const mode = modes[args[0] ?? ''];
