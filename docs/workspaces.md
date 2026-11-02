@@ -92,7 +92,7 @@ bun run dev --port 5280
 bun run dev --status
 ```
 
-Everything binds to `127.0.0.1`; use IDE port forwarding remotely. Atlas still reads and writes reports and user
+Everything binds to `127.0.0.1`; use IDE port forwarding or a private tunnel (see [T3 Code](#t3-code)) remotely. Atlas still reads and writes reports and user
 state through S3 only. With no `ATLAS_S3_*` configuration, dev starts
 [Mockingbird S3](https://github.com/crvouga/mockingbird/tree/main/packages/service/s3) on an ephemeral loopback port,
 creates its bucket, and persists the emulator's objects and metadata in `.atlas-workspace/s3/storage.sqlite`
@@ -156,8 +156,10 @@ and free ports, so parallel threads can each run and test Atlas without touching
 | Script | Command | T3 setting |
 | --- | --- | --- |
 | Setup | `bun run dev --setup` | Run on worktree create, not async, so an agent starts after dependencies exist |
-| Dev | `bun run dev` | The play action: services, example population, live viewer |
-| Preview (bundled examples) | `bun run dev --preview` | |
+| Dev | `ATLAS_DEV_ALLOWED_HOSTS=.ts.net bun run dev` | The play action: services, example population, live viewer |
+| Share on tailnet | `tailscale serve --bg --https=<port> http://127.0.0.1:<port>` for each port **Status** reports | Prints the private `https://<machine>.<tailnet>.ts.net:<port>/` link |
+| Stop sharing on tailnet | `tailscale serve --https=<port> off` for the same ports | |
+| Preview (bundled examples) | `ATLAS_DEV_ALLOWED_HOSTS=.ts.net bun run dev --preview` | |
 | Status (live URLs) | `bun run dev --status` | Prints this checkout's actual server and viewer URLs |
 | Stop | `bun run dev --stop` | Run on settle, so a finished thread releases its services; data is kept |
 | Check, Test, Build, Smoke | `bun run check`, `bun run test`, `bun run build`, `bun run smoke` | |
@@ -165,6 +167,13 @@ and free ports, so parallel threads can each run and test Atlas without touching
 
 To test by hand: open a worktree thread (Setup runs on its own), press **Dev**, wait for `Atlas server ready:` and
 open that URL in T3's preview. Ports differ per worktree, so take the URL from the output or **Status**.
+
+When the T3 client is on another machine than the agent, `127.0.0.1` is not reachable from your browser. Press
+**Share on tailnet** and open the printed `ts.net` link from any device on your tailnet; it is private to the tailnet
+and needs no change to what the server binds. The dev viewer refuses hostnames other than localhost (Vite's
+DNS-rebinding guard), so the Dev and Preview scripts name the tailnet in `ATLAS_DEV_ALLOWED_HOSTS`: a comma-separated
+list of extra hostnames, where a leading dot allows subdomains. Unset, only localhost is accepted. Do not use a public
+tunnel (`tailscale funnel`, ngrok, Cloudflare) for a dev server without tokens: anyone with the link could read it.
 
 ## Verification
 
