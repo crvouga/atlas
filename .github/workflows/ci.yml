@@ -143,6 +143,19 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
+      # Quint downloads its evaluator from the GitHub API without a token on first use, and the
+      # shared runner's anonymous rate limit made every Quint check fail (PR #101). Install the
+      # version the package pins with the job's token instead; Quint skips the download when it is present.
+      - name: Install the Quint evaluator
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(bun -e "console.log(require('@informalsystems/quint/dist/src/rust/binaryManager.js').QUINT_EVALUATOR_VERSION)")
+          dir="${QUINT_HOME:-$HOME/.quint}/rust-evaluator-$version"
+          mkdir -p "$dir"
+          gh release download "evaluator/$version" --repo quint-co/quint \
+            --pattern quint_evaluator-x86_64-unknown-linux-gnu.tar.gz --output - | tar -xz -C "$dir"
+          chmod +x "$dir/quint_evaluator"
       - name: Verify example UI catalog captures and uploads
         if: matrix.script == 'run'
         env:
