@@ -7,6 +7,7 @@ import path from 'node:path';
 import { populateWorkspace } from './workspace-populate';
 import { devAllowedHosts, sharedLinks, sharePorts, unsharePorts } from './workspace-share';
 import { diagnoseWorkspace, formatFindings } from './workspace-doctor';
+import { formatVerdicts, verifyWorkspace } from './workspace-verify';
 
 type Mode = 'server' | 'preview';
 type Runtime = {
@@ -34,6 +35,8 @@ const help = `Atlas IDE workspace commands (run from the repository root):
   bun run dev --share     Put this checkout's running targets on a private tailnet HTTPS link (starts Dev if none)
   bun run dev --unshare   Remove those tailnet links
   bun run dev --doctor    Check this machine is ready to run and share Atlas (--json for JSON)
+  bun run dev --verify    Check the running server end to end: API, viewer, reports, UI catalog, shared link
+  bun run dev --atlas ... Run an Atlas CLI command against this checkout's running server
 
 Populate/run/preview accept --port <0-65535> and --share. ATLAS_PORT, then PORT, also select a port.
 Without an explicit port, try 5180 (server) or 5181 (preview), then a free port.
@@ -383,6 +386,13 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string,
 
 const runningPorts = async (root: string) => (await workspaceStatus(root)).runtimes.map((item) => Number(new URL(item.url).port));
 
+/** This checkout's running server, or an error that says how to start one. */
+async function liveServer(root: string) {
+  const server = (await workspaceStatus(root)).runtimes.find((item) => item.mode === 'server' && item.state === 'running');
+  if (!server) throw new Error('No Atlas server is running in this checkout. Start one with "bun run dev" (or the Dev script), then retry.');
+  return server;
+}
+
 /** Share ports and print the links; a sharing problem is reported but never stops a running server. */
 async function announceShare(ports: number[]): Promise<boolean> {
   try {
@@ -416,6 +426,21 @@ export async function workspaceMain(argv: string[], root = process.cwd()): Promi
     } else if (command === 'unshare' && !args.length) {
       const removed = await unsharePorts(await runningPorts(root));
       console.log(removed.length ? `Stopped sharing port ${removed.join(', ')}.` : 'Nothing from this checkout is shared.');
+    } else if (command === 'verify' && (!args.length || (args.length === 1 && args[0] === '--json'))) {
+      const server = await liveServer(root);
+      const verdicts = await verifyWorkspace(root, server.url, server.population);
+      console.log(args[0] === '--json' ? JSON.stringify({ url: server.url, verdicts }, null, 2) : `Verifying ${server.url}\n${formatVerdicts(verdicts)}`);
+      if (verdicts.some((item) => item.level === 'fail')) return 1;
+    } else if (command === 'atlas' && args.length) {
+      const server = await liveServer(root);
+      const child = Bun.spawn([process.execPath, path.join(import.meta.dir, '..', 'packages/core/bin/atlas.mjs'), ...args], {
+        cwd: root,
+        env: { ...process.env, ATLAS_STORE: server.url, ATLAS_SERVER_URL: server.url, ATLAS_PROJECT: process.env.ATLAS_PROJECT ?? 'todo-app' },
+        stdin: 'inherit',
+        stdout: 'inherit',
+        stderr: 'inherit'
+      });
+      return await child.exited;
     } else if (command === 'doctor' && (!args.length || (args.length === 1 && args[0] === '--json'))) {
       const findings = await diagnoseWorkspace(root, await runningPorts(root), (await dependencyFingerprint(root).catch(() => ({ current: false }))).current);
       console.log(args[0] === '--json' ? JSON.stringify({ root, findings }, null, 2) : formatFindings(findings));

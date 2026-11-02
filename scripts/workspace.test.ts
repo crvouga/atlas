@@ -107,7 +107,7 @@ test('T3 Code project scripts call the shared lifecycle and work on any machine'
   expect(scripts.filter((item) => item.runOnWorktreeCreate)).toEqual([expect.objectContaining({ command: 'bun run dev --setup', async: false })]);
   expect(scripts.filter((item) => item.runOnSettle).map((item) => item.command)).toEqual(['bun run dev --stop']);
   const commands = scripts.map((item) => item.command);
-  for (const shared of ['bun run dev', 'bun run dev --share', 'bun run dev --unshare', 'bun run dev --status', 'bun run dev --doctor', 'bun run check', 'bun run test', 'bun run build', 'bun run smoke', 'bun run docs --check'])
+  for (const shared of ['bun run dev', 'bun run dev --share', 'bun run dev --unshare', 'bun run dev --status', 'bun run dev --doctor', 'bun run dev --verify', 'bun run check', 'bun run test', 'bun run build', 'bun run smoke', 'bun run docs --check'])
     expect(commands).toContain(shared);
 });
 

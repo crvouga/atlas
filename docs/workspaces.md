@@ -61,6 +61,8 @@ The existing development workflows are modes of that same command:
 | `bun run dev --stop` | Stop owned services, retaining their data. Add `server` or `preview` to stop one target. |
 | `bun run dev --share` | Put this checkout's running targets on a private tailnet HTTPS link; with nothing running, start Dev and share it once ready. Add `--share` to the default, `--server` or `--preview` to do the same. |
 | `bun run dev --unshare` | Remove this checkout's tailnet links. Stopping a target also removes its link. |
+| `bun run dev --verify` | Check this checkout's running server end to end: API, viewer, settings, the example project's reports and UI catalog, and its shared link. The intentional status examples never fail it. `--json` for JSON. |
+| `bun run dev --atlas <args>` | Run any Atlas CLI command against this checkout's running server, for example `bun run dev --atlas ui-catalog status`. |
 | `bun run dev --doctor` | Report, without changing anything, whether this machine can run and share Atlas, and how to fix what is missing. `--json` for JSON. |
 | `bun run dev --help` | Show modes and usage without starting services. |
 
@@ -169,6 +171,13 @@ the agent starts. **Stop** runs when a thread settles, which releases its servic
 2. Clone Atlas, add it as a T3 project (`t3 project add`, or from the app), and apply `.t3code/project.json` as above.
 3. Press **Doctor (machine readiness)**. `✗` blocks Dev; `!` is either installed by the first Dev run or only limits
    remote viewing. Each finding prints its fix.
+4. Press **Dev** (or **Dev + share on tailnet**), wait for `Populate complete`, then press **Verify running app**.
+   `Verified.` means the server, viewer, settings, reports, UI catalog and shared link all work on this machine.
+
+The scripts are grouped in the order you use them: run (Dev, Status, Stop), check the running app (Verify, Report
+status, UI catalog status, Export UI catalog to HTML, Verify recordings), test (Check, Test, Types, Viewer DOM,
+Server, Reports and UI catalog, the real-browser UI catalog capture test, workspace lifecycle, UI architecture), docs
+and build, and benchmarks. Each worktree's scripts act on that worktree's own server.
 
 Nothing needs credentials: with no `ATLAS_S3_*` set, Dev runs its own S3 emulator in the checkout. The first Dev run
 downloads Chromium and FFmpeg.

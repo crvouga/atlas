@@ -14,6 +14,8 @@ const help = `Usage: bun run dev [--port <port>]
   --share       Share running services on a private tailnet HTTPS link (starts Dev first if nothing runs)
   --unshare     Remove this checkout's tailnet links
   --doctor [--json]  Check this machine is ready to run and share Atlas
+  --verify [--json]  Check the running server end to end (API, viewer, reports, UI catalog, shared link)
+  --atlas <args>     Run an Atlas CLI command against this checkout's running server
   Add --share after the default, --server or --preview to share once ready.
 `;
 const modes: Record<string, string> = {
@@ -24,7 +26,9 @@ const modes: Record<string, string> = {
   '--stop': 'stop',
   '--share': 'share',
   '--unshare': 'unshare',
-  '--doctor': 'doctor'
+  '--doctor': 'doctor',
+  '--verify': 'verify',
+  '--atlas': 'atlas'
 };
 if (args.includes('--help') || args.includes('-h')) console.log(help);
 else {
