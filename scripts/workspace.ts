@@ -1,5 +1,5 @@
 /** @module IDE workspace lifecycle
- * Shared local development commands for Superset, super.engineering and Orca.
+ * Shared local development commands for Superset, super.engineering, Orca and T3 Code.
  * Runtime ownership stays in this checkout; stopping never signals a stored PID.
  */
 import { mkdir, readFile, unlink, writeFile, chmod } from 'node:fs/promises';
@@ -101,23 +101,32 @@ export async function workspaceStatus(root: string) {
   return { root, runtimes: runtimes.filter((value): value is Runtime => value !== null).map(publicRuntime) };
 }
 
+/**
+ * A hard-killed owner (a crash, a reboot, a closed IDE) can leave a lease behind. Remove it only when its PID is
+ * gone; a live process, even an unrelated one that reused the PID, keeps the lease. Returns the dead owner's PID.
+ */
+async function removeDeadLease(root: string, mode: Mode): Promise<number | null> {
+  const stale = await readFile(stateFile(root, mode), 'utf8').then(
+    (text) => JSON.parse(text) as Runtime,
+    () => null
+  );
+  if (!(stale?.root === root && stale.mode === mode && Number.isInteger(stale.pid) && stale.pid > 0)) return null;
+  try {
+    process.kill(stale.pid, 0);
+    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return null;
+  }
+  await unlink(stateFile(root, mode)).catch(() => {});
+  return stale.pid;
+}
+
 /** Ask only authenticated, live owners to stop; stale metadata cannot kill another process. */
 export async function stopWorkspace(root: string, selected: Mode[] = modes): Promise<void> {
   for (const mode of selected) {
     const runtime = await held(root, mode);
     if (!runtime) {
-      // A hard-killed owner can leave a lease. Only remove it when its PID is gone.
-      const stale = await readFile(stateFile(root, mode), 'utf8').then(
-        (text) => JSON.parse(text) as Runtime,
-        () => null
-      );
-      if (stale?.root === root && stale.mode === mode && Number.isInteger(stale.pid) && stale.pid > 0) {
-        try {
-          process.kill(stale.pid, 0);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ESRCH') await unlink(stateFile(root, mode)).catch(() => {});
-        }
-      }
+      await removeDeadLease(root, mode);
       continue;
     }
     const response = await fetch(`${runtime.control}/stop`, {
@@ -268,12 +277,17 @@ export async function runWorkspace(root: string, mode: Mode, portValue?: string,
       token: crypto.randomUUID()
     };
     // Atomic lease acquisition prevents two simultaneous Run commands owning one target.
-    await writeFile(stateFile(root, mode), JSON.stringify(runtime), { mode: 0o600, flag: 'wx' }).catch((error) => {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST')
+    const claim = () => writeFile(stateFile(root, mode), JSON.stringify(runtime), { mode: 0o600, flag: 'wx' });
+    await claim().catch(async (error) => {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      // A lease whose owner died would otherwise block Run until someone ran --stop.
+      const dead = (await held(root, mode)) ? null : await removeDeadLease(root, mode);
+      if (dead === null)
         throw new Error(
           `Atlas ${mode} already has a runtime lease. Check "bun run dev --status"; use "bun run dev --stop" to clear a stopped owner's lease.`
         );
-      throw error;
+      console.log(`Cleared a ${mode} lease left by a stopped process (pid ${dead}).`);
+      await claim();
     });
     acquired = true;
     await chmod(stateFile(root, mode), 0o600);

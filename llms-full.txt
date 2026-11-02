@@ -5188,7 +5188,7 @@ the client at your stores with `reportsHost` ([integrating Atlas](integrating.md
 <doc path="docs/workspaces.md">
 # Atlas in agent IDEs
 
-This guide develops **this repository** in Superset, super.engineering or Orca. Consumer projects
+This guide develops **this repository** in Superset, super.engineering, Orca or T3 Code. Consumer projects
 install the npm package and follow [integrating](integrating.md).
 
 ## Six commands
@@ -5300,8 +5300,9 @@ Setup records a dependency fingerprint in `node_modules/`. Dev reuses it when Bu
 match. Changed manifests or removed dependencies trigger installation; `--setup` always performs a frozen install
 to repair an incomplete tree. Do not share dependencies, `.atlas-workspace/` or caches across checkouts.
 
-Simultaneous starts cannot claim the same target lease. After a hard kill, use `bun run dev --stop` to clear a stale
-lease; it removes one only when the owner PID is gone. An unauthenticated live owner must be investigated, never killed.
+Simultaneous starts cannot claim the same target lease. After a hard kill (a crash, a reboot, a closed IDE), the next
+`bun run dev` clears the stale lease itself, and `bun run dev --stop` does the same; both remove one only when the
+owner PID is gone. An unauthenticated live owner must be investigated, never killed.
 
 ## IDE configuration
 
@@ -5332,6 +5333,26 @@ preserve unknown fields. See [project configuration](https://super.engineering/d
 No unsupported `scripts.run` key is added. Keep Shared + Local or Shared only enabled for repository hooks and approve
 Orca's shared-config trust prompt when offered. These are user-owned settings. Existing workspaces can run the same
 Bun command in a terminal; default tabs apply to new workspaces. See the [Orca reference](https://www.onorca.dev/docs/model/orca-yaml).
+
+### T3 Code
+
+T3 Code keeps project scripts in its own settings rather than in a repository file, so set them once per machine
+(**Project settings → Scripts**, or ask an agent in a T3 thread to apply this table). Use **worktree** as the
+project's default thread mode: each thread then gets its own checkout, dependencies, `.atlas-workspace/`, local S3
+and free ports, so parallel threads can each run and test Atlas without touching one another.
+
+| Script | Command | T3 setting |
+| --- | --- | --- |
+| Setup | `bun run dev --setup` | Run on worktree create, not async, so an agent starts after dependencies exist |
+| Dev | `bun run dev` | The play action: services, example population, live viewer |
+| Preview (bundled examples) | `bun run dev --preview` | |
+| Status (live URLs) | `bun run dev --status` | Prints this checkout's actual server and viewer URLs |
+| Stop | `bun run dev --stop` | Run on settle, so a finished thread releases its services; data is kept |
+| Check, Test, Build, Smoke | `bun run check`, `bun run test`, `bun run build`, `bun run smoke` | |
+| Docs | `bun run docs --check` | |
+
+To test by hand: open a worktree thread (Setup runs on its own), press **Dev**, wait for `Atlas server ready:` and
+open that URL in T3's preview. Ports differ per worktree, so take the URL from the output or **Status**.
 
 ## Verification
 
