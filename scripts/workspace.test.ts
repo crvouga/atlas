@@ -315,3 +315,21 @@ test('populate help describes the workflow without starting services', async () 
   expect(await output).toContain('bun run dev');
   expect((await workspaceStatus(root)).runtimes).toEqual([]);
 });
+
+test('Run reclaims a lease whose owner died, but never one held by a live process', async () => {
+  const root = await fixture();
+  const lease = path.join(root, '.atlas-workspace/server.json');
+  const stale = { root, mode: 'server', pid: 0, url: 'http://127.0.0.1:1', state: 'running', control: 'http://127.0.0.1:1', token: crypto.randomUUID() };
+  await mkdir(path.dirname(lease), { recursive: true });
+  // A live PID that does not answer the control endpoint is still never taken over.
+  await writeFile(lease, JSON.stringify({ ...stale, pid: process.pid }));
+  await expect(start(root)).rejects.toThrow('already has a runtime lease');
+  // A hard-killed owner (crash, reboot) leaves its lease; Run must not need --stop first.
+  const exited = Bun.spawn([process.execPath, '-e', '0']);
+  await exited.exited;
+  await writeFile(lease, JSON.stringify({ ...stale, pid: exited.pid }));
+  const { child, runtime } = await start(root);
+  expect(runtime.pid).toBe(child.pid);
+  await stopWorkspace(root);
+  expect(await child.exited).toBe(0);
+}, 60_000);

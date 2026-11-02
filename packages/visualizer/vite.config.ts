@@ -17,6 +17,10 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url));
 // this dev server alone: `/api` is proxied to the server, and the page gets the same address book a served
 // build gets, so the viewer cannot tell the two apart. Without a server, the viewer reads the working tree.
 const serverUrl = process.env.ATLAS_API_URL || '';
+// Hostnames the dev server answers to besides localhost, for viewing it through a private tunnel such as
+// `tailscale serve`. Opt-in and comma-separated; a leading dot allows subdomains (`.ts.net`). Unset, Vite's
+// localhost-only check stays in place, which is what stops DNS rebinding.
+const allowedHosts = (process.env.ATLAS_DEV_ALLOWED_HOSTS ?? '').split(',').map((host) => host.trim()).filter(Boolean);
 const reportsModule = serverUrl ? '' : process.env.ATLAS_REPORTS_MODULE || (servesExampleReports(resolveRoots().specs) ? path.join(appRoot, 'vite/example-reports.ts') : '');
 
 export default defineConfig({
@@ -27,6 +31,11 @@ export default defineConfig({
     ? [react(), atlasServerPage()]
     : [react(), atlasDevPlugin(), ...(reportsModule ? [reportsDevPlugin({ repoRoot: process.env.INIT_CWD || process.cwd(), appModule: reportsModule })] : [])],
   worker: { format: 'es' },
-  server: { port: Number(process.env.PORT ?? 5180), strictPort: false, ...(serverUrl ? atlasServerProxy(serverUrl) : {}) },
+  server: {
+    port: Number(process.env.PORT ?? 5180),
+    strictPort: false,
+    ...(allowedHosts.length ? { allowedHosts } : {}),
+    ...(serverUrl ? atlasServerProxy(serverUrl) : {})
+  },
   build: { outDir: 'dist', emptyOutDir: true, chunkSizeWarningLimit: 2_500 }
 });
