@@ -241,33 +241,37 @@ export function Explorer() {
           </Alert>
         )}
         {kinds.length > 0 && !search.tab && (
-          <Paper withBorder component="section" aria-label="Published specs" mb="lg">
-            <Stack gap="sm">
-              <Group justify="space-between" gap="sm">
-                <Title order={2}>Published specs</Title>
-                <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'health', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
-                  Why do these counts differ from the Tests?
-                </Anchor>
-              </Group>
-              <Group gap="xs">
-                {kinds.map(({ kind, files }) => (
-                  <Button key={kind.id} variant="default" leftSection={<SpecLogo kind={kind} />}
-                    rightSection={<Badge color="gray">{files.length}</Badge>}
-                    renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}>
-                    {kind.label}
-                  </Button>
-                ))}
-              </Group>
-              {kinds.some(({ kind }) => kind.id === 'gherkin') && (
-                <Anchor renderRoot={(props) => <Link {...props} to="/behaviors" search={{}} />}>
-                  <Group component="span" display="inline-flex" gap="xs">
-                    Behaviors: read what the project promises, then watch it
-                    <IconArrowRight size={16} aria-hidden="true" />
+          <Accordion variant="separated" mb="lg" role="region" aria-label="Published specs">
+            <Accordion.Item value="specs">
+              <Accordion.Control>Published specs · {kinds.reduce((count, entry) => count + entry.files.length, 0)} files</Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="sm">
+                  <Group justify="space-between" gap="sm">
+                    <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'health', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+                      Why do these counts differ from the Tests?
+                    </Anchor>
                   </Group>
-                </Anchor>
-              )}
-            </Stack>
-          </Paper>
+                  <Group gap="xs">
+                    {kinds.map(({ kind, files }) => (
+                      <Button key={kind.id} variant="default" leftSection={<SpecLogo kind={kind} />}
+                        rightSection={<Badge color="gray">{files.length}</Badge>}
+                        renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}>
+                        {kind.label}
+                      </Button>
+                    ))}
+                  </Group>
+                  {kinds.some(({ kind }) => kind.id === 'gherkin') && (
+                    <Anchor renderRoot={(props) => <Link {...props} to="/behaviors" search={{}} />}>
+                      <Group component="span" display="inline-flex" gap="xs">
+                        Behaviors: read what the project promises, then watch it
+                        <IconArrowRight size={16} aria-hidden="true" />
+                      </Group>
+                    </Anchor>
+                  )}
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
         )}
         {!model && !evidence.unavailable && (
           <Text role="status" component="div" c="dimmed">
@@ -361,123 +365,148 @@ function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: re
   const environments = useMemo(() => groupTests(scope, 'environment', false).sort((a, b) => b.tests.length - a.tests.length), [scope]);
   const statuses = values(search.status);
   const envs = values(search.env);
+  const [allEnvironments, setAllEnvironments] = useState(false);
+  const [mobileInsights, setMobileInsights] = useState(false);
+  const visibleEnvironments = environments.filter((group, index) => index < 1 || envs.includes(group.key));
   const last = scope.reduce((latest, test) => Math.max(latest, test.lastRecordedAtMs), 0);
   const status = (id: string) => go({ status: statuses.length === 1 && statuses[0] === id ? undefined : id });
   return (
     <Box component="section" aria-label="Insights" mb="lg">
-      <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-        <Paper withBorder>
+      <Paper withBorder hiddenFrom="sm" mb="md">
+        <Group justify="space-between" gap="xs">
           <Stack gap="xs">
-            <Text c="dimmed">Tests</Text>
-            <Title order={2}>{scope.length.toLocaleString()}</Title>
-            <Meter counts={counts} />
-            <Group gap="xs">
+            <Text fw={600}>{plural(scope.length, 'test', 'tests')}</Text>
+            <Text c="dimmed">{counts.failed} failed · {counts.passed} passed{counts.running ? ` · ${counts.running} running` : ''}{counts['not-run'] ? ` · ${counts['not-run']} not run` : ''}</Text>
+          </Stack>
+          <Button variant="subtle" aria-expanded={mobileInsights} onClick={() => setMobileInsights((open) => !open)}>
+            {mobileInsights ? 'Hide insights' : 'View insights'}
+          </Button>
+        </Group>
+      </Paper>
+      <Box display={{ base: mobileInsights ? 'block' : 'none', sm: 'block' }}>
+        <SimpleGrid cols={{ base: 2, xl: 4 }} spacing="md">
+          <Paper withBorder>
+            <Stack gap="xs">
+              <Text c="dimmed">Tests</Text>
+              <Title order={2}>{scope.length.toLocaleString()}</Title>
+              <Meter counts={counts} />
+              <Group gap="xs">
+                <Button
+                  color="red"
+                  variant={statuses.includes('failed') ? 'light' : 'subtle'}
+                  aria-pressed={statuses.includes('failed')}
+                  disabled={!counts.failed}
+                  onClick={() => status('failed')}
+                >
+                  {counts.failed} failed
+                </Button>
+                <Button
+                  color="green"
+                  variant={statuses.includes('passed') ? 'light' : 'subtle'}
+                  aria-pressed={statuses.includes('passed')}
+                  onClick={() => status('passed')}
+                >
+                  {counts.passed} passed
+                </Button>
+                {counts['not-run'] > 0 && (
+                  <Button aria-pressed={statuses.includes('not-run')} onClick={() => status('not-run')}>
+                    {counts['not-run']} not run
+                  </Button>
+                )}
+                {counts.running > 0 && (
+                  <Button aria-pressed={statuses.includes('running')} onClick={() => status('running')}>
+                    {counts.running} running
+                  </Button>
+                )}
+              </Group>
+            </Stack>
+          </Paper>
+          <Paper withBorder>
+            <Stack gap="xs">
+              <Text c="dimmed">Flaky</Text>
+              <Title order={2}>{flaky}</Title>
+              <Text size="xs" c="dimmed">
+                {flaky ? 'Passed and failed on one commit, or needed a retry' : 'None recorded'}
+              </Text>
               <Button
-                color="red"
-                variant={statuses.includes('failed') ? 'light' : 'subtle'}
-                aria-pressed={statuses.includes('failed')}
-                disabled={!counts.failed}
-                onClick={() => status('failed')}
+                color="orange"
+                variant={statuses.includes('flaky') ? 'light' : 'subtle'}
+                aria-pressed={statuses.includes('flaky')}
+                aria-label={`View flaky tests: ${flaky}`}
+                onClick={() => status('flaky')}
               >
-                {counts.failed} failed
+                View flaky tests
               </Button>
-              <Button
-                color="green"
-                variant={statuses.includes('passed') ? 'light' : 'subtle'}
-                aria-pressed={statuses.includes('passed')}
-                onClick={() => status('passed')}
+            </Stack>
+          </Paper>
+          <Paper withBorder>
+            <Stack gap="xs">
+              <Text c="dimmed">Duration</Text>
+              <Title order={2}>{durations ? formatMs(durations.avgMs) : '—'}</Title>
+              <Text size="xs" c="dimmed">
+                {durations
+                  ? `average · p95 ${formatMs(durations.p95Ms)} · ${averages.length.toLocaleString()} measured`
+                  : 'No durations recorded. Producers can send durationMs with each check.'}
+              </Text>
+              <Anchor
+                aria-label={`${model.summary.runs} runs`}
+                renderRoot={(props) => (
+                  <Link
+                    {...props}
+                    to="/"
+                    search={patched({ tab: 'runs', test: undefined, layer: undefined })}
+                    resetScroll={false}
+                    activeOptions={{ exact: true }}
+                  />
+                )}
               >
-                {counts.passed} passed
-              </Button>
-              {counts['not-run'] > 0 && (
-                <Button aria-pressed={statuses.includes('not-run')} onClick={() => status('not-run')}>
-                  {counts['not-run']} not run
+                {model.summary.runs.toLocaleString()} runs
+              </Anchor>
+              <Text size="xs" c="dimmed">
+                {last ? `Last recorded ${ago(last, now)}` : 'Nothing recorded yet'}
+              </Text>
+            </Stack>
+          </Paper>
+          <Paper withBorder>
+            <Stack gap="xs">
+              <Text c="dimmed">Environments</Text>
+              <Title order={2}>{environments.length}</Title>
+              {visibleEnvironments.map((group) => (
+                <Button key={group.key} variant={envs.includes(group.key) ? 'light' : 'subtle'}
+                  fullWidth justify="flex-start" aria-pressed={envs.includes(group.key)}
+                  onClick={() => go({ env: toggled(search.env, group.key) })}
+                  title={`${group.label}: ${plural(group.tests.length, 'test', 'tests')} · ${group.counts.failed} failed · ${group.counts.passed} passed`}>
+                  <Text span inherit truncate>{group.label}</Text>
+                </Button>
+              ))}
+              {environments.length > 1 && (
+                <Button variant="subtle" aria-expanded={allEnvironments} onClick={() => setAllEnvironments((open) => !open)}>
+                  {allEnvironments ? 'Show fewer' : `Show all (${environments.length})`}
                 </Button>
               )}
-              {counts.running > 0 && (
-                <Button aria-pressed={statuses.includes('running')} onClick={() => status('running')}>
-                  {counts.running} running
+            </Stack>
+          </Paper>
+        </SimpleGrid>
+        {allEnvironments && (
+          <Paper withBorder mt="md" component="section" aria-label="All environment insights">
+            <Title order={3} mb="sm">All environments</Title>
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+              {environments.map((group) => (
+                <Button key={group.key} variant={envs.includes(group.key) ? 'light' : 'subtle'}
+                  h="auto" py="sm" justify="flex-start" aria-pressed={envs.includes(group.key)}
+                  onClick={() => go({ env: toggled(search.env, group.key) })}>
+                  <Stack align="flex-start" gap="xs">
+                    <Text fw={500}>{group.label}</Text>
+                    <Text size="xs" c="dimmed">{plural(group.tests.length, 'test', 'tests')} · {group.counts.failed} failed · {group.counts.passed} passed</Text>
+                  </Stack>
                 </Button>
-              )}
-            </Group>
-          </Stack>
-        </Paper>
-        <Paper withBorder>
-          <Stack gap="xs">
-            <Text c="dimmed">Flaky</Text>
-            <Title order={2}>{flaky}</Title>
-            <Text size="xs" c="dimmed">
-              {flaky ? 'Passed and failed on one commit, or needed a retry' : 'None recorded'}
-            </Text>
-            <Button
-              color="orange"
-              variant={statuses.includes('flaky') ? 'light' : 'subtle'}
-              aria-pressed={statuses.includes('flaky')}
-              aria-label={`${flaky} flaky tests`}
-              onClick={() => status('flaky')}
-            >
-              View flaky tests
-            </Button>
-          </Stack>
-        </Paper>
-        <Paper withBorder>
-          <Stack gap="xs">
-            <Text c="dimmed">Duration</Text>
-            <Title order={2}>{durations ? formatMs(durations.avgMs) : '—'}</Title>
-            <Text size="xs" c="dimmed">
-              {durations
-                ? `average · p95 ${formatMs(durations.p95Ms)} · ${averages.length.toLocaleString()} measured`
-                : 'No durations recorded. Producers can send durationMs with each check.'}
-            </Text>
-            <Anchor
-              aria-label={`${model.summary.runs} runs`}
-              renderRoot={(props) => (
-                <Link
-                  {...props}
-                  to="/"
-                  search={patched({ tab: 'runs', test: undefined, layer: undefined })}
-                  resetScroll={false}
-                  activeOptions={{ exact: true }}
-                />
-              )}
-            >
-              {model.summary.runs.toLocaleString()} runs
-            </Anchor>
-            <Text size="xs" c="dimmed">
-              {last ? `Last recorded ${ago(last, now)}` : 'Nothing recorded yet'}
-            </Text>
-          </Stack>
-        </Paper>
-        <Paper withBorder>
-          <Stack gap="xs">
-            <Text c="dimmed">Environments</Text>
-            {environments.map((group) => (
-              <Button
-                key={group.key}
-                variant={envs.includes(group.key) ? 'light' : 'subtle'}
-                fullWidth
-                h="auto"
-                py="xs"
-                justify="flex-start"
-                aria-pressed={envs.includes(group.key)}
-                onClick={() => go({ env: toggled(search.env, group.key) })}
-                title={`Show only ${group.label}`}
-              >
-                <Stack align="flex-start" gap="xs">
-                  <Text fw={500}>{group.label}</Text>
-                  <Text size="xs" c="dimmed">
-                    {plural(group.tests.length, 'test', 'tests')} · {group.counts.failed} failed · {group.counts.passed} passed
-                    {group.counts['not-run'] ? ` · ${group.counts['not-run']} not run` : ''}
-                    {group.avgMs !== null ? ` · avg ${formatMs(group.avgMs)}` : ''}
-                  </Text>
-                </Stack>
-              </Button>
-            ))}
-          </Stack>
-        </Paper>
-      </SimpleGrid>
-      <Box mt="md">
-        <MoreInsights scope={scope} />
+              ))}
+            </SimpleGrid>
+          </Paper>
+        )}
+        <Box mt="md">
+          <MoreInsights scope={scope} />
+        </Box>
       </Box>
     </Box>
   );
@@ -681,7 +710,7 @@ function Toolbar({
         <Button
           type="button"
           aria-pressed={search.video === true || listing.parsed.filters.video}
-          aria-label={`Has video: ${plural(listing.withVideo, 'test', 'tests')}`}
+          aria-label={`Has video ${plural(listing.withVideo, 'test', 'tests')}`}
           onClick={() => {
             if (listing.parsed.filters.video) {
               const token = listing.parsed.tokens.find((item) => item.key === 'video')!;
@@ -699,7 +728,7 @@ function Toolbar({
         <Button
           type="button"
           aria-pressed={search.evidence === 'stale'}
-          aria-label={`Stale or unverified evidence: ${plural(listing.stale, 'test', 'tests')}`}
+          aria-label={`Stale or unverified ${plural(listing.stale, 'test', 'tests')}`}
           onClick={() => go({ evidence: search.evidence ? undefined : 'stale' })}
           variant={search.evidence === 'stale' ? 'light' : 'subtle'}
           leftSection={<IconAlertTriangle size={16} aria-hidden="true" />}

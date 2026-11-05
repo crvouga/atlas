@@ -7,9 +7,9 @@ import { checkMain } from './check';
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
-test('the public command set contains six regular names and the automatic install hook', async () => {
+test('the public command set contains regular names, Storybook verification and the automatic install hook', async () => {
   const pkg = await Bun.file(path.join(import.meta.dir, '../package.json')).json();
-  expect(Object.keys(pkg.scripts).sort()).toEqual(['build', 'check', 'dev', 'docs', 'prepare', 'smoke', 'test']);
+  expect(Object.keys(pkg.scripts).sort()).toEqual(['build', 'check', 'dev', 'docs', 'prepare', 'smoke', 'storybook:build', 'storybook:check', 'storybook:test', 'test']);
 });
 
 async function fixture(fail = '') {

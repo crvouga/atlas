@@ -55,7 +55,7 @@ function Body() {
 function Layout() {
   const [opened, setOpened] = useState(false);
   const location = useLocation();
-  const catalog = location.pathname === '/catalog';
+  const catalog = location.pathname === '/catalog' || location.pathname === '/behaviors' || location.pathname === '/critiques';
   useEffect(() => setOpened(false), [location.href]);
   return (
     <UiCatalogProvider enabled={location.pathname === '/catalog'}>

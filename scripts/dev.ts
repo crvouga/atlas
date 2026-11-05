@@ -8,6 +8,7 @@ const help = `Usage: bun run dev [--port <port>]
   Default       Start services, populate examples and keep the viewer running
   --server      Start the server without populating
   --preview     Open the separate examples viewer
+  --storybook   Open the isolated screen and state workshop (port 6006)
   --setup       Install or repair the pinned dependencies
   --status      Print this checkout's live URLs and population state
   --stop [server|preview]  Stop owned services, retaining their data
@@ -31,7 +32,10 @@ const modes: Record<string, string> = {
   '--atlas': 'atlas'
 };
 if (args.includes('--help') || args.includes('-h')) console.log(help);
-else {
+else if (args[0] === '--storybook') {
+  const child = Bun.spawn([process.execPath, 'node_modules/storybook/dist/bin/dispatcher.js', 'dev', '-p', '6006', '--no-open', ...args.slice(1)], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+  process.exitCode = await child.exited;
+} else {
   const mode = modes[args[0] ?? ''];
   process.exitCode = await workspaceMain([mode ?? 'populate', ...(mode ? args.slice(1) : args)]);
 }

@@ -118,8 +118,8 @@ function FocusedGallery({ state, states, profile, scope, onProfile, onSelect, on
         <Text role="status" aria-live="polite" aria-atomic="true">{index >= 0 ? `Item ${index + 1} of ${states.length}: ${state.title}` : `${state.title} is outside the current filters.`}</Text>
         {index >= 0 && <>
           <Group gap="xs">
-            <Button variant="default" aria-label="Previous catalog item" leftSection={<IconArrowLeft size={16} aria-hidden="true" />} disabled={index === 0} onClick={() => select(index)}>Previous item</Button>
-            <Button aria-label="Next catalog item" rightSection={<IconArrowRight size={16} aria-hidden="true" />} disabled={index === states.length - 1} onClick={() => select(index + 2)}>Next item</Button>
+            <Button variant="default" aria-label="Previous item in catalog" leftSection={<IconArrowLeft size={16} aria-hidden="true" />} disabled={index === 0} onClick={() => select(index)}>Previous item</Button>
+            <Button aria-label="Next item in catalog" rightSection={<IconArrowRight size={16} aria-hidden="true" />} disabled={index === states.length - 1} onClick={() => select(index + 2)}>Next item</Button>
           </Group>
           <Pagination total={states.length} value={index + 1} onChange={select} layout="responsive" withControls={false}
             formatLabel={({ page, totalPages }) => `Item ${page} of ${totalPages}`}

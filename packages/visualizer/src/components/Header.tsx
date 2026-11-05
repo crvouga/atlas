@@ -157,11 +157,11 @@ export function Header() {
           <Menu.Target>
             <Button
               variant="subtle"
-              aria-label="Spec type"
+              aria-label="Explore"
               leftSection={kind ? <SpecLogo kind={kind} /> : undefined}
               rightSection={<ChevronDownIcon aria-hidden="true" size={12} />}
             >
-              {testsOpen ? 'Tests' : catalogOpen ? 'UI catalog' : critiquesOpen ? 'Needs polish' : behaviorsOpen ? 'Behaviors' : (kind?.label ?? (hasCharts ? 'Statecharts' : evidence.ready && !tabs.length ? 'Tests' : 'Specs'))}
+              Explore
             </Button>
           </Menu.Target>
           <Menu.Dropdown>

@@ -66,7 +66,7 @@ function SpecUnavailable({
                 <List listStyleType="none">
                   {similar.map((candidate) => (
                     <List.Item key={candidate}>
-                      <Anchor renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run, spec: candidate }} />}>{candidate}</Anchor>
+                      <Anchor c="blue.9" underline="always" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run, spec: candidate }} />}>{candidate}</Anchor>
                     </List.Item>
                   ))}
                 </List>

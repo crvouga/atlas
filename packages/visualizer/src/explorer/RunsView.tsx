@@ -159,7 +159,7 @@ function RunVideos({ run, verification }: { run: RunSummary; verification: RunVe
       )}
     >
       <Text span inherit data-run-files>
-        {plural(run.attachments, 'run file', 'run files')}
+        {plural(run.attachments, 'file', 'files')}
       </Text>
     </Anchor>
   ) : null;
@@ -182,7 +182,7 @@ function RunVideos({ run, verification }: { run: RunSummary; verification: RunVe
             <Link {...props} to="/" search={patched({ openRun: run.key, layer: undefined, artifact: undefined, video: true })} resetScroll={false} activeOptions={{ exact: true }} />
           )}
         >
-          <IconVideo size={16} aria-hidden="true" /> {plural(videos.recordings, 'video', 'videos')}
+          <IconVideo size={16} aria-hidden="true" /> Watch {plural(videos.recordings, 'recording', 'recordings')}
         </Anchor>
       )}
       {videos.references !== videos.recordings + videos.unavailable && (
@@ -198,7 +198,7 @@ function RunVideos({ run, verification }: { run: RunSummary; verification: RunVe
 /** The Has video filter: a toggle named by its meaning and the count of what it matches. */
 function HasVideo({ count, pressed, noun, onToggle }: { count: number; pressed: boolean; noun: [string, string]; onToggle: () => void }) {
   return (
-    <Button type="button" aria-pressed={pressed} aria-label={`Has video: ${plural(count, noun[0], noun[1])}`} onClick={onToggle} variant="light" leftSection={<IconVideo size={16} aria-hidden="true" />} rightSection={<Text span inherit>{count}</Text>}>
+    <Button type="button" aria-pressed={pressed} aria-label={`Has video ${plural(count, noun[0], noun[1])}`} onClick={onToggle} variant="light" leftSection={<IconVideo size={16} aria-hidden="true" />} rightSection={<Text span inherit>{count}</Text>}>
       Has video{' '}
     </Button>
   );
@@ -378,7 +378,7 @@ function RunTable() {
         <Table data-runs>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th scope="col">Ended</Table.Th>
+              <Table.Th scope="col">Run / ended</Table.Th>
               <Table.Th scope="col">Branch</Table.Th>
               <Table.Th scope="col">Commit</Table.Th>
               <Table.Th scope="col">Environments</Table.Th>
@@ -402,13 +402,9 @@ function RunTable() {
                       <Link {...props} to="/" search={patched({ openRun: run.key, layer: undefined, artifact: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
                     )}
                   >
-                    {ago(run.endedAtMs, now)}
+                    {runLabel(run)}
                   </Anchor>
-                  {run.title && (
-                    <Text c="dimmed" fz="xs">
-                      {run.title}
-                    </Text>
-                  )}
+                  <Text c="dimmed" fz="xs">{ago(run.endedAtMs, now)}</Text>
                   <WhyMatched hit={found.hits?.get(`runs:${run.key}`)} />
                 </Table.Td>
                 <Table.Td title={run.branch ?? ''} c="dimmed">

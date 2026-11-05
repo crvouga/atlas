@@ -94,6 +94,7 @@ export function ProjectIndex() {
                 key={kind.id}
                 label={kind.label}
                 leftSection={<SpecLogo kind={kind} />}
+                rightSection={<Badge color="gray">{files.filter(kind.accepts).length} {files.filter(kind.accepts).length === 1 ? kind.one : kind.many}</Badge>}
                 renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}
               />
             ))}

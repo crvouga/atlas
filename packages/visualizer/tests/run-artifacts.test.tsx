@@ -94,7 +94,7 @@ test('a layer of only files is reachable, and a run of no checks is not shown as
   expect(row.textContent).toContain('No checks recorded');
   expect(row.textContent).not.toContain('0 passed');
   expect(row.getAttribute('data-status')).toBe('not-run');
-  expect(row.textContent).toContain('1 run file');
+  expect(row.textContent).toContain('1 file');
   await atlas!.click('a', 'Open run');
   await atlas!.until(() => !!hub()?.querySelector('video'), 'the movie of the layer');
   expect(hub().textContent).toContain('No checks in this layer');
@@ -217,7 +217,7 @@ test('a run row counts its layer movie with its test videos, links straight to t
   await atlas!.until(() => document.querySelectorAll('section[aria-label="Runs"] tbody tr').length === 2, 'both runs');
   const rowOf = (n: number) => [...document.querySelectorAll<HTMLElement>('section[aria-label="Runs"] tbody tr')].find((row) => row.querySelector(`a[aria-label="Open run #${n}"]`))!;
   // Two test videos and the layer's movie are three recordings, watched from one link, with no filename or producer named.
-  expect(rowOf(1).textContent).toContain('3 videos');
+  expect(rowOf(1).textContent).toContain('Watch 3 recordings');
   expect(rowOf(1).querySelector('a[aria-label="Watch 3 recordings in run #1"]')).not.toBeNull();
   // The run's own file has its own link, which opens the run on its files; the movie plays there.
   expect(rowOf(1).querySelector('a[aria-label^="Open the 1 file of run"]')).not.toBeNull();
@@ -225,7 +225,7 @@ test('a run row counts its layer movie with its test videos, links straight to t
   expect(rowOf(2).textContent).toContain('1 video unavailable');
   expect(rowOf(2).querySelector('a[aria-label^="Watch"]')).toBeNull();
   const filter = document.querySelector<HTMLButtonElement>('section[aria-label="Runs"] button[aria-label^="Has video"]')!;
-  expect(filter.getAttribute('aria-label')).toBe('Has video: 1 run');
+  expect(filter.getAttribute('aria-label')).toBe('Has video 1 run');
 
   await atlas!.click('section[aria-label="Runs"] a', 'Open the 1 file of run #1');
   await atlas!.until(() => !!hub()?.querySelector('video'), 'the run-level movie');

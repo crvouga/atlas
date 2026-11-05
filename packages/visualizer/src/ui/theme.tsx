@@ -2,6 +2,7 @@
  * The sole Mantine theme and provider for the report viewer and server settings.
  */
 import { CodeHighlight, CodeHighlightTabs } from '@mantine/code-highlight';
+import { Spotlight } from '@mantine/spotlight';
 import {
   ActionIcon,
   DEFAULT_THEME,
@@ -20,8 +21,10 @@ import {
   MantineProvider,
   Modal,
   NativeSelect,
+  NavLink,
   Paper,
   Table,
+  TableScrollContainer,
   Text,
   Title,
   Tooltip
@@ -54,10 +57,12 @@ export const theme = createTheme({
   focusRing: 'auto',
   components: {
     CodeHighlight: CodeHighlight.extend({
-      defaultProps: { withLineNumbers: true, withFirstLineIndentation: true, defaultExpanded: true, withBorder: true, radius: 'md' }
+      defaultProps: { background: 'white', attributes: { pre: { tabIndex: 0 } }, withLineNumbers: true, withFirstLineIndentation: true, defaultExpanded: true, withBorder: true, radius: 'md' }
     }),
     CodeHighlightTabs: CodeHighlightTabs.extend({
       defaultProps: {
+        background: 'white',
+        attributes: { pre: { tabIndex: 0 } },
         withLineNumbers: true,
         withFirstLineIndentation: true,
         defaultExpanded: true,
@@ -80,11 +85,14 @@ export const theme = createTheme({
     Title: Title.extend({ defaultProps: { textWrap: 'pretty' } }),
     InputWrapper: InputWrapper.extend({ defaultProps: { size: 'sm' } }),
     NativeSelect: NativeSelect.extend({ defaultProps: { size: 'sm' } }),
+    // Mantine dims active descriptions with opacity; keep their semantic active color fully readable.
+    NavLink: NavLink.extend({ styles: { description: { opacity: 1 } } }),
+    Spotlight: Spotlight.extend({ styles: { actionDescription: { opacity: 1 } } }),
     Modal: Modal.extend({
-      defaultProps: { centered: true, size: 'lg', overlayProps: { backgroundOpacity: 0.35 }, transitionProps: { duration: 120 } }
+      defaultProps: { centered: true, size: 'lg', closeButtonProps: { 'aria-label': 'Close dialog' }, overlayProps: { backgroundOpacity: 0.35 }, transitionProps: { duration: 120 } }
     }),
     Drawer: Drawer.extend({
-      defaultProps: { position: 'right', size: 'lg', padding: 'lg', transitionProps: { duration: 120 } },
+      defaultProps: { position: 'right', size: 'lg', padding: 'lg', closeButtonProps: { 'aria-label': 'Close panel' }, transitionProps: { duration: 120 } },
       // Drawer has no body-only scrolling prop; keep Paper padding and scrolled evidence out of its header.
       // See the drawer containment exception in docs/ui.md.
       styles: {
@@ -94,6 +102,7 @@ export const theme = createTheme({
       }
     }),
     DrawerContent: DrawerContent.extend({ defaultProps: { p: 0 } }),
+    TableScrollContainer: TableScrollContainer.extend({ defaultProps: { scrollAreaProps: { viewportProps: { tabIndex: 0 } } } }),
     Table: Table.extend({ defaultProps: { verticalSpacing: 'sm', horizontalSpacing: 'sm', highlightOnHover: true, tabularNums: true } }),
     Tooltip: Tooltip.extend({ defaultProps: { openDelay: 300, withArrow: true } })
   }

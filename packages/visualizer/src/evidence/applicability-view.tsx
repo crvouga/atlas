@@ -5,7 +5,7 @@
  * promise, the release), the controls that name a release and filter to stale or unverified evidence, and the
  * address state that keeps both shareable. A verdict is a reading of the evidence and never changes an outcome.
  */
-import { Alert, Badge, Button, Group, List, Paper, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Accordion, Alert, Badge, Button, Group, List, Paper, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useMemo } from 'react';
 
@@ -193,7 +193,8 @@ export function ApplicabilityControls({
   state,
   stale = 0,
   total = 0,
-  filter = true
+  filter = true,
+  compact = false
 }: {
   state: ApplicabilityState;
   /** How many behaviors (or tests) have stale or unverified evidence. Only shown with the filter. */
@@ -202,13 +203,19 @@ export function ApplicabilityControls({
   total?: number;
   /** Whether to offer the stale-or-unverified filter here; a caller that offers it elsewhere sets this false. */
   filter?: boolean;
+  /** Disclose optional release fields while keeping evidence filters visible. */
+  compact?: boolean;
 }) {
   const { release, setRelease, onlyStale, setOnlyStale } = state;
   return (
     <Paper component="section" aria-label="Evidence applicability" withBorder p="md" my="md">
       <Stack gap="sm">
         <Title order={2}>Evidence applicability</Title>
-        <Text component="div" c="dimmed">
+        {compact ? (
+          <Accordion variant="separated" defaultValue={hasRelease(release) || release.platform ? 'release' : null}>
+            <Accordion.Item value="release">
+              <Accordion.Control>{hasRelease(release) || release.platform ? `Release: ${[release.build, release.sha, release.platform].filter(Boolean).join(' · ')}` : 'Compare with a release (optional)'}</Accordion.Control>
+              <Accordion.Panel><Stack gap="sm">        <Text component="div" c="dimmed">
           Name the release you care about to see whether each recording was made against it. Without one, evidence is read against the current promise only.
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
@@ -236,6 +243,38 @@ export function ApplicabilityControls({
             A platform alone does not name a release. Add its build or commit.
           </Text>
         )}
+</Stack></Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        ) : <>        <Text component="div" c="dimmed">
+          Name the release you care about to see whether each recording was made against it. Without one, evidence is read against the current promise only.
+        </Text>
+        <SimpleGrid cols={{ base: 1, sm: 3 }}>
+          <TextInput
+            label="Release build"
+            description="Compared with each result's build label"
+            value={release.build ?? ''}
+            onChange={(event) => setRelease({ ...release, build: event.currentTarget.value })}
+          />
+          <TextInput
+            label="Release commit"
+            description="Compared with the commit the checks ran at"
+            value={release.sha ?? ''}
+            onChange={(event) => setRelease({ ...release, sha: event.currentTarget.value })}
+          />
+          <TextInput
+            label="Release platform"
+            description="For example ios, android or desktop-web"
+            value={release.platform ?? ''}
+            onChange={(event) => setRelease({ ...release, platform: event.currentTarget.value })}
+          />
+        </SimpleGrid>
+        {release.platform && !hasRelease(release) && (
+          <Text role="status" component="div" c="dimmed">
+            A platform alone does not name a release. Add its build or commit.
+          </Text>
+        )}
+</>}
         {filter && (
           <Group role="group" aria-label="Evidence filter" gap="sm">
             <Button type="button" aria-pressed={!onlyStale} onClick={() => setOnlyStale(false)} variant={onlyStale ? 'subtle' : 'light'} rightSection={<Text span inherit>{total}</Text>}>

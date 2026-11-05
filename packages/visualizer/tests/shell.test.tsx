@@ -48,12 +48,12 @@ test('the single project picker lists available projects and spec menus close on
   const picker = atlas.host.querySelector<HTMLSelectElement>('select[aria-label="Project"]')!;
   expect([...picker.options].map((option) => option.text)).toEqual(['Default', 'Shop']);
   expect(picker.disabled).toBe(false);
-  await atlas.click('button', 'Spec type');
-  expect(atlas.find('button', 'Spec type')!.getAttribute('aria-expanded')).toBe('true');
+  await atlas.click('button', 'Explore');
+  expect(atlas.find('button', 'Explore')!.getAttribute('aria-expanded')).toBe('true');
   await act(async () => {
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
   });
-  expect(atlas.find('button', 'Spec type')!.getAttribute('aria-expanded')).toBe('false');
+  expect(atlas.find('button', 'Explore')!.getAttribute('aria-expanded')).toBe('false');
 });
 
 test('opening Sources removes its parent popover and restores focus to View options after closing the drawer', async () => {
@@ -111,4 +111,5 @@ test('desktop review destinations link directly to tests and behaviors while ret
   await act(async () => behaviors.click());
   await atlas.until(() => atlas!.router.state.location.pathname === '/behaviors', 'the behaviors destination');
   expect(behaviors.getAttribute('aria-current')).toBe('page');
+  expect(atlas.host.querySelector('button[aria-label="Toggle navigation"]')).toBeNull();
 });

@@ -75,8 +75,8 @@ test('a test whose promise changed after its only result is marked stale in the 
 test('the stale or unverified facet lists tests without applying evidence and changes no status', async () => {
   const view = await open(STALE_AND_CURRENT);
   await view.until(() => rows().length === 2, 'both tests');
-  const facet = () => document.querySelector<HTMLButtonElement>('button[aria-label^="Stale or unverified evidence"]')!;
-  expect(facet().getAttribute('aria-label')).toBe('Stale or unverified evidence: 1 test');
+  const facet = () => document.querySelector<HTMLButtonElement>('button[aria-label^="Stale or unverified"]')!;
+  expect(facet().getAttribute('aria-label')).toBe('Stale or unverified 1 test');
   await view.click('button', 'Stale or unverified');
   await view.until(() => rows().length === 1, 'only the stale test');
   expect(rows()[0]).toContain('Old promise');

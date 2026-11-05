@@ -36,7 +36,7 @@ export function SummaryBar({ noun, nounPlural, counts, verb }: { noun: string; n
         {BAR_ORDER.map(
           (status) =>
             counts[status] > 0 && (
-              <Progress.Section key={status} value={counts.total ? (counts[status] / counts.total) * 100 : 0} color={statusColor(status)} />
+              <Progress.Section aria-label={`${counts[status]} ${STATUS_LABEL[status]}`} key={status} value={counts.total ? (counts[status] / counts.total) * 100 : 0} color={statusColor(status)} />
             )
         )}
       </Progress.Root>

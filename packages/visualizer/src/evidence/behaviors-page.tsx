@@ -252,6 +252,7 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
         </Box>
         <TextInput
           type="search"
+          label="Search behaviors"
           aria-label="Search behaviors"
           placeholder='Search behaviors, steps, tags… or filter: status:failed has:video domain: "exact phrase"'
           value={draft}
@@ -272,7 +273,7 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
         </Group>
         <SearchNotes issues={listing.found.parsed.issues} semantic={listing.found.status} />
         <CoverageFilter listing={listing} coverage={search.coverage} />
-        <ApplicabilityControls state={applicability} stale={index.entries.filter((entry) => needsAttention(entry.assessment)).length} total={index.entries.length} />
+        <ApplicabilityControls compact state={applicability} stale={index.entries.filter((entry) => needsAttention(entry.assessment)).length} total={index.entries.length} />
         <Disclosure unread={index.unread} features={index.features} unreadable={index.unreadable} pending={pending} error={filesError} />
         {selected && (
           <Group gap="sm" wrap="wrap" role="group" aria-label="Selected behavior">
@@ -314,7 +315,7 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
                     <Text component="div" c="dimmed">
                       {whereIs(selected)}
                       {' · '}
-                      <Anchor renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: 'gherkin' }} search={{ spec: selected.file, check: selected.behavior.slot?.id }} />}>Open the feature</Anchor>
+                      <Anchor underline="always" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: 'gherkin' }} search={{ spec: selected.file, check: selected.behavior.slot?.id }} />}>Open the feature</Anchor>
                     </Text>
                     <BehaviorPanel key={selected.id} behavior={selected.behavior} applicability={selected.assessment} release={applicability.release} inspect={<Inspect entry={selected} />} />
                   </Stack>

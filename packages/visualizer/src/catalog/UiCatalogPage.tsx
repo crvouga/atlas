@@ -255,7 +255,7 @@ export function UiCatalogPage() {
         <Group justify="space-between" align="flex-start">
           <Stack gap={4}>
             <Title order={1} ref={indexHeading} tabIndex={-1}>UI catalog</Title>
-            <Text c="dimmed">Explore the product through its screens. Search, filter and sort the catalog, then open a screen to inspect its images and details.</Text>
+            <Text c="dimmed">Browse captured screens and inspect the evidence behind each state.</Text>
           </Stack>
           <Group gap="sm">
             {whole && <>
