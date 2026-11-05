@@ -229,7 +229,29 @@ export function Header() {
             </Box>
           </Menu.Dropdown>
         </Menu>
-        <Box visibleFrom="sm" miw={0}>
+        <Group component="nav" aria-label="Review destinations" gap="xs" visibleFrom="lg" wrap="nowrap">
+          <Button variant={testsOpen || (!hasCharts && pathname === '/') ? 'light' : 'subtle'}
+            leftSection={<IconFlask size={16} aria-hidden="true" />}
+            aria-current={testsOpen || (!hasCharts && pathname === '/') ? 'page' : undefined}
+            renderRoot={(props) => <Link {...props} to="/" search={(prev) => ({ ...runOnly(prev), view: 'tests' })} />}>
+            Tests
+          </Button>
+          {(hasFeatures || behaviorsOpen) && (
+            <Button variant={behaviorsOpen ? 'light' : 'subtle'} leftSection={<IconListSearch size={16} aria-hidden="true" />}
+              aria-current={behaviorsOpen ? 'page' : undefined}
+              renderRoot={(props) => <Link {...props} to="/behaviors" search={(prev) => runOnly(prev)} />}>
+              Behaviors
+            </Button>
+          )}
+          {(hasCatalog || catalogOpen) && (
+            <Button variant={catalogOpen ? 'light' : 'subtle'} leftSection={<IconLayoutGrid size={16} aria-hidden="true" />}
+              aria-current={catalogOpen ? 'page' : undefined}
+              renderRoot={(props) => <Link {...props} to="/catalog" search={(prev) => runOnly(prev)} />}>
+              UI catalog
+            </Button>
+          )}
+        </Group>
+        <Box visibleFrom="xl" miw={0}>
           <SpecBreadcrumb />
         </Box>
       </Group>

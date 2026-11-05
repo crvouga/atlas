@@ -1,5 +1,5 @@
 import { SpecLogo } from '../components/SpecLogo';
-import { IconAlertTriangle, IconVideo, IconX } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowRight, IconSearch, IconVideo, IconX } from '@tabler/icons-react';
 import {
   Accordion,
   Alert,
@@ -192,9 +192,10 @@ export function Explorer() {
     <Container size="xl" py="xl">
       <Box aria-label="Test explorer" component="article" miw={0}>
         <Box component="header" mb="lg">
-          <Title order={1} mb="sm">
+          <Title order={1} mb="xs">
             {projectTitle()}
           </Title>
+          <Text c="dimmed" mb="lg">Explore test outcomes, review recordings, and trace the evidence behind each result.</Text>
           {model && (model.tests.length > 0 || model.summary.runs > 0) && (
             <Tabs
               value={search.tab ?? 'tests'}
@@ -239,37 +240,34 @@ export function Explorer() {
             The server’s test history could not be read ({catalog.notice}). Showing what this page holds.
           </Alert>
         )}
-        {kinds.length > 0 && (
-          <Box aria-label="Published specs" component="section" mb="lg">
-            <Title order={2} mb="sm" c="dimmed">
-              Specs
-            </Title>
-            <List spacing="xs" listStyleType="none">
-              {kinds.map(({ kind, files }) => (
-                <List.Item key={kind.id}>
-                  <Anchor renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}>
-                    <Group component="span" display="inline-flex" gap="xs">
-                      <SpecLogo kind={kind} />
-                      <Text span inherit fw={600}>
-                        {kind.label}
-                      </Text>
-                      <Text span inherit>
-                        {files.length} {files.length === 1 ? kind.one : kind.many}
-                      </Text>
-                    </Group>
-                  </Anchor>
-                </List.Item>
-              ))}
-            </List>
-            <Anchor mt="xs" display="inline-block" size="sm" renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'health', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
-              Why do these counts differ from the Tests?
-            </Anchor>
-            {kinds.some(({ kind }) => kind.id === 'gherkin') && (
-              <Anchor ml="md" mt="xs" display="inline-block" size="sm" renderRoot={(props) => <Link {...props} to="/behaviors" search={{}} />}>
-                Behaviors: read what the project promises, then watch it
-              </Anchor>
-            )}
-          </Box>
+        {kinds.length > 0 && !search.tab && (
+          <Paper withBorder component="section" aria-label="Published specs" mb="lg">
+            <Stack gap="sm">
+              <Group justify="space-between" gap="sm">
+                <Title order={2}>Published specs</Title>
+                <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'health', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+                  Why do these counts differ from the Tests?
+                </Anchor>
+              </Group>
+              <Group gap="xs">
+                {kinds.map(({ kind, files }) => (
+                  <Button key={kind.id} variant="default" leftSection={<SpecLogo kind={kind} />}
+                    rightSection={<Badge color="gray">{files.length}</Badge>}
+                    renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}>
+                    {kind.label}
+                  </Button>
+                ))}
+              </Group>
+              {kinds.some(({ kind }) => kind.id === 'gherkin') && (
+                <Anchor renderRoot={(props) => <Link {...props} to="/behaviors" search={{}} />}>
+                  <Group component="span" display="inline-flex" gap="xs">
+                    Behaviors: read what the project promises, then watch it
+                    <IconArrowRight size={16} aria-hidden="true" />
+                  </Group>
+                </Anchor>
+              )}
+            </Stack>
+          </Paper>
         )}
         {!model && !evidence.unavailable && (
           <Text role="status" component="div" c="dimmed">
@@ -593,12 +591,15 @@ function Toolbar({
     ...(search.inRun ? [{ label: `Run: ${runName(search.inRun)}`, clear: { inRun: undefined } }] : [])
   ];
   return (
-    <Box aria-label="Find tests" component="section" mb="xl">
+    <Paper withBorder aria-label="Find tests" component="section" mb="lg">
+      <Title order={2} mb="sm">Find tests</Title>
       <Flex gap="sm" align="flex-end" wrap="wrap" mb="md">
         <TextInput
           flex={1}
           miw={{ base: '100%', sm: '15rem' }}
           type="search"
+          label="Search tests"
+          leftSection={<IconSearch size={16} aria-hidden="true" />}
           aria-label="Search tests"
           placeholder='Search titles, specs, tags… or filter: status:failed has:video "exact phrase"'
           value={draft}
@@ -607,7 +608,7 @@ function Toolbar({
             onSearch(event.target.value.trim());
           }}
         />
-        <Box component="label">
+        <Box component="label" flex={{ base: 1, sm: undefined }}>
           <Text span inherit>
             Group by
           </Text>
@@ -623,7 +624,7 @@ function Toolbar({
             ))}
           </NativeSelect>
         </Box>
-        <Box component="label">
+        <Box component="label" flex={{ base: 1, sm: undefined }}>
           <Text span inherit>
             Sort
           </Text>
@@ -823,7 +824,7 @@ function Toolbar({
       </Flex>
       <SearchNotes issues={listing.parsed.issues} semantic={listing.semantic} />
       <ReleaseReading />
-    </Box>
+    </Paper>
   );
 }
 /**
@@ -871,9 +872,12 @@ function TestList({
   const setAll = (open: boolean) => setOverrides(new Map(groups.map((group) => [`${by}|${group.key}`, open])));
   if (!tests.length)
     return (
-      <Text role="status" component="div" c="dimmed">
-        {total ? 'No test matches these filters.' : 'No tests recorded yet.'}
-      </Text>
+      <Paper withBorder role="status">
+        <Stack gap="xs" align="flex-start">
+          <Title order={2}>{total ? 'No test matches these filters.' : 'No tests recorded yet.'}</Title>
+          <Text c="dimmed">{total ? 'Try a broader search or clear the filters above to return to the full test list.' : 'Published test results will appear here with their outcomes and recorded evidence.'}</Text>
+        </Stack>
+      </Paper>
     );
   let parent: string | null = null;
   return (

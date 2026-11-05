@@ -5,7 +5,7 @@ import { act } from 'react';
 
 import { createNode } from '../../server/tests/node-compat';
 import { setFinderOpen } from '../src/find/open';
-import { memoryStore, openAtlas, publishRun, step, type Atlas } from './atlas';
+import { memoryStore, openAtlas, publishRun, SPECS, step, type Atlas } from './atlas';
 
 class FinderResizeObserver {
   observe() {}
@@ -529,4 +529,21 @@ test('every supported spec has a bundled SVG mark and retains a named navigation
   await atlas.click('nav[aria-label="Project specs"] a', 'Quint');
   await atlas.until(() => atlas!.router.state.location.pathname === '/specs/quint', 'the Quint route');
   expect(document.querySelector('button[aria-label="Spec type"] img[data-spec-logo="quint"]')).not.toBeNull();
+});
+
+
+test('published specs stay compact and only accompany the tests view, leaving run review focused', async () => {
+  const localStore = memoryStore();
+  await publish(localStore);
+  atlas = await openAtlas({ at: '/', specs: SPECS, deps: { localStore } });
+  await atlas.until(() => shows('Refund a payment'), 'the tests');
+  const specs = atlas.host.querySelector('section[aria-label="Published specs"]')!;
+  expect(specs.querySelectorAll('a')).toHaveLength(4); // two notations, health and behavior review
+  expect(specs.querySelector('ul')).toBeNull();
+  expect(atlas.host.querySelector('label[for="' + atlas.host.querySelector('input[aria-label="Search tests"]')!.id + '"]')?.textContent).toBe('Search tests');
+  await atlas.go('/?tab=runs');
+  await atlas.until(() => atlas!.router.state.location.search.tab === 'runs', 'run review');
+  expect(atlas.host.querySelector('section[aria-label="Published specs"]')).toBeNull();
+  await atlas.go('/?tab=health');
+  expect(atlas.host.querySelector('section[aria-label="Published specs"]')).toBeNull();
 });

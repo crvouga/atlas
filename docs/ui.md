@@ -554,6 +554,16 @@ The hash routes (`/`, `/chart/$chartId`, `/specs/$kind`), query contracts, proje
 report APIs and data adapters remain the migration boundary. `/admin` still serves an independent document:
 it lazily bundles the shared React settings entry once, so API-only servers do not need a prebuilt viewer.
 
+## Storybook review loop
+
+Storybook renders the real viewer with deterministic report adapters and the shared `AtlasThemeProvider`.
+The screen/state inventory and fixture notes live in `packages/visualizer/stories/README.md`.
+Review desktop and narrow layouts, keyboard navigation, loading and unavailable evidence before assigning a score.
+For each UI improvement round, record the council members' votes, five scores (clarity, consistency,
+accessibility, responsiveness and task completion), screenshots and unresolved findings in the pull request.
+An 8/10 average requires no unresolved critical usability or accessibility blockers; it is a review judgment,
+not a certification or a claim that every data combination was tested.
+
 ## Checks
 
 Run `bunx tsc --noEmit -p packages/visualizer`,
