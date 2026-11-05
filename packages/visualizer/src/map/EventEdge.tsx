@@ -110,7 +110,7 @@ export const EventEdge = memo(function EventEdge({ data, id }: EdgeProps<EventEd
           data-highlight={step !== null}
           data-dimmed={dimmed}
           style={{ transform: `translate(${placed.label.x}px, ${placed.label.y}px)`, width: placed.label.width }}
-          aria-label={`${KIND_LABEL[t.kind]}: ${t.event}. ${STATUS_LABEL[t.status]}.${step !== null ? ` Step ${step} of the journey.` : ''}`}
+          aria-label={`${step !== null ? `${step} ` : ''}${t.event}. ${KIND_LABEL[t.kind]}. ${STATUS_LABEL[t.status]}.${step !== null ? ` Step ${step} of the journey.` : ''}`}
           title={t.event}
         >
           {step !== null && (

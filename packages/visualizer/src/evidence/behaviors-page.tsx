@@ -9,7 +9,7 @@
  * for the session, so leaving the workspace gives the list back as it was, with focus on the behavior that was open.
  */
 import { Accordion, Alert, Anchor, Badge, Box, Button, Container, Grid, Group, NavLink, Paper, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
-import { IconArrowLeft, IconArrowsMaximize, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { IconArrowLeft, IconArrowsMaximize, IconChevronLeft, IconChevronRight, IconBook, IconPlayerPlay, IconSearch } from '@tabler/icons-react';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -252,6 +252,7 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
         </Box>
         <TextInput
           type="search"
+          label="Search behaviors"
           aria-label="Search behaviors"
           placeholder='Search behaviors, steps, tags… or filter: status:failed has:video domain: "exact phrase"'
           value={draft}
@@ -272,7 +273,7 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
         </Group>
         <SearchNotes issues={listing.found.parsed.issues} semantic={listing.found.status} />
         <CoverageFilter listing={listing} coverage={search.coverage} />
-        <ApplicabilityControls state={applicability} stale={index.entries.filter((entry) => needsAttention(entry.assessment)).length} total={index.entries.length} />
+        <ApplicabilityControls compact state={applicability} stale={index.entries.filter((entry) => needsAttention(entry.assessment)).length} total={index.entries.length} />
         <Disclosure unread={index.unread} features={index.features} unreadable={index.unreadable} pending={pending} error={filesError} />
         {selected && (
           <Group gap="sm" wrap="wrap" role="group" aria-label="Selected behavior">
@@ -314,7 +315,7 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
                     <Text component="div" c="dimmed">
                       {whereIs(selected)}
                       {' · '}
-                      <Anchor renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: 'gherkin' }} search={{ spec: selected.file, check: selected.behavior.slot?.id }} />}>Open the feature</Anchor>
+                      <Anchor underline="always" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: 'gherkin' }} search={{ spec: selected.file, check: selected.behavior.slot?.id }} />}>Open the feature</Anchor>
                     </Text>
                     <BehaviorPanel key={selected.id} behavior={selected.behavior} applicability={selected.assessment} release={applicability.release} inspect={<Inspect entry={selected} />} />
                   </Stack>
@@ -324,9 +325,28 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
                   {pending ? 'Reading features to find that behavior…' : 'That behavior is not in the project now. It may have been renamed or removed from its feature.'}
                 </Alert>
               ) : (
-                <Text component="div" c="dimmed">
-                  Select a behavior to read it and watch its recording.
-                </Text>
+                <Paper component="section" aria-label="Choose a behavior" withBorder>
+                  <Stack gap="lg">
+                    <Box>
+                      <Title order={2} mb="xs">Explore a behavior</Title>
+                      <Text c="dimmed">Select a behavior to read it and watch its recording.</Text>
+                    </Box>
+                    <Stack gap="md">
+                      <Group wrap="nowrap" align="flex-start">
+                        <IconBook aria-hidden="true" size={20} />
+                        <Box><Text fw={600}>Read the promise</Text><Text c="dimmed">Follow the steps that describe what should happen.</Text></Box>
+                      </Group>
+                      <Group wrap="nowrap" align="flex-start">
+                        <IconPlayerPlay aria-hidden="true" size={20} />
+                        <Box><Text fw={600}>Watch the evidence</Text><Text c="dimmed">Play a recorded run when one is available. Missing recordings stay explicit.</Text></Box>
+                      </Group>
+                      <Group wrap="nowrap" align="flex-start">
+                        <IconSearch aria-hidden="true" size={20} />
+                        <Box><Text fw={600}>Inspect the record</Text><Text c="dimmed">Check outcomes, environments and the sources behind them.</Text></Box>
+                      </Group>
+                    </Stack>
+                  </Stack>
+                </Paper>
               )}
             </Grid.Col>
           </Grid>

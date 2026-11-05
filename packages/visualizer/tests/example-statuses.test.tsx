@@ -37,7 +37,7 @@ test('status examples are browsable in Tests, Runs and Gherkin behavior coverage
   await open('/catalog', true);
   await atlas!.sees('Example: Pending capture');
   expect(atlas!.requests.some(request => request.startsWith('/tests?'))).toBe(false);
-  await atlas!.click('button', 'Spec type');
+  await atlas!.click('button', 'Explore');
   await atlas!.until(() => !!atlas!.find('[role="menuitem"]', /^ Tests$/), 'Tests menu item');
   await atlas!.click('[role="menuitem"]', /^ Tests$/);
   await atlas!.until(() => atlas!.router.state.location.pathname === '/' && atlas!.router.state.location.search.view === 'tests', 'Tests address');

@@ -48,12 +48,12 @@ test('the single project picker lists available projects and spec menus close on
   const picker = atlas.host.querySelector<HTMLSelectElement>('select[aria-label="Project"]')!;
   expect([...picker.options].map((option) => option.text)).toEqual(['Default', 'Shop']);
   expect(picker.disabled).toBe(false);
-  await atlas.click('button', 'Spec type');
-  expect(atlas.find('button', 'Spec type')!.getAttribute('aria-expanded')).toBe('true');
+  await atlas.click('button', 'Explore');
+  expect(atlas.find('button', 'Explore')!.getAttribute('aria-expanded')).toBe('true');
   await act(async () => {
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
   });
-  expect(atlas.find('button', 'Spec type')!.getAttribute('aria-expanded')).toBe('false');
+  expect(atlas.find('button', 'Explore')!.getAttribute('aria-expanded')).toBe('false');
 });
 
 test('opening Sources removes its parent popover and restores focus to View options after closing the drawer', async () => {
@@ -94,4 +94,22 @@ test('the explorer is one header, the open index of places and one plate', async
   expect(document.querySelectorAll('header').length).toBe(1);
   expect(document.querySelectorAll('aside nav, nav[aria-label="Atlas"], nav[aria-label="Product"]').length).toBe(0);
   expect(atlas.text()).not.toContain('A living map of your product');
+});
+
+
+test('desktop review destinations link directly to tests and behaviors while retaining the selected run', async () => {
+  atlas = await openAtlas({ at: '/specs/gherkin?run=review-run', deps: {}, specs: SPECS });
+  await atlas.until(() => [...atlas!.host.querySelectorAll('nav[aria-label="Review destinations"] a')].some((link) => link.textContent === 'Behaviors'), 'review destinations');
+  const nav = atlas.host.querySelector('nav[aria-label="Review destinations"]')!;
+  expect(nav).not.toBeNull();
+  const tests = [...nav.querySelectorAll('a')].find((link) => link.textContent?.includes('Tests'))!;
+  const behaviors = [...nav.querySelectorAll('a')].find((link) => link.textContent?.includes('Behaviors'))!;
+  expect(tests.getAttribute('href')).toContain('run=review-run');
+  expect(tests.getAttribute('href')).toContain('view=tests');
+  expect(behaviors.getAttribute('href')).toContain('/behaviors');
+  expect(behaviors.getAttribute('href')).toContain('run=review-run');
+  await act(async () => behaviors.click());
+  await atlas.until(() => atlas!.router.state.location.pathname === '/behaviors', 'the behaviors destination');
+  expect(behaviors.getAttribute('aria-current')).toBe('page');
+  expect(atlas.host.querySelector('button[aria-label="Toggle navigation"]')).toBeNull();
 });

@@ -1,0 +1,52 @@
+{
+  "council": {
+    "round": 2,
+    "score": 8.0,
+    "dimensions": {
+      "clarity": 8,
+      "consistency": 8.5,
+      "accessibility": 8,
+      "responsiveness": 7.5,
+      "taskCompletion": 8
+    }
+  },
+  "storybook": {
+    "stories": 80,
+    "passed": 80,
+    "failed": 0,
+    "checks": [
+      "built static artifact",
+      "real viewer rendering",
+      "interaction plays",
+      "named mobile viewports",
+      "image decoding",
+      "video metadata",
+      "whole-document axe serious and critical violations, including portals"
+    ]
+  },
+  "repositoryTests": {
+    "passed": 1641,
+    "skipped": 13,
+    "failed": 0
+  },
+  "viewerDomTests": {
+    "passed": 329,
+    "failed": 0
+  },
+  "documentationTests": {
+    "passed": 118,
+    "failed": 0
+  },
+  "otherChecks": [
+    "Storybook typecheck and inventory",
+    "package build",
+    "client build",
+    "Bun and Node consumer smoke",
+    "workspace and UI architecture checks"
+  ],
+  "limitations": [
+    "Finite named product branches, not all arbitrary data/filter combinations",
+    "Automated accessibility checks and sampled keyboard review are not certification",
+    "Mobile filter density remains a nonblocking follow-up"
+  ]
+}

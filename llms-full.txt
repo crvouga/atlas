@@ -5464,7 +5464,8 @@ results section and moves keyboard focus there. Keep scenario selection,
 filters, traces, decision tables and model declaration links working alongside the source.
 
 `ui/highlight.ts` owns the one lazy Shiki adapter. It imports only the supported grammars and caches the
-engine. The shared source composition installs that adapter when source is displayed; the Mantine theme
+engine. The source code background is white in the central theme so GitHub syntax colors, including comments, retain AA contrast.
+The shared source composition installs that adapter when source is displayed; the Mantine theme
 and component defaults still live only in `ui/theme.tsx`. Quint/Alloy grammar sources and licenses live in
 [`ui/grammars/README.md`](../packages/visualizer/src/ui/grammars/README.md). Unknown formats remain plain
 text, and parse failures must leave the source visible. Syntax highlighting never means a spec passed.
@@ -5508,7 +5509,7 @@ when Watch is on screen.
 
 ## Behaviors across the project
 
-`/behaviors` (`evidence/behaviors-page.tsx`, **Behaviors** in the spec-type menu) lists every behavior of every Gherkin feature in one
+`/behaviors` (`evidence/behaviors-page.tsx`, **Behaviors** in the header navigation or exploration menu) lists every behavior of every Gherkin feature in one
 place, so the question "what does this product promise?" needs no knowledge of which file holds the answer. It adds no source of
 truth: `evidence/behavior-index.ts` reads each feature through the same `featureBehaviors` the feature page uses, so a behavior has the
 same coverage state, revisions and recording in both.
@@ -5563,7 +5564,7 @@ How the pieces stay honest, and what a test in that file holds them to:
 
 - The four states (not executed, API only, failed with a recording, demonstrated) are told apart in words and never counted as one
   pass. A recording that was expected and not uploaded, or stored and then lost, is shown beside its green tests, never in place of them.
-- Behaviors, Runs and Videos and artifacts link to one another (the header of Behaviors and the Specs block of the explorer), and a
+- Behaviors, Runs and Videos and artifacts link to one another (the header of Behaviors, persistent review destinations and the explorer’s Published specs disclosure), and a
   result in the playlist or in a test's detail links back to the exact check of its feature. Read names the check and no run;
   Inspect names the run (`layer`), so it never falls back to the latest combined evidence.
 - The address holds the scope: the release (`release`, `releaseSha`, `releasePlatform`) and `evidence=stale` on Behaviors as on a feature,
@@ -5930,6 +5931,11 @@ The narrowly scoped exceptions are:
    height with its own overflow. This keeps scrolled evidence below the header and inside the drawer,
    including at narrow widths, without changing the shared Paper spacing or stacking order.
 
+7. **Selected navigation descriptions:** Mantine lowers opacity on active NavLink descriptions and selected Spotlight action
+   descriptions, which can drop their small text below WCAG AA contrast. These components have no description-opacity prop.
+   The central theme keeps description opacity at one through the supported Styles API, preserving Mantine's selected and
+   unselected semantic colors and making those labels readable without feature styles.
+
 ## Inventory and migration boundary
 
 | Area | Screens/interactions | Mantine composition |
@@ -5951,6 +5957,27 @@ The catalog keeps browsing first: Area, Profile and Sort controls complement the
 The hash routes (`/`, `/chart/$chartId`, `/specs/$kind`), query contracts, project scoping, streaming,
 report APIs and data adapters remain the migration boundary. `/admin` still serves an independent document:
 it lazily bundles the shared React settings entry once, so API-only servers do not need a prebuilt viewer.
+
+## Report browsing hierarchy
+
+The explorer uses neutral page surfaces, a descriptive header and direct desktop review destinations.
+The exploration menu remains available on mobile, and destination changes preserve the selected run.
+Published specs are a secondary disclosure on the Tests tab only; the sidebar keeps direct spec links.
+Find tests groups search, status and evidence filters with visible labels. Mobile insights start as a compact
+summary with a View insights action. The environment metric shows the largest environment and selected
+filters, with the full list disclosed below the metric grid so it cannot stretch every summary card.
+Behaviors and critiques use the full content width. Optional behavior release fields are disclosed until
+a release is named; evidence filters remain visible. The behavior selection panel explains Read, Watch and Inspect.
+
+## Storybook review loop
+
+Storybook renders the real viewer with deterministic report adapters and the shared `AtlasThemeProvider`.
+The screen/state inventory and fixture notes live in `packages/visualizer/stories/README.md`.
+Review desktop and narrow layouts, keyboard navigation, loading and unavailable evidence before assigning a score.
+For each UI improvement round, record the council members' votes, five scores (clarity, consistency,
+accessibility, responsiveness and task completion), screenshots and unresolved findings in the pull request.
+An 8/10 average requires no unresolved critical usability or accessibility blockers; it is a review judgment,
+not a certification or a claim that every data combination was tested.
 
 ## Checks
 

@@ -390,7 +390,7 @@ export function SettingsPage() {
                             This policy is saved in S3 (<Code>server/state.json</Code>) and the server reads it from there each time it collects.
                           </Text>
                         ) : (
-                          <Alert id="gc-empty" color="yellow" title="No policy has been saved yet">
+                          <Alert id="gc-empty" color="orange" title="No policy has been saved yet">
                             Garbage collection is off and nothing is deleted. The values below are suggestions; they take effect only after you
                             turn collection on and save.
                           </Alert>

@@ -213,7 +213,10 @@
     "build": "bun scripts/build-package.ts",
     "docs": "bun scripts/docs.ts",
     "smoke": "bun scripts/release/consumer-smoke.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "storybook:build": "bun node_modules/storybook/dist/bin/dispatcher.js build -o .atlas-workspace/storybook",
+    "storybook:check": "bunx tsc --noEmit -p packages/visualizer/stories && bun test packages/visualizer/stories/inventory.test.ts",
+    "storybook:test": "bun packages/visualizer/stories/smoke.ts"
   },
   "dependencies": {
     "@cucumber/gherkin": "^42.0.1",
@@ -260,6 +263,8 @@
     "@commitlint/config-conventional": "19.8.1",
     "@crvouga/mockingbird-service-s3": "4.0.0",
     "@informalsystems/quint": "^0.33.0",
+    "@storybook/addon-a11y": "10.6.5",
+    "@storybook/react-vite": "10.6.5",
     "@types/bun": "1.4.3",
     "@types/node": "^22.20.3",
     "@types/react": "19.2.7",
@@ -268,6 +273,7 @@
     "happy-dom": "20.11.1",
     "husky": "^9.1.7",
     "playwright": "1.60.0",
+    "storybook": "10.6.5",
     "typescript": "^5.9.3"
   },
   "trustedDependencies": [

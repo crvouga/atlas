@@ -28,7 +28,7 @@ export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNod
       data-status={state.status}
       data-selected={selected}
       data-dimmed={dimmed}
-      aria-label={`${state.name}. Screen, ${STATUS_LABEL[state.status]}.`}
+      aria-description={`${state.name}. Screen, ${STATUS_LABEL[state.status]}.`}
       aria-current={selected ? 'true' : undefined}
       renderRoot={(props) => (
         <Link
@@ -113,7 +113,7 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
       h="100%"
       className={`nopan nodrag ${styles.node}`}
       data-dimmed={dimmed}
-      aria-label={`${state.name}: open the ${chart.name} chart`}
+      aria-description={`${state.name}: open the ${chart.name} chart`}
       renderRoot={(props) => <Link {...props} to="/chart/$chartId" params={{ chartId: chart.id }} search={(prev) => ({ run: prev.run })} />}
     >
       {body}
@@ -135,7 +135,7 @@ export const ContextNode = memo(function ContextNode({ data }: NodeProps<Context
       p="sm"
       className={`nopan nodrag ${styles.node}`}
       data-dimmed={dimmed}
-      aria-label={`${state.name}, in ${chart?.name ?? 'another chart'}. ${STATUS_LABEL[state.status]}.`}
+      aria-description={`${state.name}, in ${chart?.name ?? 'another chart'}. ${STATUS_LABEL[state.status]}.`}
       renderRoot={(props) => (
         <Link
           {...props}
@@ -173,7 +173,7 @@ export const SummaryNode = memo(function SummaryNode({ data }: NodeProps<Summary
       className={`nopan nodrag ${styles.node}`}
       data-status={status}
       data-dimmed={dimmed}
-      aria-label={`${state.name}. ${places} ${noun}. ${STATUS_LABEL[status]}.`}
+      aria-description={`${state.name}. ${places} ${noun}. ${STATUS_LABEL[status]}.`}
       renderRoot={(props) => (
         <Link
           {...props}

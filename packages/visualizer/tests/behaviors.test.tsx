@@ -170,3 +170,21 @@ test('a link to a behavior that is not in the project says so instead of waiting
   await act(async () => [...document.querySelectorAll<HTMLElement>('a')].find((link) => link.textContent === 'Back to behaviors')!.click());
   await view.until(() => rows().length === 4, 'the list');
 });
+
+test('optional release comparison is disclosed while behavior selection and evidence filters remain available', async () => {
+  const view = await open();
+  await view.until(() => rows().length === 4, 'the behavior list');
+  const disclosure = view.find('button', 'Compare with a release (optional)');
+  expect(disclosure?.getAttribute('aria-expanded')).toBe('false');
+  expect(view.find('button', 'Stale or unverified')).toBeDefined();
+  expect(document.querySelector('[aria-label="Choose a behavior"]')).not.toBeNull();
+  await view.click('button', 'Compare with a release (optional)');
+  expect(view.find('button', 'Compare with a release (optional)')?.getAttribute('aria-expanded')).toBe('true');
+  expect(document.querySelector('input[id]')).not.toBeNull();
+});
+
+test('a named release opens its comparison fields so active scope is visible', async () => {
+  const view = await open('/behaviors?release=42');
+  await view.until(() => rows().length === 4, 'the behavior list');
+  expect(view.find('button', 'Release: 42')?.getAttribute('aria-expanded')).toBe('true');
+});

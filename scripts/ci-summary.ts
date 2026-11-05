@@ -19,6 +19,7 @@ export function renderSummary(needs: Record<string, JobResult>, env: Record<stri
   const rows = [
     ['commitlint', 'Commit conventions', 'PR commits and title'],
     ['check', 'Repository checks', 'Docs, schemas, types, tests, build and Bun/Node consumer smoke'],
+    ['storybook', 'Storybook', 'Built screen/state workshop, browser interactions and accessibility'],
     ['s3', 'S3 integration', 'Store and report flow against real SeaweedFS'],
     ['example', 'Browser examples', 'Both run and clients matrix jobs; recordings in artifacts'],
     ['image', 'Server image', 'Linux AMD64 build, Railway container smoke and eligible publication'],
@@ -37,7 +38,7 @@ export function renderSummary(needs: Record<string, JobResult>, env: Record<stri
     '| --- | --- | --- |',
     ...rows.map(([id, label, description]) => `| ${label} | ${code(needs[id!]?.result ?? 'unknown')} | ${description} |`),
     '',
-    `[Logs and timings](${run}) · [Artifacts: example recordings and Docker build record](${run}#artifacts)`,
+    `[Logs and timings](${run}) · [Artifacts: Storybook workshop, example recordings and Docker build record](${run}#artifacts)`,
     '',
   ];
   for (const [job, label, image] of [

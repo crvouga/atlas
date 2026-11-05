@@ -439,7 +439,7 @@ test('7. Behaviors, Runs and Videos reach one another, and a result opened for i
   expect(view.router.state.location.search).toMatchObject({ tab: 'artifacts' });
 
   // From the explorer back to the promises, and from a result under Inspect to the promise it was recorded for.
-  await view.click('a', /Behaviors: read what the project promises/);
+  await view.click('nav[aria-label="Review destinations"] a', 'Behaviors');
   await view.until(() => view.router.state.location.pathname === '/behaviors' && rows().length === 4, 'the behaviors from the explorer');
   const key = JSON.stringify([PATH, `${PATH} > Decline a card`]);
   const detail = await visit(`/?test=${encodeURIComponent(key)}`);

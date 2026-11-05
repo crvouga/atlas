@@ -240,12 +240,13 @@ function AgreementPanel({ list }: { list: PolishList }) {
                 {agreement.critics.map((critic) => {
                   const view = row.views.find((candidate) => candidate.critic === critic);
                   if (!view) return <Table.Td key={critic}><Text c="dimmed" fz="sm">Not judged at this picture</Text></Table.Td>;
+                  const scoreLabel = `${view.score === undefined ? 'No score' : `Score ${Math.round(view.score * 1000) / 1000}`}${view.percentile === undefined ? '' : `, ${Math.round(view.percentile)}th percentile`}`;
                   return (
                     <Table.Td key={critic}>
                       <Stack gap={2} align="flex-start">
                         <Badge variant="light" color={STANCE_COLOR[view.stance]}>{STANCE_WORDS[view.stance]}</Badge>
-                        <Anchor fz="sm" aria-label={`Open ${critic}’s critique of ${row.entry.title}, ${row.entry.profile.label}`} renderRoot={(props) => <Link {...props} to="/critiques" search={((prev: Record<string, unknown>) => ({ ...prev, critic, entry: row.entry.key })) as never} resetScroll={false} />}>
-                          {view.score === undefined ? 'No score' : `Score ${Math.round(view.score * 1000) / 1000}`}{view.percentile === undefined ? '' : `, ${Math.round(view.percentile)}th percentile`}
+                        <Anchor fz="sm" aria-label={`${scoreLabel}. Open ${critic}’s critique of ${row.entry.title}, ${row.entry.profile.label}`} renderRoot={(props) => <Link {...props} to="/critiques" search={((prev: Record<string, unknown>) => ({ ...prev, critic, entry: row.entry.key })) as never} resetScroll={false} />}>
+                          {scoreLabel}
                         </Anchor>
                       </Stack>
                     </Table.Td>

@@ -94,7 +94,7 @@ export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues }
           <Combobox.Footer><Text size="xs" c="dimmed">Up/Down to choose · Enter or Tab to add · Backspace to edit the last chip · Escape to close</Text></Combobox.Footer>
         </Combobox.Dropdown>
       </Combobox>
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+      <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="sm">
         <NativeSelect label="Area" value={chosen('area')} onChange={event => choose('area', event.currentTarget.value)} data={[{ value: '', label: 'All areas' }, ...catalog.facets.areas.map(facet => ({ value: facet.value, label: `${facet.label ?? facet.value} (${facet.count})` }))]} />
         <NativeSelect label="Profile" value={chosen('profile')} onChange={event => choose('profile', event.currentTarget.value)} data={[{ value: '', label: 'All profiles' }, ...catalog.profiles.map(profile => ({ value: profile.key, label: profile.label }))]} />
         <NativeSelect label="Sort by" value={chosen('sort') || 'relevance'} onChange={event => choose('sort', event.currentTarget.value)} data={Object.entries(CATALOG_SORTS).map(([value, label]) => ({ value, label }))} />

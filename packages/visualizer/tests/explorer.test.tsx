@@ -5,7 +5,7 @@ import { act } from 'react';
 
 import { createNode } from '../../server/tests/node-compat';
 import { setFinderOpen } from '../src/find/open';
-import { memoryStore, openAtlas, publishRun, step, type Atlas } from './atlas';
+import { memoryStore, openAtlas, publishRun, SPECS, step, type Atlas } from './atlas';
 
 class FinderResizeObserver {
   observe() {}
@@ -103,7 +103,8 @@ test('the project home is a test explorer: insights, groups by spec, search, sta
   expect(insights()).toContain('Tests4');
   expect(insights()).toContain('1 failed');
   expect(insights()).toContain('3 passed');
-  expect(document.querySelector('[aria-label="1 flaky tests"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="View flaky tests: 1"]')).not.toBeNull();
+  await atlas.click('button', 'Show all (2)');
   expect(insights()).toContain('Api3 tests · 1 failed · 2 passed');
   expect(insights()).toContain('Desktop web3 tests · 0 failed · 3 passed');
   expect(document.querySelector('[aria-label="2 runs"]')).not.toBeNull();
@@ -183,6 +184,12 @@ test('a link opens one test with its results per environment, statistics, trend 
   // Current result per environment.
   const current = [...detail()!.querySelectorAll('[aria-label="Current results"] tbody tr')].map((row) => row.textContent ?? '');
   expect(current).toHaveLength(2);
+  // Evidence tables remain reachable when a narrow viewport requires horizontal scrolling.
+  const scrollViewport = detail()!.querySelector<HTMLElement>('[aria-label="Current results"] [tabindex="0"]')!;
+  expect(scrollViewport).not.toBeNull();
+  scrollViewport.focus();
+  expect(document.activeElement).toBe(scrollViewport);
+  expect(document.querySelector('[role="dialog"] button[aria-label="Close panel"]')).not.toBeNull();
   expect(current.find((row) => row.includes('Api'))).toContain('Failed');
   expect(current.find((row) => row.includes('Desktop web'))).toContain('Passed');
   expect(detail()!.querySelector('[aria-label="Current results"] a[href="https://github.com/acme/app/actions/runs/2"]')).not.toBeNull();
@@ -271,11 +278,11 @@ test('runs show how many recordings they have, filter to those with video, and k
   const runRows = () => [...document.querySelectorAll<HTMLElement>('section[aria-label="Runs"] tbody tr')];
   const rowOf = (n: number) => runRows().find((row) => row.querySelector(`a[aria-label="Open run #${n}"]`))!;
   // Three distinct recordings from four references: the same bytes referenced twice are one recording.
-  expect(rowOf(1).textContent).toContain('3 videos');
+  expect(rowOf(1).textContent).toContain('Watch 3 recordings');
   expect(rowOf(1).textContent).toContain('4 references');
   expect(rowOf(1).querySelector('a[aria-label="Watch 3 recordings in run #1"]')).not.toBeNull();
   expect(rowOf(2).textContent).toContain('No video');
-  expect(rowOf(3).textContent).toContain('1 video');
+  expect(rowOf(3).textContent).toContain('Watch 1 recording');
   // A reference with no stored file is explained, and is not a recording to watch.
   expect(rowOf(4).textContent).toContain('1 video unavailable');
   expect(rowOf(4).textContent).toContain('never stored');
@@ -283,7 +290,7 @@ test('runs show how many recordings they have, filter to those with video, and k
 
   // The filter is a pressable button whose name says what it means and how many runs it matches.
   const filter = () => document.querySelector<HTMLButtonElement>('section[aria-label="Runs"] button[aria-label^="Has video"]')!;
-  expect(filter().getAttribute('aria-label')).toBe('Has video: 2 runs');
+  expect(filter().getAttribute('aria-label')).toBe('Has video 2 runs');
   expect(filter().getAttribute('aria-pressed')).toBe('false');
   await act(async () => filter().click());
   await atlas.until(() => runRows().length === 2, 'only the runs with a video');
@@ -298,7 +305,7 @@ test('runs show how many recordings they have, filter to those with video, and k
   const result = document.querySelector('section[aria-label="Run #3"] li[data-status]')!.textContent!;
   expect(result).toContain('1 video (step “Open the inbox”, try 1)');
   const detailFilter = document.querySelector<HTMLButtonElement>('section[aria-label="Run #3"] button[aria-label^="Has video"]')!;
-  expect(detailFilter.getAttribute('aria-label')).toBe('Has video: 1 result');
+  expect(detailFilter.getAttribute('aria-label')).toBe('Has video 1 result');
   expect(detailFilter.getAttribute('aria-pressed')).toBe('true');
 });
 
@@ -455,7 +462,7 @@ test('the left index lists domains and specs from the recorded tests and filters
   await atlas.click('nav[aria-label="Project specs"] a', 'support');
   await atlas.until(() => rows().length === 2 && shows('Escalate a ticket'), 'the tests of one domain');
   // The header names what this project is made of.
-  expect(document.querySelector('header button[aria-label="Spec type"]')?.textContent).toContain('Tests');
+  expect(document.querySelector('header button[aria-label="Explore"]')?.textContent).toContain('Explore');
 });
 
 test('the finder opens a recorded test in the explorer', async () => {
@@ -524,9 +531,51 @@ test('every supported spec has a bundled SVG mark and retains a named navigation
     expect(logo.getAttribute('src')).toEndWith('.svg');
     expect(logo.getAttribute('alt')).toBe('');
     expect(logo.getAttribute('aria-hidden')).toBe('true');
-    expect(link.textContent).toBe(label);
+    expect(link.textContent).toStartWith(label);
   }
   await atlas.click('nav[aria-label="Project specs"] a', 'Quint');
   await atlas.until(() => atlas!.router.state.location.pathname === '/specs/quint', 'the Quint route');
-  expect(document.querySelector('button[aria-label="Spec type"] img[data-spec-logo="quint"]')).not.toBeNull();
+  expect(document.querySelector('button[aria-label="Explore"] img[data-spec-logo="quint"]')).not.toBeNull();
+});
+
+
+test('published specs stay compact and only accompany the tests view, leaving run review focused', async () => {
+  const localStore = memoryStore();
+  await publish(localStore);
+  atlas = await openAtlas({ at: '/', specs: SPECS, deps: { localStore } });
+  await atlas.until(() => shows('Refund a payment'), 'the tests');
+  expect(atlas.find('button', /^ ?Published specs/)!.getAttribute('aria-expanded')).toBe('false');
+  await atlas.click('button', /^ ?Published specs/);
+  expect(atlas.find('button', /^ ?Published specs/)!.getAttribute('aria-expanded')).toBe('true');
+  const specs = atlas.host.querySelector('[aria-label="Published specs"]')!;
+  expect(specs.querySelectorAll('a')).toHaveLength(4); // two notations, health and behavior review
+  expect(specs.querySelector('ul')).toBeNull();
+  expect(atlas.host.querySelector('label[for="' + atlas.host.querySelector('input[aria-label="Search tests"]')!.id + '"]')?.textContent).toBe('Search tests');
+  await atlas.go('/?tab=runs');
+  await atlas.until(() => atlas!.router.state.location.search.tab === 'runs', 'run review');
+  expect(atlas.host.querySelector('[aria-label="Published specs"]')).toBeNull();
+  await atlas.go('/?tab=health');
+  expect(atlas.host.querySelector('[aria-label="Published specs"]')).toBeNull();
+});
+
+
+test('environment insights start bounded and keep a selected environment visible after collapsing', async () => {
+  const localStore = memoryStore();
+  for (const environment of ['android', 'ios', 'web', 'api']) {
+    await publishChecks(localStore, { producer: 'suite', environment, recordedAtMs: 100, sha: 'a'.repeat(40), checks: [{ id: 'sign-in', title: 'Sign in', status: 'passed' }] });
+  }
+  atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
+  await atlas.until(() => shows('Sign in'), 'the test');
+  const insights = () => atlas!.host.querySelector('section[aria-label="Insights"]')!;
+  expect(atlas.find('button', 'View insights')!.getAttribute('aria-expanded')).toBe('false');
+  await atlas.click('button', 'View insights');
+  expect(atlas.find('button', 'Hide insights')!.getAttribute('aria-expanded')).toBe('true');
+  expect(insights().querySelectorAll('button[title]')).toHaveLength(1);
+  await atlas.click('button', 'Show all (4)');
+  const details = atlas.host.querySelector('section[aria-label="All environment insights"]')!;
+  expect(details.querySelectorAll('button')).toHaveLength(4);
+  await act(async () => [...details.querySelectorAll('button')].find((button) => button.textContent?.startsWith('Web'))!.click());
+  await atlas.click('button', 'Show fewer');
+  expect(atlas.host.querySelector('section[aria-label="All environment insights"]')).toBeNull();
+  expect(insights().querySelector('button[title^="Web"]')?.getAttribute('aria-pressed')).toBe('true');
 });

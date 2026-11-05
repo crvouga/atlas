@@ -233,7 +233,7 @@ test('global palette shortcuts work from fields and buttons without stealing tex
   await act(async () => finderInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
   await atlas.until(() => !finder(), 'palette dismissed');
   expect(field.value).toBe('draft text');
-  const button = atlas.find('button', 'Spec type')!;
+  const button = atlas.find('button', 'Explore')!;
   await act(async () => { button.focus(); button.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })); });
   await atlas.until(() => !!finder(), 'slash shortcut from a button');
   field.remove();
