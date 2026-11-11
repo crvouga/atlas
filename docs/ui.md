@@ -602,10 +602,13 @@ release are all inside **Filters**, which shows how many of them are narrowing t
 - **List** (`layout=list` in the address) is the grouped list: one row a test under its spec, with the average, pass
   rate, runs and age in columns.
 - **Opening a result focuses it** in a wide panel. *Previous* and *Next* (and the Left and Right keys) step through the
-  results in the order and filters the list has now, without closing it. Its pictures and recordings come first, as a
-  **media carousel**: one at a time and as large as the panel allows, with arrows, a count and a strip of thumbnails.
-  Every slide stays in the page, so a step's *Recording m:ss* still seeks its recording. The outcome explanation, the
-  steps and the other files follow; where the test is written and which evidence is shown are stated last.
+  results in the order and filters the list has now, without closing it. Under a short heading (the title, the
+  outcome, and which environment's result is shown) the recording or picture is the center of the panel, as a
+  **media carousel**: one at a time and as large as the panel allows, with the thumbnails, the count and the arrows
+  under it. Every slide stays in the page, so a step's *Recording m:ss* still seeks its recording. What a recording
+  declares it shows stays directly above it. Below: where the result came from, the outcome explanation, the steps and
+  the other files; then **Results**, **Statistics**, **Reliability**, **Product latency** and **History** as tabs; and
+  last where the test is written and which evidence is shown. A link to a reliability scope arrives at its tab.
 
 Published specs and the slowest, flakiest and failing lists are secondary panels after the list.
 Behaviors is a two-pane review: the searchable list on the left and the selected behavior's Read, Watch and Inspect

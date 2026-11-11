@@ -4,7 +4,7 @@ import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { LayerHeader, LayerRow } from '@crvouga/atlas/reports/evidence-types';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
 import type { Annotation, Attachment, Attempt, Step } from '@crvouga/atlas/schema';
-import { Accordion, ActionIcon, Alert, Anchor, Badge, Box, Button, Center, Code, Divider, Group, Image, List, Paper, ScrollArea, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, UnstyledButton } from '@mantine/core';
+import { Accordion, ActionIcon, Alert, Anchor, Badge, Box, Button, Center, Code, Divider, Group, Image, List, Paper, ScrollArea, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, UnstyledButton, VisuallyHidden } from '@mantine/core';
 import {
   IconBrowser,
   IconChevronLeft,
@@ -388,28 +388,14 @@ function MediaCarousel({ items, layer }: { items: readonly { attachment: Attachm
         event.stopPropagation();
       }}
     >
-      {many && (
-        <Group justify="space-between" gap="xs" wrap="nowrap">
-          <Text size="sm" c="dimmed" role="status" aria-live="polite" truncate>
-            {current + 1} of {items.length} · {items[current]!.attachment.name}
-          </Text>
-          <ActionIcon.Group>
-            <ActionIcon variant="default" size="md" aria-label="Previous picture or recording" onClick={() => step(-1)}>
-              <IconChevronLeft size={16} aria-hidden="true" />
-            </ActionIcon>
-            <ActionIcon variant="default" size="md" aria-label="Next picture or recording" onClick={() => step(1)}>
-              <IconChevronRight size={16} aria-hidden="true" />
-            </ActionIcon>
-          </ActionIcon.Group>
-        </Group>
-      )}
       <Stack component="ul" gap="sm" p={0} m={0}>
         {items.map(({ attachment, index }, slide) => (
           <ArtifactCard key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} hidden={slide !== current} bare />
         ))}
       </Stack>
       {many && (
-        <ScrollArea type="auto" offsetScrollbars="x" scrollbarSize={6}>
+        <Group gap="sm" wrap="nowrap" align="center">
+          <ScrollArea flex={1} miw={0} type="auto" offsetScrollbars="x" scrollbarSize={6}>
           <Group gap={6} wrap="nowrap" role="group" aria-label="Choose a picture or recording">
             {items.map(({ attachment, index }, slide) => {
               const type = mediaType(attachment);
@@ -442,6 +428,19 @@ function MediaCarousel({ items, layer }: { items: readonly { attachment: Attachm
             })}
           </Group>
         </ScrollArea>
+          <Text size="xs" c="dimmed" role="status" aria-live="polite" flex="none" title={items[current]!.attachment.name}>
+            {current + 1} of {items.length}
+            <VisuallyHidden> · {items[current]!.attachment.name}</VisuallyHidden>
+          </Text>
+          <ActionIcon.Group>
+            <ActionIcon variant="default" size="md" aria-label="Previous picture or recording" onClick={() => step(-1)}>
+              <IconChevronLeft size={16} aria-hidden="true" />
+            </ActionIcon>
+            <ActionIcon variant="default" size="md" aria-label="Next picture or recording" onClick={() => step(1)}>
+              <IconChevronRight size={16} aria-hidden="true" />
+            </ActionIcon>
+          </ActionIcon.Group>
+        </Group>
       )}
     </Stack>
   );
@@ -628,7 +627,7 @@ function Tries({ attempts, layer }: { attempts: readonly Attempt[]; layer: strin
                 </Group>
                 {attempt.detail &&
                   (attempt.status === 'failed' ? (
-                    <Code block c="red.7">
+                    <Code block c="red.7" tabIndex={0}>
                       {attempt.detail}
                     </Code>
                   ) : (

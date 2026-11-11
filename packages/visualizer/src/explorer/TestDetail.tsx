@@ -145,11 +145,18 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
   const [rows, setRows] = useState(HISTORY_ROWS);
   // A link to a reliability scope opens on the figures it describes.
   const scoped = !!(search.relOpen || search.relEnv || search.relProducer || search.relBranch || search.relParam || search.relSince || search.relUntil || search.relRevision);
-  const [tab, setTab] = useState(scoped ? 'reliability' : 'evidence');
+  const [tab, setTab] = useState(scoped ? 'reliability' : 'results');
   // Opening another result (from the history or the executions) shows what it recorded.
   const shownLayer = useRef(layer);
+  const top = useRef<HTMLDivElement>(null);
+  const about = useRef<HTMLDivElement>(null);
+  // A link to a reliability scope arrives at its figures, which sit under the recording.
   useEffect(() => {
-    if (shownLayer.current !== layer) setTab('evidence');
+    if (scoped) about.current?.scrollIntoView?.({ block: 'start' });
+  }, []);
+  useEffect(() => {
+    // Its evidence is at the top of the panel, above these tabs.
+    if (shownLayer.current !== layer) top.current?.scrollIntoView?.({ block: 'start' });
     shownLayer.current = layer;
   }, [layer]);
   const entries = history.data?.history ?? [];
@@ -201,7 +208,7 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
     ['First seen', stats.firstSeenMs ? ago(stats.firstSeenMs, now) : '—']
   ];
   return (
-    <Stack aria-label={test.title} component="article" gap="lg">
+    <Stack aria-label={test.title} component="article" gap="lg" ref={top}>
       <Stack component="header" gap="xs">
         {test.spec && (
           <Group gap={6} c="dimmed" fz="xs">
@@ -244,33 +251,72 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
             </Anchor>
           </Group>
         )}
-        <Title order={2} size="h1">
-          {test.title}
-        </Title>
+        <Title order={2}>{test.title}</Title>
         <Flex gap="xs" align="center" wrap="wrap">
-          <Badge size="lg" color={statusColor(test.status)} data-status={test.status} leftSection={<StatusMark status={test.status} size={14} />}>
+          <Badge color={statusColor(test.status)} data-status={test.status} leftSection={<StatusMark status={test.status} size={12} />}>
             {statusWord(test.status)}
           </Badge>
-          <Text span c="dimmed">
+          <Text span size="xs" c="dimmed">
             worst current result of {plural(test.outcomes.length, 'source', 'sources')}
           </Text>
           {stats.flaky && (
-            <Text title={stats.flakyReason} span c="orange">
+            <Text title={stats.flakyReason} span size="xs" c="orange">
               Flaky: {stats.flakyReason}
             </Text>
           )}
-          <Badges test={test} />
         </Flex>
         {selected && slot && (
-          <Text component="p" m={0} role="status" fw={600} data-outcome-headline>
+          <Text component="p" m={0} role="status" size="xs" c="dimmed" data-outcome-headline>
             {outcomeHeadline(selected, slot).text}
           </Text>
         )}
       </Stack>
 
-      <Tabs value={tab} onChange={(value) => setTab(value ?? 'evidence')} keepMounted>
+      <Stack aria-label="Evidence" component="section" gap="sm">
+        <VisuallyHidden>
+          <Title order={3}>{layer ? 'What this run recorded' : 'What the current result carries'}</Title>
+        </VisuallyHidden>
+        {slot && (!layer || pinned.state === 'ready') ? (
+      <CheckDetail
+        slot={slot}
+        layerId={layer}
+        {...(pinned.state === 'ready' ? { pinned: pinned.entry, pin: true } : {})}
+        reads="steps"
+        headline={false}
+        mediaFirst
+        records={entries.map((entry) => ({
+          layer: entry.layer,
+          kind: entry.kind,
+          status: entry.status,
+          at: entry.at,
+          sha: entry.sha,
+          producer: entry.producer,
+          environment: entry.environment,
+          parameters: entry.parameters
+        }))}
+        {...(layer ? {} : { source, onSource: (next: string | null) => go({ source: next ?? undefined }) })}
+        select={(patch) => {
+          if (patch.view === 'recording') {
+            setRecordingLayer(patch.layer ?? undefined);
+            setRecording(true);
+            setMoment(null);
+          } else go({ layer: patch.layer ?? undefined });
+        }}
+      />
+        ) : layer ? (
+      <Text component="div" c="dimmed">
+        {pinned.state === 'missing' ? 'There is no evidence to show for that run.' : 'Reading the evidence of that run…'}
+      </Text>
+        ) : (
+      <Text component="div" c="dimmed">
+        The evidence of this result is not loaded in this page.
+      </Text>
+        )}
+      </Stack>
+
+      <Divider />
+      <Tabs ref={about} value={tab} onChange={(value) => setTab(value ?? 'results')} keepMounted>
         <Tabs.List aria-label="About this test">
-          <Tabs.Tab value="evidence">Evidence</Tabs.Tab>
           <Tabs.Tab value="results">Results</Tabs.Tab>
           <Tabs.Tab value="statistics">Statistics</Tabs.Tab>
           <Tabs.Tab value="reliability">Reliability</Tabs.Tab>
@@ -289,49 +335,6 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           </Tabs.Tab>
         </Tabs.List>
 
-        <Tabs.Panel value="evidence" pt="md">
-          <Stack aria-label="Evidence" component="section" gap="sm">
-            <VisuallyHidden>
-              <Title order={3}>{layer ? 'What this run recorded' : 'What the current result carries'}</Title>
-            </VisuallyHidden>
-        {slot && (!layer || pinned.state === 'ready') ? (
-          <CheckDetail
-            slot={slot}
-            layerId={layer}
-            {...(pinned.state === 'ready' ? { pinned: pinned.entry, pin: true } : {})}
-            reads="steps"
-            headline={false}
-            mediaFirst
-            records={entries.map((entry) => ({
-              layer: entry.layer,
-              kind: entry.kind,
-              status: entry.status,
-              at: entry.at,
-              sha: entry.sha,
-              producer: entry.producer,
-              environment: entry.environment,
-              parameters: entry.parameters
-            }))}
-            {...(layer ? {} : { source, onSource: (next: string | null) => go({ source: next ?? undefined }) })}
-            select={(patch) => {
-              if (patch.view === 'recording') {
-                setRecordingLayer(patch.layer ?? undefined);
-                setRecording(true);
-                setMoment(null);
-              } else go({ layer: patch.layer ?? undefined });
-            }}
-          />
-        ) : layer ? (
-          <Text component="div" c="dimmed">
-            {pinned.state === 'missing' ? 'There is no evidence to show for that run.' : 'Reading the evidence of that run…'}
-          </Text>
-        ) : (
-          <Text component="div" c="dimmed">
-            The evidence of this result is not loaded in this page.
-          </Text>
-        )}
-          </Stack>
-        </Tabs.Panel>
 
         <Tabs.Panel value="results" pt="md">
           <Stack gap="lg">
@@ -583,6 +586,7 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
         </Tabs.Panel>
       </Tabs>
       <Divider />
+      <Badges test={test} />
       <Scope pinned={pinned} slot={slot} />
       <Group gap="sm" c="dimmed" fz="xs">
           {test.spec && (

@@ -369,6 +369,26 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
         }}
       />
   );
+  const origin = (
+      <Group gap="sm" align="center" wrap="wrap" c="dimmed" fz="sm">
+        <Group gap={6} wrap="nowrap">
+          <StatusMark status={chosen.row.status} size={14} />
+          <Text data-status={chosen.row.status} span inherit fw={600} c="var(--mantine-color-text)">
+            {statusWord(chosen.row.status)}
+          </Text>
+        </Group>
+        {chosen.row.durationMs !== null && (
+          <>
+            <Divider orientation="vertical" />
+            <Text span inherit>
+              {duration(chosen.row.durationMs)}
+            </Text>
+          </>
+        )}
+        <Divider orientation="vertical" />
+        <Origin layer={chosen.layer} backends={backends} now={now} />
+      </Group>
+  );
   const carried = <ResultEvidence layer={chosen.layer} row={chosen.row} />;
   return (
     <Stack gap="md" miw={0}>
@@ -390,25 +410,9 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
           ))}
         </Group>
       )}
-      <Group gap="sm" align="center" wrap="wrap" c="dimmed" fz="sm">
-        <Group gap={6} wrap="nowrap">
-          <StatusMark status={chosen.row.status} size={14} />
-          <Text data-status={chosen.row.status} span inherit fw={600} c="var(--mantine-color-text)">
-            {statusWord(chosen.row.status)}
-          </Text>
-        </Group>
-        {chosen.row.durationMs !== null && (
-          <>
-            <Divider orientation="vertical" />
-            <Text span inherit>
-              {duration(chosen.row.durationMs)}
-            </Text>
-          </>
-        )}
-        <Divider orientation="vertical" />
-        <Origin layer={chosen.layer} backends={backends} now={now} />
-      </Group>
+      {!mediaFirst && origin}
       {mediaFirst && carried}
+      {mediaFirst && origin}
       {mediaFirst && summary}
       {(moments > 0 || chosen.layer.runUrl) && (
         <Group gap="xs" align="center" wrap="wrap">
@@ -448,7 +452,7 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
         </Alert>
       )}
       {failure && (
-        <Code block c="red.7">
+        <Code block c="red.7" tabIndex={0}>
           {failure}
         </Code>
       )}
