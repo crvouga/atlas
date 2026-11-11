@@ -1,10 +1,15 @@
 import type { Meta } from '@storybook/react-vite';
+import { userEvent, within } from 'storybook/test';
 import type { Screen } from './fixture';
 import { MOBILE, RELEASE, REVIEW_FEATURE, pick, screen, tests, type ScreenStory } from './support';
 const meta = { ...screen, title: 'Tests/Explorer' } satisfies Meta<typeof Screen>;
 export default meta;
 type Story = ScreenStory;
 export const Tests: Story = {};
+export const ListLayout: Story = { args: { at: tests({ layout: 'list' }) } };
+export const ListUngrouped: Story = { args: { at: tests({ layout: 'list', group: 'none' }) } };
+export const FiltersOpen: Story = { args: { at: tests({ env: 'desktop-web' }) } };
+export const InsightsOpen: Story = { play: async ({ canvasElement }) => { await userEvent.click(await within(canvasElement).findByRole('button', { name: 'View insights' })); } };
 export const GroupedByDomain: Story = { args: { at: tests({ group: 'domain' }) } };
 export const GroupedByEnvironment: Story = { args: { at: tests({ group: 'environment' }) } };
 export const GroupedByStatus: Story = { args: { at: tests({ group: 'status' }) } };

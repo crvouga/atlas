@@ -266,24 +266,7 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
             {outcomeHeadline(selected, slot).text}
           </Text>
         )}
-        <Group gap="sm" c="dimmed" fz="xs">
-          {test.spec && (
-            <>
-              <Text span inherit ff="monospace">
-                {test.spec!.path}
-              </Text>
-              <Divider orientation="vertical" visibleFrom="xs" />
-            </>
-          )}
-          <Text span inherit ff="monospace" title="Check id">
-            {test.id}
-          </Text>
-          {test.spec && <Divider orientation="vertical" visibleFrom="xs" />}
-          <ReadPromise specPath={test.spec?.path ?? null} check={test.id} />
-        </Group>
       </Stack>
-
-      <Scope pinned={pinned} slot={slot} />
 
       <Tabs value={tab} onChange={(value) => setTab(value ?? 'evidence')} keepMounted>
         <Tabs.List aria-label="About this test">
@@ -308,7 +291,9 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
 
         <Tabs.Panel value="evidence" pt="md">
           <Stack aria-label="Evidence" component="section" gap="sm">
-            <Title order={3}>{layer ? 'What this run recorded' : 'What the current result carries'}</Title>
+            <VisuallyHidden>
+              <Title order={3}>{layer ? 'What this run recorded' : 'What the current result carries'}</Title>
+            </VisuallyHidden>
         {slot && (!layer || pinned.state === 'ready') ? (
           <CheckDetail
             slot={slot}
@@ -316,6 +301,7 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
             {...(pinned.state === 'ready' ? { pinned: pinned.entry, pin: true } : {})}
             reads="steps"
             headline={false}
+            mediaFirst
             records={entries.map((entry) => ({
               layer: entry.layer,
               kind: entry.kind,
@@ -596,6 +582,23 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
           </Stack>
         </Tabs.Panel>
       </Tabs>
+      <Divider />
+      <Scope pinned={pinned} slot={slot} />
+      <Group gap="sm" c="dimmed" fz="xs">
+          {test.spec && (
+            <>
+              <Text span inherit ff="monospace">
+                {test.spec!.path}
+              </Text>
+              <Divider orientation="vertical" visibleFrom="xs" />
+            </>
+          )}
+          <Text span inherit ff="monospace" title="Check id">
+            {test.id}
+          </Text>
+          {test.spec && <Divider orientation="vertical" visibleFrom="xs" />}
+          <ReadPromise specPath={test.spec?.path ?? null} check={test.id} />
+        </Group>
 
       <Divider />
       <Group justify="center">

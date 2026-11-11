@@ -2,32 +2,43 @@ import { SpecLogo } from '../components/SpecLogo';
 import {
   IconAdjustmentsHorizontal,
   IconAlertTriangle,
+  IconApi,
   IconArrowRight,
   IconChevronDown,
+  IconChevronLeft,
   IconChevronRight,
   IconFilterOff,
   IconFlask,
   IconInbox,
+  IconLayoutGrid,
+  IconList,
+  IconPhoto,
+  IconPlayerPlayFilled,
   IconSearch,
   IconVideo,
+  IconVideoOff,
   IconX
 } from '@tabler/icons-react';
 import {
   Accordion,
   Alert,
   Anchor,
+  AspectRatio,
   Badge,
   Box,
   Button,
   Card,
+  Center,
   Divider,
   Drawer,
   Flex,
   Group,
+  Image,
   List,
   MultiSelect,
   NativeSelect,
   NavLink,
+  SegmentedControl,
   SimpleGrid,
   Skeleton,
   Stack,
@@ -41,10 +52,10 @@ import {
 /**
  * @module Test explorer
  *
- * The home of a project without statecharts: every test the report holds, found by searching and filtering, grouped
- * by spec (or domain, environment, status, producer), with what was recorded about each at a glance: where it ran and
- * how it went there, how long it takes, how often it passes, how many runs it was in. Above the list, the report in
- * numbers; beside it, the open test; in a second tab, the CI runs that produced the results.
+ * The home of a project without statecharts: every test the report holds, as a grid of cards to look through or a list
+ * grouped by spec (or domain, environment, status, producer), found by searching and filtering. Opening a test focuses
+ * it beside the list, its pictures and recordings first, with Previous and Next to step through the results. The
+ * report in numbers is one line above the list; in a second tab, the CI runs that produced the results.
  */
 import type { CheckSlot } from '@crvouga/atlas/reports/evidence-view';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
@@ -84,6 +95,8 @@ import { RunsView } from './RunsView';
 import { SearchNotes, TypedFilters } from './search-notes';
 import { EXPLORER_SORTS, joined, narrowed, queryOf, sortOf, TEST_GROUPS, toggled, values, type ExplorerSearch, type ExplorerSort, type TestGroup } from './search';
 import { TestDetail } from './TestDetail';
+import { clipHints, playableVideo, recordingState } from './playlist-entries';
+import { attachmentSource } from '../evidence/artifacts';
 /** Groups start closed when there are more of them than this, unless the list is short. */
 const OPEN_GROUPS = 40;
 const OPEN_TESTS = 300;
@@ -240,6 +253,13 @@ export function Explorer() {
   const model = catalog.model;
   const selected = search.test ? (model?.byKey.get(search.test) ?? null) : null;
   const empty = model !== null && model.tests.length === 0;
+  // The opened result's place in the list as it is filtered and ordered now: the carousel steps through that list.
+  const order = listing?.shown ?? [];
+  const position = selected ? order.findIndex((test) => test.key === selected.key) : -1;
+  const stepTo = (by: number) => {
+    const next = order[position + by];
+    if (position >= 0 && next) go({ test: next.key, layer: undefined, source: undefined }, { replace: true });
+  };
   const split = !!search.test && search.tab !== 'runs' && search.tab !== 'artifacts' && search.tab !== 'collections' && search.tab !== 'compare' && search.tab !== 'health';
   return (
     <>
@@ -380,8 +400,31 @@ export function Explorer() {
           </Accordion>
         )}
       </Stack>
-      <Drawer opened={split} onClose={() => go({ test: undefined, layer: undefined })} title="Test detail" size="64rem">
-        <Box aria-label="Test detail" component="aside">
+      <Drawer opened={split} onClose={() => go({ test: undefined, layer: undefined })} title="Test detail" size="min(100vw, 76rem)">
+        <Box
+          aria-label="Test detail"
+          component="aside"
+          onKeyDown={(event) => {
+            // Left and Right step through the results, unless a player, a slider, a field or the media carousel has the keys.
+            const target = event.target as HTMLElement;
+            if (event.altKey || event.metaKey || event.ctrlKey || ['VIDEO', 'AUDIO', 'INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.getAttribute('role') === 'slider' || target.getAttribute('role') === 'tab') return;
+            if (event.key === 'ArrowLeft') stepTo(-1);
+            else if (event.key === 'ArrowRight') stepTo(1);
+          }}
+        >
+          {position >= 0 && order.length > 1 && (
+            <Group component="nav" aria-label="Results" justify="space-between" gap="xs" wrap="nowrap" mb="md">
+              <Button variant="default" size="compact-sm" disabled={position === 0} leftSection={<IconChevronLeft size={16} aria-hidden="true" />} onClick={() => stepTo(-1)}>
+                Previous
+              </Button>
+              <Text size="sm" c="dimmed" role="status" aria-live="polite">
+                {position + 1} of {order.length}
+              </Text>
+              <Button variant="default" size="compact-sm" disabled={position === order.length - 1} rightSection={<IconChevronRight size={16} aria-hidden="true" />} onClick={() => stepTo(1)}>
+                Next
+              </Button>
+            </Group>
+          )}
           {selected ? (
             <TestDetail test={selected} slot={slots.get(selected.key)} />
           ) : model ? (
@@ -472,18 +515,23 @@ function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: re
     );
   return (
     <Box component="section" aria-label="Insights">
-      <Card hiddenFrom="sm" padding="md">
+      <Card padding="sm" px="md">
         <Group justify="space-between" gap="xs" wrap="nowrap">
           <Stack gap={2} miw={0} flex={1}>
-            <Text fw={600}>{plural(scope.length, 'test', 'tests')}</Text>
-            <Text size="xs" c="dimmed">{counts.failed} failed · {counts.passed} passed{counts.running ? ` · ${counts.running} running` : ''}{counts['not-run'] ? ` · ${counts['not-run']} not run` : ''}</Text>
+            <Text fw={600} hiddenFrom="sm">{plural(scope.length, 'test', 'tests')}</Text>
+            <Text size="xs" c="dimmed" hiddenFrom="sm">{counts.failed} failed · {counts.passed} passed{counts.running ? ` · ${counts.running} running` : ''}{counts['not-run'] ? ` · ${counts['not-run']} not run` : ''}</Text>
+            <Group gap="md" wrap="nowrap" visibleFrom="sm">
+              <Text size="sm" fw={600} flex="none">{plural(scope.length, 'test', 'tests')}</Text>
+              <Box w={160} flex="none"><Meter counts={counts} /></Box>
+              <Text size="sm" c="dimmed" truncate>{counts.failed} failed · {counts.passed} passed{counts.running ? ` · ${counts.running} running` : ''}{counts['not-run'] ? ` · ${counts['not-run']} not run` : ''}{flaky ? ` · ${flaky} flaky` : ''}</Text>
+            </Group>
           </Stack>
           <Button variant="subtle" size="compact-sm" flex="none" aria-expanded={mobileInsights} onClick={() => setMobileInsights((open) => !open)}>
             {mobileInsights ? 'Hide insights' : 'View insights'}
           </Button>
         </Group>
       </Card>
-      <Box display={{ base: mobileInsights ? 'block' : 'none', sm: 'block' }} mt={{ base: 'md', sm: 0 }}>
+      <Box display={mobileInsights ? 'block' : 'none'} mt="md">
         <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
           <Metric label="Tests" value={scope.length.toLocaleString()}>
             <Box py={4}>
@@ -697,7 +745,7 @@ function TestsPanel({
   const hasVideo = search.video === true || listing.parsed.filters.video;
   const released = !!(search.release || search.releaseSha || search.releasePlatform);
   // What the Filters control holds that is narrowing the list now.
-  const more = envs.length + values(search.producer).length + values(search.domain).length + values(search.scope).length + values(search.artifactTag).length + (released ? 1 : 0);
+  const more = (search.group ? 1 : 0) + (search.sort ? 1 : 0) + (search.evidence ? 1 : 0) + envs.length + values(search.producer).length + values(search.domain).length + values(search.scope).length + values(search.artifactTag).length + (released ? 1 : 0);
   const [filters, setFilters] = useState(more > 0);
   const filtersId = useId();
   const clear = () => {
@@ -742,36 +790,15 @@ function TestsPanel({
                 }}
               />
             </Box>
-            <NativeSelect
-              flex={{ base: 1, sm: 'none' }}
-              aria-label="Group by"
-              leftSection={<Text span size="xs" c="dimmed">Group</Text>}
-              leftSectionWidth={56}
-              leftSectionPointerEvents="none"
-              value={search.group ?? 'spec'}
-              onChange={(event) => go({ group: event.target.value === 'spec' ? undefined : (event.target.value as TestGroup) })}
-            >
-              {TEST_GROUPS.map((group) => (
-                <option key={group} value={group}>
-                  {GROUP_LABEL[group]}
-                </option>
-              ))}
-            </NativeSelect>
-            <NativeSelect
-              flex={{ base: 1, sm: 'none' }}
-              aria-label="Sort"
-              leftSection={<Text span size="xs" c="dimmed">Sort</Text>}
-              leftSectionWidth={48}
-              leftSectionPointerEvents="none"
-              value={sort}
-              onChange={(event) => go({ sort: event.target.value === defaultSort ? undefined : (event.target.value as ExplorerSort) })}
-            >
-              {EXPLORER_SORTS.filter((option) => option !== 'relevance' || listing.hits !== null || sort === 'relevance').map((option) => (
-                <option key={option} value={option}>
-                  {SORT_LABEL[option]}
-                </option>
-              ))}
-            </NativeSelect>
+            <SegmentedControl
+              aria-label="Layout"
+              value={search.layout ?? 'grid'}
+              onChange={(value) => go({ layout: value === 'list' ? 'list' : undefined }, { replace: true })}
+              data={[
+                { value: 'grid', label: <Center component="span" title="Grid"><IconLayoutGrid size={16} aria-hidden="true" /><VisuallyHidden>Grid</VisuallyHidden></Center> },
+                { value: 'list', label: <Center component="span" title="List"><IconList size={16} aria-hidden="true" /><VisuallyHidden>List</VisuallyHidden></Center> }
+              ]}
+            />
             <Button
               variant={filters ? 'light' : 'default'}
               aria-expanded={filters}
@@ -826,18 +853,6 @@ function TestsPanel({
             >
               Has video{' '}
             </Button>
-            <Button
-              type="button"
-              size="compact-sm"
-              aria-pressed={search.evidence === 'stale'}
-              aria-label={`Stale or unverified ${plural(listing.stale, 'test', 'tests')}`}
-              onClick={() => go({ evidence: search.evidence ? undefined : 'stale' })}
-              variant={search.evidence === 'stale' ? 'light' : 'subtle'}
-              leftSection={<IconAlertTriangle size={14} aria-hidden="true" />}
-              rightSection={<Text span size="xs" c="dimmed">{listing.stale.toLocaleString()}</Text>}
-            >
-              Stale or unverified{' '}
-            </Button>
           </Flex>
         </Flex>
         <Box id={filtersId} display={filters ? undefined : 'none'}>
@@ -865,6 +880,30 @@ function TestsPanel({
               </Stack>
             )}
             <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="sm">
+            <NativeSelect
+              label="Group by"
+              aria-label="Group by"
+              value={search.group ?? (search.layout === 'list' ? 'spec' : 'none')}
+              onChange={(event) => go({ group: event.target.value === (search.layout === 'list' ? 'spec' : 'none') ? undefined : (event.target.value as TestGroup) })}
+            >
+              {TEST_GROUPS.map((group) => (
+                <option key={group} value={group}>
+                  {GROUP_LABEL[group]}
+                </option>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              label="Sort"
+              aria-label="Sort"
+              value={sort}
+              onChange={(event) => go({ sort: event.target.value === defaultSort ? undefined : (event.target.value as ExplorerSort) })}
+            >
+              {EXPLORER_SORTS.filter((option) => option !== 'relevance' || listing.hits !== null || sort === 'relevance').map((option) => (
+                <option key={option} value={option}>
+                  {SORT_LABEL[option]}
+                </option>
+              ))}
+            </NativeSelect>
               {model.facets.producers.length > 1 && (
                 <NativeSelect
                   label="Producer"
@@ -929,6 +968,20 @@ function TestsPanel({
                 />
               )}
             </SimpleGrid>
+            <Group gap="xs">
+            <Button
+              type="button"
+              size="compact-sm"
+              aria-pressed={search.evidence === 'stale'}
+              aria-label={`Stale or unverified ${plural(listing.stale, 'test', 'tests')}`}
+              onClick={() => go({ evidence: search.evidence ? undefined : 'stale' })}
+              variant={search.evidence === 'stale' ? 'light' : 'subtle'}
+              leftSection={<IconAlertTriangle size={14} aria-hidden="true" />}
+              rightSection={<Text span size="xs" c="dimmed">{listing.stale.toLocaleString()}</Text>}
+            >
+              Stale or unverified{' '}
+            </Button>
+            </Group>
             <ReleaseReading />
           </Stack>
         </Box>
@@ -962,7 +1015,7 @@ function TestsPanel({
         )}
       </Stack>
       <Divider />
-      <TestList tests={listing.shown} search={search} total={model.tests.length} hits={listing.hits} sort={search.sort ?? (listing.hits ? 'relevance' : 'spec')} assessments={listing.assessments} release={listing.release} onClear={clear} />
+      <TestList layout={search.layout ?? 'grid'} tests={listing.shown} search={search} total={model.tests.length} hits={listing.hits} sort={search.sort ?? (listing.hits ? 'relevance' : 'spec')} assessments={listing.assessments} release={listing.release} onClear={clear} />
     </Card>
   );
 }
@@ -989,6 +1042,7 @@ function ReleaseReading() {
   );
 }
 function TestList({
+  layout,
   tests,
   search,
   total,
@@ -998,6 +1052,7 @@ function TestList({
   release,
   onClear
 }: {
+  layout: 'grid' | 'list';
   tests: readonly TestSummary[];
   search: ExplorerSearch;
   total: number;
@@ -1009,7 +1064,8 @@ function TestList({
 }) {
   // A reading is shown on every row only when the reader asked about evidence; otherwise only evidence known to be stale.
   const asked = search.evidence === 'stale' || sort === 'evidence' || hasRelease(release);
-  const by = search.group ?? 'spec';
+  // A grid is one flat set of cards unless a grouping is asked for; a list is grouped by spec.
+  const by = search.group ?? (layout === 'grid' ? 'none' : 'spec');
   const groups = useMemo(() => groupTests(tests, by, sort === 'spec'), [tests, by, sort]);
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(new Map());
   const defaultOpen = groups.length <= OPEN_GROUPS || tests.length <= OPEN_TESTS;
@@ -1029,7 +1085,7 @@ function TestList({
   let parent: string | null = null;
   return (
     <Box aria-label="Tests" component="section" pb="xs">
-      <Flex gap="xs" align="center" px="lg" py={6} mih={36}>
+      <Flex gap="xs" align="center" px="lg" py={6} mih={36} display={layout === 'grid' && by === 'none' ? 'none' : undefined}>
         <Text span size="xs" c="dimmed">
           {by === 'none'
             ? ''
@@ -1045,7 +1101,7 @@ function TestList({
             </Button>
           </Flex>
         )}
-        <Group aria-hidden="true" gap={0} ml="auto" visibleFrom="sm" wrap="nowrap">
+        <Group aria-hidden="true" gap={0} ml="auto" visibleFrom="sm" wrap="nowrap" display={layout === 'grid' ? 'none' : undefined}>
           {['Avg', 'Pass', 'Runs', 'Last'].map((column) => (
             <Text key={column} span size="xs" c="dimmed" fw={500} w={COLUMN} ta="right">
               {column}
@@ -1068,6 +1124,7 @@ function TestList({
             )}
             {!heading && by !== 'none' && by !== 'spec' && <Divider />}
             <TestGroupSection
+              layout={layout}
               group={group}
               by={by}
               open={isOpen(group)}
@@ -1084,6 +1141,7 @@ function TestList({
   );
 }
 function TestGroupSection({
+  layout,
   group,
   by,
   open,
@@ -1093,6 +1151,7 @@ function TestGroupSection({
   asked,
   onToggle
 }: {
+  layout: 'grid' | 'list';
   group: TestGroupView;
   by: TestGroup;
   open: boolean;
@@ -1102,22 +1161,32 @@ function TestGroupSection({
   asked: boolean;
   onToggle: () => void;
 }) {
-  const [shown, setShown] = useState(by === 'none' ? 100 : GROUP_ROWS);
+  // A flat grid shows a few screens of cards; a flat list a hundred rows; a group fifty.
+  const page = by !== 'none' ? GROUP_ROWS : layout === 'grid' ? 48 : 100;
+  const [shown, setShown] = useState(page);
   const now = useNow();
-  const rows = (
-    <List spacing={0} listStyleType="none">
-      {group.tests.slice(0, shown).map((test) => (
-        <TestRow key={test.key} test={test} selected={selected === test.key} now={now} hit={hits?.get(behaviorId(test.key))} assessment={assessments.get(test.key)} asked={asked} nested={by !== 'none'} />
-      ))}
-      {group.tests.length > shown && (
-        <List.Item>
-          <Button variant="subtle" size="compact-sm" c="dimmed" ml={by === 'none' ? 'sm' : 36} my={4} onClick={() => setShown(shown + (by === 'none' ? 100 : GROUP_ROWS))}>
-            Show more ({group.tests.length - shown} more)
-          </Button>
-        </List.Item>
-      )}
-    </List>
+  const items = group.tests.slice(0, shown).map((test) => (
+    <TestRow key={test.key} layout={layout} test={test} selected={selected === test.key} now={now} hit={hits?.get(behaviorId(test.key))} assessment={assessments.get(test.key)} asked={asked} nested={by !== 'none'} />
+  ));
+  const more = group.tests.length > shown && (
+    <Button variant="subtle" size="compact-sm" c="dimmed" ml={layout === 'grid' ? 0 : by === 'none' ? 'sm' : 36} my={4} onClick={() => setShown(shown + page)}>
+      Show more ({group.tests.length - shown} more)
+    </Button>
   );
+  const rows =
+    layout === 'grid' ? (
+      <Box px="sm" pt={by === 'none' ? 'sm' : 4} pb="sm">
+        <SimpleGrid component="ul" cols={{ base: 1, xs: 2, md: 3, lg: 4 }} spacing="md" p={0} m={0}>
+          {items}
+        </SimpleGrid>
+        {more}
+      </Box>
+    ) : (
+      <List spacing={0} listStyleType="none">
+        {items}
+        {more && <List.Item>{more}</List.Item>}
+      </List>
+    );
   return (
     <Box component="section" aria-label={group.label} px={8} py={2}>
       {by === 'none' ? (
@@ -1163,7 +1232,39 @@ function TestGroupSection({
     </Box>
   );
 }
+/** The picture that stands for a test in the grid: its recording's poster with a play mark, or what it carries instead. */
+function ResultThumb({ test }: { test: TestSummary }) {
+  const [broken, setBroken] = useState(false);
+  const outcome = test.outcomes.find((item) => playableVideo({ videos: item.evidence?.videos ?? [] })) ?? test.outcomes[0];
+  const entry = { videos: outcome?.evidence?.videos ?? [], backend: outcome?.backend ?? null, environment: outcome?.environment ?? null };
+  const state = recordingState(entry);
+  const poster = clipHints(entry).poster;
+  const url = poster && outcome ? attachmentSource({ name: 'poster', bundleKey: poster }, outcome.layer).url : null;
+  const roles = test.evidence.roles;
+  const pictures = roles.includes('image') || roles.includes('screenshot');
+  return (
+    <AspectRatio component="span" display="block" ratio={16 / 9} data-thumb={state}>
+      {state === 'playable' ? (
+        <Center component="span" pos="relative" bg="dark.9">
+          {url && !broken && <Image src={url} alt="" loading="lazy" decoding="async" pos="absolute" top={0} left={0} w="100%" h="100%" fit="cover" data-poster onError={() => setBroken(true)} />}
+          <ThemeIcon component="span" pos="relative" size={44} radius="xl" color="gray" variant="white" opacity={0.92}>
+            <IconPlayerPlayFilled size={18} aria-hidden="true" />
+          </ThemeIcon>
+        </Center>
+      ) : (
+        // Nothing to play: a quiet ground with what the result carries instead.
+        <Stack component="span" gap={4} align="center" justify="center" bg="var(--mantine-color-default-hover)" c="dimmed" aria-hidden="true">
+          {pictures ? <IconPhoto size={26} stroke={1.5} /> : state === 'api-only' ? <IconApi size={26} stroke={1.5} /> : <IconVideoOff size={26} stroke={1.5} />}
+          <Text span size="xs">
+            {pictures ? 'Screenshots' : state === 'api-only' ? 'API only' : 'No recording'}
+          </Text>
+        </Stack>
+      )}
+    </AspectRatio>
+  );
+}
 function TestRow({
+  layout,
   test,
   selected,
   now,
@@ -1172,6 +1273,7 @@ function TestRow({
   asked,
   nested
 }: {
+  layout: 'grid' | 'list';
   test: TestSummary;
   selected: boolean;
   now: number;
@@ -1188,6 +1290,59 @@ function TestRow({
       {value}
     </Text>
   );
+  const last = test.live ? 'now' : test.lastRecordedAtMs ? ago(test.lastRecordedAtMs, now) : '';
+  if (layout === 'grid')
+    return (
+      <Box component="li" display="block" miw={0} data-status={test.status}>
+        <Card
+          p={0}
+          h="100%"
+          shadow="none"
+          radius="md"
+          c="var(--mantine-color-text)"
+          bd={selected ? '1px solid var(--mantine-primary-color-filled)' : undefined}
+          aria-current={selected ? 'true' : undefined}
+          renderRoot={(props) => <Link {...props} to="/" search={patched({ test: selected ? undefined : test.key, layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}
+        >
+          <ResultThumb test={test} />
+          <Stack gap={6} p="sm">
+            <Group gap={8} wrap="nowrap" align="flex-start">
+              <Box pt={2} flex="none">
+                <StatusMark status={test.status} size={16} />
+              </Box>
+              <Text span fw={500} lineClamp={2} title={test.title}>
+                {test.title}
+              </Text>
+            </Group>
+            <Group gap={6}>
+              <EnvironmentChips test={test} />
+              <Badges test={test} />
+              {assessment && (assessment.verdict === 'stale' || (asked && assessment.verdict !== 'applies')) && <VerdictBadge verdict={assessment.verdict} />}
+            </Group>
+            {failure && (
+              <Text span size="xs" c="red" lineClamp={1}>
+                {failure}
+              </Text>
+            )}
+            {why && (
+              <Text span size="xs" c="dimmed" data-why lineClamp={2}>
+                {hit?.exact && (
+                  <Badge component="span" size="xs" color="blue" mr={6}>
+                    Exact
+                  </Badge>
+                )}
+                {why}
+              </Text>
+            )}
+            {(last || test.stats.durations) && (
+              <Text span size="xs" c="dimmed">
+                {[last, test.stats.durations ? formatMs(test.stats.durations.avgMs) : ''].filter(Boolean).join(' · ')}
+              </Text>
+            )}
+          </Stack>
+        </Card>
+      </Box>
+    );
   return (
     <List.Item data-status={test.status}>
       <NavLink

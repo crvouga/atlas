@@ -5985,9 +5985,27 @@ it lazily bundles the shared React settings entry once, so API-only servers do n
 
 The header carries the review destinations (Tests, Behaviors, UI catalog) directly on wide screens, the **Explore** menu
 with every spec type and destination at all widths, search, the color scheme and view options. Destination changes
-preserve the selected run. The test explorer opens with its tabs and a row of figures, then the Tests panel: search,
-grouping, sorting and **Filters** in its heading row, the status filter as one row of chips, and the grouped list
-directly below. Published specs and the slowest, flakiest and failing lists are secondary panels after the list.
+preserve the selected run.
+
+The test explorer is built to look through results, not to read a report. Under its tabs is one quiet line (how many
+tests, the outcome meter, the counts) whose **View insights** opens the figures; then the Tests panel: search, the
+**Layout** control and **Filters** in its heading row, and the status filter with *Has video* as one row of chips.
+Grouping, sorting, environments, producers, domains, recording scope, artifact tags, *Stale or unverified* and the
+release are all inside **Filters**, which shows how many of them are narrowing the list.
+
+- **Grid** (the default) is a flat set of cards, one a test: its recording's poster with a play mark (or, with nothing to
+  play, a quiet ground with the words *Screenshots*, *API only* or *No recording*), the outcome mark and title, where
+  it ran, and when. Choosing a grouping in Filters groups the cards. Only the catalog's own poster is shown; nothing is
+  read for a card.
+- **List** (`layout=list` in the address) is the grouped list: one row a test under its spec, with the average, pass
+  rate, runs and age in columns.
+- **Opening a result focuses it** in a wide panel. *Previous* and *Next* (and the Left and Right keys) step through the
+  results in the order and filters the list has now, without closing it. Its pictures and recordings come first, as a
+  **media carousel**: one at a time and as large as the panel allows, with arrows, a count and a strip of thumbnails.
+  Every slide stays in the page, so a step's *Recording m:ss* still seeks its recording. The outcome explanation, the
+  steps and the other files follow; where the test is written and which evidence is shown are stated last.
+
+Published specs and the slowest, flakiest and failing lists are secondary panels after the list.
 Behaviors is a two-pane review: the searchable list on the left and the selected behavior's Read, Watch and Inspect
 beside it, with the recording as large as the pane allows. Optional release fields are disclosed until a release is named.
 

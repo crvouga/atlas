@@ -4,9 +4,11 @@ import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { LayerHeader, LayerRow } from '@crvouga/atlas/reports/evidence-types';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
 import type { Annotation, Attachment, Attempt, Step } from '@crvouga/atlas/schema';
-import { Accordion, Alert, Anchor, Badge, Box, Button, Code, Divider, Group, Image, List, Paper, ScrollArea, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import { Accordion, ActionIcon, Alert, Anchor, Badge, Box, Button, Center, Code, Divider, Group, Image, List, Paper, ScrollArea, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, UnstyledButton } from '@mantine/core';
 import {
   IconBrowser,
+  IconChevronLeft,
+  IconChevronRight,
   IconDownload,
   IconExternalLink,
   IconFile,
@@ -238,7 +240,9 @@ export function ArtifactCard({
   link,
   note,
   selected,
-  tile
+  tile,
+  hidden,
+  bare
 }: {
   attachment: Attachment;
   layer: string;
@@ -247,6 +251,10 @@ export function ArtifactCard({
   selected?: boolean;
   /** One tile of a grid of pictures: the picture keeps to a thumbnail's height and the caption is compact. */
   tile?: boolean;
+  /** A slide of the media carousel that is not the one on screen: it stays in the page, out of sight. */
+  hidden?: boolean;
+  /** A slide of the media carousel: no frame of its own. */
+  bare?: boolean;
 }) {
   const type = mediaType(attachment);
   const { path, url } = attachmentSource(attachment, layer);
@@ -263,11 +271,12 @@ export function ArtifactCard({
   return (
     <Paper
       component="li"
-      display="block"
+      display={hidden ? 'none' : 'block'}
+      aria-hidden={hidden || undefined}
       ref={item}
-      withBorder
+      withBorder={!bare}
       radius="md"
-      p={tile ? 'xs' : 'sm'}
+      p={bare ? 0 : tile ? 'xs' : 'sm'}
       miw={0}
       data-wide={renderer?.wide || undefined}
       data-role={attachment.role ?? roleOfType(type)}
@@ -346,28 +355,116 @@ function groupOf(attachment: Attachment): 'wide' | 'tile' | 'file' {
   return type.startsWith('image/') ? 'tile' : 'file';
 }
 const attachmentSourceKnown = (attachment: Attachment) => Boolean(attachment.bundleKey) || safeUri(attachment.uri) !== null;
+/** Whether an attachment is something to look at or play (a picture, a recording, a sound) that the page can show. */
+function isMedia(attachment: Attachment): boolean {
+  const type = mediaType(attachment);
+  return (type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/')) && groupOf(attachment) !== 'file';
+}
+/**
+ * The pictures and recordings of one result, one at a time and as large as the page allows, with arrows, a count and a
+ * strip to choose from. Every slide stays in the page (a recording keeps its place for the steps that seek it); only the
+ * chosen one is on screen.
+ */
+function MediaCarousel({ items, layer }: { items: readonly { attachment: Attachment; index: number }[]; layer: string }) {
+  const [at, setAt] = useState(0);
+  const current = Math.min(at, items.length - 1);
+  const step = (by: number) => setAt((current + by + items.length) % items.length);
+  const many = items.length > 1;
+  return (
+    <Stack
+      component="section"
+      aria-label="Media"
+      aria-roledescription="carousel"
+      gap="xs"
+      miw={0}
+      data-media-carousel
+      onKeyDown={(event) => {
+        // Arrow keys belong to a focused player or slider; elsewhere in the carousel they change the slide.
+        const target = event.target as HTMLElement;
+        if (!many || ['VIDEO', 'AUDIO', 'INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.getAttribute('role') === 'slider') return;
+        if (event.key === 'ArrowLeft') step(-1);
+        else if (event.key === 'ArrowRight') step(1);
+        else return;
+        event.stopPropagation();
+      }}
+    >
+      {many && (
+        <Group justify="space-between" gap="xs" wrap="nowrap">
+          <Text size="sm" c="dimmed" role="status" aria-live="polite" truncate>
+            {current + 1} of {items.length} · {items[current]!.attachment.name}
+          </Text>
+          <ActionIcon.Group>
+            <ActionIcon variant="default" size="md" aria-label="Previous picture or recording" onClick={() => step(-1)}>
+              <IconChevronLeft size={16} aria-hidden="true" />
+            </ActionIcon>
+            <ActionIcon variant="default" size="md" aria-label="Next picture or recording" onClick={() => step(1)}>
+              <IconChevronRight size={16} aria-hidden="true" />
+            </ActionIcon>
+          </ActionIcon.Group>
+        </Group>
+      )}
+      <Stack component="ul" gap="sm" p={0} m={0}>
+        {items.map(({ attachment, index }, slide) => (
+          <ArtifactCard key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} hidden={slide !== current} bare />
+        ))}
+      </Stack>
+      {many && (
+        <ScrollArea type="auto" offsetScrollbars="x" scrollbarSize={6}>
+          <Group gap={6} wrap="nowrap" role="group" aria-label="Choose a picture or recording">
+            {items.map(({ attachment, index }, slide) => {
+              const type = mediaType(attachment);
+              const { url } = attachmentSource(attachment, layer);
+              const Icon = fileIcon(type);
+              return (
+                <UnstyledButton
+                  key={`${attachment.id ?? attachment.name}:${index}`}
+                  aria-label={`Show ${attachment.name}`}
+                  aria-pressed={slide === current}
+                  title={attachment.name}
+                  onClick={() => setAt(slide)}
+                  w={88}
+                  h={56}
+                  flex="none"
+                  bdrs="sm"
+                  bd={slide === current ? '2px solid var(--mantine-primary-color-filled)' : '1px solid var(--mantine-color-default-border)'}
+                  bg="var(--mantine-color-default-hover)"
+                  c="dimmed"
+                >
+                  <Center h="100%">
+                    {type.startsWith('image/') && url ? (
+                      <Image src={url} alt="" loading="lazy" decoding="async" fit="cover" w="100%" h="100%" radius="xs" />
+                    ) : (
+                      <Icon size={20} stroke={1.5} aria-hidden="true" />
+                    )}
+                  </Center>
+                </UnstyledButton>
+              );
+            })}
+          </Group>
+        </ScrollArea>
+      )}
+    </Stack>
+  );
+}
 export function Attachments({ attachments: all, layer }: { attachments: readonly Attachment[]; layer: string }) {
   const attachments = useFilteredAttachments(all);
   if (!attachments.length) return null;
+  const indexed = attachments.map((attachment, index) => ({ attachment, index }));
+  const media = indexed.filter(({ attachment }) => isMedia(attachment));
+  const rest = indexed.filter(({ attachment }) => !isMedia(attachment));
   return (
     <Stack aria-label="Attachments" component="section" gap="sm" miw={0}>
-      <Title order={3}>{plural(attachments.length, 'attachment', 'attachments')}</Title>
-      {(['wide', 'tile', 'file'] as const).map((group) => {
-        const items = attachments.flatMap((attachment, index) => (groupOf(attachment) === group ? [{ attachment, index }] : []));
-        if (!items.length) return null;
-        const cards = items.map(({ attachment, index }) => (
-          <ArtifactCard key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} tile={group === 'tile'} />
-        ));
-        return group === 'tile' ? (
-          <SimpleGrid key={group} component="ul" cols={{ base: 2, sm: 3 }} spacing="sm" p={0} m={0}>
-            {cards}
-          </SimpleGrid>
-        ) : (
-          <Stack key={group} component="ul" gap="sm" p={0} m={0}>
-            {cards}
-          </Stack>
-        );
-      })}
+      {media.length > 0 && <MediaCarousel items={media} layer={layer} />}
+      <Title order={3} size="sm" c="dimmed" fw={500}>
+        {plural(attachments.length, 'attachment', 'attachments')}
+      </Title>
+      {rest.length > 0 && (
+        <Stack component="ul" gap="sm" p={0} m={0}>
+          {rest.map(({ attachment, index }) => (
+            <ArtifactCard key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} />
+          ))}
+        </Stack>
+      )}
     </Stack>
   );
 }
@@ -615,11 +712,11 @@ function Evidence({ holder, layer, steps = false, owner }: { holder: EvidenceHol
   return (
     <ScopeProvider scope={holder.scope}>
       <MomentPlayback steps={steps ? holder.steps : undefined} attachments={holder.attachments ?? NO_FILES} layer={layer} primary={steps} owner={owner}>
+        {holder.attachments && <Attachments attachments={holder.attachments} layer={layer} />}
         <Facts holder={holder} />
         {holder.annotations && <Notes notes={holder.annotations} />}
         {steps && holder.steps && holder.steps.length > 0 ? <Timeline steps={holder.steps} layer={layer} /> : <MomentBar />}
         {holder.attempts && holder.attempts.length > 1 && <Tries attempts={holder.attempts} layer={layer} />}
-        {holder.attachments && <Attachments attachments={holder.attachments} layer={layer} />}
         {holder.extensions && <Raw extensions={holder.extensions} />}
       </MomentPlayback>
     </ScopeProvider>
@@ -677,14 +774,14 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
             substituted.
           </Alert>
         )}
+        <ScopeProvider scope={inheritedScope}>
+          <Evidence holder={check} layer={layer.id} steps owner={momentOwner(layer.id, row.kind, row.id)} />
+        </ScopeProvider>
         {declared && (
           <Box aria-label="Scope of this result" component="section">
             <ScopeNotice scope={declared} name={row.title} />
           </Box>
         )}
-        <ScopeProvider scope={inheritedScope}>
-          <Evidence holder={check} layer={layer.id} steps owner={momentOwner(layer.id, row.kind, row.id)} />
-        </ScopeProvider>
         {hasRun && (
           <Stack aria-label="From the run" component="section" gap="md" miw={0}>
             <Divider />

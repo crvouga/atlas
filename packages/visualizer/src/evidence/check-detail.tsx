@@ -289,6 +289,8 @@ type Props = {
   headline?: boolean;
   /** Every record of this check the page knows (a node's history of it), when the layers held here are only the winners. */
   records?: readonly ResultRecord[];
+  /** Show what the result carries (its pictures and recordings first) before the explanation of its outcome. For a view opened to watch. */
+  mediaFirst?: boolean;
 };
 /** Everything recorded for one check: the chosen result, how it went, and every other run of it. */
 export function CheckDetail(props: Props) {
@@ -319,7 +321,7 @@ export function CheckDetail(props: Props) {
     </>
   );
 }
-function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pin, source, onSource, headline = true, records }: Props) {
+function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pin, source, onSource, headline = true, records, mediaFirst = false }: Props) {
   const { evidence, backends, ready, pending } = useEvidence();
   const now = useNow();
   const [variant, setVariant] = useState(0);
@@ -351,8 +353,7 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
     chosen.row.status === 'failed' && !(stepsShown && report.data?.steps.some((step) => step.error))
       ? (report.data?.meta.error ?? chosen.row.detail)
       : '';
-  return (
-    <Stack gap="md" miw={0}>
+  const summary = (
       <OutcomeSummary
         slot={slot}
         selected={chosen}
@@ -367,6 +368,11 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
           else select({ layer });
         }}
       />
+  );
+  const carried = <ResultEvidence layer={chosen.layer} row={chosen.row} />;
+  return (
+    <Stack gap="md" miw={0}>
+      {!mediaFirst && summary}
       {slot.outcomes.length > 1 && !earlier && (
         <Group role="group" aria-label="Environments" gap={6} align="center" wrap="wrap">
           {slot.outcomes.map((outcome, at) => (
@@ -402,6 +408,8 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
         <Divider orientation="vertical" />
         <Origin layer={chosen.layer} backends={backends} now={now} />
       </Group>
+      {mediaFirst && carried}
+      {mediaFirst && summary}
       {(moments > 0 || chosen.layer.runUrl) && (
         <Group gap="xs" align="center" wrap="wrap">
           {moments > 0 && (
@@ -509,7 +517,7 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
           )}
         </Stack>
       )}
-      <ResultEvidence layer={chosen.layer} row={chosen.row} />
+      {!mediaFirst && carried}
       {history.length > 1 && (
         <Stack aria-label="Other runs of this check" component="section" gap="xs" miw={0}>
           <Title order={3}>Recorded in {plural(history.length, 'run', 'runs')}</Title>

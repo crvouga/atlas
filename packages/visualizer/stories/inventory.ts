@@ -138,6 +138,7 @@ export const INVENTORY = {
   ],
   // Tests/Explorer
   TestsExplorer: [
+    'ListLayout', 'ListUngrouped', 'FiltersOpen', 'InsightsOpen',
     'Tests', 'GroupedByDomain', 'GroupedByEnvironment', 'GroupedByStatus', 'GroupedByProducer', 'Ungrouped', 'SortedByTitle',
     'SortedByRecent', 'SortedBySlowest', 'SortedByFailures', 'SortedByFlaky', 'SortedByRuns', 'FailedTests', 'PassedTests', 'RunningTests',
     'NotRunTests', 'FailedOrRunningTests', 'EnvironmentFilter', 'ProducerFilter', 'DomainFilter', 'SpecFilter', 'TagFilter',

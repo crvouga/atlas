@@ -92,10 +92,44 @@ async function choose(label: string, value: string) {
   });
 }
 
-test('the project home is a test explorer: insights, groups by spec, search, status and environment filters', async () => {
+test('tests open as a flat grid of cards, can be laid out as the grouped list, and an opened result steps through the list', async () => {
   const localStore = memoryStore();
   await publish(localStore);
   atlas = await openAtlas({ at: '/', specs: {}, deps: { localStore } });
+  await atlas.until(() => shows('Refund a payment'), 'the tests');
+  const list = () => document.querySelector('section[aria-label="Tests"]')!;
+  const layout = (value: string) => document.querySelector<HTMLInputElement>(`[aria-label="Layout"] input[value="${value}"]`)!;
+  // The grid is the default: one card a test, each a link with a thumbnail, and no group between them.
+  expect(layout('grid').checked).toBe(true);
+  expect(list().querySelectorAll('section').length).toBe(1);
+  expect(list().querySelectorAll('li a [data-thumb]').length).toBe(rows().length);
+  // The list is in the address, grouped by spec as before.
+  await act(async () => layout('list').click());
+  await atlas.until(() => atlas!.router.state.location.search.layout === 'list', 'the list layout in the address');
+  expect(list().querySelectorAll('section').length).toBeGreaterThan(1);
+  expect(list().querySelectorAll('[data-thumb]').length).toBe(0);
+  await act(async () => layout('grid').click());
+  await atlas.until(() => atlas!.router.state.location.search.layout === undefined, 'the grid again');
+  // Opening a result focuses it; Next and Previous walk the same filtered order without closing it.
+  const titles = [...list().querySelectorAll<HTMLAnchorElement>('li a')];
+  await act(async () => titles[0]!.click());
+  await atlas.until(() => document.querySelector('nav[aria-label="Results"]') !== null, 'the opened result');
+  const first = atlas.router.state.location.search.test;
+  const nav = () => document.querySelector('nav[aria-label="Results"]')!;
+  expect(nav().textContent).toContain(`1 of ${titles.length}`);
+  expect(atlas.find('nav[aria-label="Results"] button', 'Previous')!.hasAttribute('disabled')).toBe(true);
+  await atlas.click('nav[aria-label="Results"] button', 'Next');
+  await atlas.until(() => atlas!.router.state.location.search.test !== first, 'the next result');
+  expect(nav().textContent).toContain(`2 of ${titles.length}`);
+  await atlas.click('nav[aria-label="Results"] button', 'Previous');
+  await atlas.until(() => atlas!.router.state.location.search.test === first, 'the first result again');
+});
+
+test('the project home is a test explorer: insights, groups by spec, search, status and environment filters', async () => {
+  // The list layout is the grouped one; the default grid is a flat set of cards.
+  const localStore = memoryStore();
+  await publish(localStore);
+  atlas = await openAtlas({ at: '/?layout=list', specs: {}, deps: { localStore } });
   await atlas.until(() => shows('Refund a payment'), 'the tests');
 
   // The insight strip: every test, by outcome, flaky, timing, environments and runs.
