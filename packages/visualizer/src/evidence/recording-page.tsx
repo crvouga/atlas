@@ -1,9 +1,10 @@
 import { IconArrowLeft } from '@tabler/icons-react';
 import { checkHistory, type CheckSlot, type HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
 import type { RunReport } from '@crvouga/atlas/reports/report-types';
-import { Alert, Box, Button, Container, Flex, Text, Title } from '@mantine/core';
+import { Alert, Button, Divider, Group, Skeleton, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { PageHeader, Panel } from '../components/Page';
 import { TestProgress, useTestProgress } from '../live/test-progress';
 import { reportText } from './api';
 import { useRecordedReport } from './check-detail';
@@ -60,82 +61,93 @@ export function RecordingPage({ slot, layerId, entry, label, back, moment, onMom
   });
   const waiting = !chosen && !unavailable && (!ready || pending > 0);
   return (
-    <Container data-wide="true" aria-label="Recorded test" component="article" size="xl" w="100%" py="xl">
-      <Button type="button" onClick={onClose} variant="subtle">
-        <Text aria-hidden="true" span inherit>
-          <IconArrowLeft size={16} aria-hidden="true" />
-        </Text>{' '}
-        {back}
-      </Button>
-      <Box component="header" mb="lg">
-        <Title order={1} mb="sm">
-          {label}
-        </Title>
-        {chosen && (
-          <Flex gap="xs" align="center" wrap="wrap" c="dimmed">
-            <StatusMark status={chosen.row.status} />
-            <Text data-status={chosen.row.status} span inherit fw={600}>
-              {statusWord(chosen.row.status)}
-            </Text>
-            {chosen.row.durationMs !== null && (
-              <Text span inherit>
-                {duration(chosen.row.durationMs)}
-              </Text>
-            )}
-            <Origin layer={chosen.layer} backends={backends} now={now} />
-          </Flex>
-        )}
-      </Box>
+    <Stack data-wide="true" aria-label="Recorded test" component="article" gap="md" w="100%">
+      <Stack component="header" gap="sm">
+        <PageHeader
+          eyebrow={
+            <Button type="button" onClick={onClose} variant="subtle" size="compact-sm" w="fit-content" ml={-8} leftSection={<IconArrowLeft size={16} aria-hidden="true" />}>
+              {back}
+            </Button>
+          }
+          title={label}
+        >
+          {chosen && (
+            <Group gap="sm" align="center" wrap="wrap" c="dimmed" fz="sm">
+              <Group gap={6} wrap="nowrap">
+                <StatusMark status={chosen.row.status} />
+                <Text data-status={chosen.row.status} span inherit fw={600} c="var(--mantine-color-text)">
+                  {statusWord(chosen.row.status)}
+                </Text>
+              </Group>
+              {chosen.row.durationMs !== null && (
+                <>
+                  <Divider orientation="vertical" />
+                  <Text span inherit>
+                    {duration(chosen.row.durationMs)}
+                  </Text>
+                </>
+              )}
+              <Divider orientation="vertical" />
+              <Origin layer={chosen.layer} backends={backends} now={now} />
+            </Group>
+          )}
+        </PageHeader>
+      </Stack>
       <TestProgress {...progress} />
       {waiting && <EvidenceWaiting label="Loading the recording…" usable="The way back to the spec is available." />}
       {!chosen && !waiting && !progress.tests.length && (
-        <Alert color={'blue'} my="sm">
+        <Alert color={'blue'}>
           {unavailable ??
             (failed.length > 0
               ? 'This result was not found in the layers that could be read, and some layers could not be read.'
               : 'This result is not in the combined report any more. A newer run may have replaced it, or its source is switched off.')}{' '}
           {(unavailable || failed.length > 0) && (
-            <Button type="button" onClick={retry} variant="subtle">
+            <Button type="button" onClick={retry} variant="subtle" size="compact-sm">
               Try again
             </Button>
           )}
         </Alert>
       )}
       {chosen && layerId && !entry && chosen.layer.id !== layerId && ready && pending === 0 && (
-        <Alert role="status" color={'blue'} my="sm">
+        <Alert role="status" color={'blue'}>
           The layer this link names is not among the results held for this test. Showing the current result instead.
         </Alert>
       )}
       {ready && !chosen && <EvidenceIncomplete />}
       {chosen && !paths && (
-        <Alert color={'blue'} my="sm">
+        <Alert color={'blue'}>
           This result has an outcome and no recorded timeline.
         </Alert>
       )}
       {report.isLoading && (
-        <Text role="status" component="div" c="dimmed">
-          Loading the recording…
-        </Text>
+        <Panel>
+          <Text role="status" component="div" c="dimmed">
+            Loading the recording…
+          </Text>
+          <Skeleton height="16rem" radius="md" />
+        </Panel>
       )}
       {report.isError && (
-        <Alert role="alert" color={'red'} my="sm">
+        <Alert role="alert" color={'red'}>
           The recording could not be read. {report.error.message}{' '}
-          <Button type="button" onClick={() => void report.refetch()} variant="subtle">
+          <Button type="button" onClick={() => void report.refetch()} variant="subtle" size="compact-sm">
             Try again
           </Button>
         </Alert>
       )}
       {wantsCss && css.isError && (
-        <Alert role="alert" color={'red'} my="sm">
+        <Alert role="alert" color={'red'}>
           The recorded stylesheet could not be read, so pictures appear unstyled.{' '}
-          <Button type="button" onClick={() => void css.refetch()} variant="subtle">
+          <Button type="button" onClick={() => void css.refetch()} variant="subtle" size="compact-sm">
             Try again
           </Button>
         </Alert>
       )}
       {report.data && paths && (
-        <Timeline report={report.data} fileUrl={paths.file} css={css.data ?? ''} moment={moment} onMoment={onMoment} />
+        <Panel>
+          <Timeline report={report.data} fileUrl={paths.file} css={css.data ?? ''} moment={moment} onMoment={onMoment} />
+        </Panel>
       )}
-    </Container>
+    </Stack>
   );
 }

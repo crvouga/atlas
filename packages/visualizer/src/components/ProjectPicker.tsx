@@ -1,5 +1,6 @@
 import { ProjectsSchema, type Project } from '@crvouga/atlas/schema';
-import { Alert, Box, Button, NativeSelect, Text, VisuallyHidden } from '@mantine/core';
+import { Alert, Box, Button, NativeSelect, Stack, Text, VisuallyHidden } from '@mantine/core';
+import { IconAlertTriangle, IconFolder } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { liveInvalidator } from '../live/live-query';
@@ -62,6 +63,7 @@ export function ProjectPicker() {
       <NativeSelect
         aria-label="Project"
         maw={{ base: '8rem', sm: '14rem' }}
+        leftSection={<IconFolder size={16} aria-hidden="true" />}
         value={value}
         disabled={!projects.length}
         onChange={(event) => selectProject(event.target.value)}
@@ -84,16 +86,18 @@ export function ProjectNotice() {
   const query = useProjects();
   if (!query.error) return null;
   return (
-    <Alert role="alert" color={'red'} my="sm">
-      <Text component="div">
-        Project switching is unavailable.{' '}
-        {query.error.message.includes('(404)')
-          ? 'Restart the Atlas server to load project support.'
-          : 'The last available project list is shown.'}
-      </Text>
-      <Button type="button" onClick={() => void query.refetch()} variant="light">
-        Retry projects
-      </Button>
+    <Alert role="alert" color="red" my="sm" icon={<IconAlertTriangle size={18} aria-hidden="true" />}>
+      <Stack gap="xs" align="flex-start">
+        <Text component="div">
+          Project switching is unavailable.{' '}
+          {query.error.message.includes('(404)')
+            ? 'Restart the Atlas server to load project support.'
+            : 'The last available project list is shown.'}
+        </Text>
+        <Button type="button" size="xs" onClick={() => void query.refetch()}>
+          Retry projects
+        </Button>
+      </Stack>
     </Alert>
   );
 }

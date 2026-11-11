@@ -12,7 +12,7 @@ import {
   compareLatency, formatLatency, latencyReview, LATENCY_GROUPINGS, type LatencyChange, type LatencyGrouping, type LatencyReview, type LatencySummary
 } from '@crvouga/atlas/reports/latency';
 import type { TestResultEntry } from '@crvouga/atlas/reports/test-catalog';
-import { Badge, Box, Code, Flex, List, NativeSelect, Stack, Table, Text, Title } from '@mantine/core';
+import { Badge, Code, Flex, List, NativeSelect, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import { useMemo, useState } from 'react';
 
 import { plural } from '../evidence/format';
@@ -130,21 +130,23 @@ function Metric({ metric, groups, baselineGroup }: { metric: LatencyReview['metr
   const first = groups[0]!;
   const source = [...new Set(groups.map((summary) => summary.metric.boundary.label))];
   return (
-    <Stack gap="xs" aria-label={metric.name} role="group">
-      <Flex gap="xs" align="center" wrap="wrap">
-        <Text span inherit fw={600}>
-          {metric.name}
-        </Text>
-        <Text span inherit c="dimmed">
-          {source.join(', ')} · {metric.unit}
-        </Text>
-        {metric.boundary.state === 'partial' && <Badge color="orange" variant="light">Partial interval</Badge>}
-        {metric.boundary.state === 'undeclared' && <Badge color="gray" variant="light">Boundaries not declared</Badge>}
-        {first.lowerBound && <Badge color="orange" variant="light">Includes timeouts or failures</Badge>}
-      </Flex>
-      <MetricTable summaries={groups} baseline={baseline} />
-      <Notes summaries={groups} baseline={baseline} />
-    </Stack>
+    <Paper withBorder aria-label={metric.name} role="group">
+      <Stack gap="xs">
+        <Flex gap="xs" align="center" wrap="wrap">
+          <Text span inherit fw={600}>
+            {metric.name}
+          </Text>
+          <Text span inherit c="dimmed">
+            {source.join(', ')} · {metric.unit}
+          </Text>
+          {metric.boundary.state === 'partial' && <Badge color="orange" variant="light">Partial interval</Badge>}
+          {metric.boundary.state === 'undeclared' && <Badge color="gray" variant="light">Boundaries not declared</Badge>}
+          {first.lowerBound && <Badge color="orange" variant="light">Includes timeouts or failures</Badge>}
+        </Flex>
+        <MetricTable summaries={groups} baseline={baseline} />
+        <Notes summaries={groups} baseline={baseline} />
+      </Stack>
+    </Paper>
   );
 }
 
@@ -159,16 +161,16 @@ export function ProductLatency({ entries }: { entries: readonly TestResultEntry[
   const review = useMemo(() => latencyReview(entries, by), [entries, by]);
   const groups = [...new Set(review.metrics.flatMap((item) => item.groups.map((summary) => summary.group)))];
   return (
-    <Box aria-label="Product latency" component="section" mb="lg">
-      <Title order={3} mb="sm" c="dimmed">
-        Product latency
-      </Title>
-      <Text component="div" c="dimmed" mb="sm">
-        How quickly the product responded to a user, between two events the producer named. It is not the test's duration, which includes setup,
-        waits, retries and any demo pacing.
-      </Text>
+    <Stack aria-label="Product latency" component="section" gap="sm">
+      <Stack gap={2}>
+        <Title order={3}>Product latency</Title>
+        <Text component="div" c="dimmed">
+          How quickly the product responded to a user, between two events the producer named. It is not the test's duration, which includes setup,
+          waits, retries and any demo pacing.
+        </Text>
+      </Stack>
       {review.metrics.length === 0 ? (
-        <Text component="div" role="status">
+        <Text component="div" role="status" p="md" bg="var(--mantine-color-default-hover)" bdrs="md">
           No product latency was recorded for this test, so it is unknown, not fast. A producer records one as a measurement with{' '}
           <Code>kind: "product-latency"</Code>, a <Code>from</Code> and a <Code>to</Code>, and optionally a <Code>limit</Code> as the budget.
         </Text>
@@ -209,6 +211,6 @@ export function ProductLatency({ entries }: { entries: readonly TestResultEntry[
           </Text>
         </Stack>
       )}
-    </Box>
+    </Stack>
   );
 }

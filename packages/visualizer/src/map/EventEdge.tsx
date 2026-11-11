@@ -148,12 +148,12 @@ export function EdgeMarkers() {
   return (
     <svg className={styles.markers} aria-hidden="true">
       <defs>
-        {marker('user', 'var(--mantine-color-blue-7)')}
-        {marker('system', 'var(--mantine-color-gray-6)')}
-        {marker('time', 'var(--mantine-color-gray-6)')}
-        {marker('hand-off', 'var(--mantine-color-dark-5)')}
-        {marker('muted', 'var(--mantine-color-gray-4)')}
-        {marker('active', 'var(--mantine-color-blue-7)')}
+        {marker('user', 'var(--mantine-color-anchor)')}
+        {marker('system', 'var(--mantine-color-dimmed)')}
+        {marker('time', 'var(--mantine-color-dimmed)')}
+        {marker('hand-off', 'var(--mantine-color-text)')}
+        {marker('muted', 'var(--mantine-color-placeholder)')}
+        {marker('active', 'var(--mantine-primary-color-filled)')}
       </defs>
     </svg>
   );

@@ -1,4 +1,5 @@
-import { Badge, Button, Image, List, Paper, Skeleton, Stack, Text } from '@mantine/core';
+import { Badge, Button, Group, Image, List, Paper, Skeleton, Stack, Text } from '@mantine/core';
+import { IconPhotoOff } from '@tabler/icons-react';
 import { useRef, useState, type ReactNode } from 'react';
 import type { ImageMedia, ItemStatus, StateView } from '../data/model';
 type PlaceholderReason = 'not-captured' | 'not-reached' | 'processing' | 'not-run' | 'spec-only';
@@ -38,11 +39,20 @@ export function ScreenPlaceholder({
 }) {
   const sketch = lines ? (state.hints.length ? state.hints : state.specChecks).slice(0, size === 'thumb' ? 3 : 8) : [];
   return (
-    <Paper withBorder p={size === 'thumb' ? 'xs' : 'lg'} w="100%" role="img" aria-label={`${state.name}: ${REASON_LABEL[reason]}`}>
+    <Paper
+      bd="1px dashed var(--mantine-color-default-border)"
+      bg="var(--mantine-color-default-hover)"
+      p={size === 'thumb' ? 'xs' : 'lg'}
+      w="100%"
+      role="img"
+      aria-label={`${state.name}: ${REASON_LABEL[reason]}`}
+    >
       {state.design ? (
         <Stack gap="xs">
-          <Image src={state.design.image} alt={`Design for ${state.name}`} fit="contain" mah="60vh" />
-          <Badge color="gray">Design, not a screenshot</Badge>
+          <Image src={state.design.image} alt={`Design for ${state.name}`} fit="contain" mah="60vh" radius="sm" />
+          <Badge color="gray" size="sm" w="fit-content">
+            Design, not a screenshot
+          </Badge>
         </Stack>
       ) : (
         <Stack gap="xs">
@@ -52,18 +62,21 @@ export function ScreenPlaceholder({
             </Text>
           )}
           {sketch.length > 0 && (
-            <List size="xs" spacing="xs">
+            <List size="xs" spacing={2} c="dimmed">
               {sketch.map((line) => (
                 <List.Item key={line}>{line}</List.Item>
               ))}
             </List>
           )}
           {caption && (
-            <Text size="xs" c="dimmed">
-              {REASON_LABEL[reason]}
-            </Text>
+            <Group gap={6} wrap="nowrap" c="dimmed">
+              <IconPhotoOff size={14} aria-hidden="true" />
+              <Text size="xs" fw={500}>
+                {REASON_LABEL[reason]}
+              </Text>
+            </Group>
           )}
-          <Skeleton height="4rem" animate={false} />
+          {sketch.length === 0 && <Skeleton height={size === 'thumb' ? '2.5rem' : '4rem'} animate={false} />}
         </Stack>
       )}
     </Paper>
@@ -76,11 +89,13 @@ export function Screenshot({ src, alt, size, underlay }: { src: string; alt: str
   const url = attempt ? `${src}${src.includes('?') ? '&' : '?'}retry=${attempt}` : src;
   return (
     <Stack gap="xs">
-      {state !== 'loaded' && (underlay ?? <Skeleton height={size === 'thumb' ? '6rem' : '18rem'} />)}
+      {state !== 'loaded' && (underlay ?? <Skeleton height={size === 'thumb' ? '6rem' : '18rem'} radius="md" />)}
       {state === 'failed' ? (
         <Stack gap="xs" role="status">
-          <Text>Couldn’t load the screenshot.</Text>
+          <Text c="dimmed">Couldn’t load the screenshot.</Text>
           <Button
+            size="compact-sm"
+            w="fit-content"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -99,6 +114,9 @@ export function Screenshot({ src, alt, size, underlay }: { src: string; alt: str
           fit="contain"
           maw="100%"
           mah="60vh"
+          radius="md"
+          bg="var(--mantine-color-default-hover)"
+          bd="1px solid var(--mantine-color-default-border)"
           loading="lazy"
           decoding="async"
           draggable={false}

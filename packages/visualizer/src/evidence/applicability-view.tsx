@@ -5,9 +5,10 @@
  * promise, the release), the controls that name a release and filter to stale or unverified evidence, and the
  * address state that keeps both shareable. A verdict is a reading of the evidence and never changes an outcome.
  */
-import { Accordion, Alert, Badge, Button, Group, List, Paper, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Badge, Button, Collapse, Group, List, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useId, useMemo, useState, type ReactNode } from 'react';
 
 import { hasRelease, VERDICTS, type Assessment, type ReleaseIdentity, type ReleaseMatch, type Verdict } from './applicability';
 import { exactTime, ago, plural, shortSha, useNow } from './format';
@@ -77,6 +78,27 @@ const RELEASE_WORDS: Record<ReleaseMatch, string> = {
   unknown: 'Not known to apply to the release'
 };
 
+/** One recorded fact of the evidence: a quiet label and its value. */
+function Fact({ label, children, ...rest }: { label: string; children: ReactNode; 'data-published'?: boolean; 'data-enriched'?: boolean }) {
+  return (
+    <Text span inherit {...rest}>
+      {label}:{' '}
+      <Text span inherit fw={600} c="var(--mantine-color-text)">
+        {children}
+      </Text>
+    </Text>
+  );
+}
+
+/** A moment, exact and relative. */
+function When({ at, now }: { at: number; now: number }) {
+  return (
+    <time dateTime={new Date(at).toISOString()} title={exactTime(at)}>
+      {exactTime(at)} ({ago(at, now)})
+    </time>
+  );
+}
+
 /**
  * A compact reading of one behavior's evidence: the verdict; when the checks ran (the age of the evidence, whatever
  * was uploaded or enriched since); what it ran against; and why. Stale evidence is stated first and prominently, and
@@ -87,7 +109,7 @@ export function ApplicabilitySummary({ assessment, release }: { assessment: Asse
   const { verdict, facts, reasons } = assessment;
   if (verdict === 'none' || !facts) {
     return (
-      <Text component="div" c="dimmed" data-applicability="none">
+      <Text component="div" size="xs" c="dimmed" data-applicability="none">
         No completed result, so there is no evidence to apply.
       </Text>
     );
@@ -95,9 +117,9 @@ export function ApplicabilitySummary({ assessment, release }: { assessment: Asse
   const named = hasRelease(release);
   return (
     <Stack gap="xs" component="section" aria-label="Applicability of this evidence" data-applicability={verdict} data-release={assessment.release}>
-      <Group gap="sm" wrap="wrap">
+      <Group gap="xs" wrap="wrap">
         <VerdictBadge verdict={verdict} />
-        <Text span inherit c="dimmed">
+        <Text span c="dimmed">
           {VERDICTS[verdict].meaning}
         </Text>
       </Group>
@@ -106,59 +128,31 @@ export function ApplicabilitySummary({ assessment, release }: { assessment: Asse
           This recording is not proof of the named release. Its recorded outcome is unchanged.
         </Alert>
       )}
-      <Group gap="md" wrap="wrap" c="dimmed">
-        <Text span inherit>
-          Checks ran:{' '}
-          <Text span inherit fw={600}>
-            <time dateTime={new Date(facts.executedAtMs).toISOString()} title={exactTime(facts.executedAtMs)}>
-              {exactTime(facts.executedAtMs)} ({ago(facts.executedAtMs, now)})
-            </time>
-          </Text>
-        </Text>
+      <Group gap="md" wrap="wrap" c="dimmed" fz="xs">
+        <Fact label="Checks ran">
+          <When at={facts.executedAtMs} now={now} />
+        </Fact>
         {facts.publishedAtMs !== null && (
-          <Text span inherit data-published>
-            Published:{' '}
-            <Text span inherit fw={600}>
-              <time dateTime={new Date(facts.publishedAtMs).toISOString()} title={exactTime(facts.publishedAtMs)}>
-                {exactTime(facts.publishedAtMs)} ({ago(facts.publishedAtMs, now)})
-              </time>
-            </Text>
-          </Text>
+          <Fact label="Published" data-published>
+            <When at={facts.publishedAtMs} now={now} />
+          </Fact>
         )}
         {facts.enrichedAtMs !== null && (
-          <Text span inherit data-enriched>
-            Enriched:{' '}
-            <Text span inherit fw={600}>
-              <time dateTime={new Date(facts.enrichedAtMs).toISOString()} title={exactTime(facts.enrichedAtMs)}>
-                {exactTime(facts.enrichedAtMs)} ({ago(facts.enrichedAtMs, now)})
-              </time>
-            </Text>
-          </Text>
+          <Fact label="Enriched" data-enriched>
+            <When at={facts.enrichedAtMs} now={now} />
+          </Fact>
         )}
-        <Text span inherit>
-          Build:{' '}
-          <Text span inherit fw={600}>
-            {facts.build ?? 'not recorded'}
-          </Text>
-        </Text>
-        <Text span inherit>
-          Commit:{' '}
-          <Text span inherit fw={600}>
-            {shortSha(facts.sha) ?? 'not recorded'}
-            {facts.provenance === 'modified' ? ' with local changes' : facts.provenance === 'unknown' ? ' (origin not captured)' : ''}
-          </Text>
-        </Text>
-        <Text span inherit>
-          Platform:{' '}
-          <Text span inherit fw={600}>
-            {facts.platform ?? 'not recorded'}
-          </Text>
-        </Text>
+        <Fact label="Build">{facts.build ?? 'not recorded'}</Fact>
+        <Fact label="Commit">
+          {shortSha(facts.sha) ?? 'not recorded'}
+          {facts.provenance === 'modified' ? ' with local changes' : facts.provenance === 'unknown' ? ' (origin not captured)' : ''}
+        </Fact>
+        <Fact label="Platform">{facts.platform ?? 'not recorded'}</Fact>
       </Group>
       {named && (
         <Text component="div" c="dimmed">
           Release {[release.build && `build ${release.build}`, release.sha && `commit ${release.sha.slice(0, 7)}`, release.platform].filter(Boolean).join(', ')}:{' '}
-          <Text span inherit fw={600}>
+          <Text span inherit fw={600} c="var(--mantine-color-text)">
             {RELEASE_WORDS[assessment.release]}
           </Text>
         </Text>
@@ -170,13 +164,13 @@ export function ApplicabilitySummary({ assessment, release }: { assessment: Asse
         </Text>
       )}
       {reasons.length > 0 && (
-        <List spacing={4}>
+        <List spacing={4} size="sm">
           {reasons.map((reason) => (
             <List.Item key={reason}>{reason}</List.Item>
           ))}
         </List>
       )}
-      <Text component="div" c="dimmed">
+      <Text component="div" size="xs" c="dimmed">
         Its age counts from when the checks ran, not from when it was uploaded or annotated.
         {assessment.others > 0 ? ` Best of ${plural(assessment.others + 1, 'completed result', 'completed results')}.` : ''}
       </Text>
@@ -207,90 +201,75 @@ export function ApplicabilityControls({
   compact?: boolean;
 }) {
   const { release, setRelease, onlyStale, setOnlyStale } = state;
+  const named = hasRelease(release) || !!release.platform;
+  const [open, setOpen] = useState(named);
+  const fieldsId = useId();
+  const Chevron = open ? IconChevronUp : IconChevronDown;
+  const fields = (
+    <Stack gap="sm">
+      <Text component="div" size="xs" c="dimmed">
+        Name the release you care about to see whether each recording was made against it. Without one, evidence is read against the current promise only.
+      </Text>
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+        <TextInput
+          label="Release build"
+          description="Compared with each result's build label"
+          value={release.build ?? ''}
+          onChange={(event) => setRelease({ ...release, build: event.currentTarget.value })}
+        />
+        <TextInput
+          label="Release commit"
+          description="Compared with the commit the checks ran at"
+          value={release.sha ?? ''}
+          onChange={(event) => setRelease({ ...release, sha: event.currentTarget.value })}
+        />
+        <TextInput
+          label="Release platform"
+          description="For example ios, android or desktop-web"
+          value={release.platform ?? ''}
+          onChange={(event) => setRelease({ ...release, platform: event.currentTarget.value })}
+        />
+      </SimpleGrid>
+      {release.platform && !hasRelease(release) && (
+        <Text role="status" component="div" c="dimmed">
+          A platform alone does not name a release. Add its build or commit.
+        </Text>
+      )}
+    </Stack>
+  );
   return (
-    <Paper component="section" aria-label="Evidence applicability" withBorder p="md" my="md">
-      <Stack gap="sm">
-        <Title order={2}>Evidence applicability</Title>
-        {compact ? (
-          <Accordion variant="separated" defaultValue={hasRelease(release) || release.platform ? 'release' : null}>
-            <Accordion.Item value="release">
-              <Accordion.Control>{hasRelease(release) || release.platform ? `Release: ${[release.build, release.sha, release.platform].filter(Boolean).join(' · ')}` : 'Compare with a release (optional)'}</Accordion.Control>
-              <Accordion.Panel><Stack gap="sm">        <Text component="div" c="dimmed">
-          Name the release you care about to see whether each recording was made against it. Without one, evidence is read against the current promise only.
-        </Text>
-        <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput
-            label="Release build"
-            description="Compared with each result's build label"
-            value={release.build ?? ''}
-            onChange={(event) => setRelease({ ...release, build: event.currentTarget.value })}
-          />
-          <TextInput
-            label="Release commit"
-            description="Compared with the commit the checks ran at"
-            value={release.sha ?? ''}
-            onChange={(event) => setRelease({ ...release, sha: event.currentTarget.value })}
-          />
-          <TextInput
-            label="Release platform"
-            description="For example ios, android or desktop-web"
-            value={release.platform ?? ''}
-            onChange={(event) => setRelease({ ...release, platform: event.currentTarget.value })}
-          />
-        </SimpleGrid>
-        {release.platform && !hasRelease(release) && (
-          <Text role="status" component="div" c="dimmed">
-            A platform alone does not name a release. Add its build or commit.
-          </Text>
-        )}
-</Stack></Accordion.Panel>
-            </Accordion.Item>
-          </Accordion>
-        ) : <>        <Text component="div" c="dimmed">
-          Name the release you care about to see whether each recording was made against it. Without one, evidence is read against the current promise only.
-        </Text>
-        <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput
-            label="Release build"
-            description="Compared with each result's build label"
-            value={release.build ?? ''}
-            onChange={(event) => setRelease({ ...release, build: event.currentTarget.value })}
-          />
-          <TextInput
-            label="Release commit"
-            description="Compared with the commit the checks ran at"
-            value={release.sha ?? ''}
-            onChange={(event) => setRelease({ ...release, sha: event.currentTarget.value })}
-          />
-          <TextInput
-            label="Release platform"
-            description="For example ios, android or desktop-web"
-            value={release.platform ?? ''}
-            onChange={(event) => setRelease({ ...release, platform: event.currentTarget.value })}
-          />
-        </SimpleGrid>
-        {release.platform && !hasRelease(release) && (
-          <Text role="status" component="div" c="dimmed">
-            A platform alone does not name a release. Add its build or commit.
-          </Text>
-        )}
-</>}
-        {filter && (
-          <Group role="group" aria-label="Evidence filter" gap="sm">
-            <Button type="button" aria-pressed={!onlyStale} onClick={() => setOnlyStale(false)} variant={onlyStale ? 'subtle' : 'light'} rightSection={<Text span inherit>{total}</Text>}>
-              All evidence{' '}
+    <Stack component="section" aria-label="Evidence applicability" gap="xs" miw={0}>
+      {(filter || compact) && (
+        <Group gap="xs" wrap="wrap">
+          {filter && (
+            <Group role="group" aria-label="Evidence filter" gap={4}>
+              <Button type="button" size="compact-sm" aria-pressed={!onlyStale} onClick={() => setOnlyStale(false)} variant={onlyStale ? 'subtle' : 'light'} rightSection={<Text span inherit c="dimmed">{total}</Text>}>
+                All evidence{' '}
+              </Button>
+              <Button type="button" size="compact-sm" aria-pressed={onlyStale} onClick={() => setOnlyStale(true)} variant={onlyStale ? 'light' : 'subtle'} rightSection={<Text span inherit c="dimmed">{stale}</Text>}>
+                Stale or unverified{' '}
+              </Button>
+            </Group>
+          )}
+          {compact && (
+            <Button type="button" size="compact-sm" variant={named ? 'light' : 'subtle'} aria-expanded={open} aria-controls={fieldsId} onClick={() => setOpen(!open)} rightSection={<Chevron size={14} aria-hidden="true" />}>
+              {named ? `Release: ${[release.build, release.sha, release.platform].filter(Boolean).join(' · ')}` : 'Compare with a release (optional)'}
             </Button>
-            <Button type="button" aria-pressed={onlyStale} onClick={() => setOnlyStale(true)} variant={onlyStale ? 'light' : 'subtle'} rightSection={<Text span inherit>{stale}</Text>}>
-              Stale or unverified{' '}
-            </Button>
-          </Group>
-        )}
-        {filter && onlyStale && stale === 0 && (
-          <Text role="status" component="div" c="dimmed">
-            Every behavior has evidence that applies.
-          </Text>
-        )}
-      </Stack>
-    </Paper>
+          )}
+        </Group>
+      )}
+      {compact ? (
+        <Collapse expanded={open} id={fieldsId} keepMountedMode="display-none">
+          {fields}
+        </Collapse>
+      ) : (
+        fields
+      )}
+      {filter && onlyStale && stale === 0 && (
+        <Text role="status" component="div" c="dimmed">
+          Every behavior has evidence that applies.
+        </Text>
+      )}
+    </Stack>
   );
 }

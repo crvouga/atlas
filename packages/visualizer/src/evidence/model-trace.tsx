@@ -1,4 +1,4 @@
-import { Button, Code, List, Stack, Table, Text } from '@mantine/core';
+import { Badge, Button, Code, Group, List, Stack, Table, Text, VisuallyHidden } from '@mantine/core';
 import { useState } from 'react';
 import type { ModelState } from './quint';
 function shown(value: unknown) {
@@ -21,16 +21,16 @@ export function ModelTrace({ states }: { states: readonly ModelState[] }) {
   const changed = (name: string) => previous !== undefined && JSON.stringify(previous[name]) !== JSON.stringify(state[name]);
   return (
     <Stack gap="sm" miw={0}>
-      <List aria-label="Model trace states" spacing="xs" listStyleType="none" type="ordered">
+      <List aria-label="Model trace states" spacing={4} listStyleType="none" type="ordered">
         {states.map((entry, index) => (
           <List.Item key={index}>
             <Button
               type="button"
-              aria-label={`State ${index + 1}`}
+              size="compact-sm"
               aria-pressed={at === index}
               onClick={() => setSelected(index)}
-              variant="light"
-              leftSection={<Text span inherit>{index + 1}</Text>}
+              variant={at === index ? 'light' : 'subtle'}
+              leftSection={<Text span inherit c="dimmed"><VisuallyHidden>State </VisuallyHidden>{index + 1}</Text>}
             >
               {' '}
               <Text span inherit>
@@ -53,12 +53,16 @@ export function ModelTrace({ states }: { states: readonly ModelState[] }) {
             {variables.map((name) => (
               <Table.Tr key={name} data-changed={changed(name) || undefined}>
                 <Table.Th scope="row">
-                  {name}
-                  {changed(name) && (
-                    <Text span inherit>
-                      Changed
+                  <Group gap="xs" wrap="nowrap">
+                    <Text span inherit ff="monospace" c="var(--mantine-color-text)">
+                      {name}
                     </Text>
-                  )}
+                    {changed(name) && (
+                      <Badge color="orange" size="sm">
+                        Changed
+                      </Badge>
+                    )}
+                  </Group>
                 </Table.Th>
                 <Table.Td>
                   <Code block>{previous ? shown(previous[name]) : '—'}</Code>

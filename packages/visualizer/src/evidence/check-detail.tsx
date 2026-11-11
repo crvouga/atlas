@@ -5,7 +5,8 @@ import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { boundaryOf, isProductLatency } from '@crvouga/atlas/reports/latency';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
-import { Accordion, Alert, Anchor, Box, Button, Code, Flex, Group, List, Stack, Table, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Badge, Button, Code, Divider, Group, List, NavLink, Skeleton, Stack, Table, Text, Title } from '@mantine/core';
+import { IconExternalLink, IconPlayerPlayFilled } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
 import { TestProgress, useTestProgress } from '../live/test-progress';
@@ -81,32 +82,32 @@ export function ResultRow({
       <Accordion variant="separated" value={open ? 'result' : null} onChange={onToggle}>
         <Accordion.Item value="result">
           <Accordion.Control>
-            <Group gap="sm" wrap="nowrap">
+            <Group gap="sm" wrap="nowrap" align="center">
               <StatusMark status={slot?.status ?? 'none'} />
-              <Text data-result-label span inherit>
+              <Text data-result-label span fw={500} flex={1} miw={0}>
                 {label}
                 {marks.length > 0 && (
-                  <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
+                  <Group component="span" display="inline-flex" gap="xs" align="center" wrap="wrap" ml="xs" fz="xs" fw={400}>
                     {marks.map((mark) => (
-                      <Text key={mark.id || 'unspecified'} data-status={mark.status} span inherit>
+                      <Text key={mark.id || 'unspecified'} data-status={mark.status} span inherit c={mark.status === 'failed' ? 'red.7' : 'dimmed'}>
                         {environmentLabel(mark.id || null)} {statusWord(mark.status).toLowerCase()}
                       </Text>
                     ))}
-                  </Flex>
+                  </Group>
                 )}
               </Text>
               {badge}
               {slot?.live && (
-                <Text span inherit>
+                <Badge color="blue" size="sm">
                   Running now
-                </Text>
+                </Badge>
               )}
               {interrupted && (
-                <Text span inherit>
+                <Badge color="orange" size="sm">
                   Interrupted
-                </Text>
+                </Badge>
               )}
-              <Text span inherit c="dimmed">
+              <Text span c="dimmed" size="xs" ta="right">
                 {current
                   ? duration(current.check.durationMs ?? null) || 'In progress'
                   : interrupted
@@ -128,18 +129,18 @@ export function ResultRow({
         </Accordion.Item>
       </Accordion>
       {!open && current && (
-        <Text component="p" data-progress="true" role="status" c="dimmed">
+        <Text component="p" data-progress="true" role="status" c="dimmed" size="xs" px="md" my={4}>
           {current.check.detail || current.check.steps?.at(-1)?.name || 'Test in progress…'}
           {progress.error ? ` · ${progress.error}` : ''}
         </Text>
       )}
       {!open && interrupted && (
-        <Text component="p" data-progress="true" role="status" c="dimmed">
+        <Text component="p" data-progress="true" role="status" c="dimmed" size="xs" px="md" my={4}>
           {interrupted.run.reason ?? 'The test run was interrupted.'}
         </Text>
       )}
       {!open && !current && failure && (
-        <Text component="p" c="red.7">
+        <Text component="p" c="red.7" size="xs" px="md" my={4} lineClamp={2}>
           {failure}
         </Text>
       )}
@@ -151,7 +152,7 @@ function StepLine({ title }: { title: string }) {
   const keyword = KEYWORD.exec(title)?.[1];
   return keyword ? (
     <Text span inherit>
-      <Text span inherit>
+      <Text span inherit c="dimmed" fw={600}>
         {keyword}
       </Text>{' '}
       {title.slice(keyword.length + 1)}
@@ -165,23 +166,27 @@ function StepLine({ title }: { title: string }) {
 /** The steps a test recorded, each with what happened to it. */
 export function RecordedSteps({ steps, nested = false }: { steps: readonly ReportStep[]; nested?: boolean }) {
   return (
-    <List data-nested={nested || undefined} spacing="xs" listStyleType="none" type="ordered">
+    <List data-nested={nested || undefined} spacing={6} listStyleType="none" type="ordered">
       {steps.map((step) => (
         <List.Item key={step.index} data-status={step.status}>
-          <Flex gap="xs" align="center" wrap="wrap">
-            <StatusMark status={step.status} size={14} />
-            <StepLine title={step.title} />
-            <Text span inherit c="dimmed">
+          <Group gap="xs" align="flex-start" wrap="nowrap">
+            <Group pt={3} lh={1} gap={0}>
+              <StatusMark status={step.status} size={14} />
+            </Group>
+            <Text span flex={1} miw={0} fw={step.status === 'failed' ? 600 : undefined}>
+              <StepLine title={step.title} />
+            </Text>
+            <Text span c="dimmed" size="xs">
               {duration(step.durationMs)}
             </Text>
-          </Flex>
+          </Group>
           {step.error && !step.steps.some((inner) => inner.status === 'failed' && inner.error) && (
-            <Code block c="red.7">
+            <Code block c="red.7" mt={6} ml="lg">
               {step.error}
             </Code>
           )}
           {step.steps.length > 0 && (
-            <Accordion variant="separated" my="sm" defaultValue={step.status === 'failed' ? 'content' : null}>
+            <Accordion variant="separated" mt={6} ml="lg" defaultValue={step.status === 'failed' ? 'content' : null}>
               <Accordion.Item value="content">
                 <Accordion.Control>{plural(step.steps.length, 'recorded action', 'recorded actions')}</Accordion.Control>
                 <Accordion.Panel>
@@ -199,25 +204,29 @@ export function RecordedSteps({ steps, nested = false }: { steps: readonly Repor
 export function PlainSteps({ steps, examples = [] }: { steps: readonly FeatureStep[]; examples?: readonly FeatureExamples[] }) {
   return (
     <>
-      <List spacing="xs" listStyleType="none" type="ordered">
+      <List spacing={6} listStyleType="none" type="ordered">
         {steps.map((step, index) => (
           <List.Item key={index}>
-            <Flex gap="xs" align="center" wrap="wrap">
+            <Text component="div">
               <Text span inherit>
-                <Text span inherit>
+                <Text span inherit c="dimmed" fw={600}>
                   {step.keyword}
                 </Text>{' '}
                 {step.text}
               </Text>
-            </Flex>
-            {step.docString !== null && <Code block>{step.docString}</Code>}
+            </Text>
+            {step.docString !== null && (
+              <Code block mt={6}>
+                {step.docString}
+              </Code>
+            )}
             {step.table.length > 0 && <Cells rows={step.table} />}
           </List.Item>
         ))}
       </List>
       {examples.map((example, index) => (
-        <Stack key={index} gap="sm" miw={0}>
-          <Text component="div" c="dimmed">
+        <Stack key={index} gap="xs" miw={0}>
+          <Text component="div" c="dimmed" size="xs" fw={500}>
             Examples{example.name ? `: ${example.name}` : ''}
           </Text>
           <Cells header={example.header} rows={example.rows} />
@@ -228,8 +237,8 @@ export function PlainSteps({ steps, examples = [] }: { steps: readonly FeatureSt
 }
 function Cells({ header, rows }: { header?: readonly string[]; rows: readonly (readonly string[])[] }) {
   return (
-    <Table.ScrollContainer minWidth={600}>
-      <Table>
+    <Table.ScrollContainer minWidth={360}>
+      <Table withTableBorder>
         {header && (
           <Table.Thead>
             <Table.Tr>
@@ -280,6 +289,8 @@ type Props = {
   headline?: boolean;
   /** Every record of this check the page knows (a node's history of it), when the layers held here are only the winners. */
   records?: readonly ResultRecord[];
+  /** Show what the result carries (its pictures and recordings first) before the explanation of its outcome. For a view opened to watch. */
+  mediaFirst?: boolean;
 };
 /** Everything recorded for one check: the chosen result, how it went, and every other run of it. */
 export function CheckDetail(props: Props) {
@@ -293,7 +304,7 @@ export function CheckDetail(props: Props) {
       <TestProgress {...progress} />
       {props.slot.outcomes.length > 0 ? (
         inProgress && !props.layerId ? (
-          <Accordion variant="separated" my="sm">
+          <Accordion variant="separated">
             <Accordion.Item value="content">
               <Accordion.Control>Previous recorded result</Accordion.Control>
               <Accordion.Panel>
@@ -310,7 +321,7 @@ export function CheckDetail(props: Props) {
     </>
   );
 }
-function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pin, source, onSource, headline = true, records }: Props) {
+function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pin, source, onSource, headline = true, records, mediaFirst = false }: Props) {
   const { evidence, backends, ready, pending } = useEvidence();
   const now = useNow();
   const [variant, setVariant] = useState(0);
@@ -342,8 +353,7 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
     chosen.row.status === 'failed' && !(stepsShown && report.data?.steps.some((step) => step.error))
       ? (report.data?.meta.error ?? chosen.row.detail)
       : '';
-  return (
-    <Stack gap="sm" miw={0}>
+  const summary = (
       <OutcomeSummary
         slot={slot}
         selected={chosen}
@@ -358,62 +368,118 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
           else select({ layer });
         }}
       />
+  );
+  const origin = (
+      <Group gap="sm" align="center" wrap="wrap" c="dimmed" fz="sm">
+        <Group gap={6} wrap="nowrap">
+          <StatusMark status={chosen.row.status} size={14} />
+          <Text data-status={chosen.row.status} span inherit fw={600} c="var(--mantine-color-text)">
+            {statusWord(chosen.row.status)}
+          </Text>
+        </Group>
+        {chosen.row.durationMs !== null && (
+          <>
+            <Divider orientation="vertical" />
+            <Text span inherit>
+              {duration(chosen.row.durationMs)}
+            </Text>
+          </>
+        )}
+        <Divider orientation="vertical" />
+        <Origin layer={chosen.layer} backends={backends} now={now} />
+      </Group>
+  );
+  const carried = <ResultEvidence layer={chosen.layer} row={chosen.row} />;
+  return (
+    <Stack gap="md" miw={0}>
+      {!mediaFirst && summary}
       {slot.outcomes.length > 1 && !earlier && (
-        <Flex role="group" aria-label="Environments" gap="xs" align="center" wrap="wrap">
+        <Group role="group" aria-label="Environments" gap={6} align="center" wrap="wrap">
           {slot.outcomes.map((outcome, at) => (
             <Button
               key={outcome.key}
               type="button"
               aria-pressed={at === index}
               onClick={() => choose(at)}
-              variant="light"
+              variant={at === index ? 'light' : 'default'}
+              size="compact-sm"
+              leftSection={<StatusMark status={outcome.row.status} size={12} />}
             >
-              <StatusMark status={outcome.row.status} size={12} />
               {labels[at]!.text}
             </Button>
           ))}
-        </Flex>
+        </Group>
       )}
-      <Flex gap="xs" align="center" wrap="wrap" c="dimmed">
-        <Text data-status={chosen.row.status} span inherit fw={600}>
-          {statusWord(chosen.row.status)}
-        </Text>
-        {chosen.row.durationMs !== null && (
-          <Text span inherit>
-            {duration(chosen.row.durationMs)}
-          </Text>
-        )}
-        <Origin layer={chosen.layer} backends={backends} now={now} />
-      </Flex>
-      {note && (
-        <Alert color={'blue'} my="sm">
-          {note}
-        </Alert>
+      {!mediaFirst && origin}
+      {mediaFirst && carried}
+      {mediaFirst && origin}
+      {mediaFirst && summary}
+      {(moments > 0 || chosen.layer.runUrl) && (
+        <Group gap="xs" align="center" wrap="wrap">
+          {moments > 0 && (
+            <Button
+              type="button"
+              onClick={() => select({ view: 'recording', check: slot.id, layer: earlier || index > 0 ? chosen.layer.id : null })}
+              variant="filled"
+              leftSection={<IconPlayerPlayFilled size={14} aria-hidden="true" />}
+              rightSection={
+                <Badge size="sm" variant="white" color="dark" visibleFrom="xs">
+                  {plural(moments, 'moment', 'moments')}
+                </Badge>
+              }
+            >
+              Open recording{' '}
+            </Button>
+          )}
+          {chosen.layer.runUrl && (
+            <Button
+              component="a"
+              href={chosen.layer.runUrl}
+              target="_blank"
+              rel="noreferrer"
+              variant="default"
+              rightSection={<IconExternalLink size={14} aria-hidden="true" />}
+            >
+              Open the run
+            </Button>
+          )}
+        </Group>
       )}
+      {note && <Alert color="blue">{note}</Alert>}
       {layerId && !earlier && ready && pending === 0 && (
-        <Alert role="status" color={'blue'} my="sm">
+        <Alert role="status" color="blue">
           The layer this link names is not among the results held for this check. Showing the current result instead.
         </Alert>
       )}
       {failure && (
-        <Code block c="red.7">
+        <Code block c="red.7" tabIndex={0}>
           {failure}
         </Code>
       )}
       {report.isLoading && (
-        <Text role="status" component="div" c="dimmed">
-          Loading what was recorded…
-        </Text>
+        <Stack gap="xs">
+          <Text role="status" component="div" c="dimmed">
+            Loading what was recorded…
+          </Text>
+          <Skeleton height="1rem" radius="sm" />
+          <Skeleton height="1rem" radius="sm" w="80%" />
+          <Skeleton height="1rem" radius="sm" w="60%" />
+        </Stack>
       )}
       {report.isError && (
-        <Alert role="alert" color={'red'} my="sm">
+        <Alert role="alert" color="red">
           The recording could not be read. {report.error.message}{' '}
-          <Button type="button" onClick={() => void report.refetch()} variant="subtle">
+          <Button type="button" onClick={() => void report.refetch()} variant="subtle" size="compact-sm">
             Try again
           </Button>
         </Alert>
       )}
-      {report.data && stepsShown && <RecordedSteps steps={report.data.steps} />}
+      {report.data && stepsShown && (
+        <Stack gap="sm" component="section" miw={0}>
+          <Title order={3}>Recorded steps</Title>
+          <RecordedSteps steps={report.data.steps} />
+        </Stack>
+      )}
       {states.length > 0 && <ModelTrace states={states} />}
       {!report.data && written}
       {!paths && !written && (
@@ -421,86 +487,79 @@ function RecordedCheckDetail({ slot, layerId, select, reads, written, pinned, pi
           This check has an outcome and no recorded timeline.
         </Text>
       )}
-      {timings.flatMap((entry) =>
-        entry.row.measurements.map((measurement, index) => {
-          const over = measurement.limit !== undefined && measurement.value > measurement.limit;
-          return (
-            <Text key={`${entry.key}:${index}`} data-over={over || undefined} component="div">
-              {measurement.name}:{' '}
-              <Text span inherit fw={600}>
-                {Number(measurement.value.toFixed(1))} {measurement.unit}
-              </Text>
-              {measurement.limit !== undefined && (
-                <Text span inherit>
-                  {' '}
-                  against an allowance of {measurement.limit} {measurement.unit}
+      {timings.some((entry) => entry.row.measurements.length > 0) && (
+        <Stack gap="xs" component="section" aria-label="Measurements" miw={0}>
+          <Title order={3}>Measurements</Title>
+          {timings.flatMap((entry) =>
+            entry.row.measurements.map((measurement, index) => {
+              const over = measurement.limit !== undefined && measurement.value > measurement.limit;
+              return (
+                <Text key={`${entry.key}:${index}`} data-over={over || undefined} component="div">
+                  <Text span inherit c="dimmed">
+                    {measurement.name}:
+                  </Text>{' '}
+                  <Text span inherit fw={600} c={over ? 'red.7' : undefined}>
+                    {Number(measurement.value.toFixed(1))} {measurement.unit}
+                  </Text>
+                  {measurement.limit !== undefined && (
+                    <Text span inherit>
+                      {' '}
+                      against an allowance of {measurement.limit} {measurement.unit}
+                    </Text>
+                  )}
+                  {isProductLatency(measurement) && (
+                    <Text span inherit c="dimmed">
+                      {' '}
+                      · product latency, {boundaryOf(measurement).label}
+                      {boundaryOf(measurement).state === 'partial' && ` (partial: not ${boundaryOf(measurement).intended})`}
+                      {measurement.outcome !== undefined && measurement.outcome !== 'observed' && ` · ${measurement.outcome}: waited at least this long`}
+                    </Text>
+                  )}
                 </Text>
-              )}
-              {isProductLatency(measurement) && (
-                <Text span inherit c="dimmed">
-                  {' '}
-                  · product latency, {boundaryOf(measurement).label}
-                  {boundaryOf(measurement).state === 'partial' && ` (partial: not ${boundaryOf(measurement).intended})`}
-                  {measurement.outcome !== undefined && measurement.outcome !== 'observed' && ` · ${measurement.outcome}: waited at least this long`}
-                </Text>
-              )}
-            </Text>
-          );
-        })
-      )}
-      <ResultEvidence layer={chosen.layer} row={chosen.row} />
-      {(moments > 0 || chosen.layer.runUrl) && (
-        <Flex gap="xs" align="center" wrap="wrap">
-          {moments > 0 && (
-            <Button
-              type="button"
-              onClick={() => select({ view: 'recording', check: slot.id, layer: earlier || index > 0 ? chosen.layer.id : null })}
-              variant="filled"
-              rightSection={<Text span inherit>{plural(moments, 'moment', 'moments')}</Text>}
-            >
-              Open recording{' '}
-            </Button>
+              );
+            })
           )}
-          {chosen.layer.runUrl && (
-            <Anchor href={chosen.layer.runUrl} target="_blank" rel="noreferrer">
-              Open the run
-            </Anchor>
-          )}
-        </Flex>
+        </Stack>
       )}
+      {!mediaFirst && carried}
       {history.length > 1 && (
-        <Box aria-label="Other runs of this check" component="section" mb="lg">
-          <Title order={4} mb="sm">
-            Recorded in {plural(history.length, 'run', 'runs')}
-          </Title>
-          <List spacing="xs" listStyleType="none">
+        <Stack aria-label="Other runs of this check" component="section" gap="xs" miw={0}>
+          <Title order={3}>Recorded in {plural(history.length, 'run', 'runs')}</Title>
+          <List spacing={2} listStyleType="none">
             <Bounded items={history} size={6} more="Earlier runs">
               {(entry) => {
                 const current = entry.layer.id === chosen.layer.id && entry.row.kind === chosen.row.kind;
                 return (
                   <List.Item key={`${entry.layer.backend}|${entry.layer.id}|${entry.row.kind}`}>
-                    <Button
+                    <NavLink
+                      component="button"
                       type="button"
                       aria-current={current || undefined}
+                      active={current}
+                      variant="light"
+                      py={6}
+                      px="xs"
                       onClick={() =>
                         select({
                           layer: !pin && slot.outcomes.some((outcome) => outcome.layer.id === entry.layer.id) ? null : entry.layer.id
                         })
                       }
-                      variant="light"
-                    >
-                      <StatusMark status={entry.row.status} size={14} />
-                      <Text span inherit>
-                        {statusWord(entry.row.status)}
-                      </Text>
-                      <Origin layer={entry.layer} backends={backends} now={now} />
-                    </Button>
+                      leftSection={<StatusMark status={entry.row.status} size={14} />}
+                      label={
+                        <Group gap="sm" wrap="wrap" align="center">
+                          <Text span inherit fw={current ? 600 : 500} miw="3.5rem">
+                            {statusWord(entry.row.status)}
+                          </Text>
+                          <Origin layer={entry.layer} backends={backends} now={now} />
+                        </Group>
+                      }
+                    />
                   </List.Item>
                 );
               }}
             </Bounded>
           </List>
-        </Box>
+        </Stack>
       )}
     </Stack>
   );

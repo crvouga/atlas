@@ -10,7 +10,7 @@
 import type { CheckSlot, HistoryEntry } from '@crvouga/atlas/reports/evidence-view';
 import type { CheckDetail } from '@crvouga/atlas/reports/evidence-detail';
 import { effectiveScope, scopeBadges } from '@crvouga/atlas/reports/evidence-scope';
-import { Badge, Box, Button, Flex, List, Paper, Stack, Text, Title } from '@mantine/core';
+import { Badge, Button, Code, Group, List, Paper, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useState } from 'react';
 
@@ -72,34 +72,20 @@ export function OutcomeSummary({
   const timeline = chronology(recordOf(selected), history);
   const [jumped, setJumped] = useState<string | null>(null);
   return (
-    <Paper component="section" aria-label="Outcome summary" data-outcome={selected.row.status} withBorder p="md">
+    <Paper component="section" aria-label="Outcome summary" data-outcome={selected.row.status} withBorder radius="md" p="md">
       <Stack gap="sm" miw={0}>
         {showHeadline && (
-          <Title order={3} data-outcome-headline>
-            {headline.text}
-          </Title>
-        )}
-        {headline.others.length > 0 && (
-          <Stack gap="xs" component="section" aria-label="Other current sources">
-            <Text component="div" c="dimmed">
-              Other current sources of this check
-            </Text>
-            <List listStyleType="none" spacing="xs">
-              {headline.others.map((outcome, index) => (
-                <List.Item key={outcome.key}>
-                  <Button type="button" variant="light" onClick={() => choose(outcome.layer.id)} aria-label={`Open ${labels[index]!.text}`}>
-                    <StatusMark status={outcome.row.status} size={12} />
-                    <Text span inherit>
-                      {labels[index]!.text}
-                    </Text>
-                  </Button>
-                </List.Item>
-              ))}
-            </List>
-          </Stack>
+          <Group gap="xs" wrap="nowrap" align="flex-start">
+            <Group pt={3} lh={1} gap={0}>
+              <StatusMark status={selected.row.status} size={16} />
+            </Group>
+            <Title order={3} data-outcome-headline flex={1} miw={0}>
+              {headline.text}
+            </Title>
+          </Group>
         )}
         {reach && (
-          <Flex gap="xs" align="center" wrap="wrap" data-reach={reach.state}>
+          <Group gap="xs" align="center" wrap="wrap" data-reach={reach.state}>
             <Badge variant={reach.state === 'setup-failed' ? 'filled' : 'light'} color={reach.state === 'unknown' ? 'gray' : 'red'}>
               {reach.state === 'setup-failed'
                 ? 'Behavior not verified'
@@ -107,40 +93,42 @@ export function OutcomeSummary({
                   ? 'Expectation not met'
                   : 'Failure point unknown'}
             </Badge>
-            <Text span inherit>
+            <Text span flex={1} miw="12rem">
               {reach.text}
             </Text>
-          </Flex>
+          </Group>
         )}
         {failed && (note?.expected !== undefined || note?.actual !== undefined) && (
-          <Box component="dl" aria-label="Expected and observed" m={0}>
+          <SimpleGrid component="dl" aria-label="Expected and observed" cols={{ base: 1, sm: 2 }} spacing="sm" m={0}>
             {note?.expected !== undefined && (
-              <>
-                <Text component="dt" fw={600}>
+              <Stack gap={4} miw={0}>
+                <Text component="dt" size="xs" c="dimmed" fw={500}>
                   Expected
                 </Text>
-                <Text component="dd" m={0}>
+                <Code component="dd" block m={0}>
                   {note.expected}
-                </Text>
-              </>
+                </Code>
+              </Stack>
             )}
             {note?.actual !== undefined && (
-              <>
-                <Text component="dt" fw={600}>
+              <Stack gap={4} miw={0}>
+                <Text component="dt" size="xs" c="dimmed" fw={500}>
                   Observed
                 </Text>
-                <Text component="dd" m={0}>
+                <Code component="dd" block m={0} c="red.7">
                   {note.actual}
-                </Text>
-              </>
+                </Code>
+              </Stack>
             )}
-          </Box>
+          </SimpleGrid>
         )}
         {failed && (point || video) && (
-          <Stack gap="xs" component="section" aria-label="Closest evidence">
+          <Stack gap={4} component="section" aria-label="Closest evidence">
             {point && (
               <Text component="div">
-                Closest step:{' '}
+                <Text span inherit c="dimmed">
+                  Closest step:{' '}
+                </Text>
                 <Text span inherit fw={600}>
                   {point.name}
                 </Text>
@@ -154,7 +142,9 @@ export function OutcomeSummary({
             )}
             {video && (
               <Text component="div">
-                Closest video:{' '}
+                <Text span inherit c="dimmed">
+                  Closest video:{' '}
+                </Text>
                 <Text span inherit fw={600}>
                   {video.description ?? video.name}
                 </Text>
@@ -169,12 +159,13 @@ export function OutcomeSummary({
               </Text>
             )}
             {video && point && (
-              <Flex gap="xs" align="center" wrap="wrap">
+              <Group gap="xs" align="center" wrap="wrap" mt={4}>
                 <Button
                   type="button"
                   variant="light"
                   color="red"
-                  leftSection={<IconAlertTriangle size={16} aria-hidden="true" />}
+                  size="compact-sm"
+                  leftSection={<IconAlertTriangle size={14} aria-hidden="true" />}
                   onClick={() =>
                     setJumped(
                       requestFailureMoment(momentOwner(selected.layer.id, selected.row.kind, selected.row.id))?.text ??
@@ -185,45 +176,68 @@ export function OutcomeSummary({
                   Jump to the failing moment in the recording
                 </Button>
                 {jumped && (
-                  <Text span inherit role="status" c="dimmed" data-jump-result>
+                  <Text span role="status" c="dimmed" size="xs" data-jump-result>
                     {jumped}
                   </Text>
                 )}
-              </Flex>
+              </Group>
             )}
           </Stack>
         )}
         {failed && (
-          <Text component="div" c="dimmed" data-attribution={note?.attribution ?? 'unknown'}>
+          <Text component="div" c="dimmed" size="xs" data-attribution={note?.attribution ?? 'unknown'}>
             Cause:{' '}
             {note?.attribution
               ? `${BLAME[note.attribution]}, as declared by the producer`
               : 'unknown. Nothing recorded says whether the product, the test harness or the environment is at fault.'}
           </Text>
         )}
+        {headline.others.length > 0 && (
+          <Stack gap={4} component="section" aria-label="Other current sources">
+            <Text component="div" c="dimmed" size="xs" fw={500}>
+              Other current sources of this check
+            </Text>
+            <List listStyleType="none" spacing={2}>
+              {headline.others.map((outcome, index) => (
+                <List.Item key={outcome.key}>
+                  <Button
+                    type="button"
+                    variant="subtle"
+                    size="compact-sm"
+                    onClick={() => choose(outcome.layer.id)}
+                    aria-label={`Open ${labels[index]!.text}`}
+                    leftSection={<StatusMark status={outcome.row.status} size={12} />}
+                  >
+                    {labels[index]!.text}
+                  </Button>
+                </List.Item>
+              ))}
+            </List>
+          </Stack>
+        )}
         {timeline.length > 0 && (
-          <Stack gap="xs" component="section" aria-label="Chronology of this source">
-            <Text component="div" c="dimmed">
+          <Stack gap={4} component="section" aria-label="Chronology of this source">
+            <Text component="div" c="dimmed" size="xs" fw={500}>
               Records of this source, oldest first
             </Text>
-            <List listStyleType="none" spacing="xs" type="ordered">
+            <List listStyleType="none" spacing={4} type="ordered">
               {timeline.map(({ record, selected: current }) => (
                 <List.Item key={`${record.layer}|${record.kind}`} aria-current={current || undefined} data-status={record.status}>
-                  <Flex gap="xs" align="center" wrap="wrap">
+                  <Group gap="xs" align="center" wrap="wrap">
                     <StatusMark status={record.status} size={12} />
-                    <Text span inherit fw={current ? 600 : undefined}>
+                    <Text span fw={current ? 600 : undefined}>
                       {statusWord(record.status)}
                     </Text>
-                    <Text span inherit c="dimmed">
+                    <Text span c="dimmed" size="xs">
                       {ago(record.at, now)} · {shortSha(record.sha) ?? 'revision not recorded'}
                       {current ? ' · selected' : ''}
                     </Text>
-                  </Flex>
+                  </Group>
                 </List.Item>
               ))}
             </List>
             {passedAfterFailure(timeline) && (
-              <Text component="div" role="status">
+              <Text component="div" role="status" c="dimmed" size="xs">
                 The latest run passed after an earlier failure. Nothing recorded shows that the failure was fixed or why it passed.
               </Text>
             )}

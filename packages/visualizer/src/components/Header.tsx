@@ -1,8 +1,8 @@
 import { SpecLogo } from './SpecLogo';
-import { IconDots, IconFlask, IconLayoutGrid, IconListSearch, IconSparkles, IconTopologyStar } from '@tabler/icons-react';
+import { IconAdjustmentsHorizontal, IconDeviceDesktop, IconFlask, IconLayoutGrid, IconListSearch, IconMap2, IconMoon, IconSparkles, IconSun, IconTopologyStar } from '@tabler/icons-react';
 import { isUiKind } from '@crvouga/atlas/reports/ui-state';
 import { isStatechartFile } from '@crvouga/atlas/schema';
-import { ActionIcon, Anchor, Badge, Box, Button, Group, Menu, NativeSelect, Popover, Stack, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Badge, Box, Button, Divider, Group, Menu, NativeSelect, Popover, Stack, Tooltip, useMantineColorScheme, VisuallyHidden } from '@mantine/core';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAtlas } from '../app/atlas-context';
@@ -147,16 +147,47 @@ export function Header() {
   const hasCatalog = useMemo(() => evidence.evidence.some((layer) => layer.rows.some((row) => isUiKind(row.kind))), [evidence.evidence]);
   // Needs polish is offered once a critic has recorded an opinion.
   const hasCritiques = useMemo(() => evidence.evidence.some((layer) => layer.rows.some((row) => row.critique !== undefined)), [evidence.evidence]);
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const nextScheme = colorScheme === 'auto' ? 'light' : colorScheme === 'light' ? 'dark' : 'auto';
+  const schemeLabel = `Color scheme: ${colorScheme === 'auto' ? 'system' : colorScheme}. Switch to ${nextScheme === 'auto' ? 'system' : nextScheme}`;
+  const destination = (active: boolean) => ({ variant: active ? 'light' : 'subtle', 'aria-current': active ? ('page' as const) : undefined });
   return (
     <Group flex={1} miw={0} justify="space-between" wrap="nowrap" gap="xs">
       <Group gap="xs" wrap="nowrap" miw={0}>
-        <Anchor fw={800} size="lg" underline="never" renderRoot={(props) => <Link {...props} to="/" search={(prev) => runOnly(prev)} />}>
-          Atlas
+        <Anchor c="inherit" fw={700} size="md" underline="never" renderRoot={(props) => <Link {...props} to="/" search={(prev) => runOnly(prev)} />}>
+          <Group gap={6} wrap="nowrap" component="span">
+            <IconMap2 size={20} aria-hidden="true" />
+            <Box component="span" visibleFrom="xs">
+              Atlas
+            </Box>
+            <VisuallyHidden hiddenFrom="xs">Atlas</VisuallyHidden>
+          </Group>
         </Anchor>
+        <Divider orientation="vertical" visibleFrom="lg" />
+        <Group component="nav" aria-label="Review destinations" gap={4} visibleFrom="lg" wrap="nowrap">
+          <Button {...destination(testsOpen || (!hasCharts && pathname === '/'))}
+            leftSection={<IconFlask size={16} aria-hidden="true" />}
+            renderRoot={(props) => <Link {...props} to="/" search={(prev) => ({ ...runOnly(prev), view: 'tests' })} />}>
+            Tests
+          </Button>
+          {(hasFeatures || behaviorsOpen) && (
+            <Button {...destination(behaviorsOpen)} leftSection={<IconListSearch size={16} aria-hidden="true" />}
+              renderRoot={(props) => <Link {...props} to="/behaviors" search={(prev) => runOnly(prev)} />}>
+              Behaviors
+            </Button>
+          )}
+          {(hasCatalog || catalogOpen) && (
+            <Button {...destination(catalogOpen)} leftSection={<IconLayoutGrid size={16} aria-hidden="true" />}
+              renderRoot={(props) => <Link {...props} to="/catalog" search={(prev) => runOnly(prev)} />}>
+              UI catalog
+            </Button>
+          )}
+        </Group>
         <Menu keepMounted position="bottom-start">
           <Menu.Target>
             <Button
               variant="subtle"
+              flex="none"
               aria-label="Explore"
               leftSection={kind ? <SpecLogo kind={kind} /> : undefined}
               rightSection={<ChevronDownIcon aria-hidden="true" size={12} />}
@@ -165,7 +196,7 @@ export function Header() {
             </Button>
           </Menu.Target>
           <Menu.Dropdown>
-            <Box component="nav" aria-label="Spec type">
+            <Box component="nav" role="group" aria-label="Spec type">
               <Menu.Item
                 leftSection={hasCharts || !evidence.ready ? <IconTopologyStar size={16} aria-hidden="true" /> : <IconFlask size={16} aria-hidden="true" />}
                 aria-current={pathname.startsWith('/specs/') || (testsOpen && hasCharts) || catalogOpen || behaviorsOpen || critiquesOpen ? undefined : 'page'}
@@ -229,28 +260,6 @@ export function Header() {
             </Box>
           </Menu.Dropdown>
         </Menu>
-        <Group component="nav" aria-label="Review destinations" gap="xs" visibleFrom="lg" wrap="nowrap">
-          <Button variant={testsOpen || (!hasCharts && pathname === '/') ? 'light' : 'subtle'}
-            leftSection={<IconFlask size={16} aria-hidden="true" />}
-            aria-current={testsOpen || (!hasCharts && pathname === '/') ? 'page' : undefined}
-            renderRoot={(props) => <Link {...props} to="/" search={(prev) => ({ ...runOnly(prev), view: 'tests' })} />}>
-            Tests
-          </Button>
-          {(hasFeatures || behaviorsOpen) && (
-            <Button variant={behaviorsOpen ? 'light' : 'subtle'} leftSection={<IconListSearch size={16} aria-hidden="true" />}
-              aria-current={behaviorsOpen ? 'page' : undefined}
-              renderRoot={(props) => <Link {...props} to="/behaviors" search={(prev) => runOnly(prev)} />}>
-              Behaviors
-            </Button>
-          )}
-          {(hasCatalog || catalogOpen) && (
-            <Button variant={catalogOpen ? 'light' : 'subtle'} leftSection={<IconLayoutGrid size={16} aria-hidden="true" />}
-              aria-current={catalogOpen ? 'page' : undefined}
-              renderRoot={(props) => <Link {...props} to="/catalog" search={(prev) => runOnly(prev)} />}>
-              UI catalog
-            </Button>
-          )}
-        </Group>
         <Box visibleFrom="xl" miw={0}>
           <SpecBreadcrumb />
         </Box>
@@ -260,8 +269,28 @@ export function Header() {
           <ServerConnection />
         </Box>
         <Tooltip label="Search and commands (⌘K / Ctrl+K)">
-          <ActionIcon aria-label="Search and commands" aria-keyshortcuts="Meta+K Control+K Meta+Shift+P Control+Shift+P" onClick={() => setFinderOpen(true)}>
+          <Button
+            visibleFrom="md"
+            c="dimmed"
+            fw={400}
+            miw={180}
+            justify="flex-start"
+            aria-label="Search and commands"
+            aria-keyshortcuts="Meta+K Control+K Meta+Shift+P Control+Shift+P"
+            leftSection={<SearchIcon aria-hidden="true" size={16} />}
+            onClick={() => setFinderOpen(true)}
+          >
+            Search and commands
+          </Button>
+        </Tooltip>
+        <Tooltip label="Search and commands (⌘K / Ctrl+K)">
+          <ActionIcon hiddenFrom="md" aria-label="Search and commands" aria-keyshortcuts="Meta+K Control+K Meta+Shift+P Control+Shift+P" onClick={() => setFinderOpen(true)}>
             <SearchIcon aria-hidden="true" size={18} />
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label={schemeLabel}>
+          <ActionIcon aria-label={schemeLabel} onClick={() => setColorScheme(nextScheme)}>
+            {colorScheme === 'auto' ? <IconDeviceDesktop size={18} aria-hidden="true" /> : colorScheme === 'light' ? <IconSun size={18} aria-hidden="true" /> : <IconMoon size={18} aria-hidden="true" />}
           </ActionIcon>
         </Tooltip>
         <Popover
@@ -275,7 +304,7 @@ export function Header() {
         >
           <Popover.Target>
             <ActionIcon ref={optionsTarget} aria-label="View options" onClick={() => setOptionsOpen((open) => !open)}>
-              <IconDots size={20} aria-hidden="true" />
+              <IconAdjustmentsHorizontal size={18} aria-hidden="true" />
             </ActionIcon>
           </Popover.Target>
           <Popover.Dropdown>

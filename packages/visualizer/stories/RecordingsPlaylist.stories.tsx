@@ -1,0 +1,14 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, pick, screen, tests, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Recordings/Playlist' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+export const WatchFilteredTests: Story = { args: { at: tests({ producer: 'storybook-review', watch: true }) } };
+export const WatchArtifacts: Story = { args: { at: tests({ tab: 'artifacts', type: 'video', watch: true }) } };
+export const WatchRun: Story = { args: { at: tests({ tab: 'runs', openRun: pick.runs.candidate, watch: true }) } };
+export const WatchOnChosenClip: Story = { args: { at: tests({ tab: 'runs', openRun: pick.runs.candidate, watch: true, watchClip: pick.review.watchClip }) } };
+export const WatchCollection: Story = { args: { at: tests({ tab: 'collections', collection: pick.collection, watch: true }) } };
+export const WatchFailedOnly: Story = { args: { at: tests({ tab: 'artifacts', outcome: 'failed', type: 'video', watch: true }) } };
+export const NothingToWatch: Story = { args: { at: tests({ producer: 'ordering', watch: true }) } };
+export const MobileWatchRun: Story = { ...MOBILE, args: { at: tests({ tab: 'runs', openRun: pick.runs.candidate, watch: true }) } };

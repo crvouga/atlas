@@ -1,0 +1,10 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, screen, tests, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Catalog health' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+export const CatalogHealth: Story = { args: { at: tests({ tab: 'health' }) } };
+export const TriedRootMapping: Story = { args: { at: tests({ tab: 'health', root: 'coffee/>specs/coffee/' }) } };
+export const TriedSeveralRootMappings: Story = { args: { at: tests({ tab: 'health', root: 'coffee/>specs/coffee/,storybook/>specs/storybook/' }) } };
+export const MobileCatalogHealth: Story = { ...MOBILE, args: { at: tests({ tab: 'health' }) } };

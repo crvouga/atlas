@@ -1,4 +1,4 @@
-import { IconCheck, IconX, IconCircle } from '@tabler/icons-react';
+import { IconCheck, IconX, IconCircleDashed } from '@tabler/icons-react';
 import type { BackendInfo, LayerHeader, StatusCounts } from '@crvouga/atlas/reports/evidence-types';
 import type { SpecStatus, SpecSummary } from '@crvouga/atlas/reports/evidence-view';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
@@ -8,22 +8,27 @@ import { statusColor } from '../ui/theme';
 import { ago, exactTime, plural, shortSha, statusWord } from './format';
 /** A named outcome mark; color is always accompanied by a distinct symbol and accessible text. */
 export function StatusMark({ status, size = 16 }: { status: SpecStatus; size?: number }) {
-  if (status === 'running') return <Loader size={size} role="img" aria-label={statusWord(status)} />;
+  if (status === 'running') return <Loader size={size} color="blue" role="img" aria-label={statusWord(status)} />;
+  const decided = status === 'passed' || status === 'failed';
+  // The symbol sits inside a tinted disc with room around it, so a check and a cross stay crisp at 12px.
+  const glyph = Math.max(8, Math.round(size * 0.68));
   return (
     <ThemeIcon
       size={size}
+      miw={size}
+      mih={size}
       radius="xl"
-      variant={status === 'none' ? 'outline' : 'light'}
+      variant={decided ? 'light' : 'transparent'}
       color={statusColor(status)}
       role="img"
       aria-label={statusWord(status)}
     >
       {status === 'passed' ? (
-        <IconCheck size={size} aria-hidden="true" />
+        <IconCheck size={glyph} stroke={3} aria-hidden="true" />
       ) : status === 'failed' ? (
-        <IconX size={size} aria-hidden="true" />
+        <IconX size={glyph} stroke={3} aria-hidden="true" />
       ) : (
-        <IconCircle size={size} aria-hidden="true" />
+        <IconCircleDashed size={size} aria-hidden="true" />
       )}
     </ThemeIcon>
   );
@@ -53,13 +58,13 @@ const SEGMENTS = ['failed', 'running', 'passed', 'not-run'] as const;
 export function Meter({ counts, missing = 0 }: { counts: StatusCounts; missing?: number }) {
   const total = SEGMENTS.reduce((sum, status) => sum + counts[status], 0) + missing;
   return (
-    <Progress.Root size="sm" w="100%" miw="4rem" aria-hidden="true">
+    <Progress.Root size={6} radius="xl" w="100%" miw="4rem" aria-hidden="true">
       {total > 0 &&
         SEGMENTS.map(
           (status) =>
             counts[status] > 0 && <Progress.Section key={status} value={(counts[status] / total) * 100} color={statusColor(status)} />
         )}
-      {total > 0 && missing > 0 && <Progress.Section value={(missing / total) * 100} color="gray.3" />}
+      {total > 0 && missing > 0 && <Progress.Section value={(missing / total) * 100} color="var(--mantine-color-default-border)" />}
     </Progress.Root>
   );
 }
@@ -117,7 +122,11 @@ export function Origin({ layer, backends, now }: { layer: LayerHeader; backends:
           {environmentLabel(layer.environment)}
         </Text>
       )}
-      {sha && <Box component="code">{sha}</Box>}
+      {sha && (
+        <Box component="code" ff="monospace">
+          {sha}
+        </Box>
+      )}
       {layer.freshness === 'modified' && (
         <Text span inherit>
           with local changes
@@ -159,7 +168,7 @@ export function Bounded<T>({
       {items.slice(0, shown).map(children)}
       {items.length > shown && (
         <List.Item>
-          <Button variant="subtle" onClick={() => setShown(shown + size)}>
+          <Button variant="subtle" size="compact-sm" onClick={() => setShown(shown + size)}>
             {more} ({items.length - shown} more)
           </Button>
         </List.Item>

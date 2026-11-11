@@ -8,22 +8,24 @@ export function TestFilter({ slots }: { slots: readonly CheckSlot[] }) {
   const running = slots.filter((slot) => slot.status === 'running').length;
   return (
     <>
-      <Group role="group" aria-label="Test status" gap="sm" my="md">
+      <Group role="group" aria-label="Test status" gap={4}>
         <Button
           type="button"
+          size="compact-sm"
           aria-pressed={filter !== 'running'}
           onClick={() => setFilter('all')}
           variant={filter !== 'running' ? 'light' : 'subtle'}
-          rightSection={<Text span inherit>{slots.length}</Text>}
+          rightSection={<Text span inherit c="dimmed">{slots.length}</Text>}
         >
           All tests{' '}
         </Button>
         <Button
           type="button"
+          size="compact-sm"
           aria-pressed={filter === 'running'}
           onClick={() => setFilter('running')}
           variant={filter === 'running' ? 'light' : 'subtle'}
-          rightSection={<Text span inherit>{running}</Text>}
+          rightSection={<Text span inherit c="dimmed">{running}</Text>}
         >
           Running{' '}
         </Button>

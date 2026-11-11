@@ -1,4 +1,5 @@
-import { Alert, Box, Table, Text, Title } from '@mantine/core';
+import { Alert, Table, Text } from '@mantine/core';
+import { Panel } from '../components/Page';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 type Xml = Record<string, unknown>;
 const array = (value: unknown): Xml[] => (Array.isArray(value) ? value : value ? [value] : []) as Xml[];
@@ -31,7 +32,7 @@ export function DecisionTables({ text }: { text: string }) {
     tables = decisionTables(text);
   } catch (error) {
     return (
-      <Alert role="alert" color={'red'} my="sm">
+      <Alert role="alert" color={'red'}>
         This decision table could not be read: {error instanceof Error ? error.message : String(error)}
       </Alert>
     );
@@ -39,13 +40,17 @@ export function DecisionTables({ text }: { text: string }) {
   return (
     <>
       {tables.map((table) => (
-        <Box key={table.id} component="section" mb="lg">
-          <Title order={2} mb="sm">
-            {table.id}{' '}
-            <Text span inherit c="dimmed">
+        <Panel
+          key={table.id}
+          component="section"
+          flush
+          title={table.id}
+          description={
+            <Text span c="dimmed">
               Hit policy {table.policy.toLowerCase()}
             </Text>
-          </Title>
+          }
+        >
           <Table.ScrollContainer minWidth={600}>
             <Table>
               <Table.Thead>
@@ -70,7 +75,7 @@ export function DecisionTables({ text }: { text: string }) {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
-        </Box>
+        </Panel>
       ))}
     </>
   );

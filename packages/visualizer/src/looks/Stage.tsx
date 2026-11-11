@@ -1,7 +1,16 @@
-import { IconArrowLeft } from '@tabler/icons-react';
-import { Alert, Box, Button, Flex, Group, Image, List, ScrollArea, Slider, Stack, Tabs, Text, Title } from '@mantine/core';
+import {
+  IconAlertTriangle,
+  IconChevronLeft,
+  IconChevronRight,
+  IconMovie,
+  IconPhoto,
+  IconPhotoOff,
+  IconPlayerPauseFilled,
+  IconPlayerPlayFilled,
+  IconTimeline
+} from '@tabler/icons-react';
+import { ActionIcon, Alert, Box, Button, Card, Center, Group, Image, List, ScrollArea, Slider, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { IconChevronRight as ChevronIcon } from '@tabler/icons-react';
 import { finderBlocksKeys } from '../find/open';
 import type { FilmLook, Looks, MomentLook } from './collect';
 export type LookMode = 'pictures' | 'film' | 'timeline';
@@ -10,6 +19,9 @@ const MODE_LABEL: Record<LookMode, string> = {
   film: 'Video',
   timeline: 'Timeline'
 };
+const MODE_ICON = { pictures: IconPhoto, film: IconMovie, timeline: IconTimeline } satisfies Record<LookMode, unknown>;
+/** The dark neutral ground a picture or a video is letterboxed on, in both color schemes. */
+const FRAME = 'dark.9';
 type Props = {
   looks: Looks;
   /** Which kind to open when a run recorded more than one. */
@@ -67,7 +79,7 @@ export function Stage({ looks, prefer, empty, notice, moment, onMoment, renderMo
   const [picture, setPicture] = useState(0);
   const [film, setFilm] = useState(0);
   const [localMoment, setLocalMoment] = useState(0);
-  const sectionRef = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const onMomentRef = useRef(onMoment);
   onMomentRef.current = onMoment;
@@ -126,16 +138,19 @@ export function Stage({ looks, prefer, empty, notice, moment, onMoment, renderMo
   if (!active) {
     return (
       <Stack gap="sm">
-        {notice && (
-          <Alert color={'blue'} my="sm">
-            {notice}
-          </Alert>
-        )}
-        {empty ?? (
-          <Text component="div" c="dimmed">
-            Nothing was captured of this.
-          </Text>
-        )}
+        {notice && <Alert color="blue">{notice}</Alert>}
+        <Card padding="xl" radius="md" shadow="none" bg="var(--mantine-color-default-hover)" bd="1px dashed var(--mantine-color-default-border)">
+          <Stack gap="xs" align="center" ta="center">
+            <Text span c="dimmed" lh={1}>
+              <IconPhotoOff size={28} stroke={1.5} aria-hidden="true" />
+            </Text>
+            {empty ?? (
+              <Text component="div" c="dimmed">
+                Nothing was captured of this.
+              </Text>
+            )}
+          </Stack>
+        </Card>
       </Stack>
     );
   }
@@ -146,64 +161,73 @@ export function Stage({ looks, prefer, empty, notice, moment, onMoment, renderMo
   const step = looks.moments[index];
   const noun = active === 'pictures' ? 'Picture' : active === 'film' ? 'Video' : 'Moment';
   return (
-    <Box ref={sectionRef} aria-label="What it looked like" component="section" mb="lg">
+    <Stack ref={sectionRef} aria-label="What it looked like" component="section" gap="sm" miw={0}>
       {modes.length > 1 && (
-        <Tabs value={active} onChange={(value) => pickMode(value as LookMode)} mb="md">
+        <Tabs value={active} onChange={(value) => pickMode(value as LookMode)}>
           <Tabs.List aria-label="Captured evidence">
-            {modes.map((item) => (
-              <Tabs.Tab key={item} value={item} id={`look-${item}`}>
-                {MODE_LABEL[item]}
-              </Tabs.Tab>
-            ))}
+            {modes.map((item) => {
+              const Icon = MODE_ICON[item];
+              return (
+                <Tabs.Tab key={item} value={item} id={`look-${item}`} leftSection={<Icon size={16} aria-hidden="true" />}>
+                  {MODE_LABEL[item]}
+                </Tabs.Tab>
+              );
+            })}
           </Tabs.List>
         </Tabs>
       )}
-      {notice && (
-        <Alert color={'blue'} my="sm">
-          {notice}
-        </Alert>
-      )}
-      <Stack gap="sm" miw={0}>
+      {notice && <Alert color="blue">{notice}</Alert>}
+      <Stack gap="xs" miw={0}>
         {active === 'pictures' && shot && (
           <>
-            <Image src={shot.src} alt={shot.alt} fit="contain" maw="100%" mah="60vh" />
-            <Flex gap="xs" align="center" wrap="wrap" c="dimmed">
+            <Card padding="xs" radius="md" shadow="none" bg={FRAME}>
+              <Center>
+                <Image src={shot.src} alt={shot.alt} fit="contain" w="auto" maw="100%" mah="min(64vh, 40rem)" radius="xs" />
+              </Center>
+            </Card>
+            <Text component="div" c="dimmed" size="xs">
               {shot.label}
-            </Flex>
+            </Text>
           </>
         )}
         {active === 'film' && clip && <Film film={clip} videoRef={videoRef} />}
         {active === 'timeline' &&
           step &&
           (renderMoment ? (
-            <Stack gap="sm" miw={0}>
-              {renderMoment(index)}
-            </Stack>
+            <Card padding="md" radius="md" shadow="none">
+              <Stack gap="sm" miw={0}>
+                {renderMoment(index)}
+              </Stack>
+            </Card>
           ) : step.thumb ? (
             <Box component="figure" m={0}>
-              <Still src={step.thumb} point={step.point} />
-              <Box data-status={step.status ?? undefined} component="figcaption">
+              <Card padding="xs" radius="md" shadow="none" bg={FRAME}>
+                <Still src={step.thumb} point={step.point} />
+              </Card>
+              <Group data-status={step.status ?? undefined} component="figcaption" gap="xs" mt="xs" fz="sm">
                 {step.caption && (
-                  <Text span inherit>
+                  <Text span inherit c="dimmed">
                     {step.caption}
                   </Text>
                 )}
                 <Text span inherit fw={600}>
                   {step.label}
                 </Text>
-              </Box>
+              </Group>
             </Box>
           ) : (
-            <Box data-status={step.status ?? undefined} component="article">
-              {step.caption && <Text component="div">{step.caption}</Text>}
-              <Title order={3} mb="sm">
-                {step.label}
-              </Title>
-            </Box>
+            <Card data-status={step.status ?? undefined} component="article" padding="md" radius="md" shadow="none">
+              {step.caption && (
+                <Text component="div" c="dimmed" size="xs">
+                  {step.caption}
+                </Text>
+              )}
+              <Title order={3}>{step.label}</Title>
+            </Card>
           ))}
       </Stack>
       {showTransport && (
-        <Flex gap="xs" align="center" wrap="wrap">
+        <Group gap="xs" align="center" wrap="wrap">
           {showPlay && (
             <Button
               type="button"
@@ -212,56 +236,72 @@ export function Stage({ looks, prefer, empty, notice, moment, onMoment, renderMo
                 setPlaying((value) => !value);
               }}
               variant="light"
+              size="compact-md"
+              leftSection={playing ? <IconPlayerPauseFilled size={14} aria-hidden="true" /> : <IconPlayerPlayFilled size={14} aria-hidden="true" />}
             >
               {playing ? 'Pause' : 'Play'}
             </Button>
           )}
-          <Button
-            type="button"
-            aria-label={`Previous ${noun.toLowerCase()}`}
-            disabled={index === 0}
-            onClick={() => {
-              setPlaying(false);
-              select(index - 1);
-            }}
-            variant="light"
-          >
-            <Text span aria-hidden="true">
-              <IconArrowLeft size={16} aria-hidden="true" />
-            </Text>
-          </Button>
-          <Button
-            type="button"
-            aria-label={`Next ${noun.toLowerCase()}`}
-            disabled={index >= count - 1}
-            onClick={() => {
-              setPlaying(false);
-              select(index + 1);
-            }}
-            variant="light"
-          >
-            <ChevronIcon aria-hidden="true" size={14} />
-          </Button>
+          <ActionIcon.Group>
+            <ActionIcon
+              type="button"
+              aria-label={`Previous ${noun.toLowerCase()}`}
+              disabled={index === 0}
+              onClick={() => {
+                setPlaying(false);
+                select(index - 1);
+              }}
+              variant="default"
+              size="md"
+            >
+              <IconChevronLeft aria-hidden="true" size={16} />
+            </ActionIcon>
+            <ActionIcon
+              type="button"
+              aria-label={`Next ${noun.toLowerCase()}`}
+              disabled={index >= count - 1}
+              onClick={() => {
+                setPlaying(false);
+                select(index + 1);
+              }}
+              variant="default"
+              size="md"
+            >
+              <IconChevronRight aria-hidden="true" size={16} />
+            </ActionIcon>
+          </ActionIcon.Group>
           <Slider
             aria-label={noun}
+            thumbLabel={noun}
             min={0}
             max={count - 1}
             value={index}
+            label={(value) => `${noun} ${value + 1}`}
+            size="sm"
             onChange={(value) => {
               setPlaying(false);
               select(value);
             }}
             flex={1}
+            miw="6rem"
           />
-          <Text span inherit c="dimmed">
+          <Text span c="dimmed" size="xs">
             {noun} {index + 1} of {count}
           </Text>
           {active === 'timeline' && onFailure && (
-            <Button type="button" disabled={!failure} onClick={onFailure} variant="light">
+            <Button
+              type="button"
+              disabled={!failure}
+              onClick={onFailure}
+              variant="light"
+              color="red"
+              size="compact-md"
+              leftSection={<IconAlertTriangle size={14} aria-hidden="true" />}
+            >
               Next failure
             </Button>
           )}
-        </Flex>
+        </Group>
       )}
       {active === 'pictures' && (
         <Strip
@@ -291,7 +331,7 @@ export function Stage({ looks, prefer, empty, notice, moment, onMoment, renderMo
         />
       )}
       {active === 'film' && clip && clip.chapters.length > 0 && (
-        <List aria-label="Moments in the video" spacing="xs" listStyleType="none" type="ordered">
+        <List aria-label="Moments in the video" spacing={2} listStyleType="none" type="ordered">
           {clip.chapters.map((chapter) => (
             <List.Item key={`${chapter.atMs}:${chapter.label}`}>
               <Button
@@ -302,7 +342,9 @@ export function Stage({ looks, prefer, empty, notice, moment, onMoment, renderMo
                   node.currentTime = chapter.atMs / 1000;
                   void node.play().catch(() => undefined);
                 }}
-                variant="light"
+                variant="subtle"
+                size="compact-sm"
+                leftSection={<IconPlayerPlayFilled size={12} aria-hidden="true" />}
               >
                 {clock(chapter.atMs)} {chapter.label}
               </Button>
@@ -310,7 +352,7 @@ export function Stage({ looks, prefer, empty, notice, moment, onMoment, renderMo
           ))}
         </List>
       )}
-    </Box>
+    </Stack>
   );
 }
 function Film({ film, videoRef }: { film: FilmLook; videoRef: RefObject<HTMLVideoElement | null> }) {
@@ -330,15 +372,19 @@ function Film({ film, videoRef }: { film: FilmLook; videoRef: RefObject<HTMLVide
           if (node.videoWidth > 0 && node.videoHeight > 0) node.style.setProperty('--ar', String(node.videoWidth / node.videoHeight));
         }}
         component="video"
+        display="block"
         maw="100%"
         w="100%"
+        mah="min(70vh, 40rem)"
+        bg={FRAME}
+        bdrs="md"
       >
         {film.captions && <track kind="captions" src={film.captions} srcLang="en" label="Steps" default />}
       </Box>
-      <Flex gap="xs" align="center" wrap="wrap" c="dimmed">
+      <Text component="div" c="dimmed" size="xs">
         {film.label}
         {film.durationMs !== null && ` · ${clock(film.durationMs)}`}
-      </Flex>
+      </Text>
     </>
   );
 }
@@ -366,7 +412,7 @@ function Still({
         onLoad={(event) => setSize({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight })}
         fit="contain"
         maw="100%"
-        mah="60vh"
+        mah="min(60vh, 40rem)"
       />
       {placed && (
         <Box
@@ -404,8 +450,8 @@ function Strip({
   }, [index]);
   if (items.length < 2) return null;
   return (
-    <ScrollArea type="auto" mt="sm">
-      <Group gap="xs" wrap="nowrap" aria-label="Captured frames">
+    <ScrollArea type="auto" offsetScrollbars="x">
+      <Group gap={6} wrap="nowrap" aria-label="Captured frames">
         {items.map((item, itemIndex) => (
           <Box key={item.id}>
             <Button
@@ -415,14 +461,17 @@ function Strip({
               aria-label={item.label}
               title={item.label}
               onClick={() => onSelect(itemIndex)}
-              variant={itemIndex === index ? 'light' : 'default'}
+              variant={itemIndex === index ? 'light' : 'subtle'}
+              color={itemIndex === index ? undefined : 'gray'}
+              bd={itemIndex === index ? '1px solid var(--mantine-color-primary-outline)' : '1px solid var(--mantine-color-default-border)'}
               h="auto"
-              p="xs"
+              p={item.thumb ? 4 : 'xs'}
+              size="compact-sm"
             >
               {item.thumb ? (
-                <Image src={item.thumb} alt="" fit="contain" w="4rem" h="3rem" />
+                <Image src={item.thumb} alt="" fit="contain" w="4.5rem" h="3rem" radius="xs" bg={FRAME} />
               ) : (
-                <Text span inherit>
+                <Text span inherit maw="10rem" truncate>
                   {item.label}
                 </Text>
               )}

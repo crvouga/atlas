@@ -1,5 +1,6 @@
 import type { SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
-import { Box, Container, List, Title } from '@mantine/core';
+import { Box, List, Stack } from '@mantine/core';
+import { Panel } from '../components/Page';
 import type { SpecKind } from '../spec-kind';
 import { CheckDetail, ResultRow, type CheckSelection, type SelectCheck } from './check-detail';
 import { DecisionTables } from './decision-table';
@@ -27,40 +28,40 @@ export function DocumentPage({ file, text, kind, entry, selection, select }: Pro
     .replace(/\.[^.]+$/, '')
     .replace(/\.openslo$/, '');
   return (
-    <Container component="article" size="xl" w="100%" py="xl">
+    <Stack component="article" gap="md">
       <SpecHeader title={name} file={file} kind={kind} entry={entry} />
       <SourceText text={text} file={file} withResults />
       <Box component="section" id="spec-results" aria-label="Recorded results" tabIndex={-1}>
-        <TestFilter slots={slots} />
-        {visible.length > 0 && (
-          <Box component="section" mb="lg">
-            <Title order={2} mb="sm">
-              Checks
-            </Title>
-            <List spacing="xs" listStyleType="none">
-              <Bounded items={visible} size={40} more="More checks">
-                {(slot) => (
-                  <ResultRow
-                    key={slot.key}
-                    label={slot.title}
-                    slot={slot}
-                    open={selection.check === slot.id}
-                    onToggle={() => toggle(slot.id)}
-                  >
-                    <CheckDetail
-                      slot={slot}
-                      layerId={selection.check === slot.id ? selection.layer : undefined}
-                      select={(patch) => select({ check: slot.id, ...patch })}
-                      reads="steps"
-                    />
-                  </ResultRow>
-                )}
-              </Bounded>
-            </List>
-          </Box>
-        )}
-        {kind.id === 'dmn' && <DecisionTables text={text} />}
+        <Stack gap="md">
+          {(slots.length > 0 || runningOnly) && (
+            <Panel component="section" title={visible.length > 0 ? 'Checks' : undefined} actions={<TestFilter slots={slots} />}>
+              {visible.length > 0 && (
+                <List spacing="xs" listStyleType="none">
+                  <Bounded items={visible} size={40} more="More checks">
+                    {(slot) => (
+                      <ResultRow
+                        key={slot.key}
+                        label={slot.title}
+                        slot={slot}
+                        open={selection.check === slot.id}
+                        onToggle={() => toggle(slot.id)}
+                      >
+                        <CheckDetail
+                          slot={slot}
+                          layerId={selection.check === slot.id ? selection.layer : undefined}
+                          select={(patch) => select({ check: slot.id, ...patch })}
+                          reads="steps"
+                        />
+                      </ResultRow>
+                    )}
+                  </Bounded>
+                </List>
+              )}
+            </Panel>
+          )}
+          {kind.id === 'dmn' && <DecisionTables text={text} />}
+        </Stack>
       </Box>
-    </Container>
+    </Stack>
   );
 }

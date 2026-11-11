@@ -1,0 +1,18 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { behaviors, pick, press, screen, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Behaviors/Coverage states' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const coverage = (state: string) => behaviors({ behavior: pick.behaviors[state] ?? 'missing-coverage-' + state });
+const watch = async () => { await press('tab', 'Watch'); };
+export const DemonstratedBehavior: Story = { args: { at: coverage('demonstrated') }, play: watch };
+export const OlderRecording: Story = { args: { at: coverage('outdated-recording') }, play: watch };
+export const RecordingMissing: Story = { args: { at: coverage('recording-missing') } };
+export const NoRecording: Story = { args: { at: coverage('no-recording') } };
+export const ApiOnlyBehavior: Story = { args: { at: coverage('api-only') } };
+export const FailedBehavior: Story = { args: { at: coverage('failed') } };
+export const RunningBehavior: Story = { args: { at: coverage('running') } };
+export const SkippedBehavior: Story = { args: { at: coverage('skipped') } };
+export const ParkedBehavior: Story = { args: { at: coverage('parked') } };
+export const UnexecutedBehavior: Story = { args: { at: coverage('unexecuted') } };

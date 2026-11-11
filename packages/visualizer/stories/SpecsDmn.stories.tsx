@@ -1,0 +1,11 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, screen, spec, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Specs/DMN' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const FILE = 'coffee/ordering/drink-price.dmn';
+export const DmnIndex: Story = { args: { at: spec('dmn') } };
+export const Dmn: Story = { args: { at: spec('dmn', { spec: FILE }) } };
+export const DecisionOpen: Story = { args: { at: spec('dmn', { spec: FILE, check: 'ordering/price-large' }) } };
+export const MobileDmn: Story = { ...MOBILE, args: { at: spec('dmn', { spec: FILE }) } };

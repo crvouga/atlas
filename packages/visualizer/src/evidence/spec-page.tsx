@@ -1,4 +1,5 @@
-import { Alert, Anchor, Button, Container, Group, List, Stack, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Button, Card, Group, List, Skeleton, Stack, Text, Title } from '@mantine/core';
+import { IconArrowLeft, IconFileOff, IconFileUnknown, IconRefresh } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { lazy, Suspense } from 'react';
@@ -6,7 +7,7 @@ import { keys, specKey, useAdapter } from '../data/queries';
 import { outlinePath, resolveSpec, similarSpecs, specFile, specKind, type SpecKind } from '../spec-kind';
 import type { SelectCheck } from './check-detail';
 import { useEvidence } from './evidence-context';
-import { isMissing, useStalled } from './load-state';
+import { isMissing, StateBlock, useStalled } from './load-state';
 import { SpecHeader } from './spec-header';
 import { Overview } from './overview';
 // Each kind of spec has a page with a parser of its own (Gherkin, Quint, DMN); a page loads only the one it shows.
@@ -18,11 +19,9 @@ function Loading({ children }: { children: React.ReactNode }) {
   return (
     <Suspense
       fallback={
-        <Container>
-          <Text role="status" c="dimmed">
-            Loading…
-          </Text>
-        </Container>
+        <Card>
+          <StateBlock role="status">Loading…</StateBlock>
+        </Card>
       }
     >
       {children}
@@ -50,10 +49,25 @@ function SpecUnavailable({
   const similar = similarSpecs(file, listed);
   const entry = evidence.view.specs.get(outlinePath(file));
   return (
-    <Container component="article" size="xl" w="100%" py="xl">
-      <SpecHeader title={file.split('/').at(-1)!} file={file} kind={kind} entry={entry}>
-        <Alert role={missing ? 'status' : 'alert'} color={missing ? 'orange' : 'red'} my="sm" title={missing ? `This ${kind.one} is not available` : `The ${kind.one} could not be read`}>
-          <Stack gap="sm">
+    <Stack component="article" gap="md">
+      <SpecHeader title={file.split('/').at(-1)!} file={file} kind={kind} entry={entry} />
+      <Card>
+        <StateBlock
+          role={missing ? 'status' : 'alert'}
+          icon={<IconFileOff size={22} />}
+          title={missing ? `This ${kind.one} is not available` : `The ${kind.one} could not be read`}
+          actions={
+            <>
+              <Button type="button" onClick={retry} variant="filled" leftSection={<IconRefresh size={16} aria-hidden="true" />}>
+                Try again
+              </Button>
+              <Button leftSection={<IconArrowLeft size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run }} />}>
+                Back to {kind.label}
+              </Button>
+            </>
+          }
+        >
+          <Stack gap="sm" align="center">
             <Text component="div">
               {missing ? `specs/${file} is not in this spec set. ` : ''}
               {detail}
@@ -61,29 +75,21 @@ function SpecUnavailable({
               {entry && entry.slots.length > 0 ? ' Results recorded against it are shown above.' : ''}
             </Text>
             {similar.length > 0 && (
-              <>
+              <Stack gap={4} align="center">
                 <Text component="div">Did you mean:</Text>
-                <List listStyleType="none">
+                <List listStyleType="none" spacing={4}>
                   {similar.map((candidate) => (
                     <List.Item key={candidate}>
-                      <Anchor c="blue.9" underline="always" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run, spec: candidate }} />}>{candidate}</Anchor>
+                      <Anchor ff="monospace" underline="always" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run, spec: candidate }} />}>{candidate}</Anchor>
                     </List.Item>
                   ))}
                 </List>
-              </>
+              </Stack>
             )}
-            <Group gap="sm">
-              <Button type="button" onClick={retry} variant="light">
-                Try again
-              </Button>
-              <Button variant="subtle" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run }} />}>
-                Back to {kind.label}
-              </Button>
-            </Group>
           </Stack>
-        </Alert>
-      </SpecHeader>
-    </Container>
+        </StateBlock>
+      </Card>
+    </Stack>
   );
 }
 /** One spec tab: its overview, one of its documents, or a recording opened from that document. */
@@ -111,27 +117,21 @@ export function SpecPage() {
   };
   if (!kind) {
     return (
-      <Container component="article" size="xl" w="100%" py="xl">
-        <Title order={1} mb="sm">
-          No such kind of spec
-        </Title>
-        <Text component="div" c="dimmed">
+      <Card component="article">
+        <StateBlock icon={<IconFileUnknown size={22} />} title={<Title order={1}>No such kind of spec</Title>}>
           Pick a tab above.
-        </Text>
-      </Container>
+        </StateBlock>
+      </Card>
     );
   }
   if (!file) return <Overview kind={kind} />;
   if (!readable) {
     return (
-      <Container component="article" size="xl" w="100%" py="xl">
-        <Title order={1} mb="sm">
-          {kind.label}
-        </Title>
-        <Text component="div" c="dimmed">
+      <Card component="article">
+        <StateBlock icon={<IconFileUnknown size={22} />} title={<Title order={1}>{kind.label}</Title>}>
           This file is not a {kind.one}.
-        </Text>
-      </Container>
+        </StateBlock>
+      </Card>
     );
   }
   const entry = evidence.view.specs.get(outlinePath(file));
@@ -169,26 +169,43 @@ export function SpecPage() {
   }
   if (text.isPending || (text.isError && evidence.filesPending))
     return (
-      <Container component="article" size="xl" w="100%" py="xl">
-        <Text role="status" component="div" c="dimmed">
-          Loading specs/{file}…
-        </Text>
+      <Stack component="article" gap="md">
         {stalled && (
-          <Alert role="status" color="orange" my="sm" title={`Reading the ${kind.one} is taking longer than expected`}>
-            <Group gap="sm">
-              <Text span inherit>
+          <Alert role="status" color="orange" title={`Reading the ${kind.one} is taking longer than expected`}>
+            <Stack gap="sm">
+              <Text span>
                 specs/{file} has not arrived yet. Recorded results for other specs are not affected.
               </Text>
-              <Button type="button" onClick={retryText} variant="light">
-                Try again
-              </Button>
-              <Button variant="subtle" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run: search.run }} />}>
-                Back to {kind.label}
-              </Button>
-            </Group>
+              <Group gap="xs">
+                <Button type="button" onClick={retryText} variant="filled" leftSection={<IconRefresh size={16} aria-hidden="true" />}>
+                  Try again
+                </Button>
+                <Button leftSection={<IconArrowLeft size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{ run: search.run }} />}>
+                  Back to {kind.label}
+                </Button>
+              </Group>
+            </Stack>
           </Alert>
         )}
-      </Container>
+        <Card>
+          <Stack gap="sm">
+            <Text role="status" component="div" size="xs" c="dimmed" ff="monospace">
+              Loading specs/{file}…
+            </Text>
+            <Skeleton h={28} w="40%" />
+            <Skeleton h={8} />
+            <Skeleton h={14} w="30%" />
+          </Stack>
+        </Card>
+        <Card>
+          <Stack gap="xs">
+            <Skeleton h={20} w={120} />
+            {[92, 64, 78, 55, 70, 48].map((width, at) => (
+              <Skeleton key={at} h={12} w={`${width}%`} />
+            ))}
+          </Stack>
+        </Card>
+      </Stack>
     );
   if (text.isError) {
     const listedElsewhere = !evidence.filesPending && !evidence.filesError && !evidence.files.includes(file);

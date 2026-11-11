@@ -1,0 +1,11 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, screen, spec, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Specs/OpenSLO' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const FILE = 'coffee/ordering/checkout.openslo.yaml';
+export const OpenSloIndex: Story = { args: { at: spec('openslo') } };
+export const OpenSlo: Story = { args: { at: spec('openslo', { spec: FILE }) } };
+export const ObjectiveOpen: Story = { args: { at: spec('openslo', { spec: FILE, check: 'ordering/checkout-latency' }) } };
+export const MobileOpenSlo: Story = { ...MOBILE, args: { at: spec('openslo', { spec: FILE }) } };

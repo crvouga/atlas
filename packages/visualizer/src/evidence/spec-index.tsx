@@ -1,7 +1,8 @@
 import { addSummaries, NO_EVIDENCE, type SpecSummary } from '@crvouga/atlas/reports/evidence-view';
-import { Box, Button, Group, NavLink, SegmentedControl, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Box, Button, Group, NavLink, SegmentedControl, Stack, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
+import { IconSearch } from '@tabler/icons-react';
 import { Link, useSearch } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { folderOf, outlinePath, specFile, type SpecKind } from '../spec-kind';
 import { useUiStore, type ResultFilter } from '../state/ui-store';
 import { useEvidence } from './evidence-context';
@@ -25,6 +26,7 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
   const filter = useUiStore((s) => s.resultFilter);
   const setFilter = useUiStore((s) => s.setResultFilter);
   const [query, setQuery] = useState('');
+  const searchId = useId();
   const [grouping, setGrouping] = useState<'folder' | 'domain'>('folder');
   const open = typeof search.spec === 'string' ? specFile(search.spec) : '';
   // The domain a spec declares in its metadata is used as given; a spec that declares none is not given one.
@@ -54,44 +56,58 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
     return [...byGroup];
   }, [visible, grouping]);
   return (
-    <Box aria-label={`${kind.label} ${kind.many}`} component="nav" p="md">
-      <Group role="group" aria-label="Show" gap="xs" mb="md">
+    <Stack aria-label={`${kind.label} ${kind.many}`} component="nav" p="xs" gap="sm">
+      <Box>
+        <Box component="label" htmlFor={searchId}>
+          <VisuallyHidden>Search {kind.many}</VisuallyHidden>
+        </Box>
+        <TextInput
+          id={searchId}
+          placeholder={`Search ${kind.many}`}
+        type="search"
+        leftSection={<IconSearch size={16} aria-hidden="true" />}
+        value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+        />
+      </Box>
+      <Group role="group" aria-label="Show" gap={4}>
         {FILTERS.map((entry) => (
           <Button
             key={entry.id}
             type="button"
+            size="compact-xs"
             aria-pressed={filter === entry.id}
             onClick={() => setFilter(entry.id)}
             variant={filter === entry.id ? 'light' : 'subtle'}
-            rightSection={<Text span inherit>{rows.filter((row) => entry.keeps(row.summary)).length}</Text>}
+            rightSection={<Text span inherit c="dimmed">{rows.filter((row) => entry.keeps(row.summary)).length}</Text>}
           >
             {entry.label}{' '}
           </Button>
         ))}
       </Group>
-      <Group gap="md" align="end" mb="md">
-        <TextInput
-          label={`Search ${kind.many}`}
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          flex={1}
-          miw="12rem"
-        />
-        <SegmentedControl
-          aria-label="Group by"
-          value={grouping}
-          onChange={(value) => setGrouping(value === 'domain' ? 'domain' : 'folder')}
-          data={[
-            { label: 'Folder', value: 'folder' },
-            { label: 'Domain', value: 'domain' }
-          ]}
-        />
-      </Group>
-      {evidence.filesPending && <Text component="div">Loading…</Text>}
-      {evidence.filesError && <Text component="div">The file list could not be loaded.</Text>}
+      <SegmentedControl
+        aria-label="Group by"
+        size="xs"
+        fullWidth
+        value={grouping}
+        onChange={(value) => setGrouping(value === 'domain' ? 'domain' : 'folder')}
+        data={[
+          { label: 'Folder', value: 'folder' },
+          { label: 'Domain', value: 'domain' }
+        ]}
+      />
+      {evidence.filesPending && (
+        <Text component="div" c="dimmed">
+          Loading…
+        </Text>
+      )}
+      {evidence.filesError && (
+        <Text component="div" c="dimmed">
+          The file list could not be loaded.
+        </Text>
+      )}
       {!evidence.filesPending && !evidence.filesError && visible.length === 0 && (
-        <Text component="div">
+        <Text component="div" c="dimmed" ta="center" py="md">
           {rows.length === 0
             ? `No ${kind.many} in this spec set.`
             : needle
@@ -106,14 +122,14 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
         </Text>
       )}
       {groups.map(([folder, entries]) => (
-        <Box key={folder || kind.id} component="section" mb="lg">
-          <Title order={3} mb="sm">
-            <Text span inherit>
+        <Box key={folder || kind.id} component="section">
+          <Group justify="space-between" wrap="nowrap" gap="xs" px="xs" mb={4}>
+            <Title order={3} size="xs" fw={600} c="dimmed" lineClamp={1} title={folder || kind.label}>
               {folder || kind.label}
-            </Text>
+            </Title>
             <Tally summary={addSummaries(entries.map((row) => row.summary))} />
-          </Title>
-          <Stack gap="xs">
+          </Group>
+          <Stack gap={2}>
             {entries.map((row) => (
               <NavLink
                 key={row.file}
@@ -130,6 +146,6 @@ export function SpecIndex({ kind }: { kind: SpecKind }) {
           </Stack>
         </Box>
       ))}
-    </Box>
+    </Stack>
   );
 }

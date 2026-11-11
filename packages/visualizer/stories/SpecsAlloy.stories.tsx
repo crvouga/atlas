@@ -1,0 +1,11 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, screen, spec, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Specs/Alloy' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const FILE = 'coffee/ordering/payment.als';
+export const AlloyIndex: Story = { args: { at: spec('alloy') } };
+export const Alloy: Story = { args: { at: spec('alloy', { spec: FILE }) } };
+export const CheckOpen: Story = { args: { at: spec('alloy', { spec: FILE, check: 'ordering/one-payment' }) } };
+export const MobileAlloy: Story = { ...MOBILE, args: { at: spec('alloy', { spec: FILE }) } };

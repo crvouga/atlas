@@ -10,9 +10,11 @@
  */
 import type { UiCatalog } from '@crvouga/atlas/reports/ui-catalog';
 import { UI_CELL_CHANGES, changedUiEntries, diffUiCatalogs, diffUiProfiles, uiCatalogCommits, type UiCatalogDiff, type UiCellChange, type UiDiffEntry } from '@crvouga/atlas/reports/ui-catalog-diff';
-import { Alert, Anchor, Badge, Button, Card, Code, Group, NativeSelect, SegmentedControl, SimpleGrid, Stack, Switch, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Card, Code, Group, NativeSelect, SegmentedControl, SimpleGrid, Stack, Switch, Text } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+
+import { Panel } from '../components/Page';
 
 import { useEvidence } from '../evidence/evidence-context';
 import { ago, plural, shortSha, useNow } from '../evidence/format';
@@ -45,11 +47,11 @@ function narrowedBy(expression: string, mode: 'commit' | 'profile'): string {
 function Entry({ entry, before, after }: { entry: UiDiffEntry; before: string; after: string }) {
   const change = CHANGE[entry.change];
   return (
-    <Card withBorder role="listitem" data-state={entry.id} data-change={entry.change}>
+    <Card padding="md" role="listitem" data-state={entry.id} data-change={entry.change}>
       <Stack gap="sm">
         <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Stack gap={2}>
-            <Anchor fw={700} aria-label={`Open ${entry.title}`} renderRoot={(props) => <Link {...props} to="/catalog" search={((prev: Record<string, unknown>) => ({ ...prev, state: entry.id })) as never} resetScroll={false} />}>
+          <Stack gap={0} miw={0}>
+            <Anchor fw={600} c="inherit" size="md" aria-label={`Open ${entry.title}`} renderRoot={(props) => <Link {...props} to="/catalog" search={((prev: Record<string, unknown>) => ({ ...prev, state: entry.id })) as never} resetScroll={false} />}>
               {entry.title}
             </Anchor>
             <Text c="dimmed" fz="xs">
@@ -57,14 +59,14 @@ function Entry({ entry, before, after }: { entry: UiDiffEntry; before: string; a
               {entry.profile ? ` · ${entry.profile.label}` : ''}
             </Text>
           </Stack>
-          <Badge variant="light" color={change.color} title={change.meaning}>
+          <Badge variant={change.color === 'gray' ? 'default' : 'light'} color={change.color} title={change.meaning} flex="0 0 auto">
             {entry.change === 'coverage' && entry.before && entry.after ? `${coverageWord(entry.before.coverage)} → ${coverageWord(entry.after.coverage)}` : change.label}
           </Badge>
         </Group>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           {([['Before', before, entry.before], ['After', after, entry.after]] as const).map(([side, name, cell]) => (
             <Stack key={side} gap="xs" component="section" aria-label={`${side}: ${name}`}>
-              <Text fw={600} fz="sm">
+              <Text fw={500} fz="xs" c="dimmed">
                 {side}: {name}
               </Text>
               {cell ? (
@@ -95,21 +97,25 @@ function Results({ diff, before, after }: { diff: UiCatalogDiff; before: string;
   return (
     <GalleryProvider images={entries.flatMap(entry => ([['before', before, entry.before], ['after', after, entry.after]] as const).flatMap(([side, name, cell]) => { const image = cell ? galleryImage(cell, entry.title, `${side}, ${name}`) : null; return image ? [image] : []; }))}>
     <Stack gap="md">
-      <Group gap="xs" role="status" aria-label="Comparison summary">
-        {UI_CELL_CHANGES.map((name) =>
-          diff.summary[name] > 0 ? (
-            <Badge key={name} variant="light" color={CHANGE[name].color} title={CHANGE[name].meaning}>
-              {diff.summary[name]} {CHANGE[name].label.toLowerCase()}
-            </Badge>
-          ) : null
-        )}
-        {diff.summary.total === 0 && <Text c="dimmed">There is nothing to compare.</Text>}
+      <Group justify="space-between" gap="sm">
+        <Group gap={6} role="status" aria-label="Comparison summary">
+          {UI_CELL_CHANGES.map((name) =>
+            diff.summary[name] > 0 ? (
+              <Badge key={name} size="sm" variant={CHANGE[name].color === 'gray' ? 'default' : 'light'} color={CHANGE[name].color} title={CHANGE[name].meaning}>
+                {diff.summary[name]} {CHANGE[name].label.toLowerCase()}
+              </Badge>
+            ) : null
+          )}
+          {diff.summary.total === 0 && <Text c="dimmed" size="sm">There is nothing to compare.</Text>}
+        </Group>
+        <Switch size="sm" label="Show unchanged" checked={all} onChange={(event) => go({ all: event.currentTarget.checked ? '1' : undefined })} />
       </Group>
-      <Switch label="Show unchanged" checked={all} onChange={(event) => go({ all: event.currentTarget.checked ? '1' : undefined })} />
       {diff.summary.total > 0 && entries.length === 0 && (
-        <Text role="status" data-no-change>
-          Nothing differs between the two sides.
-        </Text>
+        <Card>
+          <Text role="status" c="dimmed" size="sm" ta="center" py="lg" data-no-change>
+            Nothing differs between the two sides.
+          </Text>
+        </Card>
       )}
       {entries.length > 0 && (
         <SimpleGrid role="list" aria-label="Differences" cols={1} spacing="md">
@@ -119,16 +125,21 @@ function Results({ diff, before, after }: { diff: UiCatalogDiff; before: string;
         </SimpleGrid>
       )}
       {entries.length > shown && (
-        <Button type="button" variant="subtle" onClick={() => setShown(shown + ENTRIES)}>
-          Show more ({entries.length - shown} more)
-        </Button>
+        <Group justify="center">
+          <Button type="button" onClick={() => setShown(shown + ENTRIES)}>
+            Show more ({entries.length - shown} more)
+          </Button>
+        </Group>
       )}
     </Stack>
     </GalleryProvider>
   );
 }
 
-function CommitComparison({ whole, query }: { whole: UiCatalog; query: string }) {
+/** The heading, mode control and closing notes every comparison's picker panel shares. */
+interface PickerPanel { title: string; actions: ReactNode; lead: ReactNode; note: ReactNode }
+
+function CommitComparison({ whole, query, panel }: { whole: UiCatalog; query: string; panel: PickerPanel }) {
   const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const now = useNow();
@@ -155,10 +166,9 @@ function CommitComparison({ whole, query }: { whole: UiCatalog; query: string })
     </>
   );
   return (
-    <Stack gap="md">
-      <Text c="dimmed">
-        The states each commit recorded, set side by side. A layer recorded from a checkout with uncommitted changes is not a commit&rsquo;s own result and is left out.
-      </Text>
+    <>
+      <Panel title={panel.title} actions={panel.actions} description="The states each commit recorded, set side by side. A layer recorded from a checkout with uncommitted changes is not a commit&rsquo;s own result and is left out.">
+      {panel.lead}
       {history.error && (
         <Alert role="alert" color="red" title="The recorded layers cannot be read">
           <Group gap="sm">
@@ -177,13 +187,13 @@ function CommitComparison({ whole, query }: { whole: UiCatalog; query: string })
       </SimpleGrid>
       {!search.from && !search.to && commits.length >= 2 && (
         <Group>
-          <Button type="button" variant="light" onClick={() => go({ from: commits[1]!.sha, to: commits[0]!.sha })}>
+          <Button type="button" variant="light" size="xs" onClick={() => go({ from: commits[1]!.sha, to: commits[0]!.sha })}>
             Compare the two newest commits
           </Button>
         </Group>
       )}
       {!history.loading && commits.length < 2 && (
-        <Text c="dimmed" role="status" data-no-commits>
+        <Text c="dimmed" size="sm" role="status" data-no-commits>
           {commits.length === 0 ? 'No layer of this catalog records the commit it was captured at, so there is nothing to compare by commit.' : 'Only one commit has recorded layers, so there is nothing to compare it with.'}
         </Text>
       )}
@@ -199,17 +209,19 @@ function CommitComparison({ whole, query }: { whole: UiCatalog; query: string })
         </Alert>
       )}
       {pending > 0 && (
-        <Text role="status" c="dimmed">
+        <Text role="status" c="dimmed" size="sm">
           Reading {plural(pending, 'more layer', 'more layers')}; the comparison fills in as they arrive.
         </Text>
       )}
+      {panel.note}
+      </Panel>
       {diff && search.from !== search.to && <Results diff={diff} before={`commit ${shortSha(search.from ?? null)}`} after={`commit ${shortSha(search.to ?? null)}`} />}
-      {search.from && search.to && !diff && !history.loading && pending === 0 && <Text c="dimmed">There is nothing recorded at those commits.</Text>}
-    </Stack>
+      {search.from && search.to && !diff && !history.loading && pending === 0 && <Text c="dimmed" size="sm">There is nothing recorded at those commits.</Text>}
+    </>
   );
 }
 
-function ProfileComparison({ whole, query }: { whole: UiCatalog; query: string }) {
+function ProfileComparison({ whole, query, panel }: { whole: UiCatalog; query: string; panel: PickerPanel }) {
   const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const known = (key: string | undefined) => whole.profiles.some((profile) => profile.key === key);
@@ -230,8 +242,9 @@ function ProfileComparison({ whole, query }: { whole: UiCatalog; query: string }
     </>
   );
   return (
-    <Stack gap="md">
-      <Text c="dimmed">Each state in one profile set beside the same state in another: desktop against mobile, light against dark.</Text>
+    <>
+      <Panel title={panel.title} actions={panel.actions} description="Each state in one profile set beside the same state in another: desktop against mobile, light against dark.">
+      {panel.lead}
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
         <NativeSelect label="Before" value={search.from ?? ''} onChange={(event) => go({ from: event.currentTarget.value || undefined })} data-compare-picker="before">
           {options(search.from)}
@@ -241,13 +254,15 @@ function ProfileComparison({ whole, query }: { whole: UiCatalog; query: string }
         </NativeSelect>
       </SimpleGrid>
       {whole.profiles.length < 2 && (
-        <Text c="dimmed" role="status" data-no-profiles>
+        <Text c="dimmed" size="sm" role="status" data-no-profiles>
           This catalog has {whole.profiles.length === 1 ? 'one profile' : 'no profiles'}, so there is nothing to compare it with.
         </Text>
       )}
       {search.from && search.from === search.to && <Alert color="gray" role="status">The same profile is on both sides.</Alert>}
+      {panel.note}
+      </Panel>
       {diff && <Results diff={diff} before={label(search.from)} after={label(search.to)} />}
-    </Stack>
+    </>
   );
 }
 
@@ -258,34 +273,38 @@ export function UiCatalogCompare({ whole, expression }: { whole: UiCatalog; expr
   const mode = search.compare === 'profile' ? 'profile' : 'commit';
   const query = expression ?? catalogExpression(search);
   const narrowed = useMemo(() => narrowedBy(query, mode), [query, mode]);
-  return (
-    <Stack gap="md" component="section" aria-label="Compare">
-      <Group justify="space-between" align="flex-end">
-        <Title order={2}>Compare</Title>
-        <Group gap="sm">
-          <SegmentedControl
-            aria-label="What to compare"
-            value={mode}
-            onChange={(value) => go({ compare: value, from: undefined, to: undefined })}
-            data={[
-              { value: 'commit', label: 'Two commits' },
-              { value: 'profile', label: 'Two profiles' }
-            ]}
-          />
-          <Button type="button" variant="subtle" onClick={() => go({ compare: undefined, from: undefined, to: undefined, all: undefined })}>
-            Back to the catalog
-          </Button>
-        </Group>
-      </Group>
+  const panel: PickerPanel = {
+    title: 'Compare',
+    actions: <>
+      <SegmentedControl
+        aria-label="What to compare"
+        value={mode}
+        onChange={(value) => go({ compare: value, from: undefined, to: undefined })}
+        data={[
+          { value: 'commit', label: 'Two commits' },
+          { value: 'profile', label: 'Two profiles' }
+        ]}
+      />
+      <Button type="button" variant="subtle" color="gray" onClick={() => go({ compare: undefined, from: undefined, to: undefined, all: undefined })}>
+        Back to the catalog
+      </Button>
+    </>,
+    lead: <>
       {catalogTokens(query).some(token => token.field === 'coverage' || (mode === 'profile' && token.field === 'profile')) ? (
-        <Text c="dimmed" fz="sm">
+        <Text c="dimmed" fz="xs">
           {mode === 'profile' ? 'The coverage and profile filters do not apply here: coverage is what is compared, and the profiles are chosen below.' : 'The coverage filter does not apply to a comparison, which is about coverage changing.'} The other filters do.
         </Text>
       ) : null}
-      {mode === 'commit' ? <CommitComparison whole={whole} query={narrowed} /> : <ProfileComparison whole={whole} query={narrowed} />}
+    </>,
+    note: <>
       <Text c="dimmed" fz="xs">
         Pictures are compared by their stored bytes: <Code>Picture changed</Code> means the file is not the same, not how many pixels differ.
       </Text>
+    </>
+  };
+  return (
+    <Stack gap="md" component="section" aria-label="Compare">
+      {mode === 'commit' ? <CommitComparison whole={whole} query={narrowed} panel={panel} /> : <ProfileComparison whole={whole} query={narrowed} panel={panel} />}
     </Stack>
   );
 }

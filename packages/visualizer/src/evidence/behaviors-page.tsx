@@ -8,10 +8,12 @@
  * the address; where the reader had scrolled to, how much of the list was shown and which row had focus are remembered
  * for the session, so leaving the workspace gives the list back as it was, with focus on the behavior that was open.
  */
-import { Accordion, Alert, Anchor, Badge, Box, Button, Container, Grid, Group, NavLink, Paper, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
-import { IconArrowLeft, IconArrowsMaximize, IconChevronLeft, IconChevronRight, IconBook, IconPlayerPlay, IconSearch } from '@tabler/icons-react';
+import { Accordion, ActionIcon, Alert, Anchor, Badge, Box, Button, Card, Divider, Grid, Group, NavLink, ScrollArea, Stack, Text, TextInput, ThemeIcon, Title, Tooltip } from '@mantine/core';
+import { IconArrowLeft, IconArrowsMaximize, IconChevronLeft, IconChevronRight, IconBook, IconListSearch, IconMovie, IconPlayerPlay, IconSearch, IconZoomQuestion } from '@tabler/icons-react';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+
+import { PageHeader, Panel } from '../components/Page';
 
 import { SearchNotes, TypedFilters } from '../explorer/search-notes';
 import { useDocSearch } from '../find/doc-search';
@@ -21,12 +23,13 @@ import { specKind } from '../spec-kind';
 import { needsAttention, type ReleaseIdentity } from './applicability';
 import { ApplicabilityControls, ApplicabilitySummary, useApplicabilityState, type ApplicabilityState } from './applicability-view';
 import { behaviorDoc, indexBehaviors, type IndexedBehavior } from './behavior-index';
-import { BehaviorPanel, behaviorSteps, CoverageBadge, Player, Provenance, RevisionLine } from './behavior-panel';
+import { BehaviorPanel, behaviorSteps, CoverageBadge, Illustrative, NothingToWatch, Player, Provenance, RevisionLine, VideoMark } from './behavior-panel';
 import { forgetReturn, recallReturn, rememberReturn, scopeKey } from './behavior-return';
 import { COVERAGE, COVERAGE_ORDER, coverageCounts, type CoverageState } from './behavior';
 import { CheckDetail, PlainSteps, type SelectCheck } from './check-detail';
 import { useEvidence } from './evidence-context';
 import { plural } from './format';
+import { StateBlock } from './load-state';
 import { ScopedSummary } from './scoped-summary-view';
 import { useSpecTexts } from './spec-texts';
 
@@ -109,7 +112,7 @@ function selecting(id: string, workspace: boolean) {
   });
 }
 
-/** One behavior in the list: its words, where it is written and its coverage state, as a link that selects it. */
+/** One behavior in the list: its words, where it is written, whether there is a recording to watch and its coverage state, as a link that selects it. */
 function Row({ entry, selected }: { entry: IndexedBehavior; selected: boolean }) {
   return (
     <NavLink
@@ -119,7 +122,12 @@ function Row({ entry, selected }: { entry: IndexedBehavior; selected: boolean })
       aria-current={selected ? 'true' : undefined}
       data-behavior-row={entry.id}
       data-coverage={entry.behavior.state}
-      rightSection={<CoverageBadge state={entry.behavior.state} />}
+      rightSection={
+        <Group gap="xs" wrap="nowrap">
+          {entry.behavior.demo && <VideoMark />}
+          <CoverageBadge state={entry.behavior.state} />
+        </Group>
+      }
       renderRoot={(props) => <Link {...props} to="/behaviors" search={selecting(entry.id, false)} resetScroll={false} />}
     />
   );
@@ -131,21 +139,19 @@ function CoverageFilter({ listing, coverage }: { listing: Listing; coverage: Cov
   const set = (next: CoverageState | undefined) => void navigate({ search: (prev) => ({ ...prev, coverage: next }), replace: true, resetScroll: false });
   const { counts, scoped } = listing;
   return (
-    <Stack gap="xs" component="section" aria-label="Coverage">
-      <Text component="div">
-        {counts.demonstrated} of {plural(scoped.length, 'behavior', 'behaviors')} demonstrated with a recording of the current spec.
-      </Text>
-      <Group role="group" aria-label="Coverage state" gap="xs">
-        <Button type="button" aria-pressed={!coverage} variant={coverage ? 'subtle' : 'light'} onClick={() => set(undefined)} rightSection={<Text span inherit>{scoped.length}</Text>}>
+    <Stack gap={6} component="section" aria-label="Coverage">
+      <Group role="group" aria-label="Coverage state" gap={4}>
+        <Button type="button" size="compact-sm" aria-pressed={!coverage} variant={coverage ? 'subtle' : 'light'} onClick={() => set(undefined)} rightSection={<Text span inherit c="dimmed">{scoped.length}</Text>}>
           All{' '}
         </Button>
         {COVERAGE_ORDER.filter((state) => state === 'demonstrated' || counts[state] > 0 || coverage === state).map((state) => (
-          <Button key={state} type="button" aria-pressed={coverage === state} variant={coverage === state ? 'light' : 'subtle'} title={COVERAGE[state].meaning} onClick={() => set(coverage === state ? undefined : state)} rightSection={<Text span inherit>{counts[state]}</Text>}>
+          <Button key={state} type="button" size="compact-sm" aria-pressed={coverage === state} variant={coverage === state ? 'light' : 'subtle'} title={COVERAGE[state].meaning} onClick={() => set(coverage === state ? undefined : state)} rightSection={<Text span inherit c="dimmed">{counts[state]}</Text>}>
             {COVERAGE[state].label}{' '}
           </Button>
         ))}
       </Group>
-      <Text component="div" c="dimmed">
+      <Text component="div" size="xs" c="dimmed">
+        {counts.demonstrated} of {plural(scoped.length, 'behavior', 'behaviors')} demonstrated with a recording of the current spec.{' '}
         A recording shows one run. It is illustrative evidence and does not mean a behavior is live or ready for production.
       </Text>
     </Stack>
@@ -157,17 +163,17 @@ function Disclosure({ unread, features, unreadable, pending, error }: { unread: 
   return (
     <>
       {error && (
-        <Alert role="alert" color="red" my="sm">
+        <Alert role="alert" color="red">
           The list of features could not be loaded, so this list may be missing behaviors.
         </Alert>
       )}
       {pending && unread > 0 && (
-        <Text role="status" component="div" c="dimmed" my="sm">
+        <Text role="status" component="div" c="dimmed">
           Reading features: {features - unread} of {features} read. Behaviors from the rest are not listed yet, so an empty answer is not final.
         </Text>
       )}
       {unreadable.length > 0 && (
-        <Alert role="status" color="orange" my="sm" title={`${plural(unreadable.length, 'feature', 'features')} could not be read`}>
+        <Alert role="status" color="orange" title={`${plural(unreadable.length, 'feature', 'features')} could not be read`}>
           Their behaviors are not in this list: {unreadable.join(', ')}.
         </Alert>
       )}
@@ -186,15 +192,20 @@ function BehaviorList({ listing, selected, limit, onMore }: { listing: Listing; 
     return [...byDomain];
   }, [visible, ranked]);
   return (
-    <Stack gap="md" component="section" aria-label="Behavior list">
+    <Stack gap={0} component="section" aria-label="Behavior list">
       {groups.map(([domain, entries]) => (
         <Box key={domain || 'ranked'} component="section" aria-label={domain || undefined}>
           {domain && (
-            <Title order={2} mb="xs">
-              {domain}
-            </Title>
+            <Group justify="space-between" gap="xs" px="md" py={6} bg="var(--mantine-color-default-hover)">
+              <Title order={2} size="xs" fw={600} c="dimmed">
+                {domain}
+              </Title>
+              <Text span size="xs" c="dimmed" aria-hidden="true">
+                {entries.length}
+              </Text>
+            </Group>
           )}
-          <Stack gap="xs">
+          <Stack gap={2} p="xs">
             {entries.map((entry) => (
               <Row key={entry.id} entry={entry} selected={selected === entry.id} />
             ))}
@@ -202,11 +213,28 @@ function BehaviorList({ listing, selected, limit, onMore }: { listing: Listing; 
         </Box>
       ))}
       {shown.length > limit && (
-        <Button type="button" variant="subtle" onClick={onMore}>
-          Show more behaviors ({shown.length - limit} more)
-        </Button>
+        <Box p="xs" pt={0}>
+          <Button type="button" variant="subtle" fullWidth onClick={onMore}>
+            Show more behaviors ({shown.length - limit} more)
+          </Button>
+        </Box>
       )}
     </Stack>
+  );
+}
+
+/** One of the three things a selected behavior offers, with its icon. */
+function Offer({ icon, title, children }: { icon: ReactNode; title: string; children: string }) {
+  return (
+    <Group wrap="nowrap" align="flex-start" gap="sm">
+      <ThemeIcon variant="light" color="gray" size={36} radius="md" aria-hidden="true">
+        {icon}
+      </ThemeIcon>
+      <Box>
+        <Text fw={600}>{title}</Text>
+        <Text c="dimmed">{children}</Text>
+      </Box>
+    </Group>
   );
 }
 
@@ -235,124 +263,138 @@ function Index({ listing, search, index, pending, filesError, applicability }: {
     } else row(search.behavior)?.scrollIntoView?.({ block: 'nearest' });
   }, [pending, index.entries.length, point, search.behavior]);
   const setQuery = (q: string) => void navigate({ search: (prev) => ({ ...prev, q: q || undefined }), replace: true, resetScroll: false });
+  const none = index.entries.length === 0 && !pending && index.unreadable.length === 0 && !filesError;
+  const remember = (id: string) => () => rememberReturn({ scope, scrollY: window.scrollY, shown: shownCount, focus: id });
   return (
-    <Container component="article" size="xl" w="100%" py="xl" aria-label="Behaviors">
-      <Stack gap="md">
-        <Box component="header">
-          <Title order={1} mb="xs">
-            Behaviors
-          </Title>
-          <Text component="div" c="dimmed">
-            Everything the project's features say should happen, found by its words. Read what should happen, watch a recording of it, and inspect the record behind it.
-          </Text>
-          <Group component="nav" aria-label="Where the evidence is" gap="md" mt="xs">
-            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', tab: 'runs' } as never} />}>Runs</Anchor>
-            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', tab: 'artifacts' } as never} />}>Videos and artifacts</Anchor>
-          </Group>
-        </Box>
-        <TextInput
-          type="search"
-          label="Search behaviors"
-          aria-label="Search behaviors"
-          placeholder='Search behaviors, steps, tags… or filter: status:failed has:video domain: "exact phrase"'
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.currentTarget.value);
-            setQuery(event.currentTarget.value.trim());
-          }}
-        />
-        <Group gap="xs">
-          <TypedFilters
-            parsed={listing.found.parsed}
-            query={search.q ?? ''}
-            onChange={(next) => {
-              setDraft(next);
-              setQuery(next.trim());
-            }}
-          />
-        </Group>
-        <SearchNotes issues={listing.found.parsed.issues} semantic={listing.found.status} />
-        <CoverageFilter listing={listing} coverage={search.coverage} />
-        <ApplicabilityControls compact state={applicability} stale={index.entries.filter((entry) => needsAttention(entry.assessment)).length} total={index.entries.length} />
-        <Disclosure unread={index.unread} features={index.features} unreadable={index.unreadable} pending={pending} error={filesError} />
-        {selected && (
-          <Group gap="sm" wrap="wrap" role="group" aria-label="Selected behavior">
-            <Text span fw={600}>
-              Selected: {selected.title}
-            </Text>
-            <Button
-              leftSection={<IconArrowsMaximize size={16} aria-hidden="true" />}
-              renderRoot={(props) => (
-                <Link
-                  {...props}
-                  to="/behaviors"
-                  search={selecting(selected.id, true)}
-                  resetScroll={false}
-                  onClick={() => rememberReturn({ scope, scrollY: window.scrollY, shown: shownCount, focus: selected.id })}
+    <Stack component="article" gap="md" aria-label="Behaviors">
+      <Box component="header">
+        <PageHeader
+          title="Behaviors"
+          description="Everything the project's features say should happen, found by its words. Read what should happen, watch a recording of it, and inspect the record behind it."
+          actions={
+            <Group component="nav" aria-label="Where the evidence is" gap="xs">
+              <Button variant="subtle" leftSection={<IconListSearch size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', tab: 'runs' } as never} />}>
+                Runs
+              </Button>
+              <Button variant="subtle" leftSection={<IconMovie size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', tab: 'artifacts' } as never} />}>
+                Videos and artifacts
+              </Button>
+            </Group>
+          }
+        >
+          {!none && <CoverageFilter listing={listing} coverage={search.coverage} />}
+        </PageHeader>
+      </Box>
+      <Disclosure unread={index.unread} features={index.features} unreadable={index.unreadable} pending={pending} error={filesError} />
+      {none ? (
+        <Card>
+          <StateBlock icon={<IconBook size={22} />} title="No behaviors">
+            No behaviors: this project has no Gherkin features.
+          </StateBlock>
+        </Card>
+      ) : (
+        <Grid gap="md" align="flex-start">
+          <Grid.Col span={{ base: 12, lg: 5 }}>
+            <Card padding={0}>
+              <Stack gap="sm" p="md">
+                <TextInput
+                  type="search"
+                  aria-label="Search behaviors"
+                  placeholder='Search behaviors, steps, tags… or filter: status:failed has:video domain: "exact phrase"'
+                  leftSection={<IconSearch size={16} aria-hidden="true" />}
+                  value={draft}
+                  onChange={(event) => {
+                    setDraft(event.currentTarget.value);
+                    setQuery(event.currentTarget.value.trim());
+                  }}
                 />
-              )}
-            >
-              Read and watch
-            </Button>
-          </Group>
-        )}
-        {index.entries.length === 0 && !pending && index.unreadable.length === 0 && !filesError ? (
-          <Text component="div">No behaviors: this project has no Gherkin features.</Text>
-        ) : listing.shown.length === 0 && !pending ? (
-          <Text role="status" component="div">
-            {search.q || search.coverage ? 'No behavior matches this search.' : 'No behaviors yet.'}
-          </Text>
-        ) : (
-          <Grid gap="lg">
-            <Grid.Col span={{ base: 12, lg: 5 }}>
-              <BehaviorList listing={listing} selected={selected?.id} limit={shownCount} onMore={() => setLimit(shownCount + PAGE)} />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, lg: 7 }}>
-              {selected ? (
-                <Paper component="section" aria-label={`Behavior: ${selected.title}`} withBorder p="md">
-                  <Stack gap="sm" miw={0}>
-                    <Title order={2}>{selected.title}</Title>
-                    <Text component="div" c="dimmed">
-                      {whereIs(selected)}
-                      {' · '}
-                      <Anchor underline="always" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: 'gherkin' }} search={{ spec: selected.file, check: selected.behavior.slot?.id }} />}>Open the feature</Anchor>
+                {listing.found.parsed.tokens.length > 0 && (
+                  <Group gap="xs">
+                    <TypedFilters
+                      parsed={listing.found.parsed}
+                      query={search.q ?? ''}
+                      onChange={(next) => {
+                        setDraft(next);
+                        setQuery(next.trim());
+                      }}
+                    />
+                  </Group>
+                )}
+                <SearchNotes issues={listing.found.parsed.issues} semantic={listing.found.status} />
+                <ApplicabilityControls compact state={applicability} stale={index.entries.filter((entry) => needsAttention(entry.assessment)).length} total={index.entries.length} />
+                {selected && (
+                  <Group gap="sm" wrap="nowrap" justify="space-between" role="group" aria-label="Selected behavior" bg="var(--mantine-color-primary-light)" bdrs="md" pl="sm" pr={6} py={6}>
+                    <Text span truncate miw={0}>
+                      <Text span inherit c="dimmed">
+                        Selected:{' '}
+                      </Text>
+                      <Text span inherit fw={600}>
+                        {selected.title}
+                      </Text>
                     </Text>
+                    <Button size="compact-sm" variant="filled" flex="none" leftSection={<IconArrowsMaximize size={14} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/behaviors" search={selecting(selected.id, true)} resetScroll={false} onClick={remember(selected.id)} />}>
+                      Read and watch
+                    </Button>
+                  </Group>
+                )}
+              </Stack>
+              <Divider />
+              {listing.shown.length === 0 && !pending ? (
+                <StateBlock role="status" icon={<IconZoomQuestion size={22} />}>
+                  {search.q || search.coverage ? 'No behavior matches this search.' : 'No behaviors yet.'}
+                </StateBlock>
+              ) : (
+                <BehaviorList listing={listing} selected={selected?.id} limit={shownCount} onMore={() => setLimit(shownCount + PAGE)} />
+              )}
+            </Card>
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, lg: 7 }} pos={{ base: 'static', lg: 'sticky' }} top="var(--mantine-spacing-md)">
+            {selected ? (
+              <Card component="section" aria-label={`Behavior: ${selected.title}`} padding={0}>
+                <ScrollArea.Autosize mah={{ lg: 'calc(100dvh - 2 * var(--mantine-spacing-md) - 2px)' }} type="auto">
+                  <Stack gap="md" miw={0} p="lg">
+                    <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
+                      <Stack gap={2} miw={0}>
+                        <Title order={2}>{selected.title}</Title>
+                        <Text component="div" c="dimmed">
+                          {whereIs(selected)}
+                          {' · '}
+                          <Anchor underline="always" renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: 'gherkin' }} search={{ spec: selected.file, check: selected.behavior.slot?.id }} />}>Open the feature</Anchor>
+                        </Text>
+                      </Stack>
+                      <Tooltip label="Read and watch on a full page">
+                        <ActionIcon variant="default" aria-label={`Expand ${selected.title} to read and watch`} renderRoot={(props) => <Link {...props} to="/behaviors" search={selecting(selected.id, true)} resetScroll={false} onClick={remember(selected.id)} />}>
+                          <IconArrowsMaximize size={18} aria-hidden="true" />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
                     <BehaviorPanel key={selected.id} behavior={selected.behavior} applicability={selected.assessment} release={applicability.release} inspect={<Inspect entry={selected} />} />
                   </Stack>
-                </Paper>
-              ) : search.behavior ? (
-                <Alert role="status" color="blue">
-                  {pending ? 'Reading features to find that behavior…' : 'That behavior is not in the project now. It may have been renamed or removed from its feature.'}
-                </Alert>
-              ) : (
-                <Paper component="section" aria-label="Choose a behavior" withBorder>
-                  <Stack gap="lg">
-                    <Box>
-                      <Title order={2} mb="xs">Explore a behavior</Title>
-                      <Text c="dimmed">Select a behavior to read it and watch its recording.</Text>
-                    </Box>
-                    <Stack gap="md">
-                      <Group wrap="nowrap" align="flex-start">
-                        <IconBook aria-hidden="true" size={20} />
-                        <Box><Text fw={600}>Read the promise</Text><Text c="dimmed">Follow the steps that describe what should happen.</Text></Box>
-                      </Group>
-                      <Group wrap="nowrap" align="flex-start">
-                        <IconPlayerPlay aria-hidden="true" size={20} />
-                        <Box><Text fw={600}>Watch the evidence</Text><Text c="dimmed">Play a recorded run when one is available. Missing recordings stay explicit.</Text></Box>
-                      </Group>
-                      <Group wrap="nowrap" align="flex-start">
-                        <IconSearch aria-hidden="true" size={20} />
-                        <Box><Text fw={600}>Inspect the record</Text><Text c="dimmed">Check outcomes, environments and the sources behind them.</Text></Box>
-                      </Group>
-                    </Stack>
-                  </Stack>
-                </Paper>
-              )}
-            </Grid.Col>
-          </Grid>
-        )}
-      </Stack>
-    </Container>
+                </ScrollArea.Autosize>
+              </Card>
+            ) : search.behavior ? (
+              <Alert role="status" color="blue">
+                {pending ? 'Reading features to find that behavior…' : 'That behavior is not in the project now. It may have been renamed or removed from its feature.'}
+              </Alert>
+            ) : (
+              <Panel component="section" aria-label="Choose a behavior" title="Explore a behavior" description="Select a behavior to read it and watch its recording.">
+                <Stack gap="md">
+                  <Offer icon={<IconBook size={20} />} title="Read the promise">
+                    Follow the steps that describe what should happen.
+                  </Offer>
+                  <Offer icon={<IconPlayerPlay size={20} />} title="Watch the evidence">
+                    Play a recorded run when one is available. Missing recordings stay explicit.
+                  </Offer>
+                  <Offer icon={<IconSearch size={20} />} title="Inspect the record">
+                    Check outcomes, environments and the sources behind them.
+                  </Offer>
+                </Stack>
+              </Panel>
+            )}
+          </Grid.Col>
+        </Grid>
+      )}
+    </Stack>
   );
 }
 
@@ -368,107 +410,117 @@ function Workspace({ entry, listing, release }: { entry: IndexedBehavior; listin
   // A reader who arrives, or moves to the next behavior, lands on its heading: the page reads from the top and keyboard focus is there.
   useEffect(() => heading.current?.focus({ preventScroll: true }), [entry.id]);
   return (
-    <Container component="article" size="xl" w="100%" py="xl" aria-label={`Read and watch: ${entry.title}`}>
-      <Stack gap="md">
-        <Group justify="space-between" wrap="wrap">
-          <Button
-            variant="subtle"
-            leftSection={<IconArrowLeft size={16} aria-hidden="true" />}
-            renderRoot={(props) => <Link {...props} to="/behaviors" search={(prev) => ({ ...prev, workspace: undefined })} resetScroll={false} />}
-          >
-            Back to behaviors
-          </Button>
-          <Group gap="xs" role="group" aria-label="Move through the behaviors of this search">
-            {at >= 0 && (
+    <Stack component="article" gap="md" aria-label={`Read and watch: ${entry.title}`}>
+      <Card component="header">
+        <Stack gap="sm">
+          <Group justify="space-between" wrap="wrap" gap="xs">
+            <Button
+              variant="subtle"
+              size="compact-sm"
+              leftSection={<IconArrowLeft size={16} aria-hidden="true" />}
+              renderRoot={(props) => <Link {...props} to="/behaviors" search={(prev) => ({ ...prev, workspace: undefined })} resetScroll={false} />}
+            >
+              Back to behaviors
+            </Button>
+            <Group gap="xs" role="group" aria-label="Move through the behaviors of this search">
+              {at >= 0 && (
+                <Text span size="xs" c="dimmed">
+                  {at + 1} of {listing.shown.length}
+                </Text>
+              )}
+              {previous && (
+                <Button size="compact-sm" leftSection={<IconChevronLeft size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/behaviors" search={selecting(previous.id, true)} resetScroll={false} />}>
+                  Previous behavior
+                </Button>
+              )}
+              {next && (
+                <Button size="compact-sm" rightSection={<IconChevronRight size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/behaviors" search={selecting(next.id, true)} resetScroll={false} />}>
+                  Next behavior
+                </Button>
+              )}
+            </Group>
+          </Group>
+          <Stack gap={6}>
+            <Title order={1} tabIndex={-1} ref={heading} w="fit-content" maw="100%">
+              {entry.title}
+            </Title>
+            <Group gap="xs" wrap="wrap">
+              <CoverageBadge state={behavior.state} />
+              {behavior.representative && <Badge variant="outline">Representative demo</Badge>}
               <Text span c="dimmed">
-                {at + 1} of {listing.shown.length}
+                {whereIs(entry)}
+                {entry.domain ? ` · ${entry.domain}` : ''}
               </Text>
-            )}
-            {previous && (
-              <Button variant="default" leftSection={<IconChevronLeft size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/behaviors" search={selecting(previous.id, true)} resetScroll={false} />}>
-                Previous behavior
-              </Button>
-            )}
-            {next && (
-              <Button variant="default" rightSection={<IconChevronRight size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/behaviors" search={selecting(next.id, true)} resetScroll={false} />}>
-                Next behavior
-              </Button>
-            )}
-          </Group>
-        </Group>
-        <Box component="header">
-          <Title order={1} tabIndex={-1} ref={heading} mb="xs">
-            {entry.title}
-          </Title>
-          <Group gap="sm" wrap="wrap">
-            <CoverageBadge state={behavior.state} />
-            {behavior.representative && <Badge variant="outline">Representative demo</Badge>}
-            <Text span c="dimmed">
-              {whereIs(entry)}
-              {entry.domain ? ` · ${entry.domain}` : ''}
-            </Text>
-          </Group>
-        </Box>
-        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-          <Stack gap="sm" miw={0} component="section" aria-label="What should happen">
-            <Title order={2}>What should happen</Title>
+            </Group>
+          </Stack>
+        </Stack>
+      </Card>
+      <Grid gap="md" align="flex-start">
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          <Panel component="section" aria-label="What should happen" title="What should happen">
             {behavior.example !== null && (
               <Text component="div" c="dimmed">
                 Example: {behavior.example}
               </Text>
             )}
-            <PlainSteps steps={steps} examples={behavior.example === null ? behavior.scenario.examples : []} />
+            <Box fz="sm">
+              <PlainSteps steps={steps} examples={behavior.example === null ? behavior.scenario.examples : []} />
+            </Box>
             {named && (
               <Text component="div" c="dimmed">
                 The recorded example name does not match one row of the examples, so the values are not filled in.
               </Text>
             )}
-          </Stack>
-          <Stack gap="sm" miw={0} component="section" aria-label="Recording">
-            <Title order={2}>Recording</Title>
+          </Panel>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 7 }}>
+          <Panel component="section" aria-label="Recording" title="Recording" actions={behavior.subject && <Provenance subject={behavior.subject} />}>
             {behavior.demo ? (
-              <>
+              <Stack gap="xs" miw={0}>
                 <Player result={behavior.demo} />
-                <Text component="div" c="dimmed">
-                  Illustrative recording of one run. It shows what happened in that run and does not approve the behavior for production.
-                </Text>
-              </>
+                <Illustrative />
+              </Stack>
             ) : (
-              <Text component="div" c="dimmed">
-                Nothing to watch. {COVERAGE[behavior.state].meaning}
-              </Text>
+              <NothingToWatch state={behavior.state} />
             )}
-            {behavior.subject && <Provenance subject={behavior.subject} />}
             <RevisionLine revision={behavior.revision} />
             <ApplicabilitySummary assessment={entry.assessment} release={release} />
-          </Stack>
-        </SimpleGrid>
+          </Panel>
+        </Grid.Col>
+      </Grid>
+      <Card>
         <ScopedSummary behavior={behavior} />
-        <Accordion variant="separated" value={inspecting} onChange={setInspecting}>
-          <Accordion.Item value="inspect">
-            <Accordion.Control>Inspect: runs, environments, attempts and files</Accordion.Control>
-            <Accordion.Panel>{inspecting === 'inspect' && <Inspect entry={entry} />}</Accordion.Panel>
-          </Accordion.Item>
-        </Accordion>
-      </Stack>
-    </Container>
+      </Card>
+      <Accordion value={inspecting} onChange={setInspecting}>
+        <Accordion.Item value="inspect">
+          <Accordion.Control>Inspect: runs, environments, attempts and files</Accordion.Control>
+          <Accordion.Panel>{inspecting === 'inspect' && <Inspect entry={entry} />}</Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
+    </Stack>
   );
 }
 
 /** What the workspace shows while its behavior is not there: still being looked for, or gone. */
 function WorkspaceMissing({ pending }: { pending: boolean }) {
   return (
-    <Container component="article" size="xl" w="100%" py="xl">
-      <Stack gap="md">
-        <Title order={1}>Read and watch</Title>
-        <Alert role="status" color="blue">
-          {pending ? 'Reading features to find that behavior…' : 'That behavior is not in the project now. It may have been renamed or removed from its feature.'}
-        </Alert>
-        <Button variant="subtle" renderRoot={(props) => <Link {...props} to="/behaviors" search={(prev) => ({ ...prev, workspace: undefined, behavior: undefined })} />}>
-          Back to behaviors
-        </Button>
-      </Stack>
-    </Container>
+    <Stack component="article" gap="md">
+      <Card>
+        <StateBlock
+          icon={<IconZoomQuestion size={22} />}
+          title={<Title order={1}>Read and watch</Title>}
+          actions={
+            <Button leftSection={<IconArrowLeft size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/behaviors" search={(prev) => ({ ...prev, workspace: undefined, behavior: undefined })} />}>
+              Back to behaviors
+            </Button>
+          }
+        >
+          <Text role="status" component="div" c="dimmed">
+            {pending ? 'Reading features to find that behavior…' : 'That behavior is not in the project now. It may have been renamed or removed from its feature.'}
+          </Text>
+        </StateBlock>
+      </Card>
+    </Stack>
   );
 }
 

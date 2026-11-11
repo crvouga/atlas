@@ -1,7 +1,8 @@
 import { flattenSteps, neighborFailure, orderedUiBlobs, selectedFrame, testFrames } from '@crvouga/atlas/reports/frames';
 import { performanceFrameIndex, performanceRows, type PerformanceRow } from '@crvouga/atlas/reports/performance';
 import type { ReportStep, RunReport } from '@crvouga/atlas/reports/report-types';
-import { Accordion, Box, Button, Code, List, NativeSelect, Progress, Stack, Tabs, Text, VisuallyHidden } from '@mantine/core';
+import { Accordion, Alert, Badge, Box, Code, Grid, Group, List, NativeSelect, NavLink, Progress, ScrollArea, Stack, Tabs, Text, Title, UnstyledButton, VisuallyHidden } from '@mantine/core';
+import { IconAlertTriangle, IconClockHour4, IconListDetails, IconUser } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
 import { reportLooks } from '../looks/collect';
 import { Stage, type LookMode } from '../looks/Stage';
@@ -55,60 +56,88 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
     }
   };
   return (
-    <Stack gap="sm">
+    <Stack gap="md">
       {report.meta.error && (
-        <Stack role="alert" gap="sm" c="red.7">
-          {report.meta.error}
-          {report.meta.errorStack && (
-            <Accordion variant="separated" my="sm">
-              <Accordion.Item value="content">
-                <Accordion.Control>Where it failed</Accordion.Control>
-                <Accordion.Panel>{report.meta.errorStack}</Accordion.Panel>
-              </Accordion.Item>
-            </Accordion>
-          )}
-        </Stack>
+        <Alert role="alert" color="red" icon={<IconAlertTriangle size={18} aria-hidden="true" />}>
+          <Stack gap="sm">
+            <Text component="div" c="red.7" fw={500}>
+              {report.meta.error}
+            </Text>
+            {report.meta.errorStack && (
+              <Accordion variant="separated">
+                <Accordion.Item value="content">
+                  <Accordion.Control>Where it failed</Accordion.Control>
+                  <Accordion.Panel>
+                    <Code block>{report.meta.errorStack}</Code>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              </Accordion>
+            )}
+          </Stack>
+        </Alert>
       )}
-      <Tabs value={tab} onChange={(value) => setTab(value as typeof tab)} mb="md">
+      <Tabs value={tab} onChange={(value) => setTab(value as typeof tab)}>
         <Tabs.List aria-label="Recording">
-          <Tabs.Tab value="moments">Moments</Tabs.Tab>
-          <Tabs.Tab value="timing">Timing</Tabs.Tab>
+          <Tabs.Tab value="moments" leftSection={<IconListDetails size={16} aria-hidden="true" />}>
+            Moments
+          </Tabs.Tab>
+          <Tabs.Tab value="timing" leftSection={<IconClockHour4 size={16} aria-hidden="true" />}>
+            Timing
+          </Tabs.Tab>
         </Tabs.List>
       </Tabs>
       {tab === 'timing' ? (
         <Timing rows={rows} canOpen={(step) => byStep.has(step)} open={jump} />
       ) : (
-        <Stack gap="sm">
-          <List aria-label="Recorded steps" spacing="xs" listStyleType="none" type="ordered">
-            {steps.map((entry) => {
-              const current = frame?.step === entry.step;
-              return (
-                <List.Item key={entry.index} pl={entry.depth ? 'md' : 0}>
-                  <Button
-                    type="button"
-                    data-status={entry.step.status}
-                    aria-current={current ? 'step' : undefined}
-                    disabled={!byStep.has(entry.step)}
-                    onClick={() => jump(entry.step)}
-                    variant="light"
-                  >
-                    <StatusMark status={entry.step.status} size={14} />
-                    <Text span inherit>
-                      {entry.step.title}
-                    </Text>
-                    <Text span inherit c="dimmed">
-                      {duration(entry.step.durationMs)}
-                    </Text>
-                  </Button>
-                </List.Item>
-              );
-            })}
-          </List>
-          <Box aria-label="Recorded moment" component="section" mb="lg">
+        <Grid gap="lg" align="flex-start">
+          <Grid.Col span={{ base: 12, md: 4 }} order={{ base: 2, md: 1 }}>
+            <Stack gap="xs">
+              <Title order={3}>Steps</Title>
+              <ScrollArea.Autosize mah="70vh" type="auto" offsetScrollbars="y">
+                <List aria-label="Recorded steps" spacing={2} listStyleType="none" type="ordered">
+                  {steps.map((entry) => {
+                    const current = frame?.step === entry.step;
+                    return (
+                      <List.Item key={entry.index} pl={entry.depth ? 'md' : 0}>
+                        <NavLink
+                          renderRoot={(props) => <UnstyledButton {...props} type="button" disabled={!byStep.has(entry.step)} />}
+                          data-status={entry.step.status}
+                          aria-current={current ? 'step' : undefined}
+                          active={current}
+                          variant="light"
+                          disabled={!byStep.has(entry.step)}
+                          onClick={() => jump(entry.step)}
+                          py={6}
+                          px="xs"
+                          leftSection={<StatusMark status={entry.step.status} size={14} />}
+                          label={
+                            <Text span inherit fw={current ? 600 : undefined}>
+                              {entry.step.title}
+                            </Text>
+                          }
+                          rightSection={
+                            <Text span c="dimmed" size="xs">
+                              {duration(entry.step.durationMs)}
+                            </Text>
+                          }
+                        />
+                      </List.Item>
+                    );
+                  })}
+                </List>
+              </ScrollArea.Autosize>
+            </Stack>
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 8 }} order={{ base: 1, md: 2 }}>
+          <Stack aria-label="Recorded moment" component="section" gap="sm" miw={0}>
             {report.meta.actorIds.length > 1 && (
-              <Box component="label">
+              <Box component="label" w="fit-content">
                 <VisuallyHidden>Person</VisuallyHidden>
-                <NativeSelect value={actor} onChange={(event) => setActor(event.target.value)}>
+                <NativeSelect
+                  value={actor}
+                  onChange={(event) => setActor(event.target.value)}
+                  leftSection={<IconUser size={16} aria-hidden="true" />}
+                >
                   <option value="all">Everyone</option>
                   {report.meta.actorIds.map((id) => (
                     <option key={id}>{id}</option>
@@ -149,13 +178,13 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
                 );
                 return (
                   <>
-                    <Text c="dimmed">
+                    <Text c="dimmed" size="xs">
                       {current.step.status === 'failed' ? 'Failed' : 'Passed'} · at{' '}
                       {duration(Math.max(0, current.frame.capturedAtMs - report.meta.startedAtMs)) || '0 ms'}
                       {current.frame.hit && <> · acted on {current.frame.hit.path.join(' › ')}</>}
                     </Text>
                     {current.step.error && (
-                      <Code role="alert" c="dimmed">
+                      <Code block role="alert" c="red.7">
                         {current.step.error}
                       </Code>
                     )}
@@ -164,7 +193,7 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
                         <SnapshotData text={current.step.detail} />
                       </Stack>
                     )}
-                    <Stack aria-label="Recorded snapshots">
+                    <Stack role="group" aria-label="Recorded snapshots">
                       {pictures.map((entry) => (
                         <Snapshot
                           key={entry.blob!.file}
@@ -189,7 +218,8 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
               }}
             />
             {extras.length > 0 && (
-              <Stack aria-label="Other attachments" gap="sm">
+              <Stack aria-label="Other attachments" gap="sm" mt="xs">
+                <Title order={3}>Other attachments</Title>
                 {extras.map((artifact) => (
                   <Snapshot
                     key={artifact.file}
@@ -201,8 +231,9 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
                 ))}
               </Stack>
             )}
-          </Box>
-        </Stack>
+          </Stack>
+          </Grid.Col>
+        </Grid>
       )}
     </Stack>
   );
@@ -226,27 +257,39 @@ function Timing({
     );
   const longest = Math.max(...measured.map((row) => row.step.performance?.selfMs ?? 0), 1);
   return (
-    <List aria-label="Recorded time per step" spacing="xs" listStyleType="none" type="ordered">
+    <List aria-label="Recorded time per step" spacing={2} listStyleType="none" type="ordered">
       {rows.map((row) => {
         const own = row.step.performance?.selfMs;
         return (
           <List.Item key={row.index} data-band={row.band}>
-            <Button type="button" disabled={!canOpen(row.step)} onClick={() => open(row.step)} pl={row.depth ? 'lg' : 'sm'} variant="light">
-              <Text span inherit>
-                {row.step.title}
-              </Text>
-              {row.band === 'slow' && (
-                <Text span inherit c="red.7">
-                  Slow
+            <NavLink
+              renderRoot={(props) => <UnstyledButton {...props} type="button" disabled={!canOpen(row.step)} />}
+              disabled={!canOpen(row.step)}
+              onClick={() => open(row.step)}
+              pl={row.depth ? 'lg' : 'xs'}
+              pr="xs"
+              py={6}
+              label={
+                <Text span inherit>
+                  {row.step.title}
                 </Text>
-              )}
-              <Text aria-hidden="true" span inherit>
-                <Progress value={own === undefined ? 0 : (own / longest) * 100} w="6rem" size="sm" />
-              </Text>
-              <Text span inherit c="dimmed">
-                {own === undefined ? 'Not measured' : `${own.toFixed(1)} ms`}
-              </Text>
-            </Button>
+              }
+              rightSection={
+                <Group gap="sm" wrap="nowrap">
+                  {row.band === 'slow' && (
+                    <Badge color="red" size="sm">
+                      Slow
+                    </Badge>
+                  )}
+                  <Box aria-hidden="true" visibleFrom="xs">
+                    <Progress value={own === undefined ? 0 : (own / longest) * 100} w="8rem" size={6} radius="xl" color={row.band === 'slow' ? 'red' : 'gray.6'} />
+                  </Box>
+                  <Text span c="dimmed" size="xs" miw="5rem" ta="right">
+                    {own === undefined ? 'Not measured' : `${own.toFixed(1)} ms`}
+                  </Text>
+                </Group>
+              }
+            />
           </List.Item>
         );
       })}

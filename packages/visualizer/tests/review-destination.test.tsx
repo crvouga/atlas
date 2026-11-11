@@ -192,7 +192,13 @@ test('4. a frozen collection keeps its members and their recorded outcomes when 
   await view.click('button', /Freeze 2 results/);
   await view.until(() => document.querySelector('section[aria-label="Review collection"]') !== null, 'the collection');
   expect(text()).toContain('Frozen, revision 1 of 1');
-  const recorded = [1, 2].map((n) => entry(n).textContent);
+  // Responsive layout emits inline style rules with generated names; they are not what the entry says.
+  const words = (n: number) => {
+    const copy = entry(n).cloneNode(true) as Element;
+    for (const style of copy.querySelectorAll('style')) style.remove();
+    return copy.textContent;
+  };
+  const recorded = [1, 2].map(words);
   expect([1, 2].map((n) => entry(n).getAttribute('data-status'))).toEqual(['passed', 'failed']);
 
   // Newer runs arrive: the declined card is fixed and recorded again, with the same tag.
@@ -210,7 +216,7 @@ test('4. a frozen collection keeps its members and their recorded outcomes when 
   expect(text()).toContain('Frozen, revision 1 of 1');
   expect(document.querySelectorAll('section[data-entry]')).toHaveLength(2);
   expect([1, 2].map((n) => entry(n).getAttribute('data-status'))).toEqual(['passed', 'failed']);
-  expect([1, 2].map((n) => entry(n).textContent)).toEqual(recorded);
+  expect([1, 2].map(words)).toEqual(recorded);
   expect(text()).not.toContain('run #5');
   expect(text()).toContain('recorded in 2 runs');
 });

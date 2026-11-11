@@ -1,5 +1,6 @@
-import { Box, List, Title } from '@mantine/core';
+import { List } from '@mantine/core';
 import { lazy, Suspense, useState } from 'react';
+import { Panel } from '../components/Page';
 import type { AtlasView } from '../data/model';
 import { CheckDetail, ResultRow, type CheckSelection } from '../evidence/check-detail';
 import { useEvidence } from '../evidence/evidence-context';
@@ -8,7 +9,7 @@ import { TestFilter, useRunningFilter } from '../evidence/test-filter';
 import { outlinePath } from '../spec-kind';
 const RecordingPage = lazy(() => import('../evidence/recording-page').then((module) => ({ default: module.RecordingPage })));
 /** Statechart test reports stay in the chart, including while their recordings are still arriving. */
-export function ChartTests({ view, chartId, compact = false }: { view: AtlasView; chartId: string; compact?: boolean }) {
+export function ChartTests({ view, chartId }: { view: AtlasView; chartId: string }) {
   const evidence = useEvidence();
   const runningOnly = useRunningFilter();
   const [selection, setSelection] = useState<CheckSelection>({});
@@ -25,10 +26,7 @@ export function ChartTests({ view, chartId, compact = false }: { view: AtlasView
   const visible = slots.filter((slot) => !runningOnly || slot.status === 'running');
   if (!slots.length) return null;
   return (
-    <Box aria-label="Chart tests" mah={compact ? '40vh' : undefined} p="md" component="section" mb="lg">
-      <Title order={3} mb="sm">
-        Tests
-      </Title>
+    <Panel aria-label="Chart tests" component="section" title="Tests" description="What the recorded tests of this chart say.">
       <TestFilter slots={slots} />
       <List spacing="xs" listStyleType="none">
         <Bounded items={visible} size={40} more="More tests">
@@ -75,6 +73,6 @@ export function ChartTests({ view, chartId, compact = false }: { view: AtlasView
           )}
         </Bounded>
       </List>
-    </Box>
+    </Panel>
   );
 }

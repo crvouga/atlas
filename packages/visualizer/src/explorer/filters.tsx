@@ -3,15 +3,16 @@
  *
  * The filter bar of the Runs and Artifacts tabs: words, artifact tag, media type, label, environment, branch, outcome,
  * feature domain and a time range (and, for runs, the completeness of their recordings, apart from their outcome), each offering the values the report has with counts in the scope of the list. What is
+ * controls fold away behind one Filters button (they stay in the page), what is
  * chosen shows as removable chips and is the address, so copying it or reloading restores the same view; named views keep
  * a query to open again. Choices combine with AND across the controls and OR within one.
  */
-import { IconBookmark, IconLink, IconTrash, IconX } from '@tabler/icons-react';
-import { Anchor, Badge, Box, Button, Checkbox, CopyButton, Flex, Group, MultiSelect, Popover, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { IconAdjustmentsHorizontal, IconBookmark, IconLink, IconSearch, IconTrash, IconX } from '@tabler/icons-react';
+import { ActionIcon, Anchor, Badge, Button, Checkbox, Collapse, CopyButton, Flex, Group, MultiSelect, Popover, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import type { QueryFacets, QueryFacetValue } from '@crvouga/atlas/reports/artifact-query';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 
 import { currentProject } from '../runtime';
 import { patched, useExplorerNavigate } from './navigate';
@@ -118,7 +119,7 @@ function Views({
               <Badge variant="outline" color="gray">
                 Live query
               </Badge>
-              <Button
+              <ActionIcon
                 type="button"
                 variant="subtle"
                 color="red"
@@ -126,7 +127,7 @@ function Views({
                 onClick={() => keep(views.filter((entry) => entry.id !== view.id))}
               >
                 <IconTrash size={16} aria-hidden="true" />
-              </Button>
+              </ActionIcon>
             </Group>
           ))}
           <TextInput label="View name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Demo review" />
@@ -196,89 +197,107 @@ export function FilterBar({
   const [views, setViews] = useState<SavedView[]>(() => readViews());
   const [failed, setFailed] = useState(false);
   const saved = views.find((view) => view.project === (currentProject() ?? '') && isView(view, search));
+  // The facet controls stay in the page while folded away, so a chosen value is one click from being changed.
+  const [open, setOpen] = useState(false);
+  const controls = useId();
+  const chosen = params.reduce((sum, param) => sum + values(search[param]).length, 0) + (search.since ? 1 : 0) + (search.until ? 1 : 0);
   return (
-    <Box aria-label="Filters" component="section" mb="md">
-      <Stack gap="sm">
-        <Flex gap="sm" align="flex-end" wrap="wrap">
-          <TextInput
-            flex={1}
-            miw={{ base: '100%', sm: '15rem' }}
-            type="search"
-            aria-label={`Search ${tab}`}
-            placeholder={tab === 'runs' ? 'Search runs by title, branch, commit, tag…' : 'Search by test, spec, tag, label…'}
-            value={draft}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              go({ q: event.target.value.trim() || undefined }, { replace: true });
-            }}
-          />
-          <Views
-            search={search}
-            tab={tab}
-            views={views}
-            failed={failed}
-            onChange={(next) => {
-              setViews(next);
-              setFailed(!writeViews(next));
-            }}
-          />
-          <CopyButton value={typeof window === 'undefined' ? '' : window.location.href}>
-            {({ copied, copy }) => (
-              <Button type="button" variant="default" onClick={copy} leftSection={<IconLink size={16} aria-hidden="true" />}>
-                {copied ? 'Link copied' : 'Copy link'}
-              </Button>
-            )}
-          </CopyButton>
-          {extra}
-        </Flex>
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }}>
-          <Facet param="artifactTag" facets={facets.artifactTags} search={search} />
-          <Facet param="type" facets={facets.types} search={search} />
-          <Facet param="label" facets={facets.labels} search={search} />
-          <Facet param="env" facets={facets.environments} search={search} />
-          <Facet param="branch" facets={facets.branches} search={search} />
-          <Facet param="outcome" facets={facets.outcomes} search={search} />
-          {tab === 'runs' && (facets.recordings || values(search.recordings).length > 0) && (
-            <Facet param="recordings" facets={facets.recordings ?? []} search={search} />
+    <Stack aria-label="Filters" component="section" gap="sm">
+      <Group gap="xs" wrap="wrap">
+        <TextInput
+          flex={1}
+          miw={{ base: '100%', sm: '15rem' }}
+          type="search"
+          leftSection={<IconSearch size={16} aria-hidden="true" />}
+          aria-label={`Search ${tab}`}
+          placeholder={tab === 'runs' ? 'Search runs by title, branch, commit, tag…' : 'Search by test, spec, tag, label…'}
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            go({ q: event.target.value.trim() || undefined }, { replace: true });
+          }}
+        />
+        <Button
+          type="button"
+          variant={open ? 'light' : 'default'}
+          aria-expanded={open}
+          aria-controls={controls}
+          leftSection={<IconAdjustmentsHorizontal size={16} aria-hidden="true" />}
+          rightSection={chosen > 0 ? <Badge size="sm" circle>{chosen}</Badge> : undefined}
+          onClick={() => setOpen(!open)}
+        >
+          Filters
+        </Button>
+        {extra}
+        <Views
+          search={search}
+          tab={tab}
+          views={views}
+          failed={failed}
+          onChange={(next) => {
+            setViews(next);
+            setFailed(!writeViews(next));
+          }}
+        />
+        <CopyButton value={typeof window === 'undefined' ? '' : window.location.href}>
+          {({ copied, copy }) => (
+            <Button type="button" variant="default" onClick={copy} leftSection={<IconLink size={16} aria-hidden="true" />}>
+              {copied ? 'Link copied' : 'Copy link'}
+            </Button>
           )}
-          {tab === 'artifacts' && facets.domains && <Facet param="domain" facets={facets.domains} search={search} />}
-          {facets.producers.length > 1 && <Facet param="producer" facets={facets.producers} search={search} />}
-          <TextInput type="date" label="From" value={search.since ?? ''} onChange={(event) => go({ since: event.target.value || undefined })} />
-          <TextInput type="date" label="Until" value={search.until ?? ''} onChange={(event) => go({ until: event.target.value || undefined })} />
-        </SimpleGrid>
-        {values(search.artifactTag).length > 0 && (
-          <Checkbox
-            label="Also match tags inherited from the check and run"
-            description="Off: only tags written on the recording itself."
-            checked={search.inherited === true}
-            onChange={(event) => go({ inherited: event.currentTarget.checked ? true : undefined })}
-          />
-        )}
-        {(chips.length > 0 || saved) && (
-          <Flex gap="xs" align="center" wrap="wrap" aria-label="Active filters">
-            {saved && (
-              <Badge variant="light" aria-label={`Live query ${saved.name}`}>
-                Live query: {saved.name}
-              </Badge>
+        </CopyButton>
+      </Group>
+      <Collapse expanded={open} id={controls} keepMountedMode="display-none">
+        <Stack gap="sm" p="md" bg="var(--mantine-color-default-hover)" bdrs="md">
+          <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="sm">
+            <Facet param="artifactTag" facets={facets.artifactTags} search={search} />
+            <Facet param="type" facets={facets.types} search={search} />
+            <Facet param="label" facets={facets.labels} search={search} />
+            <Facet param="env" facets={facets.environments} search={search} />
+            <Facet param="branch" facets={facets.branches} search={search} />
+            <Facet param="outcome" facets={facets.outcomes} search={search} />
+            {tab === 'runs' && (facets.recordings || values(search.recordings).length > 0) && (
+              <Facet param="recordings" facets={facets.recordings ?? []} search={search} />
             )}
-            {chips.map((chip) => (
-              <Button key={chip.label} type="button" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light" rightSection={<IconX size={16} aria-hidden="true" />}>
-                {chip.label}{' '}
-              </Button>
-            ))}
-            {filtered(search) && (
-              <Button type="button" variant="subtle" onClick={() => go(NO_FILTERS)}>
-                Clear filters
-              </Button>
-            )}
-            {saved && (
-              <Text size="sm" c="dimmed">
-                A live query, not a snapshot: it follows the newest report.
-              </Text>
-            )}
-          </Flex>
-        )}
-      </Stack>
-    </Box>
+            {tab === 'artifacts' && facets.domains && <Facet param="domain" facets={facets.domains} search={search} />}
+            {facets.producers.length > 1 && <Facet param="producer" facets={facets.producers} search={search} />}
+            <TextInput type="date" label="From" value={search.since ?? ''} onChange={(event) => go({ since: event.target.value || undefined })} />
+            <TextInput type="date" label="Until" value={search.until ?? ''} onChange={(event) => go({ until: event.target.value || undefined })} />
+          </SimpleGrid>
+          {values(search.artifactTag).length > 0 && (
+            <Checkbox
+              label="Also match tags inherited from the check and run"
+              description="Off: only tags written on the recording itself."
+              checked={search.inherited === true}
+              onChange={(event) => go({ inherited: event.currentTarget.checked ? true : undefined })}
+            />
+          )}
+        </Stack>
+      </Collapse>
+      {(chips.length > 0 || saved) && (
+        <Flex gap={6} align="center" wrap="wrap" aria-label="Active filters">
+          {saved && (
+            <Badge variant="light" aria-label={`Live query ${saved.name}`}>
+              Live query: {saved.name}
+            </Badge>
+          )}
+          {chips.map((chip) => (
+            <Button key={chip.label} type="button" size="compact-sm" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light" rightSection={<IconX size={14} aria-hidden="true" />}>
+              {chip.label}{' '}
+            </Button>
+          ))}
+          {filtered(search) && (
+            <Button type="button" size="compact-sm" variant="subtle" onClick={() => go(NO_FILTERS)}>
+              Clear filters
+            </Button>
+          )}
+          {saved && (
+            <Text size="sm" c="dimmed">
+              A live query, not a snapshot: it follows the newest report.
+            </Text>
+          )}
+        </Flex>
+      )}
+    </Stack>
   );
 }

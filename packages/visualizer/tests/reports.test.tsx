@@ -400,7 +400,7 @@ async function mount(element: React.ReactNode) {
 }
 async function press(host: HTMLElement, label: string) {
   const button = [...host.querySelectorAll('button')].find(
-    (candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent) === label
+    (candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent) === label || candidate.textContent?.startsWith(`${label} `)
   );
   expect(button, label).toBeDefined();
   await act(async () => button!.click());

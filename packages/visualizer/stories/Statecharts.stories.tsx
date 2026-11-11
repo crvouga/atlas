@@ -1,0 +1,16 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, chart, screen, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Statecharts' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+export const Statecharts: Story = { args: { at: '/' } };
+export const Chart: Story = { args: { at: chart() } };
+export const ChartScreen: Story = { args: { at: chart({ screen: 'Browsing the menu' }) } };
+export const ChartEvent: Story = { args: { at: chart({ event: 'Picks a drink' }) } };
+export const ChartJourney: Story = { args: { at: chart({ journey: 'Orders a drink and pays by card' }) } };
+export const ChartGroup: Story = { args: { at: chart({ group: 'Customizing the drink' }) } };
+export const ChartScreenInGroup: Story = { args: { at: chart({ group: 'Customizing the drink', screen: 'Choosing a size' }) } };
+export const MobileStatecharts: Story = { ...MOBILE, args: { at: '/' } };
+export const MobileChart: Story = { ...MOBILE, args: { at: chart() } };
+export const MobileChartScreen: Story = { ...MOBILE, args: { at: chart({ screen: 'Browsing the menu' }) } };

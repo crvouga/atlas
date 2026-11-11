@@ -1,0 +1,18 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, critiques, pick, screen, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Needs polish' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const DESIGN = { critic: 'storybook-design' };
+export const Critiques: Story = { args: { at: critiques() } };
+export const RankedByCritic: Story = { args: { at: critiques({ critic: 'storybook-accessibility' }) } };
+export const FilteredByKind: Story = { args: { at: critiques({ kind: 'screen' }) } };
+export const FilteredByCriticAndKind: Story = { args: { at: critiques({ ...DESIGN, kind: 'screen' }) } };
+export const KindWithoutOpinions: Story = { args: { at: critiques({ kind: 'empty' }) } };
+export const CritiqueDetail: Story = { args: { at: critiques({ ...DESIGN, entry: pick.critique }) } };
+export const CritiqueAgreement: Story = { args: { at: critiques({ view: 'agreement' }) } };
+export const CritiqueFailure: Story = { args: { at: critiques({ ...DESIGN, entry: pick.failedCritique }) } };
+export const CritiqueOlderPicture: Story = { args: { at: critiques({ ...DESIGN, entry: pick.olderCritique }) } };
+export const MobileCritiques: Story = { ...MOBILE, args: { at: critiques() } };
+export const MobileCritiqueDetail: Story = { ...MOBILE, args: { at: critiques({ ...DESIGN, entry: pick.critique }) } };

@@ -26,7 +26,7 @@ import {
   type RunComparison
 } from '@crvouga/atlas/reports/run-compare';
 import { formatMs, HISTORY_PER_TEST, type RunLayer, type RunResult, type RunSummary, type TestResultEntry } from '@crvouga/atlas/reports/test-catalog';
-import { Alert, Anchor, Badge, Box, Button, Code, Group, List, NativeSelect, SimpleGrid, Stack, Table, Tabs, Text, Title } from '@mantine/core';
+import { Alert, Anchor, AspectRatio, Badge, Box, Button, Code, Group, List, NativeSelect, Paper, SimpleGrid, Skeleton, Stack, Tabs, Text, Title } from '@mantine/core';
 import { IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useRef, useState } from 'react';
@@ -55,10 +55,14 @@ function Pair({ label, children }: { label: string; children: (side: Side) => Re
   return (
     <SimpleGrid cols={{ base: 1, md: 2 }} aria-label={label} role="group">
       {(['baseline', 'candidate'] as const).map((side) => (
-        <Stack key={side} gap="xs" component="section" aria-label={`${SIDE_LABEL[side]}: ${label}`} data-side={side} miw={0}>
-          <Title order={4}>{SIDE_LABEL[side]}</Title>
-          {children(side)}
-        </Stack>
+        <Paper key={side} withBorder p="md" radius="md" component="section" aria-label={`${SIDE_LABEL[side]}: ${label}`} data-side={side} miw={0}>
+          <Stack gap="xs">
+            <Title order={4} c="dimmed" tt="uppercase" fz="xs" lts={0.4}>
+              {SIDE_LABEL[side]}
+            </Title>
+            {children(side)}
+          </Stack>
+        </Paper>
       ))}
     </SimpleGrid>
   );
@@ -188,6 +192,7 @@ function OutcomeTab({ item, comparison, onClose }: { item: ComparedResult; compa
                 </Alert>
               )}
               <Anchor
+                size="sm"
                 renderRoot={(props) => (
                   <Link {...props} to="/" search={patched({ tab: undefined, pair: undefined, test: result.key, layer: result.layer })} resetScroll={false} activeOptions={{ exact: true }} onClick={onClose} />
                 )}
@@ -235,9 +240,14 @@ function RecordingSide({
     );
   } else if (detail.isPending && detail.fetchStatus !== 'idle') {
     body = (
-      <Text role="status" component="div" c="dimmed">
-        Loading the recording…
-      </Text>
+      <Stack gap="xs">
+        <AspectRatio ratio={16 / 9}>
+          <Skeleton radius="md" />
+        </AspectRatio>
+        <Text role="status" component="div" size="sm" c="dimmed">
+          Loading the recording…
+        </Text>
+      </Stack>
     );
   } else if (detail.isError || !url) {
     body = (
@@ -265,6 +275,9 @@ function RecordingSide({
           aria-label={`${SIDE_LABEL[side]} recording: ${movie!.description ?? movie!.name}`}
           w="100%"
           mah="50vh"
+          display="block"
+          bg="var(--mantine-color-dark-9)"
+          bdrs="md"
           data-compare-video={side}
           onLoadedMetadata={() => {
             const saved = positions.get(side);
@@ -555,16 +568,18 @@ export function ComparePair({
   const group = COMPARE_GROUP_TEXT[item.group];
   return (
     <Stack gap="md" aria-label={`Compare ${item.title}`} component="section">
-      <Title order={3}>{item.title}</Title>
-      <Group gap="xs">
-        <Badge variant="light" tt="none" data-group={item.group}>
-          {group.label}
-        </Badge>
-        {item.specPath && <Code>{item.specPath}</Code>}
-      </Group>
-      <Text component="div" data-pair-summary>
-        {item.summary}
-      </Text>
+      <Stack gap="xs">
+        <Title order={3}>{item.title}</Title>
+        <Group gap="xs">
+          <Badge variant="light" tt="none" data-group={item.group}>
+            {group.label}
+          </Badge>
+          {item.specPath && <Code>{item.specPath}</Code>}
+        </Group>
+        <Text component="div" size="sm" c="dimmed" data-pair-summary>
+          {item.summary}
+        </Text>
+      </Stack>
       {item.caveats.length > 0 && (
         <List size="sm" c="dimmed" aria-label="Before reading this change">
           {item.caveats.map((caveat) => (

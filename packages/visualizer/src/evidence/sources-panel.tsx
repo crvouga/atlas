@@ -9,7 +9,7 @@ import {
   type SourceSelection
 } from '@crvouga/atlas/reports/evidence-view';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
-import { Alert, Button, Checkbox, Drawer, Group, List, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Checkbox, Divider, Drawer, Group, List, Stack, Text, Title } from '@mantine/core';
 import { useMemo } from 'react';
 import { useUiStore } from '../state/ui-store';
 import { useEvidence } from './evidence-context';
@@ -46,23 +46,32 @@ export function SourcesPanel() {
   const layerCount = (id: string) => facets.backends.find((facet) => facet.id === id)?.layers ?? 0;
   return (
     <Drawer opened={open} onClose={() => setOpen(false)} title="Sources" closeButtonProps={{ 'aria-label': 'Close sources' }}>
-      <Stack gap="lg">
+      <Stack gap="md">
         <Text c="dimmed">
           {contributing} of {plural(layers.length, 'layer', 'layers')} contribute. For each check and environment, the newest completed
           result is shown. A layer fills only the checks it ran, so the rest of the report stays in place. Switch a source off to see an
           earlier result.
         </Text>
-        {excludedCount(excluded) > 0 && <Button onClick={() => setExcluded(ALL_SOURCES)}>Use every source</Button>}
+        {excludedCount(excluded) > 0 && (
+          <Button variant="filled" onClick={() => setExcluded(ALL_SOURCES)}>
+            Use every source
+          </Button>
+        )}
         {notices.map((notice) => (
-          <Alert key={notice} role="status">
-            {notice}{' '}
-            <Button variant="subtle" onClick={retry}>
-              Try again
-            </Button>
+          <Alert key={notice} role="status" color="blue">
+            <Group gap="sm" justify="space-between">
+              <Text span>{notice} </Text>
+              <Button size="compact-sm" onClick={retry}>
+                Try again
+              </Button>
+            </Group>
           </Alert>
         ))}
+        <Divider />
         <Stack gap="sm">
-          <Title order={3}>Backends</Title>
+          <Title order={3} size="xs" fw={600} c="dimmed">
+            Backends
+          </Title>
           {!backends.length && <Text c="dimmed">No report store is configured.</Text>}
           {backends.map((backend) => (
             <Checkbox
@@ -106,9 +115,17 @@ export function SourcesPanel() {
           onToggle={(id) => setExcluded({ ...excluded, versions: toggled(excluded.versions, id) })}
           onOnly={(id) => setExcluded({ ...excluded, versions: facets.versions.map((facet) => facet.id).filter((facet) => facet !== id) })}
         />
+        <Divider />
         <Stack gap="sm">
-          <Title order={3}>Layers</Title>
-          <List spacing="md" listStyleType="none">
+          <Group justify="space-between" gap="xs">
+            <Title order={3} size="xs" fw={600} c="dimmed">
+              Layers
+            </Title>
+            <Text span size="xs" c="dimmed" aria-hidden="true">
+              {layers.length}
+            </Text>
+          </Group>
+          <List spacing="sm" listStyleType="none">
             <Bounded items={layers} size={40} more="Earlier layers">
               {(layer) => {
                 const off = !contributes(layer, { ...excluded, layers: [] });
@@ -159,8 +176,12 @@ function FacetGroup({
 }) {
   if (!facets.length && empty === null) return null;
   return (
-    <Stack gap="sm">
-      <Title order={3}>{title}</Title>
+    <>
+      <Divider />
+      <Stack gap="sm">
+      <Title order={3} size="xs" fw={600} c="dimmed">
+        {title}
+      </Title>
       {!facets.length && <Text c="dimmed">{empty}</Text>}
       {facets.map((facet) => (
         <Group key={facet.id} justify="space-between" wrap="nowrap">
@@ -171,12 +192,13 @@ function FacetGroup({
             onChange={() => onToggle(facet.id)}
           />
           {facets.length > 1 && (
-            <Button variant="subtle" onClick={() => onOnly(facet.id)}>
+            <Button variant="subtle" size="compact-xs" aria-label={`Only ${label(facet.id)}`} onClick={() => onOnly(facet.id)}>
               Only
             </Button>
           )}
         </Group>
       ))}
-    </Stack>
+      </Stack>
+    </>
   );
 }

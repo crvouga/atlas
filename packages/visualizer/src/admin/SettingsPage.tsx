@@ -1,5 +1,5 @@
 import { PageCommandPalette } from '../find/PageCommandPalette';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowLeft, IconBraces, IconCircleCheck, IconDatabase, IconEye, IconInfoCircle, IconKey, IconLock, IconMap2 } from '@tabler/icons-react';
 import { ServerEditableSettingsSchema } from '@crvouga/atlas/schema';
 /** @module Server settings interface
  * Administrator credentials live only in this component; the server validates every request.
@@ -8,17 +8,19 @@ import {
   Accordion,
   Alert,
   Anchor,
-  AppShell,
   Badge,
   Box,
   Button,
+  Card,
   Code,
   Container,
+  Divider,
   Fieldset,
   Group,
   JsonInput,
   NativeSelect,
   NumberInput,
+  Paper,
   PasswordInput,
   SimpleGrid,
   Stack,
@@ -26,9 +28,11 @@ import {
   Table,
   Text,
   TextInput,
-  Title
+  ThemeIcon
 } from '@mantine/core';
 import { useState } from 'react';
+import { PageHeader, Panel } from '../components/Page';
+import { GROUND } from '../ui/theme';
 
 type Settings = Record<string, unknown>;
 type GcPolicy = { enabled: boolean; maxAgeDays: number; keepLatest: number; intervalHours: number };
@@ -316,168 +320,105 @@ export function SettingsPage() {
     );
   };
   return (
-    <AppShell header={{ height: 64 }}>
-      <AppShell.Header>
-        <Group h="100%" px="lg" justify="space-between">
-          <Group>
-            <Anchor href={back} size="lg" fw={800}>
-              Atlas
-            </Anchor>
-            <Text c="dimmed">Settings</Text>
-          </Group>
-          <Group><PageCommandPalette /><Anchor href={back}>
-            <Group gap="xs">
-              <IconArrowLeft size={16} aria-hidden="true" />
-              Back to reports
-            </Group>
-          </Anchor></Group>
-        </Group>
-      </AppShell.Header>
-      <AppShell.Main>
-        <Container size="md" py="xl">
-          <Stack gap="xl">
-            <Box>
-              <Title order={1}>Atlas server settings</Title>
-              <Text c="dimmed" mt="xs">
-                Define the garbage collection policy and configure how this Atlas node tracks test runs. Everything here is saved to S3 and applies to every project on this node.
-              </Text>
-            </Box>
-            <Fieldset legend={<Group gap="xs">Administrator access {revision && <Badge color="green">Connected</Badge>}</Group>}>
-              <Stack>
-                <Text c="dimmed">
-                  Enter an admin token to view and edit settings. For a local server without authentication, leave it blank.
+    <Box bg={GROUND} mih="100dvh">
+      <Container size="md" px={{ base: 'sm', sm: 'md' }} py={{ base: 'sm', sm: 'md' }}>
+        <Stack gap="md">
+          <Paper component="header" withBorder shadow="xs" radius="lg" px="md" py="xs">
+            <Group justify="space-between" wrap="nowrap" gap="xs">
+              <Group gap="sm" wrap="nowrap">
+                <Anchor href={back} c="inherit" fw={700} size="md" underline="never">
+                  <Group gap={6} wrap="nowrap" component="span">
+                    <IconMap2 size={20} aria-hidden="true" />
+                    Atlas
+                  </Group>
+                </Anchor>
+                <Divider orientation="vertical" visibleFrom="xs" />
+                <Text c="dimmed" fw={500} visibleFrom="xs">
+                  Settings
                 </Text>
-                <PasswordInput
-                  id="token"
-                  label="Admin token"
-                  autoComplete="off"
-                  value={token}
-                  onChange={(event) => setToken(event.currentTarget.value)}
-                  description="Your token stays in this page and is never saved in browser storage."
-                />
-                <Button id="load" variant="filled" loading={busy} onClick={() => void request('GET')}>
-                  {revision ? 'Reload settings' : 'Load settings'}
+              </Group>
+              <Group gap={4} wrap="nowrap">
+                <PageCommandPalette />
+                <Button component="a" href={back} variant="subtle" px={{ base: 'xs', sm: 'sm' }} leftSection={<IconArrowLeft size={16} aria-hidden="true" />}>
+                  Back to reports
                 </Button>
-              </Stack>
-            </Fieldset>
-            {message && (
-              <Alert
-                id="status"
-                color={message.error ? 'red' : message.success ? 'green' : 'blue'}
-                role={message.error ? 'alert' : 'status'}
+              </Group>
+            </Group>
+          </Paper>
+          <Box component="main">
+            <Stack gap="md">
+              <Box px={{ base: 4, sm: 'xs' }} pt="xs">
+                <PageHeader
+                  title="Atlas server settings"
+                  description="Define the garbage collection policy and configure how this Atlas node tracks test runs. Everything here is saved to S3 and applies to every project on this node."
+                />
+              </Box>
+              <Panel
+                component="section"
+                aria-label="Administrator access"
+                title="Administrator access"
+                description="Enter an admin token to view and edit settings. For a local server without authentication, leave it blank."
+                actions={
+                  revision && (
+                    <Badge color="green" leftSection={<IconCircleCheck size={12} aria-hidden="true" />}>
+                      Connected
+                    </Badge>
+                  )
+                }
               >
-                {message.text}
-              </Alert>
-            )}
-            {revision && (
-              <Box id="configuration">
-                <Stack gap="lg">
-                  <Alert title="Changes apply after a server restart.">
-                    The configuration file, environment variables and command-line flags can override saved settings. Current values are shown under each field.
-                  </Alert>
-                  <Box
-                    id="garbage-collection"
-                    component="form"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void gcRequest('save');
-                    }}
-                  >
-                    <Fieldset legend="Garbage collection" disabled={busy}>
-                      <Stack>
-                        {policySaved ? (
-                          <Text size="sm" c="dimmed">
-                            This policy is saved in S3 (<Code>server/state.json</Code>) and the server reads it from there each time it collects.
-                          </Text>
-                        ) : (
-                          <Alert id="gc-empty" color="orange" title="No policy has been saved yet">
-                            Garbage collection is off and nothing is deleted. The values below are suggestions; they take effect only after you
-                            turn collection on and save.
-                          </Alert>
-                        )}
-                        <Text size="sm" c="dimmed">
-                          Only report layers that no longer decide any result (newer layers replaced all their checks) are ever deleted, and never
-                          the newest layers you choose to keep. Everything else, including specs and runs, is kept.
-                        </Text>
-                        <Switch
-                          id="gc-enabled"
-                          label="Delete eligible layers on a schedule"
-                          checked={policy.enabled}
-                          onChange={(event) => setPolicy({ ...policy, enabled: event.currentTarget.checked })}
-                        />
-                        <SimpleGrid cols={{ base: 1, sm: 3 }}>
-                          <NumberInput
-                            id="gc-maxAgeDays"
-                            label="Delete layers older than (days)"
-                            min={1}
-                            max={3650}
-                            allowDecimal={false}
-                            value={policy.maxAgeDays}
-                            onChange={(value) => setPolicy({ ...policy, maxAgeDays: Number(value) })}
-                          />
-                          <NumberInput
-                            id="gc-keepLatest"
-                            label="Always keep the newest layers"
-                            min={0}
-                            allowDecimal={false}
-                            value={policy.keepLatest}
-                            onChange={(value) => setPolicy({ ...policy, keepLatest: Number(value) })}
-                          />
-                          <NumberInput
-                            id="gc-intervalHours"
-                            label="Run every (hours)"
-                            min={1}
-                            max={720}
-                            value={policy.intervalHours}
-                            onChange={(value) => setPolicy({ ...policy, intervalHours: Number(value) })}
-                          />
-                        </SimpleGrid>
-                        <Group>
-                          <Button id="gc-save" type="submit" variant="filled" loading={busy} disabled={stale}>
-                            Save garbage collection policy
-                          </Button>
-                          <Button id="gc-preview" disabled={!policySaved} loading={busy} onClick={() => void gcRequest('preview')}>
-                            Preview deletions
-                          </Button>
-                        </Group>
-                        {(preview ?? runs).length > 0 && (
-                          <Table.ScrollContainer minWidth={480}>
-                            <Table id="gc-runs">
-                              <Table.Caption>{preview ? 'Preview (nothing deleted)' : 'Last collection pass per project'}</Table.Caption>
-                              <Table.Thead>
-                                <Table.Tr>
-                                  <Table.Th>Project</Table.Th>
-                                  <Table.Th>{preview ? 'Would delete' : 'Deleted layers'}</Table.Th>
-                                  <Table.Th>Kept layers</Table.Th>
-                                  <Table.Th>Result</Table.Th>
-                                </Table.Tr>
-                              </Table.Thead>
-                              <Table.Tbody>
-                                {(preview ?? runs).map((run) => (
-                                  <Table.Tr key={`${run.project}-${run.at}`}>
-                                    <Table.Td>{run.project}</Table.Td>
-                                    <Table.Td>{preview ? run.candidates : run.deletedLayers}</Table.Td>
-                                    <Table.Td>{run.keptLayers}</Table.Td>
-                                    <Table.Td>{run.error ? `Failed: ${run.error}` : `OK at ${run.at}`}</Table.Td>
-                                  </Table.Tr>
-                                ))}
-                              </Table.Tbody>
-                            </Table>
-                          </Table.ScrollContainer>
-                        )}
-                      </Stack>
-                    </Fieldset>
-                  </Box>
-                  <Box
-                    component="form"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void request('PUT');
-                    }}
-                  >
-                    <Stack gap="lg">
-                      <Fieldset legend="Storage">
-                        <Stack gap="xs">
+                <Group align="flex-start" gap="sm">
+                  <PasswordInput
+                    id="token"
+                    label="Admin token"
+                    autoComplete="off"
+                    flex={1}
+                    miw={{ base: '100%', xs: 260 }}
+                    leftSection={<IconKey size={16} aria-hidden="true" />}
+                    value={token}
+                    onChange={(event) => setToken(event.currentTarget.value)}
+                    description="Your token stays in this page and is never saved in browser storage."
+                  />
+                  {/* The input's label and description are two lines above the field; this lines the button up with the field. */}
+                  <Button id="load" variant="filled" loading={busy} mt={{ base: 0, xs: 44 }} onClick={() => void request('GET')}>
+                    {revision ? 'Reload settings' : 'Load settings'}
+                  </Button>
+                </Group>
+              </Panel>
+              {message && (
+                <Alert
+                  id="status"
+                  color={message.error ? 'red' : message.success ? 'green' : 'blue'}
+                  role={message.error ? 'alert' : 'status'}
+                  icon={message.error ? <IconAlertTriangle size={18} aria-hidden="true" /> : message.success ? <IconCircleCheck size={18} aria-hidden="true" /> : <IconInfoCircle size={18} aria-hidden="true" />}
+                >
+                  {message.text}
+                </Alert>
+              )}
+              {!revision && !message && (
+                <Card>
+                  <Stack align="center" gap="xs" py="xl" ta="center">
+                    <ThemeIcon variant="light" color="gray" size={48} radius="xl">
+                      <IconLock size={24} aria-hidden="true" />
+                    </ThemeIcon>
+                    <Text fw={600}>Settings are not loaded yet</Text>
+                    <Text c="dimmed" maw={420}>
+                      Load the settings to see storage, garbage collection, live updates, report rules and limits.
+                    </Text>
+                  </Stack>
+                </Card>
+              )}
+              {revision && (
+                <Box id="configuration">
+                  <Stack gap="md">
+                    <Alert color="gray" icon={<IconInfoCircle size={18} aria-hidden="true" />} title="Changes apply after a server restart.">
+                      The configuration file, environment variables and command-line flags can override saved settings. Current values are shown under each field.
+                    </Alert>
+                    <Panel component="section" aria-label="Storage" title="Storage">
+                      <Group gap="md" align="flex-start" wrap="nowrap">
+                        <ThemeIcon variant="light" color="gray" size={36} radius="md" visibleFrom="xs">
+                          <IconDatabase size={18} aria-hidden="true" />
+                        </ThemeIcon>
+                        <Stack gap="xs" flex={1} miw={0}>
                           <Text>
                             All reports and all user state, including the garbage collection policy below, are stored in S3-compatible
                             object storage and nowhere else. The bucket and credentials are set by the server&apos;s required{' '}
@@ -487,66 +428,188 @@ export function SettingsPage() {
                             The settings on this page are saved as JSON in the same bucket, in <Code>server/state.json</Code>.
                           </Text>
                         </Stack>
-                      </Fieldset>
-                      <Fieldset legend="Live updates" disabled={busy}>
-                        <SimpleGrid cols={{ base: 1, sm: 2 }}>{fields.live!.map(input)}</SimpleGrid>
-                      </Fieldset>
-                      <Fieldset legend="Report rules" disabled={busy}>
-                        <Stack>{fields.rules!.map(input)}</Stack>
-                      </Fieldset>
-                      <Fieldset legend="Advanced" disabled={busy}>
-                        <Stack>
-                          <SimpleGrid cols={{ base: 1, sm: 2 }}>{fields.advanced!.map(input)}</SimpleGrid>
-                          <Accordion variant="separated">
-                            <Accordion.Item value="json">
-                              <Accordion.Control>Edit configuration as JSON</Accordion.Control>
-                              <Accordion.Panel>
-                                <JsonInput
-                                  id="settings"
-                                  label="Report and live-run settings (JSON)"
-                                  autosize
-                                  minRows={10}
-                                  formatOnBlur
-                                  value={json}
-                                  error={jsonError || undefined}
-                                  onChange={(value) => {
-                                    setJson(value);
-                                    try {
-                                      const parsed = ServerEditableSettingsSchema.parse(JSON.parse(value));
-                                      setDraft(parsed);
-                                      setJsonError('');
-                                    } catch {
-                                      setJsonError('Settings must be a valid JSON object.');
-                                    }
-                                  }}
-                                />
-                              </Accordion.Panel>
-                            </Accordion.Item>
-                            <Accordion.Item value="active">
-                              <Accordion.Control>View currently active settings</Accordion.Control>
-                              <Accordion.Panel>
-                                <Code block>{JSON.stringify(active, null, 2)}</Code>
-                              </Accordion.Panel>
-                            </Accordion.Item>
-                          </Accordion>
-                        </Stack>
-                      </Fieldset>
-                      <Group>
-                        <Button id="save" type="submit" variant="filled" loading={busy} disabled={stale || !!jsonError}>
-                          Save changes
-                        </Button>
-                        <Text size="xs" c="dimmed">
-                          Saved to S3 (<Code>server/state.json</Code>). Restart Atlas to apply.
-                        </Text>
                       </Group>
-                    </Stack>
-                  </Box>
-                </Stack>
-              </Box>
-            )}
-          </Stack>
-        </Container>
-      </AppShell.Main>
-    </AppShell>
+                    </Panel>
+                    <Box
+                      id="garbage-collection"
+                      component="form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void gcRequest('save');
+                      }}
+                    >
+                      <Panel
+                        component="section"
+                        aria-label="Garbage collection"
+                        title="Garbage collection"
+                        description={
+                          <Text size="sm" c="dimmed">
+                            Only report layers that no longer decide any result (newer layers replaced all their checks) are ever deleted, and never
+                            the newest layers you choose to keep. Everything else, including specs and runs, is kept.
+                          </Text>
+                        }
+                      >
+                        <Fieldset variant="unstyled" disabled={busy} p={0} m={0} bd={0} miw={0}>
+                          <Stack gap="md">
+                            {policySaved ? (
+                              <Text size="sm" c="dimmed">
+                                This policy is saved in S3 (<Code>server/state.json</Code>) and the server reads it from there each time it collects.
+                              </Text>
+                            ) : (
+                              <Alert id="gc-empty" color="orange" icon={<IconAlertTriangle size={18} aria-hidden="true" />} title="No policy has been saved yet">
+                                Garbage collection is off and nothing is deleted. The values below are suggestions; they take effect only after you
+                                turn collection on and save.
+                              </Alert>
+                            )}
+                            <Switch
+                              id="gc-enabled"
+                              label="Delete eligible layers on a schedule"
+                              checked={policy.enabled}
+                              onChange={(event) => setPolicy({ ...policy, enabled: event.currentTarget.checked })}
+                            />
+                            <SimpleGrid cols={{ base: 1, sm: 3 }}>
+                              <NumberInput
+                                id="gc-maxAgeDays"
+                                label="Delete layers older than (days)"
+                                min={1}
+                                max={3650}
+                                allowDecimal={false}
+                                value={policy.maxAgeDays}
+                                onChange={(value) => setPolicy({ ...policy, maxAgeDays: Number(value) })}
+                              />
+                              <NumberInput
+                                id="gc-keepLatest"
+                                label="Always keep the newest layers"
+                                min={0}
+                                allowDecimal={false}
+                                value={policy.keepLatest}
+                                onChange={(value) => setPolicy({ ...policy, keepLatest: Number(value) })}
+                              />
+                              <NumberInput
+                                id="gc-intervalHours"
+                                label="Run every (hours)"
+                                min={1}
+                                max={720}
+                                value={policy.intervalHours}
+                                onChange={(value) => setPolicy({ ...policy, intervalHours: Number(value) })}
+                              />
+                            </SimpleGrid>
+                            {(preview ?? runs).length > 0 && (
+                              <Table.ScrollContainer minWidth={480}>
+                                <Table id="gc-runs">
+                                  <Table.Caption>{preview ? 'Preview (nothing deleted)' : 'Last collection pass per project'}</Table.Caption>
+                                  <Table.Thead>
+                                    <Table.Tr>
+                                      <Table.Th>Project</Table.Th>
+                                      <Table.Th>{preview ? 'Would delete' : 'Deleted layers'}</Table.Th>
+                                      <Table.Th>Kept layers</Table.Th>
+                                      <Table.Th>Result</Table.Th>
+                                    </Table.Tr>
+                                  </Table.Thead>
+                                  <Table.Tbody>
+                                    {(preview ?? runs).map((run) => (
+                                      <Table.Tr key={`${run.project}-${run.at}`}>
+                                        <Table.Td>{run.project}</Table.Td>
+                                        <Table.Td>{preview ? run.candidates : run.deletedLayers}</Table.Td>
+                                        <Table.Td>{run.keptLayers}</Table.Td>
+                                        <Table.Td>{run.error ? `Failed: ${run.error}` : `OK at ${run.at}`}</Table.Td>
+                                      </Table.Tr>
+                                    ))}
+                                  </Table.Tbody>
+                                </Table>
+                              </Table.ScrollContainer>
+                            )}
+                            <Divider />
+                            <Group gap="xs">
+                              <Button id="gc-save" type="submit" variant="filled" loading={busy} disabled={stale}>
+                                Save garbage collection policy
+                              </Button>
+                              <Button id="gc-preview" disabled={!policySaved} loading={busy} onClick={() => void gcRequest('preview')}>
+                                Preview deletions
+                              </Button>
+                            </Group>
+                          </Stack>
+                        </Fieldset>
+                      </Panel>
+                    </Box>
+                    <Box
+                      component="form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void request('PUT');
+                      }}
+                    >
+                      <Stack gap="md">
+                        <Panel component="section" aria-label="Live updates" title="Live updates" description="When a run counts as interrupted, and how often this node and its viewers check in.">
+                          <Fieldset variant="unstyled" disabled={busy} p={0} m={0} bd={0} miw={0}>
+                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="md">{fields.live!.map(input)}</SimpleGrid>
+                          </Fieldset>
+                        </Panel>
+                        <Panel component="section" aria-label="Report rules" title="Report rules" description="Which specs and which results the combined report is built from.">
+                          <Fieldset variant="unstyled" disabled={busy} p={0} m={0} bd={0} miw={0}>
+                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="md">{fields.rules!.map(input)}</SimpleGrid>
+                          </Fieldset>
+                        </Panel>
+                        <Panel component="section" aria-label="Advanced" title="Advanced" description="Upload limits, live connections and request logging.">
+                          <Fieldset variant="unstyled" disabled={busy} p={0} m={0} bd={0} miw={0}>
+                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="md">{fields.advanced!.map(input)}</SimpleGrid>
+                          </Fieldset>
+                        </Panel>
+                        <Panel component="section" aria-label="Configuration as JSON" title="Configuration as JSON" description="The same settings as one document, and what the server is running with now.">
+                          <Fieldset variant="unstyled" disabled={busy} p={0} m={0} bd={0} miw={0}>
+                            <Accordion>
+                              <Accordion.Item value="json">
+                                <Accordion.Control icon={<IconBraces size={16} aria-hidden="true" />}>Edit configuration as JSON</Accordion.Control>
+                                <Accordion.Panel>
+                                  <JsonInput
+                                    id="settings"
+                                    label="Report and live-run settings (JSON)"
+                                    autosize
+                                    minRows={10}
+                                    formatOnBlur
+                                    value={json}
+                                    error={jsonError || undefined}
+                                    onChange={(value) => {
+                                      setJson(value);
+                                      try {
+                                        const parsed = ServerEditableSettingsSchema.parse(JSON.parse(value));
+                                        setDraft(parsed);
+                                        setJsonError('');
+                                      } catch {
+                                        setJsonError('Settings must be a valid JSON object.');
+                                      }
+                                    }}
+                                  />
+                                </Accordion.Panel>
+                              </Accordion.Item>
+                              <Accordion.Item value="active">
+                                <Accordion.Control icon={<IconEye size={16} aria-hidden="true" />}>View currently active settings</Accordion.Control>
+                                <Accordion.Panel>
+                                  <Code block>{JSON.stringify(active, null, 2)}</Code>
+                                </Accordion.Panel>
+                              </Accordion.Item>
+                            </Accordion>
+                          </Fieldset>
+                        </Panel>
+                        <Card padding="md">
+                          <Group justify="space-between" gap="sm">
+                            <Text size="xs" c="dimmed">
+                              Saved to S3 (<Code>server/state.json</Code>). Restart Atlas to apply.
+                            </Text>
+                            <Button id="save" type="submit" variant="filled" loading={busy} disabled={stale || !!jsonError}>
+                              Save changes
+                            </Button>
+                          </Group>
+                        </Card>
+                      </Stack>
+                    </Box>
+                  </Stack>
+                </Box>
+              )}
+            </Stack>
+          </Box>
+        </Stack>
+      </Container>
+    </Box>
   );
 }

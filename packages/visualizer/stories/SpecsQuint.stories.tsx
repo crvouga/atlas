@@ -1,0 +1,11 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, screen, spec, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Specs/Quint' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const FILE = 'coffee/ordering/cart.qnt';
+export const QuintIndex: Story = { args: { at: spec('quint') } };
+export const Quint: Story = { args: { at: spec('quint', { spec: FILE }) } };
+export const TraceOpen: Story = { args: { at: spec('quint', { spec: FILE, check: 'ordering/trace-1' }) } };
+export const MobileQuint: Story = { ...MOBILE, args: { at: spec('quint', { spec: FILE }) } };

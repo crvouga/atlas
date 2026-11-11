@@ -10,38 +10,42 @@
  * The tab only reads: it never changes a status, a count of passed checks or a domain.
  */
 import { parseRootMappings, type CatalogHealth, type HealthFinding, type RootMapping } from '@crvouga/atlas/reports/catalog-health';
-import { Accordion, ActionIcon, Alert, Badge, Box, Button, Code, Group, List, Paper, SimpleGrid, Stack, Table, Text, TextInput, Title, Tooltip } from '@mantine/core';
-import { IconTrash } from '@tabler/icons-react';
+import { Accordion, ActionIcon, Alert, Badge, Box, Button, Code, Group, List, SimpleGrid, Stack, Table, Text, TextInput, Title, Tooltip } from '@mantine/core';
+import { IconAlertTriangle, IconCircleCheck, IconTrash } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
 
+import { Metric, Panel } from '../components/Page';
 import { plural } from '../evidence/format';
 import { useCatalogHealth } from './catalog';
 import { useExplorerNavigate, useExplorerSearch } from './navigate';
+import { EmptyState, Reading } from './RunsView';
 
 const label = (root: { readonly from: string; readonly to: string }) => `${root.from}>${root.to}`;
 
 function Figure({ name, value, hint }: { name: string; value: number; hint: string }) {
   return (
-    <Paper withBorder p="sm" title={hint}>
-      <Text size="xs" c="dimmed" component="div">
-        {name}
-      </Text>
-      <Text fw={700} size="xl" component="div" data-health-figure={name}>
-        {value}
-      </Text>
-    </Paper>
+    <Box title={hint}>
+      <Metric
+        label={name}
+        value={
+          <Text span inherit data-health-figure={name}>
+            {value}
+          </Text>
+        }
+      />
+    </Box>
   );
 }
 
 function Counts({ health }: { health: CatalogHealth }) {
   const { specs, tests, scenarios } = health.counts;
   return (
-    <Stack gap="md">
+    <Panel title="What is counted" description={<Text size="sm" c="dimmed">Each figure is a different denominator. Hover one to read what it counts.</Text>}>
       <Box component="section" aria-label="Spec counts">
         <Title order={4} mb="xs">
           Specs
         </Title>
-        <SimpleGrid cols={{ base: 2, sm: 3, md: 5 }}>
+        <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
           <Figure name="Spec files" value={specs.files} hint="Files the report is laid over, before any root mapping. This is the number the Specs view shows." />
           <Figure name="Defined specs" value={specs.defined} hint="Spec files, with those joined by a declared root mapping counted once." />
           <Figure name="Specs with tests" value={specs.withTests} hint="Specs, defined or not, with at least one test. This is what the Tests view groups by." />
@@ -53,7 +57,7 @@ function Counts({ health }: { health: CatalogHealth }) {
         <Title order={4} mb="xs">
           Tests
         </Title>
-        <SimpleGrid cols={{ base: 2, sm: 3, md: 5 }}>
+        <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
           <Figure name="Tests" value={tests.total} hint="Check identities: a spec path and an id, however many environments ran them." />
           <Figure name="Tests passed" value={tests.passed} hint="Tests whose current status is passed." />
           <Figure name="Tests with a spec" value={tests.withSpec} hint="Tests that name the spec they belong to." />
@@ -65,7 +69,7 @@ function Counts({ health }: { health: CatalogHealth }) {
         <Title order={4} mb="xs">
           Outlines, examples and observations
         </Title>
-        <SimpleGrid cols={{ base: 2, sm: 3, md: 5 }}>
+        <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
           <Figure name="Outlines" value={scenarios.outlines} hint="Tests sharing the label outline count once; a test without it is its own outline." />
           <Figure name="Examples" value={scenarios.examples} hint="Concrete examples: tests, however many environments ran them." />
           <Figure name="Observations" value={scenarios.observations} hint="Current results per producer, environment and parameter set." />
@@ -73,7 +77,7 @@ function Counts({ health }: { health: CatalogHealth }) {
           <Figure name="Observations passed" value={scenarios.passedObservations} hint="Observations that passed." />
         </SimpleGrid>
       </Box>
-    </Stack>
+    </Panel>
   );
 }
 
@@ -84,53 +88,58 @@ function Reconciliation({ health }: { health: CatalogHealth }) {
     total += step.delta;
     return (
       <Table.Tr key={step.code}>
-        <Table.Td>{step.label}</Table.Td>
+        <Table.Td pl="lg">{step.label}</Table.Td>
         <Table.Td ta="right">{step.delta > 0 ? `+${step.delta}` : step.delta}</Table.Td>
-        <Table.Td ta="right">{total}</Table.Td>
+        <Table.Td ta="right" pr="lg">
+          {total}
+        </Table.Td>
       </Table.Tr>
     );
   });
   return (
-    <Box component="section" aria-label="Why Specs and Tests differ">
-      <Title order={3} mb="xs">
-        Why Specs and Tests differ
-      </Title>
+    <Panel flush component="section" aria-label="Why Specs and Tests differ" order={3} title="Why Specs and Tests differ">
       <Table.ScrollContainer minWidth={420}>
         <Table data-health-reconciliation>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th scope="col">Step</Table.Th>
+              <Table.Th scope="col" pl="lg">
+                Step
+              </Table.Th>
               <Table.Th scope="col" ta="right">
                 Change
               </Table.Th>
-              <Table.Th scope="col" ta="right">
+              <Table.Th scope="col" ta="right" pr="lg">
                 Total
               </Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             <Table.Tr>
-              <Table.Td>Spec files the Specs view lists</Table.Td>
+              <Table.Td pl="lg">Spec files the Specs view lists</Table.Td>
               <Table.Td />
-              <Table.Td ta="right">{reconciliation.specs}</Table.Td>
+              <Table.Td ta="right" pr="lg">
+                {reconciliation.specs}
+              </Table.Td>
             </Table.Tr>
             {rows}
             <Table.Tr>
-              <Table.Td fw={600}>Specs the Tests view groups its tests into</Table.Td>
+              <Table.Td fw={600} pl="lg">
+                Specs the Tests view groups its tests into
+              </Table.Td>
               <Table.Td />
-              <Table.Td ta="right" fw={600}>
+              <Table.Td ta="right" fw={600} pr="lg">
                 {reconciliation.testSpecs}
               </Table.Td>
             </Table.Tr>
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>
-      <List size="sm" mt="sm" data-health-explanation>
+      <List size="sm" c="dimmed" p="lg" pt="sm" data-health-explanation>
         {reconciliation.explanation.map((line) => (
           <List.Item key={line}>{line}</List.Item>
         ))}
       </List>
-    </Box>
+    </Panel>
   );
 }
 
@@ -187,15 +196,19 @@ function Mappings({ health, tried }: { health: CatalogHealth | undefined; tried:
   const known = [...configured, ...tried].some((root) => root.from === from.trim() && root.to === to.trim());
   const matched = (root: RootMapping) => health?.roots.find((item) => item.from === root.from && item.to === root.to && item.source !== 'configuration')?.matched;
   return (
-    <Box component="section" aria-label="Root mappings">
-      <Title order={3} mb="xs">
-        Root mappings
-      </Title>
-      <Text size="sm" c="dimmed" mb="sm">
-        Two spec paths are one spec only when a mapping says so. A mapping states that paths under one folder are the same specs as paths under another; Atlas never merges paths by a similar title. A mapping tried here is kept in the address and changes nothing on the server. To keep one, set <Code>catalog.roots</Code> or <Code>ATLAS_CATALOG_ROOTS</Code> on the server.
-      </Text>
+    <Panel
+      component="section"
+      aria-label="Root mappings"
+      order={3}
+      title="Root mappings"
+      description={
+        <Text size="sm" c="dimmed" maw={860}>
+          Two spec paths are one spec only when a mapping says so. A mapping states that paths under one folder are the same specs as paths under another; Atlas never merges paths by a similar title. A mapping tried here is kept in the address and changes nothing on the server. To keep one, set <Code>catalog.roots</Code> or <Code>ATLAS_CATALOG_ROOTS</Code> on the server.
+        </Text>
+      }
+    >
       {configured.length + tried.length > 0 && (
-        <List size="sm" listStyleType="none" mb="sm" aria-label="Declared root mappings">
+        <List size="sm" listStyleType="none" spacing={6} aria-label="Declared root mappings">
           {configured.map((root) => (
             <List.Item key={`c${label(root)}`}>
               <Group gap="xs" wrap="wrap">
@@ -240,15 +253,15 @@ function Mappings({ health, tried }: { health: CatalogHealth | undefined; tried:
           setTo('');
         }}
       >
-        <Group align="flex-end" gap="md" wrap="wrap">
-          <TextInput label="Paths under" description="Leave empty to match every path" placeholder="checkout/" value={from} onChange={(event) => setFrom(event.currentTarget.value)} />
-          <TextInput label="are the same specs as paths under" description="Where the specs are recorded" placeholder="specs/checkout/" value={to} onChange={(event) => setTo(event.currentTarget.value)} />
+        <Group align="flex-end" gap="sm" wrap="wrap">
+          <TextInput flex={1} miw={220} maw={360} label="Paths under" description="Leave empty to match every path" placeholder="checkout/" value={from} onChange={(event) => setFrom(event.currentTarget.value)} />
+          <TextInput flex={1} miw={220} maw={360} label="are the same specs as paths under" description="Where the specs are recorded" placeholder="specs/checkout/" value={to} onChange={(event) => setTo(event.currentTarget.value)} />
           <Button type="submit" disabled={!to.trim() || known}>
             Try this mapping
           </Button>
         </Group>
       </form>
-    </Box>
+    </Panel>
   );
 }
 
@@ -260,20 +273,16 @@ export function HealthView() {
   const health = answer.data && !answer.data.unsupported ? answer.data.health : undefined;
   const warnings = health?.findings.filter((item) => item.severity === 'warning') ?? [];
   return (
-    <Box aria-label="Catalog health" component="section" mb="lg">
-      <Title order={2} mb="sm">
-        Catalog health
-      </Title>
-      <Text component="div" c="dimmed" mb="md">
-        Specs, domains and coverage counts can disagree because of how specs are named and described, not because of a defect in a test. This explains each number, where the totals differ, and what to change at the source. It only reads: it changes no result.
-      </Text>
-      <Stack gap="lg">
-        <Mappings health={health} tried={tried} />
-        {answer.isPending && (
-          <Text role="status" component="div" c="dimmed">
-            Reading the catalog…
+    <Stack aria-label="Catalog health" component="section" gap="md">
+      <Panel
+        title="Catalog health"
+        description={
+          <Text component="div" size="sm" c="dimmed" maw={860}>
+            Specs, domains and coverage counts can disagree because of how specs are named and described, not because of a defect in a test. This explains each number, where the totals differ, and what to change at the source. It only reads: it changes no result.
           </Text>
-        )}
+        }
+      >
+        {answer.isPending && <Reading rows={3}>Reading the catalog…</Reading>}
         {answer.isError && (
           <Alert role="alert" color="red">
             The catalog health could not be read. {answer.error.message}
@@ -290,66 +299,89 @@ export function HealthView() {
           </Alert>
         )}
         {health && (
-          <>
-            <Alert role="status" color={health.ok ? 'green' : 'orange'} title={health.ok ? 'No warnings' : plural(warnings.length, 'warning', 'warnings')} data-health-summary>
-              {health.ok ? 'Nothing found that makes a count or a domain filter misleading.' : 'These make a count or a domain filter misleading. Each says what to change at its source.'}
-            </Alert>
-            <Reconciliation health={health} />
-            <Counts health={health} />
-            {health.aliases.length > 0 && (
-              <Box component="section" aria-label="Specs under more than one path">
-                <Title order={3} mb="xs">
-                  Specs under more than one path
-                </Title>
-                <Text size="sm" c="dimmed" mb="xs">
+          <Alert role="status" color={health.ok ? 'green' : 'orange'} icon={health.ok ? <IconCircleCheck size={18} aria-hidden="true" /> : <IconAlertTriangle size={18} aria-hidden="true" />} title={health.ok ? 'No warnings' : plural(warnings.length, 'warning', 'warnings')} data-health-summary>
+            {health.ok ? 'Nothing found that makes a count or a domain filter misleading.' : 'These make a count or a domain filter misleading. Each says what to change at its source.'}
+          </Alert>
+        )}
+      </Panel>
+      {health && (
+        <>
+          <Reconciliation health={health} />
+          <Counts health={health} />
+        </>
+      )}
+      <Mappings health={health} tried={tried} />
+      {health && (
+        <>
+          {health.aliases.length > 0 && (
+            <Panel
+              flush
+              component="section"
+              aria-label="Specs under more than one path"
+              order={3}
+              title="Specs under more than one path"
+              description={
+                <Text size="sm" c="dimmed">
                   Joined because a root mapping relates them. Every original path stays inspectable.
                 </Text>
-                <Table.ScrollContainer minWidth={420}>
-                  <Table data-health-aliases>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th scope="col">Spec</Table.Th>
-                        <Table.Th scope="col">Original paths</Table.Th>
+              }
+            >
+              <Table.ScrollContainer minWidth={420}>
+                <Table data-health-aliases>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th scope="col" pl="lg">
+                        Spec
+                      </Table.Th>
+                      <Table.Th scope="col" pr="lg">
+                        Original paths
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {health.aliases.map((alias) => (
+                      <Table.Tr key={alias.path}>
+                        <Table.Td pl="lg">
+                          <Code>{alias.path}</Code>
+                        </Table.Td>
+                        <Table.Td pr="lg">
+                          <Stack gap={2} align="flex-start">
+                            {alias.sources.map((source) => (
+                              <Code key={source}>{source}</Code>
+                            ))}
+                          </Stack>
+                        </Table.Td>
                       </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {health.aliases.map((alias) => (
-                        <Table.Tr key={alias.path}>
-                          <Table.Td>
-                            <Code>{alias.path}</Code>
-                          </Table.Td>
-                          <Table.Td>
-                            <Stack gap={2}>
-                              {alias.sources.map((source) => (
-                                <Code key={source}>{source}</Code>
-                              ))}
-                            </Stack>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                </Table.ScrollContainer>
-              </Box>
-            )}
-            <Box component="section" aria-label="Domains">
-              <Title order={3} mb="xs">
-                Domains
-              </Title>
-              <Text size="sm" c="dimmed" mb="xs">
-                A domain is what a spec&apos;s own metadata says. Explicit metadata is always authoritative; a domain shared by nearly every spec is reported as a finding below, not changed.
-              </Text>
-              {health.domains.length === 0 ? (
-                <Text component="div" c="dimmed">
-                  No spec declares a domain.
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            </Panel>
+          )}
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+            <Panel
+              flush
+              component="section"
+              aria-label="Domains"
+              order={3}
+              title="Domains"
+              description={
+                <Text size="sm" c="dimmed">
+                  A domain is what a spec&apos;s own metadata says. Explicit metadata is always authoritative; a domain shared by nearly every spec is reported as a finding below, not changed.
                 </Text>
+              }
+            >
+              {health.domains.length === 0 ? (
+                <EmptyState>No spec declares a domain.</EmptyState>
               ) : (
                 <Table.ScrollContainer minWidth={320}>
                   <Table data-health-domains>
                     <Table.Thead>
                       <Table.Tr>
-                        <Table.Th scope="col">Domain</Table.Th>
-                        <Table.Th scope="col" ta="right">
+                        <Table.Th scope="col" pl="lg">
+                          Domain
+                        </Table.Th>
+                        <Table.Th scope="col" ta="right" pr="lg">
                           Specs
                         </Table.Th>
                       </Table.Tr>
@@ -357,46 +389,40 @@ export function HealthView() {
                     <Table.Tbody>
                       {health.domains.map((domain) => (
                         <Table.Tr key={domain.name}>
-                          <Table.Td>{domain.name}</Table.Td>
-                          <Table.Td ta="right">{domain.specs}</Table.Td>
+                          <Table.Td pl="lg">{domain.name}</Table.Td>
+                          <Table.Td ta="right" pr="lg">
+                            {domain.specs}
+                          </Table.Td>
                         </Table.Tr>
                       ))}
                     </Table.Tbody>
                   </Table>
                 </Table.ScrollContainer>
               )}
-            </Box>
-            <Box component="section" aria-label="Findings">
-              <Title order={3} mb="xs">
-                Findings
-              </Title>
-              {health.findings.length === 0 ? (
-                <Text component="div" c="dimmed">
-                  Nothing to report.
-                </Text>
-              ) : (
-                <Accordion multiple defaultValue={warnings.map((item) => item.code)}>
-                  {health.findings.map((item) => (
-                    <Finding key={item.code} item={item} />
-                  ))}
-                </Accordion>
-              )}
-            </Box>
-            <Box component="section" aria-label="Identity">
-              <Title order={3} mb="xs">
-                Identity
-              </Title>
+            </Panel>
+            <Panel component="section" aria-label="Identity" order={3} title="Identity">
               <Text size="sm" component="div" data-health-identity>
                 Fallback identity (known by title only): {health.identity.fallbackIdentity} of {health.identity.checks} checks.
                 {health.identity.declaredBehaviorIds !== undefined && ` Declared behavior ids: ${health.identity.declaredBehaviorIds}. Declared example ids: ${health.identity.declaredExampleIds ?? 0}.`}
               </Text>
-              <Text size="sm" c="dimmed" component="div" mt="xs">
+              <Text size="sm" c="dimmed" component="div">
                 {health.identity.basis}
               </Text>
-            </Box>
-          </>
-        )}
-      </Stack>
-    </Box>
+            </Panel>
+          </SimpleGrid>
+          <Panel component="section" aria-label="Findings" order={3} title="Findings">
+            {health.findings.length === 0 ? (
+              <EmptyState icon={<IconCircleCheck size={28} stroke={1.5} aria-hidden="true" />}>Nothing to report.</EmptyState>
+            ) : (
+              <Accordion multiple defaultValue={warnings.map((item) => item.code)}>
+                {health.findings.map((item) => (
+                  <Finding key={item.code} item={item} />
+                ))}
+              </Accordion>
+            )}
+          </Panel>
+        </>
+      )}
+    </Stack>
   );
 }

@@ -13,12 +13,13 @@ import { attachmentIdentity, type EvidenceHolder, type PartEvidence } from '@crv
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import type { RunDetail, RunLayer, RunResult } from '@crvouga/atlas/reports/test-catalog';
 import type { Attachment } from '@crvouga/atlas/schema';
-import { Alert, Anchor, Badge, Box, Button, Group, List, Stack, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Box, Button, Divider, Group, List, Stack, Text, Title } from '@mantine/core';
 import { IconAlertTriangle, IconVideo } from '@tabler/icons-react';
 import { useQueries } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useMemo } from 'react';
 
+import { Panel } from '../components/Page';
 import { reportJson } from '../evidence/api';
 import { ArtifactCard } from '../evidence/artifacts';
 import { exactTime, plural } from '../evidence/format';
@@ -68,7 +69,7 @@ function TestLinks({ tests }: { tests: readonly RunResult[] }) {
       {tests.slice(0, TESTS_NAMED).map((result, index) => (
         <Text span inherit key={result.key}>
           {index > 0 && ', '}
-          <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, artifact: undefined, test: result.key, layer: result.layer })} resetScroll={false} activeOptions={{ exact: true }} />}>
+          <Anchor underline="always" renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, artifact: undefined, test: result.key, layer: result.layer })} resetScroll={false} activeOptions={{ exact: true }} />}>
             {result.title}
           </Anchor>
         </Text>
@@ -86,21 +87,21 @@ function provenance(layer: RunLayer): string {
 function LayerBlock({ runKey, layer, files, selected, shared }: { runKey: string; layer: RunLayer; files: { isPending: boolean; isError: boolean; refetch: () => unknown; data: LayerFiles | undefined }; selected: string | undefined; shared: (attachment: Attachment) => RunResult[] }) {
   const groups = files.data ? holdings(files.data) : [];
   return (
-    <Box component="section" aria-label={`Layer ${layer.producer}`} data-layer={layer.id} mb="lg">
+    <Stack component="section" aria-label={`Layer ${layer.producer}`} data-layer={layer.id} gap="xs">
       <Title order={4}>{provenance(layer)}</Title>
-      <Text c="dimmed" data-layer-checks={layer.checks}>
+      <Text size="sm" c="dimmed" data-layer-checks={layer.checks}>
         {layer.checks > 0
           ? `${plural(layer.checks, 'check', 'checks')} recorded in this layer.`
           : 'No checks in this layer: it carries files only, so it says nothing about whether anything passed.'}{' '}
         {plural(layer.attachments, 'file', 'files')} of its own.
       </Text>
       {files.isPending && (
-        <Text role="status" component="div" c="dimmed">
+        <Text role="status" component="div" size="sm" c="dimmed">
           Reading the files of this layer…
         </Text>
       )}
       {files.isError && (
-        <Alert role="alert" color="red" my="sm" title="The files of this layer could not be read">
+        <Alert role="alert" color="red" title="The files of this layer could not be read">
           <Button variant="light" onClick={() => void files.refetch()}>
             Try again
           </Button>
@@ -108,7 +109,7 @@ function LayerBlock({ runKey, layer, files, selected, shared }: { runKey: string
       )}
       {groups.map((group) => (
         <Stack key={group.owner} gap="xs" mt="sm">
-          {groups.length > 1 || group.owner !== 'the layer' ? <Text c="dimmed">From {group.owner}</Text> : null}
+          {groups.length > 1 || group.owner !== 'the layer' ? <Text size="sm" c="dimmed">From {group.owner}</Text> : null}
           <List spacing="xs" listStyleType="none">
             <Bounded items={group.attachments} size={SHOWN} more="More files">
               {(attachment, index) => {
@@ -122,6 +123,7 @@ function LayerBlock({ runKey, layer, files, selected, shared }: { runKey: string
                     selected={selected === `${layer.id}\u0000${ref}`}
                     link={
                       <Anchor
+                        size="sm"
                         aria-label={`Link to ${attachment.name}`}
                         renderRoot={(props) => (
                           <Link {...props} to="/" search={patched({ tab: 'runs', openRun: runKey, layer: layer.id, artifact: ref, test: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
@@ -132,7 +134,7 @@ function LayerBlock({ runKey, layer, files, selected, shared }: { runKey: string
                     }
                     note={
                       tests.length > 0 ? (
-                        <Text component="div" c="dimmed" data-shared>
+                        <Text component="div" size="sm" c="dimmed" data-shared>
                           The same bytes are also referenced by {plural(tests.length, 'test', 'tests')} (<TestLinks tests={tests} />
                           ). That is one recording, not {tests.length + 1}.
                         </Text>
@@ -145,7 +147,7 @@ function LayerBlock({ runKey, layer, files, selected, shared }: { runKey: string
           </List>
         </Stack>
       ))}
-    </Box>
+    </Stack>
   );
 }
 
@@ -190,43 +192,43 @@ export function RunArtifacts({ detail }: { detail: RunDetail }) {
   const wantedLayer = layers.find((layer) => layer.id === search.layer);
   const nothing = !carrying.length && !inTests.length && !unavailable;
   return (
-    <Box aria-label="Run artifacts" component="section" mb="lg" data-run-artifacts>
-      <Title order={3} mb="sm">
-        Artifacts
-      </Title>
+    <Panel aria-label="Run artifacts" component="section" data-run-artifacts order={3} title="Artifacts">
       {wanted && everyRead && !found && (
-        <Alert role="alert" color="orange" my="sm" icon={<IconAlertTriangle size={16} aria-hidden="true" />} title="That file is not in this run">
+        <Alert role="alert" color="orange" icon={<IconAlertTriangle size={16} aria-hidden="true" />} title="That file is not in this run">
           {wantedLayer
             ? 'The layer the link names is in this run, but it no longer lists that file. It is not shown as another file.'
             : 'The link names a layer that is not part of this run (it may belong to another project or have been removed). It is not shown as another file.'}
         </Alert>
       )}
       {nothing && (
-        <Text component="div" c="dimmed">
+        <Text component="div" size="sm" c="dimmed" ta="center" py="md">
           This run carries no files of its own and none of its tests references a recording.
         </Text>
       )}
       {carrying.map((layer, index) => (
-        <LayerBlock key={layer.id} runKey={run.key} layer={layer} files={queries[index]!} selected={wanted} shared={sharedWith} />
+        <Stack key={layer.id} gap="md">
+          {index > 0 && <Divider />}
+          <LayerBlock runKey={run.key} layer={layer} files={queries[index]!} selected={wanted} shared={sharedWith} />
+        </Stack>
       ))}
       {(inTests.length > 0 || unavailable > 0) && (
-        <Box aria-label="Recordings in tests" component="section" data-test-recordings>
+        <Stack aria-label="Recordings in tests" component="section" data-test-recordings gap="xs">
+          {carrying.length > 0 && <Divider mb="xs" />}
           <Title order={4}>Recordings in tests</Title>
-          <Text c="dimmed">
+          <Text size="sm" c="dimmed">
             A recording that several tests reference is listed once. Open a test to watch it.
           </Text>
           <List spacing="xs" listStyleType="none">
             <Bounded items={inTests} size={SHOWN} more="More recordings">
               {([identity, held]) => (
-                <List.Item key={identity} data-recording>
+                <List.Item key={identity} data-recording icon={<Box c="dimmed" pt={2}><IconVideo size={18} stroke={1.5} aria-hidden="true" /></Box>}>
                   <Group gap="xs">
-                    <IconVideo size={16} aria-hidden="true" />
-                    <Text span inherit fw={600}>
+                    <Text span size="sm" fw={600}>
                       {held.name}
                     </Text>
                     {held.tests.size > 1 && <Badge variant="light">shared by {held.tests.size} tests</Badge>}
                   </Group>
-                  <Text component="div" c="dimmed">
+                  <Text component="div" size="sm" c="dimmed">
                     {held.references > 1 ? `${plural(held.references, 'reference', 'references')} to the same recording, in ` : 'In '}
                     <TestLinks tests={[...held.tests.values()]} />
                   </Text>
@@ -235,12 +237,12 @@ export function RunArtifacts({ detail }: { detail: RunDetail }) {
             </Bounded>
           </List>
           {unavailable > 0 && (
-            <Text component="div" c="dimmed" data-video-unavailable>
+            <Text component="div" size="sm" c="dimmed" data-video-unavailable>
               <IconAlertTriangle size={16} aria-hidden="true" /> {plural(unavailable, 'video reference', 'video references')} name no stored file, so they cannot be played.
             </Text>
           )}
-        </Box>
+        </Stack>
       )}
-    </Box>
+    </Panel>
   );
 }

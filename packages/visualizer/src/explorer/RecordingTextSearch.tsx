@@ -13,12 +13,13 @@
  * searched: recordings with no text, silent ones and unreadable text are listed apart, each in its own words. A
  * match finds a moment; it says nothing about whether the behavior passed, and the result's own outcome stays beside it.
  */
-import { Accordion, Alert, Anchor, Badge, Button, Group, Highlight, List, Stack, Table, Text, TextInput, Title } from '@mantine/core';
-import { IconPlayerPlay } from '@tabler/icons-react';
+import { Accordion, Alert, Anchor, Badge, Button, Center, Group, Highlight, List, Stack, Table, Text, TextInput } from '@mantine/core';
+import { IconPlayerPlay, IconSearch } from '@tabler/icons-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Panel } from '../components/Page';
 import { ReportsError, reportText } from '../evidence/api';
 import { attachmentSource } from '../evidence/artifacts';
 import { plural, statusWord } from '../evidence/format';
@@ -183,25 +184,39 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
     go({ inside: value.trim() || undefined }, { replace: true });
   };
   return (
-    <Stack component="section" aria-label="Search inside recordings" gap="xs" my="md" data-recording-text>
-      <Title order={2}>Search inside recordings</Title>
-      <Text c="dimmed">
-        Find words that were spoken or shown on screen, from the transcripts, captions and screen text that producers supplied with the recordings listed here. A match finds a moment; it does not show that the behavior
-        passed.
-      </Text>
+    <Panel
+      component="section"
+      aria-label="Search inside recordings"
+      data-recording-text
+      title="Search inside recordings"
+      description={
+        <Text size="sm" c="dimmed" maw={760}>
+          Find words that were spoken or shown on screen, from the transcripts, captions and screen text that producers supplied with the recordings listed here. A match finds a moment; it does not show that the behavior
+          passed.
+        </Text>
+      }
+    >
       <Group gap="xs" align="center" wrap="wrap">
-        <TextInput type="search" aria-label="Words spoken or shown" placeholder="delivery address" value={draft} miw={{ base: '100%', sm: '20rem' }} onChange={(event) => set(event.target.value)} />
+        <TextInput
+          type="search"
+          leftSection={<IconSearch size={16} aria-hidden="true" />}
+          aria-label="Words spoken or shown"
+          placeholder="delivery address"
+          value={draft}
+          w={{ base: '100%', sm: '24rem' }}
+          onChange={(event) => set(event.target.value)}
+        />
         <TypedFilters parsed={found.parsed} query={draft} onChange={set} />
       </Group>
       <SearchNotes issues={found.parsed.issues} semantic={found.status} />
       {!query && (
-        <Text component="div" c="dimmed">
+        <Text component="div" size="sm" c="dimmed">
           Type words to search. Nothing is read from the recordings until you do, and only the text supplied with them is read, never the video.
         </Text>
       )}
       {query && (
         <Stack gap="xs">
-          <Text role="status" component="div" data-reading>
+          <Text role="status" component="div" size="sm" data-reading>
             {waiting
               ? `Reading the text of recordings: ${read} of ${readable}.`
               : `Searched the text of ${plural(counts.searched, 'recording', 'recordings')}.`}
@@ -218,7 +233,7 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
         </Stack>
       )}
       {query && matches === null && (
-        <Text component="div" c="dimmed">
+        <Text component="div" size="sm" c="dimmed">
           Add words to search for. Filters alone do not match any text.
         </Text>
       )}
@@ -233,7 +248,7 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
       )}
       {matches && matches.length > 0 && (
         <Stack gap="xs">
-          <Text role="status" component="div" data-match-count>
+          <Text role="status" component="div" size="sm" c="dimmed" data-match-count>
             {plural(matches.length, 'match', 'matches')} in {plural(resultEntries.size, 'result', 'results')}. The outcome is the result&apos;s own; a match does not change it.
           </Text>
           <Table.ScrollContainer minWidth={760}>
@@ -265,7 +280,7 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
                       <Table.Td>
                         <Text component="div">{TEXT_KIND_WORD[item.kind]}</Text>
                         {item.generated && (
-                          <Text c="orange.8" size="xs" component="div" data-generated>
+                          <Text c="orange" size="xs" component="div" data-generated>
                             {uncertaintyWord(item)}
                           </Text>
                         )}
@@ -290,7 +305,9 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
                         </Text>
                       </Table.Td>
                       <Table.Td>
-                        <StatusMark status={item.entry.status} size={14} /> {statusWord(item.entry.status)}
+                        <Group gap={6} wrap="nowrap">
+                          <StatusMark status={item.entry.status} size={14} /> {statusWord(item.entry.status)}
+                        </Group>
                       </Table.Td>
                       <Table.Td>
                         <Button
@@ -298,7 +315,7 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
                           size="compact-sm"
                           variant="light"
                           leftSection={<IconPlayerPlay size={16} aria-hidden="true" />}
-                          aria-label={`Open the recording of ${item.entry.title}${item.attemptLabel ? `, ${item.attemptLabel}` : ''} at ${rangeWord(item)}`}
+                          aria-label={`${item.segment.startMs === null ? 'Open recording' : 'Open here'}: the recording of ${item.entry.title}${item.attemptLabel ? `, ${item.attemptLabel}` : ''} at ${rangeWord(item)}`}
                           onClick={() => setOpened(focusOf(item))}
                         >
                           {item.segment.startMs === null ? 'Open recording' : 'Open here'}
@@ -311,14 +328,16 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
             </Table>
           </Table.ScrollContainer>
           {matches.length > results.length && (
-            <Button type="button" variant="subtle" onClick={() => setShown(shown + LISTED)}>
-              Show more ({matches.length - results.length} more)
-            </Button>
+            <Center>
+              <Button type="button" variant="subtle" onClick={() => setShown(shown + LISTED)}>
+                Show more ({matches.length - results.length} more)
+              </Button>
+            </Center>
           )}
         </Stack>
       )}
       {query && unsearched.length > 0 && (
-        <Accordion variant="separated">
+        <Accordion>
           <Accordion.Item value="unsearched">
             <Accordion.Control>Recordings that were not searched ({unsearched.length})</Accordion.Control>
             <Accordion.Panel>
@@ -350,6 +369,6 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
         </Accordion>
       )}
       {opened && <WatchPlaylist entries={entries} total={total} focus={opened} onClose={() => setOpened(null)} />}
-    </Stack>
+    </Panel>
   );
 }

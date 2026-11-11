@@ -69,6 +69,8 @@ export const ExplorerSearchFields = {
   release: text,
   releaseSha: text,
   releasePlatform: text,
+  /** How the tests are laid out: a grid of cards (the default) or `list`, one row each with its figures. */
+  layout: z.enum(['list']).optional().catch(undefined),
   group: z.enum(TEST_GROUPS).optional().catch(undefined),
   sort: z.enum(EXPLORER_SORTS).optional().catch(undefined),
   tab: z.enum(['runs', 'artifacts', 'collections', 'compare', 'health']).optional().catch(undefined),
@@ -144,6 +146,7 @@ export type ExplorerSearch = {
   readonly release?: string;
   readonly releaseSha?: string;
   readonly releasePlatform?: string;
+  readonly layout?: 'list';
   readonly group?: TestGroup;
   readonly sort?: ExplorerSort;
   readonly tab?: 'runs' | 'artifacts' | 'collections' | 'compare' | 'health';

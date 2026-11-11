@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Box, Button, Center, Group, Loader, Paper, Stack, Text, useMantineTheme } from '@mantine/core';
+import { ActionIcon, Alert, Box, Button, Center, Group, Loader, Paper, Stack, Text } from '@mantine/core';
 import {
   Background,
   MiniMap,
@@ -18,7 +18,9 @@ import { chartGraph } from '../layout/graph';
 import type { ChartLayout } from '../layout/layout';
 import { useChartLayout } from '../layout/use-chart-layout';
 import { useUiStore } from '../state/ui-store';
+import { GROUND, statusColor } from '../ui/theme';
 import { EdgeMarkers, edgeTypes, type EventEdgeType } from './EventEdge';
+import styles from './map.module.css';
 
 import {
   nodeTypes,
@@ -143,15 +145,15 @@ function ZoomControls() {
   const flow = useReactFlow();
   const duration = reducedMotion() ? 0 : 250;
   return (
-    <Paper shadow="xs" p="xs">
-      <Group gap="xs" role="group" aria-label="Zoom">
-        <ActionIcon variant="default" onClick={() => void flow.zoomIn({ duration })} aria-label="Zoom in">
+    <Paper withBorder shadow="xs" p={4}>
+      <Group gap={2} role="group" aria-label="Zoom">
+        <ActionIcon onClick={() => void flow.zoomIn({ duration })} aria-label="Zoom in">
           <PlusIcon aria-hidden="true" size={16} />
         </ActionIcon>
-        <ActionIcon variant="default" onClick={() => void flow.zoomOut({ duration })} aria-label="Zoom out">
+        <ActionIcon onClick={() => void flow.zoomOut({ duration })} aria-label="Zoom out">
           <MinusIcon aria-hidden="true" size={16} />
         </ActionIcon>
-        <ActionIcon variant="default" onClick={() => void flow.fitView({ duration, padding: fitPadding() })} aria-label="Fit the whole map">
+        <ActionIcon onClick={() => void flow.fitView({ duration, padding: fitPadding() })} aria-label="Fit the whole map">
           <FitIcon aria-hidden="true" size={16} />
         </ActionIcon>
       </Group>
@@ -172,7 +174,6 @@ function Flow({
   layout: ChartLayout;
   selection: MapSelection;
 }) {
-  const theme = useMantineTheme();
   const { nodes, edges } = useFlowElements(view, chartId, layout, selection);
   const saved = useRef<Viewport | undefined>(useUiStore.getState().viewports[scopeKey]);
   const saveViewport = useUiStore((s) => s.saveViewport);
@@ -224,12 +225,12 @@ function Flow({
       aria-label="Map of screens and events. Drag to move, scroll or pinch to zoom."
     >
       <EdgeMarkers />
-      <Background color={theme.colors.gray[3]} />
+      <Background color="var(--mantine-color-default-border)" gap={24} size={1.5} />
       <Panel position="top-right">
         <ZoomControls />
       </Panel>
       <Panel position="bottom-left">
-        <Paper p="xs" shadow="xs" maw="70vw">
+        <Paper withBorder p="xs" shadow="xs" maw="70vw">
           <Legend showTime={hasTime} />
         </Paper>
       </Panel>
@@ -246,18 +247,20 @@ function Flow({
             };
           };
           const status = data.status ?? data.state?.status;
-          return theme.colors[status === 'passed' ? 'green' : status === 'failed' ? 'red' : status === 'flaky' ? 'orange' : 'gray'][3];
+          return `var(--mantine-color-${statusColor(status ?? 'spec-only')}-5)`;
         }}
-        nodeStrokeColor={(n: Node) => (n.type === 'group' ? theme.colors.gray[3] : 'transparent')}
+        nodeStrokeColor={(n: Node) => (n.type === 'group' ? 'var(--mantine-color-default-border)' : 'transparent')}
         nodeBorderRadius={8}
-        maskColor="var(--mantine-color-gray-0)"
+        bgColor="var(--mantine-color-body)"
+        maskColor="var(--mantine-color-primary-light)"
+        className={styles.minimap}
       />
     </ReactFlow>
   );
 }
 function MapSkeleton({ label }: { label: string }) {
   return (
-    <Center h="60vh">
+    <Center h="60vh" bg={GROUND} className={styles.ground}>
       <Stack align="center">
         <Loader />
         <Text role="status" c="dimmed">
@@ -284,23 +287,25 @@ export function ChartMap({
   const layout = useChartLayout(input, input?.scoped ? null : (chart?.layout ?? null));
   if (layout.error) {
     return (
-      <Alert color="red" title="Map unavailable">
-        <p>The map for this chart couldn’t be laid out.</p>
-        <Button onClick={() => void layout.refetch()}>Try again</Button>
+      <Alert color="red" title="Map unavailable" m="lg" mt={0}>
+        <Stack gap="sm" align="flex-start">
+          <Text>The map for this chart couldn’t be laid out.</Text>
+          <Button onClick={() => void layout.refetch()}>Try again</Button>
+        </Stack>
       </Alert>
     );
   }
   if (!layout.data) return <MapSkeleton label={`Laying out ${chart?.name ?? 'the map'}…`} />;
   if (layout.data.nodes.length === 0) {
     return (
-      <Alert>
-        <p>This chart has no states yet.</p>
+      <Alert color="gray" m="lg" mt={0}>
+        <Text>This chart has no states yet.</Text>
       </Alert>
     );
   }
   return (
     <ReactFlowProvider>
-      <Box h="70vh" mih="24rem">
+      <Box h="70vh" mih="24rem" bg={GROUND} className={styles.ground}>
         <Flow view={view} chartId={chartId} scopeKey={`${chartId}:${input?.focus ?? ''}`} layout={layout.data} selection={selection} />
       </Box>
     </ReactFlowProvider>

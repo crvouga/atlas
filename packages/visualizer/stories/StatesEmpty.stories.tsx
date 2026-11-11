@@ -1,0 +1,18 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, behaviors, catalog, critiques, screen, spec, tests, type ScreenStory } from './support';
+const meta = { ...screen, title: 'States/Empty', args: { at: tests(), state: 'empty' } } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+export const EmptyTests: Story = {};
+export const EmptyRuns: Story = { args: { at: tests({ tab: 'runs' }) } };
+export const EmptyArtifacts: Story = { args: { at: tests({ tab: 'artifacts' }) } };
+export const EmptyCompare: Story = { args: { at: tests({ tab: 'compare' }) } };
+export const EmptyCatalogHealth: Story = { args: { at: tests({ tab: 'health' }) } };
+export const EmptyCollections: Story = { args: { at: tests({ tab: 'collections' }) } };
+export const EmptyHome: Story = { args: { at: '/' } };
+export const EmptySpecIndex: Story = { args: { at: spec('gherkin') } };
+export const EmptyBehaviors: Story = { args: { at: behaviors() } };
+export const EmptyCatalog: Story = { args: { at: catalog() } };
+export const EmptyCritiques: Story = { args: { at: critiques() } };
+export const MobileEmptyTests: Story = { ...MOBILE };

@@ -10,7 +10,8 @@ import { attachmentIdentity } from '@crvouga/atlas/reports/evidence-detail';
 import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { EvidenceResult } from '@crvouga/atlas/reports/layer-merge';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
-import { Alert, Badge, Box, Group, List, Paper, Stack, Tabs, Text, Title } from '@mantine/core';
+import { Alert, Badge, Box, Card, Group, Stack, Tabs, Text, Title } from '@mantine/core';
+import { IconBook, IconEyeOff, IconPlayerPlay, IconSearch, IconVideo } from '@tabler/icons-react';
 import { useMemo, type ReactNode } from 'react';
 import type { Attachment } from '@crvouga/atlas/schema';
 
@@ -20,6 +21,7 @@ import { attachmentSource, Timeline, useCheckDetail } from './artifacts';
 import { COVERAGE, COVERAGE_ORDER, type Behavior, type CoverageCounts, type CoverageState, type Revision } from './behavior';
 import { PlainSteps } from './check-detail';
 import { useEvidence } from './evidence-context';
+import { StateBlock } from './load-state';
 import { ScopeNotice, ScopeProvider } from './evidence-scope';
 import { plural, statusWord, useNow } from './format';
 import { exampleIndexFor, exampleRows, fillExample, type FeatureStep } from './gherkin';
@@ -43,6 +45,15 @@ export function CoverageBadge({ state }: { state: CoverageState }) {
   );
 }
 
+/** Says, beside a behavior's name, that it has a recording that can be played. */
+export function VideoMark() {
+  return (
+    <Box component="span" display="inline-flex" c="dimmed" title="Has a recording to watch">
+      <IconVideo size={16} role="img" aria-label="Has a recording" />
+    </Box>
+  );
+}
+
 /**
  * The promise and the evidence side by side, each with its own revision. A mismatch is stated, not hidden; a missing
  * fingerprint is stated as unknown rather than treated as a match.
@@ -50,16 +61,16 @@ export function CoverageBadge({ state }: { state: CoverageState }) {
 export function RevisionLine({ revision }: { revision: Revision }) {
   return (
     <Stack gap="xs" data-revision={revision.match}>
-      <Group gap="md" wrap="wrap" c="dimmed">
+      <Group gap="md" wrap="wrap" c="dimmed" fz="xs">
         <Text span inherit>
           Promise revision:{' '}
-          <Text span inherit fw={600}>
+          <Text span inherit fw={600} c="var(--mantine-color-text)">
             {revision.promise ? shortRevision(revision.promise) : 'not recorded'}
           </Text>
         </Text>
         <Text span inherit>
           Evidence revision:{' '}
-          <Text span inherit fw={600}>
+          <Text span inherit fw={600} c="var(--mantine-color-text)">
             {revision.evidence ? shortRevision(revision.evidence) : 'not recorded'}
           </Text>
         </Text>
@@ -70,7 +81,7 @@ export function RevisionLine({ revision }: { revision: Revision }) {
         </Alert>
       )}
       {revision.match === 'unknown' && (
-        <Text component="div" c="dimmed">
+        <Text component="div" size="xs" c="dimmed">
           The revisions cannot be compared, so this evidence is not tied to the current promise.
         </Text>
       )}
@@ -106,9 +117,12 @@ function WatchVideo({ attachment, url }: { attachment: Attachment; url: string }
       controls
       preload="metadata"
       aria-label={`Recording: ${attachment.description ?? attachment.name}`}
+      display="block"
       maw="100%"
       w="100%"
       mah="70vh"
+      bg="var(--mantine-color-dark-9)"
+      bdrs="md"
       {...moments}
     />
   );
@@ -129,9 +143,11 @@ export function Player({ result }: { result: EvidenceResult }) {
   );
   if (detail.isLoading) {
     return (
-      <Text role="status" component="div" c="dimmed">
-        Loading the recording…
-      </Text>
+      <Card padding="md" shadow="none" bg="var(--mantine-color-default-hover)">
+        <StateBlock role="status" icon={<IconPlayerPlay size={22} />}>
+          Loading the recording…
+        </StateBlock>
+      </Card>
     );
   }
   if (detail.isError) {
@@ -143,9 +159,9 @@ export function Player({ result }: { result: EvidenceResult }) {
   }
   if (!sources.length) {
     return (
-      <Text component="div" c="dimmed">
-        This result names a recording, but no file can be played from here.
-      </Text>
+      <Card padding="md" shadow="none" bg="var(--mantine-color-default-hover)">
+        <StateBlock icon={<IconEyeOff size={22} />}>This result names a recording, but no file can be played from here.</StateBlock>
+      </Card>
     );
   }
   const shown = sources.find(({ attachment }) => attachmentIdentity(attachment) === requested.clip) ?? sources[0]!;
@@ -163,7 +179,7 @@ export function Player({ result }: { result: EvidenceResult }) {
         </MomentPlayback>
       </ScopeProvider>
       {sources.length > 1 && (
-        <Text component="div" c="dimmed">
+        <Text component="div" size="xs" c="dimmed">
           {plural(sources.length - 1, 'more recording', 'more recordings')} in Inspect.
         </Text>
       )}
@@ -176,7 +192,7 @@ export function Provenance({ subject }: { subject: EvidenceResult }) {
   const { backends } = useEvidence();
   const now = useNow();
   return (
-    <Group gap="xs" wrap="wrap" align="center">
+    <Group gap="xs" wrap="wrap" align="center" fz="sm">
       <StatusMark status={subject.row.status} size={14} />
       <Text span inherit fw={600}>
         {statusWord(subject.row.status)}
@@ -186,6 +202,24 @@ export function Provenance({ subject }: { subject: EvidenceResult }) {
       </Text>
       <Origin layer={subject.layer} backends={backends} now={now} />
     </Group>
+  );
+}
+
+/** What a behavior with no recording says where the player would be: that there is nothing to watch, and why. */
+export function NothingToWatch({ state }: { state: CoverageState }) {
+  return (
+    <Card padding="md" shadow="none" bg="var(--mantine-color-default-hover)">
+      <StateBlock icon={<IconEyeOff size={22} />}>Nothing to watch. {COVERAGE[state].meaning}</StateBlock>
+    </Card>
+  );
+}
+
+/** The sentence under every recording: it shows one run and approves nothing. */
+export function Illustrative() {
+  return (
+    <Text component="div" size="xs" c="dimmed">
+      Illustrative recording of one run. It shows what happened in that run and does not approve the behavior for production.
+    </Text>
   );
 }
 
@@ -221,14 +255,20 @@ export function BehaviorPanel({
       keepMounted={false}
       aria-label={`${scenario.name}${example ? `: ${example}` : ''}`}
     >
-      <Tabs.List mb="sm">
-        <Tabs.Tab value="read">Read</Tabs.Tab>
-        <Tabs.Tab value="watch">Watch</Tabs.Tab>
-        <Tabs.Tab value="inspect">Inspect</Tabs.Tab>
+      <Tabs.List mb="md">
+        <Tabs.Tab value="read" leftSection={<IconBook size={16} aria-hidden="true" />}>
+          Read
+        </Tabs.Tab>
+        <Tabs.Tab value="watch" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />}>
+          Watch
+        </Tabs.Tab>
+        <Tabs.Tab value="inspect" leftSection={<IconSearch size={16} aria-hidden="true" />}>
+          Inspect
+        </Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="read">
         <Stack gap="sm" miw={0}>
-          <Group gap="sm">
+          <Group gap="xs">
             <CoverageBadge state={state} />
             <Text component="span" c="dimmed">
               {COVERAGE[state].meaning}
@@ -240,7 +280,9 @@ export function BehaviorPanel({
               Example: {example}
             </Text>
           )}
-          <PlainSteps steps={steps} examples={entry ? [] : scenario.examples} />
+          <Box fz="sm">
+            <PlainSteps steps={steps} examples={entry ? [] : scenario.examples} />
+          </Box>
           {named && (
             <Text component="div" c="dimmed">
               The recorded example name does not match one row of the examples, so the values are not filled in.
@@ -249,34 +291,32 @@ export function BehaviorPanel({
         </Stack>
       </Tabs.Panel>
       <Tabs.Panel value="watch">
-        <Stack gap="sm" miw={0}>
-          <Group gap="sm">
+        <Stack gap="md" miw={0}>
+          <Group gap="xs" wrap="wrap">
             <CoverageBadge state={state} />
             {behavior.representative && <Badge variant="outline">Representative demo</Badge>}
+            {subject && <Provenance subject={subject} />}
           </Group>
+          {demo ? (
+            <Stack gap="xs" miw={0}>
+              <Player result={demo} />
+              <Illustrative />
+            </Stack>
+          ) : (
+            <NothingToWatch state={state} />
+          )}
           {expected.length > 0 && (
-            <Box component="section" aria-label="Expected outcome">
-              <Title order={4} mb="xs">
+            <Card component="section" aria-label="Expected outcome" padding="md" shadow="none">
+              <Title order={4} size="xs" c="dimmed" fw={500} mb={6}>
                 Expected
               </Title>
-              <PlainSteps steps={expected} />
-            </Box>
+              <Box fz="sm">
+                <PlainSteps steps={expected} />
+              </Box>
+            </Card>
           )}
-          {demo ? (
-            <>
-              <Player result={demo} />
-              <Text component="div" c="dimmed">
-                Illustrative recording of one run. It shows what happened in that run and does not approve the behavior for production.
-              </Text>
-            </>
-          ) : (
-            <Text component="div" c="dimmed">
-              Nothing to watch. {COVERAGE[state].meaning}
-            </Text>
-          )}
-          {subject && <Provenance subject={subject} />}
-          <RevisionLine revision={revision} />
           <ScopedSummary behavior={behavior} />
+          <RevisionLine revision={revision} />
           {applicability && <ApplicabilitySummary assessment={applicability} release={release} />}
         </Stack>
       </Tabs.Panel>
@@ -298,31 +338,30 @@ export function BehaviorPanel({
 export function CoverageSummary({ counts, total }: { counts: CoverageCounts; total: number }) {
   if (total === 0) return null;
   return (
-    <Paper component="section" aria-label="Coverage" withBorder p="md" my="md">
-      <Stack gap="xs">
-        <Title order={2}>Coverage</Title>
-        <Text component="div">
-          {counts.demonstrated} of {plural(total, 'behavior', 'behaviors')} demonstrated with a recording of the current spec.
-        </Text>
-        <List listStyleType="none" spacing="xs">
+    <Card component="section" aria-label="Coverage" padding="md">
+      <Group justify="space-between" align="center" gap="md">
+        <Stack gap={2} flex={1} miw={{ base: '100%', sm: 320 }}>
+          <Title order={2}>Coverage</Title>
+          <Text component="div">
+            {counts.demonstrated} of {plural(total, 'behavior', 'behaviors')} demonstrated with a recording of the current spec.
+          </Text>
+          <Text component="div" size="xs" c="dimmed">
+            A recording shows one run. It is illustrative evidence and does not mean the behavior is live or ready for production.
+          </Text>
+        </Stack>
+        <Group component="ul" gap="xs" m={0} p={0}>
           {COVERAGE_ORDER.filter((state) => state === 'demonstrated' || counts[state] > 0).map((state) => (
-            <List.Item key={state} data-coverage={state}>
-              <Group gap="sm" wrap="wrap">
+            <Card key={state} component="li" data-coverage={state} padding="xs" shadow="none" title={COVERAGE[state].meaning}>
+              <Group gap="xs" wrap="nowrap">
                 <CoverageBadge state={state} />
-                <Text span inherit fw={600}>
+                <Text span fw={600}>
                   {counts[state]}
                 </Text>
-                <Text span inherit c="dimmed">
-                  {COVERAGE[state].meaning}
-                </Text>
               </Group>
-            </List.Item>
+            </Card>
           ))}
-        </List>
-        <Text component="div" c="dimmed">
-          A recording shows one run. It is illustrative evidence and does not mean the behavior is live or ready for production.
-        </Text>
-      </Stack>
-    </Paper>
+        </Group>
+      </Group>
+    </Card>
   );
 }
