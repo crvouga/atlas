@@ -5,7 +5,9 @@ import '@mantine/spotlight/styles.css';
 import '@xyflow/react/dist/base.css';
 import { AtlasThemeProvider } from '../packages/visualizer/src/ui/theme';
 const preview: Preview = {
-  decorators: [(Story) => <AtlasThemeProvider><Story /></AtlasThemeProvider>],
+  decorators: [(Story, context) => <AtlasThemeProvider scheme={context.globals.scheme === 'dark' ? 'dark' : 'light'}><Story /></AtlasThemeProvider>],
+  globalTypes: { scheme: { description: 'Color scheme', toolbar: { title: 'Scheme', icon: 'mirror', items: ['light', 'dark'], dynamicTitle: true } } },
+  initialGlobals: { scheme: 'light' },
   parameters: {
     layout: 'fullscreen',
     a11y: { test: 'error' },
