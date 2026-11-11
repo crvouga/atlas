@@ -35,6 +35,9 @@ import { latestSpecSet, readSpecBody } from '../../reports/src/spec-set';
 import { catalogHealth, healthMarkdown, parseRootMapping, parseRootMappings, type RootMapping } from '../../reports/src/catalog-health';
 import { parseArtifactFilter } from '../../reports/src/artifact-query';
 import { filterUiCatalog, pageUiCatalog, parseUiCatalogQuery, uiCatalog, uiCatalogMarkdown, uiScreenMarkdown } from '../../reports/src/ui-catalog';
+import { isDefinitionVersion, scopeUiCatalog, type UiDefinitionSelection } from '../../reports/src/ui-catalog-scope';
+import { uiCatalogFailureGroups, uiCatalogFailuresMarkdown } from '../../reports/src/ui-catalog-failures';
+import { selectUiStates, uiStateIds, UiCatalogIndexes } from '../../reports/src/ui-catalog-index';
 import { catalogEntries, pageCatalogEntries, parseCatalogEntriesQuery, CATALOG_ENTRIES_VERSION, type CatalogEntrySet } from '../../reports/src/ui-catalog-entries';
 import { parseReliabilityScope, reliability, reliabilityMarkdown } from '../../reports/src/reliability';
 import { artifactList, artifactsMarkdown, catalogMarkdown, catalogModel, historyMarkdown, parseTestQuery, runDetail, runList, runMarkdown, runsMarkdown, testCatalog, testHistory, type CatalogModel } from '../../reports/src/test-catalog';
@@ -55,7 +58,9 @@ import { projectServer } from './projects';
 import { mountReviewCollections } from './review-collections';
 import { mountRecordingVerification } from './recording-verification';
 import { readLimited, storeApi } from './store-api';
+import type { BuildInfo } from './build-info';
 import { CatalogQueue, mountCatalogQueue } from './ui-catalog-queue';
+import { CatalogRefreshes, mountCatalogRefresh } from './ui-catalog-refresh';
 
 const gzipAsync = promisify(gzip);
 const brotliAsync = promisify(brotliCompress);
@@ -86,6 +91,8 @@ export type AtlasServerOptions = {
   readonly log?: (line: Record<string, unknown>) => void;
   readonly now?: () => number;
   readonly version?: string;
+  /** Where this server was built from, for `GET /api/server` (`build`). Unknown fields are null; absent, all are. */
+  readonly build?: BuildInfo;
   /** Admin configuration persistence, supplied by atlas serve; kept in S3. Changes apply on restart. */
   readonly settings?: ServerSettings;
   /** The garbage collection policy, kept in S3 and read from there each time the server collects. Supplied by atlas serve. */
@@ -334,10 +341,11 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const identity = auth.identify(c.req.raw);
     const snapshot = index.snapshot();
     return c.json({
-      name: 'atlas', version: options.version ?? null, role: identity?.role ?? 'read', open: auth.open,
+      name: 'atlas', version: options.version ?? null, build: { version: options.version ?? options.build?.version ?? null, revision: options.build?.revision ?? null, builtAt: options.build?.builtAt ?? null, imageDigest: options.build?.imageDigest ?? null },
+      role: identity?.role ?? 'read', open: auth.open,
       write: options.write, ready: index.ready, viewers: events.count, time: now(),
       backends: snapshot.backends.map(({ id, label, available }) => ({ id, label, available, write: id === options.write })),
-      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true, recordingVerification: true, catalogEntries: true, catalogQueue: true }
+      ...(({ backends: _unused, ...rest }) => rest)(index.stats()), capabilities: { events: true, ingest: true, store: true, checks: true, status: true, effective: true, live: true, tests: true, artifactTags: true, artifactSearch: true, reviewCollections: true, recordingVerification: true, catalogEntries: true, catalogQueue: true, catalogIndex: true }
     });
   });
 
@@ -455,6 +463,9 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
   };
   let entriesModel: { version: string; value: CatalogEntrySet } | undefined;
   let uiModel: { version: string; value: ReturnType<typeof uiCatalog> } | undefined;
+  const uiScoped = new Map<string, ReturnType<typeof uiCatalog>>();
+  // The fingerprints of the index answers given, a few versions back, so a viewer's `?since=` is answered with what changed.
+  const uiIndexes = new UiCatalogIndexes();
   const wantsMarkdown = (c: Context) => {
     const format = c.req.query('format');
     return format === 'markdown' || format === 'md' || (format === undefined && /\btext\/markdown\b/.test(c.req.header('accept') ?? ''));
@@ -531,16 +542,62 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
     const document = () => artifactList(index.history, found.version, parseArtifactFilter(search), { limit: number('limit', 100), offset: number('offset', 0), domainOf: path => domains.get(path) });
     return answer(c, found.version, document, () => artifactsMarkdown(document()), `artifacts|${search.toString()}|${wantsMarkdown(c)}`);
   });
+  /**
+   * The catalog of the report in the scope `?definition=` asks for: absent, every layer's history as before; `all`, the same
+   * with the choice recorded; `latest`, the latest published definition, resolved to its version; a version, that definition.
+   * One that cannot be read is an explicit unavailable scope, never every layer's history. A scoped catalog is kept per
+   * report version and definition, like the whole one.
+   */
+  const scopedUiModel = async (search: URLSearchParams): Promise<{ whole: ReturnType<typeof uiCatalog>; key: string } | Response> => {
+    const snapshot = index.snapshot();
+    // The catalog is a function of the report, so it is built once per version and narrowed per question.
+    if (uiModel?.version !== snapshot.version) uiModel = { version: snapshot.version, value: uiCatalog(snapshot.layers, { version: snapshot.version, backends: snapshot.backends, notices: snapshot.notices }) };
+    const given = search.get('definition');
+    if (given === null || given === '') return { whole: uiModel.value, key: '' };
+    if (given !== 'all' && given !== 'latest' && !isDefinitionVersion(given)) return problemResponse(422, '?definition= takes all, latest or a definition version (64 lowercase hex digits).');
+    let selection: UiDefinitionSelection;
+    if (given === 'all') selection = { kind: 'all-history' };
+    else {
+      const version = given === 'latest' ? await catalogQueue.latestDefinition() : given;
+      const document = version ? await catalogQueue.definition(version) : null;
+      selection = { kind: 'definition', version: version ?? 'latest', document, ...(document ? {} : { reason: version ? `No definition ${version} has been published` : 'No definition has been published' }) };
+    }
+    const key = selection.kind === 'all-history' ? 'all' : `${selection.version}|${selection.document ? 'found' : 'missing'}`;
+    const cacheKey = `${snapshot.version}|${key}`;
+    let scoped = uiScoped.get(cacheKey);
+    if (!scoped) {
+      scoped = scopeUiCatalog(uiModel.value, selection);
+      if (uiScoped.size >= 4) uiScoped.delete(uiScoped.keys().next().value!);
+      uiScoped.set(cacheKey, scoped);
+    }
+    return { whole: scoped, key };
+  };
   app.get('/api/reports/ui-catalog', async c => {
     if (!index.ready) return notReady(c);
     const snapshot = index.snapshot();
     const search = new URL(c.req.url).searchParams;
     const number = (name: string, fallback: number) => (/^\d+$/.test(search.get(name) ?? '') ? Number(search.get(name)) : fallback);
-    // The catalog is a function of the report, so it is built once per version and narrowed per question.
-    if (uiModel?.version !== snapshot.version) uiModel = { version: snapshot.version, value: uiCatalog(snapshot.layers, { version: snapshot.version, backends: snapshot.backends, notices: snapshot.notices }) };
-    const whole = uiModel.value;
-    const document = () => pageUiCatalog(filterUiCatalog(whole, parseUiCatalogQuery(search)), { limit: number('limit', 200), offset: number('offset', 0) });
-    return answer(c, snapshot.version, document, () => uiCatalogMarkdown(document()), `ui-catalog|${search.toString()}|${wantsMarkdown(c)}`);
+    const model = await scopedUiModel(search);
+    if (model instanceof Response) return model;
+    // `?id=` narrows to exact states (the evidence of the cards a viewer shows); `?view=index` answers the compact index a viewer
+    // searches, and with `?since=` only what changed. A Markdown answer is always the full document.
+    const filtered = () => selectUiStates(filterUiCatalog(model.whole, parseUiCatalogQuery(search)), uiStateIds(search));
+    const page = { limit: number('limit', 200), offset: number('offset', 0) };
+    const scope = `${model.key}|${[...search].filter(([name]) => !['limit', 'offset', 'since', 'view', 'format'].includes(name)).map(([name, value]) => `${name}=${value}`).sort().join('&')}`;
+    const document = () => search.get('view') === 'index'
+      ? uiIndexes.answer(filtered(), { version: snapshot.version, scope, since: search.get('since'), ...page })
+      : pageUiCatalog(filtered(), page);
+    return answer(c, snapshot.version, document, () => uiCatalogMarkdown(pageUiCatalog(filtered(), page)), `ui-catalog|${search.toString()}|${model.key}|${wantsMarkdown(c)}`);
+  });
+  app.get('/api/reports/ui-catalog/failures', async c => {
+    if (!index.ready) return notReady(c);
+    const snapshot = index.snapshot();
+    const search = new URL(c.req.url).searchParams;
+    const model = await scopedUiModel(search);
+    if (model instanceof Response) return model;
+    const maxCells = /^\d+$/.test(search.get('maxCells') ?? '') ? Number(search.get('maxCells')) : 200;
+    const document = () => uiCatalogFailureGroups(filterUiCatalog(model.whole, parseUiCatalogQuery(search)), { maxCells });
+    return answer(c, snapshot.version, document, () => uiCatalogFailuresMarkdown(document()), `ui-failures|${search.toString()}|${model.key}|${wantsMarkdown(c)}`);
   });
   app.get('/api/reports/ui-catalog/detail', async c => {
     if (!index.ready) return notReady(c);
@@ -624,6 +681,8 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
   mountReviewCollections(app, { store: tagStore, stores, auth, index, now, maxBytes: limits.json, unauthorized });
   mountRecordingVerification(app, { stores, auth, index, now, unauthorized });
   mountCatalogQueue(app, { queue: catalogQueue, auth, ready: () => index.ready, maxBytes: limits.json, unauthorized });
+  // Refresh receipts: one collection run judged whole, kept beside the queue in the server's store.
+  mountCatalogRefresh(app, { refreshes: new CatalogRefreshes({ store: options.liveStore ?? writeBackend.store, queue: catalogQueue, now }), auth, ready: () => index.ready, maxBytes: limits.json, unauthorized });
   app.route('/api/reports', layers);
 
   // Upload: the store protocol, and a simple JSON way in for anything that can make a request.
@@ -728,7 +787,7 @@ function createProjectApplication(options: AtlasServerOptions): AtlasServer {
   // The viewer, with this server's address book written into its page.
   if (options.site) {
     const root = path.resolve(options.site);
-    const config = JSON.stringify({ api: './api', reportsUrl: './api/reports', dataUrl: './api/data/', eventsUrl: './api/events', projectsUrl: './api/projects', effective: true, ...(options.page ?? {}) }).replaceAll('<', '\\u003c');
+    const config = JSON.stringify({ api: './api', reportsUrl: './api/reports', dataUrl: './api/data/', eventsUrl: './api/events', projectsUrl: './api/projects', effective: true, catalogIndex: true, ...(options.page ?? {}) }).replaceAll('<', '\\u003c');
     const pageDigest = createHash('sha256').update(config).digest('hex').slice(0, 16);
     const files = new Map<string, { stamp: string; bytes: Uint8Array }>();
     app.get('*', async c => {

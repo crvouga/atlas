@@ -34,6 +34,8 @@ export type UiItemResult = {
   readonly layer: string;
   /** The claim it answers (its {@link UI_CLAIM_LABEL} label), or null. */
   readonly claim: string | null;
+  /** The commit its layer recorded, when it recorded one. */
+  readonly sha?: string | null;
 };
 
 /** A unit's place in the queue. `captured` units are `stale` or `fresh` depending on a claim's cutoff. */
@@ -64,7 +66,7 @@ export function latestUiResults(layers: readonly LayerEvidence[]): Map<string, U
     }
   }
   const out = new Map<string, UiItemResult>();
-  for (const [key, result] of best) out.set(key, { status: result.row.status, recordedAtMs: result.layer.recordedAtMs, layer: result.layer.id, claim: result.row.evidence?.labels[UI_CLAIM_LABEL] ?? null });
+  for (const [key, result] of best) out.set(key, { status: result.row.status, recordedAtMs: result.layer.recordedAtMs, layer: result.layer.id, claim: result.row.evidence?.labels[UI_CLAIM_LABEL] ?? null, sha: result.layer.sha ?? null });
   return out;
 }
 

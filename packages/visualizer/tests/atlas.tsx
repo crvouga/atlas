@@ -182,6 +182,10 @@ export async function openAtlas(args: {
   /** Answers a reports request itself (to stall or fail it); returning nothing leaves it to the reports app. */
   intercept?: (path: string) => Response | Promise<Response> | undefined;
   /** An Atlas node to answer `/evidence/effective`, as a deployed one does. */ node?: { fetch: (request: Request) => Promise<Response> };
+  /** Answers `GET /api/server` (and puts the API address in the page). */
+  serverInfo?: () => Response;
+  /** False: the page config does not announce the catalog index, as an older server's does not. */
+  catalogIndex?: boolean;
   /** Let the node answer its UI catalog collection queue (`/api/ui-catalog/…`), which needs the API address in the page. */
   queue?: boolean;
 }) {
@@ -210,6 +214,7 @@ export async function openAtlas(args: {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'http://atlas.test/api/projects' && args.projects) return args.projects();
     if (url === 'http://atlas.test/api/live' && args.live) return Response.json({ runs: await args.live() });
+    if (url === 'http://atlas.test/api/server' && args.serverInfo) return args.serverInfo();
     if (args.queue && args.node && url.startsWith('http://atlas.test/api/ui-catalog/')) return args.node.fetch(new Request(url, init));
     if (!url.startsWith(REPORTS_URL)) return new Response('not found', { status: 404 });
     requests.push(url.slice(REPORTS_URL.length));
@@ -218,7 +223,7 @@ export async function openAtlas(args: {
     if (args.down?.value) return new Response('{"error":"reports_unavailable"}', { status: 503 });
     // What a node answers beyond the report itself: one result's evidence, the files it points to, and the test catalog,
     // a test's history and the runs, which only a node keeps, and the layers behind the winners (an earlier run's own record).
-    if (args.node && /^\/(evidence(\/(effective|detail|rows)|\?|$)|layers\/|(tests|runs|artifacts)(\/|\?|$)|artifact-tags$|recordings\/verification(\?|$)|review-collections(\/|\?|$))/.test(url.slice(REPORTS_URL.length)))
+    if (args.node && /^\/(evidence(\/(effective|detail|rows)|\?|$)|layers\/|(tests|runs|artifacts)(\/|\?|$)|artifact-tags$|recordings\/verification(\?|$)|review-collections(\/|\?|$)|ui-catalog(\/|\?|$))/.test(url.slice(REPORTS_URL.length)))
       return args.node.fetch(new Request(url, init));
     return app.request(url.slice(REPORTS_URL.length));
   }) as typeof fetch;
@@ -240,11 +245,12 @@ export async function openAtlas(args: {
     subscribe: null
   };
   (globalThis as { __ATLAS_CONFIG__?: unknown }).__ATLAS_CONFIG__ =
-    args.node || args.live || args.projects || args.queue
+    args.node || args.live || args.projects || args.queue || args.serverInfo
       ? {
           reportsUrl: REPORTS_URL,
           effective: !!args.node,
-          ...(args.live || args.projects || args.queue ? { api: 'http://atlas.test/api' } : {}),
+          ...(args.node && args.catalogIndex !== false ? { catalogIndex: true } : {}),
+          ...(args.live || args.projects || args.queue || args.serverInfo ? { api: 'http://atlas.test/api' } : {}),
           ...(args.events ? { eventsUrl: 'http://atlas.test/api/events' } : {}),
           ...(args.projects ? { projectsUrl: 'http://atlas.test/api/projects' } : {})
         }
@@ -307,6 +313,7 @@ export async function openAtlas(args: {
     /** The same for a page served by a node, which reads the whole report in one request. */
     async pollReport() {
       await act(async () => client.refetchQueries({ queryKey: ['evidence-effective'] }));
+      await act(async () => client.refetchQueries({ queryKey: ['ui-catalog-index'] }));
     },
     async pollLive() {
       await act(async () => client.refetchQueries({ queryKey: ['live-runs'] }));

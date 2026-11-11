@@ -69,10 +69,23 @@ export type UiStateFacts = {
   readonly inventory?: boolean;
 };
 
+/**
+ * Supplemental evidence of a capture: every attachment of a `ui-state` check other than its picture (another view, a trace,
+ * a video, a log), in the order the producer gave. `role` is open (`view`, `trace`, `video`, `log`…); `label` and `order`
+ * are what `uiStateLayer` wrote (see `UiCaptureAttachment`), else the attachment's description and position.
+ */
+export type UiStateAttachment = UiScreenshot & {
+  readonly role?: string;
+  readonly label?: string;
+  readonly order: number;
+};
+
 /** What a row of a `ui-state` or `ui-plan` part carries for the catalog. Rides in the report row, only for those kinds. */
 export type UiStateFact = UiStateFacts & {
-  /** The check's picture: its `screenshot` attachment, else its first image. */
+  /** The check's picture: its `screenshot` attachment, else its first image that is not marked supplemental. */
   readonly screenshot?: UiScreenshot;
+  /** The check's other attachments, in order; absent when it has none. Evidence only: never decides a result. */
+  readonly attachments?: readonly UiStateAttachment[];
 };
 
 const MAX_TEXT = 512;
@@ -104,10 +117,20 @@ function map(value: unknown): Record<string, string> | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
-function screenshotOf(check: Pick<Check, 'attachments'>): UiScreenshot | undefined {
-  const images = (check.attachments ?? []).filter(item => item.role === 'screenshot' || (item.contentType ?? '').startsWith('image/'));
-  const picked = images.find(item => item.role === 'screenshot') ?? images[0];
-  if (!picked) return undefined;
+type LayerAttachment = NonNullable<Check['attachments']>[number];
+
+/** Whether `uiStateLayer` marked an attachment as supplemental evidence, never the primary picture. */
+function marked(item: LayerAttachment): Record<string, unknown> | undefined {
+  const raw = item.extensions?.[UI_STATE_EXTENSION];
+  return typeof raw === 'object' && raw !== null && !Array.isArray(raw) && (raw as Record<string, unknown>).supplemental === true ? raw as Record<string, unknown> : undefined;
+}
+
+function primaryOf(check: Pick<Check, 'attachments'>): LayerAttachment | undefined {
+  const images = (check.attachments ?? []).filter(item => item.role === 'screenshot' || ((item.contentType ?? '').startsWith('image/') && !marked(item)));
+  return images.find(item => item.role === 'screenshot') ?? images[0];
+}
+
+function pictureOf(picked: LayerAttachment): UiScreenshot {
   return {
     name: picked.name,
     ...(picked.bundleKey ? { bundleKey: picked.bundleKey } : {}),
@@ -119,6 +142,20 @@ function screenshotOf(check: Pick<Check, 'attachments'>): UiScreenshot | undefin
     ...(picked.sha256 ? { sha256: picked.sha256 } : {}),
     ...(picked.omitted ? { omitted: picked.omitted } : {})
   };
+}
+
+const MAX_ATTACHMENTS = 64;
+
+function attachmentsOf(check: Pick<Check, 'attachments'>, primary: LayerAttachment | undefined): UiStateAttachment[] | undefined {
+  const out: UiStateAttachment[] = [];
+  for (const item of check.attachments ?? []) {
+    if (item === primary) continue;
+    if (out.length >= MAX_ATTACHMENTS) break;
+    const facts = marked(item);
+    const label = text(facts?.label) ?? text(item.description);
+    out.push({ ...pictureOf(item), ...(item.role ? { role: item.role } : {}), ...(label ? { label } : {}), order: out.length });
+  }
+  return out.length ? out : undefined;
 }
 
 /**
@@ -146,6 +183,9 @@ export function uiStateFacts(check: Pick<Check, 'extensions'>): UiStateFacts {
 export function uiStateOf(kind: string, check: Pick<Check, 'extensions' | 'attachments'>): UiStateFact | undefined {
   if (!isUiKind(kind)) return undefined;
   const facts = uiStateFacts(check);
-  const screenshot = kind === UI_STATE_KIND ? screenshotOf(check) : undefined;
-  return screenshot || Object.keys(facts).length ? { ...facts, ...(screenshot ? { screenshot } : {}) } : undefined;
+  if (kind !== UI_STATE_KIND) return Object.keys(facts).length ? facts : undefined;
+  const primary = primaryOf(check);
+  const screenshot = primary ? pictureOf(primary) : undefined;
+  const attachments = attachmentsOf(check, primary);
+  return screenshot || attachments || Object.keys(facts).length ? { ...facts, ...(screenshot ? { screenshot } : {}), ...(attachments ? { attachments } : {}) } : undefined;
 }

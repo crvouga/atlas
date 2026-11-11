@@ -179,7 +179,15 @@ JSON Schema (`@crvouga/atlas/schemas/<name>.schema.json`, draft 2020-12):
 | `atlas ui-catalog status` | `ui-catalog-status` |
 | `atlas ui-catalog diff` | `ui-catalog-diff-result` |
 | `atlas ui-catalog export` | `ui-catalog-export-result` |
+| `atlas ui-catalog failures` | `ui-catalog-failures-result` |
 | `atlas ui-catalog collect` | `ui-catalog-collect-result` |
+| `atlas ui-catalog plan-matrix` | `ui-catalog-matrix` |
+| `atlas ui-catalog refresh begin` | `ui-catalog-refresh-begin-result` |
+| `atlas ui-catalog refresh status` | `ui-catalog-refresh-status` |
+| `atlas ui-catalog refresh finalize` | `ui-catalog-refresh-status` |
+| `atlas ui-catalog bundle validate` | `ui-catalog-bundle-result` |
+| `atlas ui-catalog bundle merge` | `ui-catalog-bundle-result` |
+| `atlas ui-catalog bundle import` | `ui-catalog-bundle-result` |
 | `a command that was wrong (standard error)` | `command-error` |
 <!-- /generated:json-command-schemas -->
 

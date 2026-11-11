@@ -16,11 +16,11 @@ import { useMemo, useState, type ReactNode } from 'react';
 
 import { Panel } from '../components/Page';
 
-import { useEvidence } from '../evidence/evidence-context';
 import { ago, plural, shortSha, useNow } from '../evidence/format';
 import { Picture, galleryImage } from './Picture';
 import { GalleryProvider } from './Gallery';
 import { useCommitCatalog, useLayerHeaders } from './history';
+import { useFullUiCatalog } from './provider';
 import { useCatalogNavigate, useCatalogSearch } from './search';
 import { coverageWord } from './words';
 import { catalogExpression, catalogTokens, searchCatalog } from './query';
@@ -143,9 +143,9 @@ function CommitComparison({ whole, query, panel }: { whole: UiCatalog; query: st
   const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const now = useNow();
-  const evidence = useEvidence();
   const history = useLayerHeaders(true);
-  const incomplete = evidence.notices.length > 0 || evidence.backends.some((backend) => !backend.available);
+  // The catalog says what could not be read, whether it was composed here or read through the server.
+  const incomplete = whole.sources.notices.length > 0 || whole.sources.backends.some((backend) => !backend.available);
   const producers = useMemo(() => new Set(whole.states.flatMap((state) => state.producers)), [whole]);
   const headers = useMemo(() => history.headers.filter((layer) => producers.has(layer.producer)), [history.headers, producers]);
   const commits = useMemo(() => uiCatalogCommits(headers), [headers]);
@@ -225,9 +225,12 @@ function ProfileComparison({ whole, query, panel }: { whole: UiCatalog; query: s
   const { search } = useCatalogSearch();
   const go = useCatalogNavigate();
   const known = (key: string | undefined) => whole.profiles.some((profile) => profile.key === key);
+  const chosen = !!(search.from && search.to && search.from !== search.to && known(search.from) && known(search.to));
+  // Pictures are compared, so this needs every state's evidence: read through a server, it is read now, once.
+  const full = useFullUiCatalog(whole, chosen);
   const diff = useMemo(
-    () => (search.from && search.to && search.from !== search.to && whole.profiles.some((p) => p.key === search.from) && whole.profiles.some((p) => p.key === search.to) ? diffUiProfiles(searchCatalog(whole, query).catalog, search.from, search.to) : null),
-    [whole, query, search.from, search.to]
+    () => (chosen && full.catalog ? diffUiProfiles(searchCatalog(full.catalog, query).catalog, search.from!, search.to!) : null),
+    [chosen, full.catalog, query, search.from, search.to]
   );
   const label = (key: string | undefined) => whole.profiles.find((profile) => profile.key === key)?.label ?? 'a profile';
   const options = (value: string | undefined) => (
@@ -259,6 +262,15 @@ function ProfileComparison({ whole, query, panel }: { whole: UiCatalog; query: s
         </Text>
       )}
       {search.from && search.from === search.to && <Alert color="gray" role="status">The same profile is on both sides.</Alert>}
+      {chosen && !full.catalog && !full.error && <Text c="dimmed" size="sm" role="status">Reading the pictures of both profiles…</Text>}
+      {full.error && (
+        <Alert role="alert" color="red" title="The pictures cannot be read">
+          <Group gap="sm">
+            <Text span inherit>{full.error}</Text>
+            <Button type="button" variant="subtle" onClick={full.retry}>Try again</Button>
+          </Group>
+        </Alert>
+      )}
       {panel.note}
       </Panel>
       {diff && <Results diff={diff} before={label(search.from)} after={label(search.to)} />}

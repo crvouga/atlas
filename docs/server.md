@@ -215,6 +215,9 @@ is said in words and the server does not start. The file has a published
 | Live producer heartbeat timeout in seconds | `runTimeoutSeconds` |  | `ATLAS_RUN_TIMEOUT_SECONDS` | `30` |
 | Live run progress stall timeout in seconds (0 disables) | `runStallSeconds` |  | `ATLAS_RUN_STALL_SECONDS` | `900` |
 | No request log | `log` | `--no-log` | `ATLAS_LOG` | one JSON line per request |
+| The source revision this server was built from (the official image sets it from its build argument) | `build.revision` |  | `ATLAS_REVISION` | unknown |
+| When this server was built, ISO 8601 or seconds since the epoch (the official image sets it) | `build.builtAt` |  | `ATLAS_BUILD_TIME` | unknown |
+| The container image digest, when the deployment injects it (an image cannot know its own) | `build.imageDigest` |  | `ATLAS_IMAGE_DIGEST` | unknown |
 <!-- /generated:server-settings -->
 
 `ATLAS_HOST` and `ATLAS_PORT` win over `HOST` and `PORT`, which other tools on a machine often set for their own
@@ -404,6 +407,12 @@ report the server would have sent whole (`applyEffectiveDelta`, tested against e
 runs); a version the server does not remember, or an older server, answers with the whole report, which a client
 takes as it always did. A result streamed into a 100 000-check report costs a client a few kilobytes.
 
+The viewer's UI catalog page reads less still: `GET /api/reports/ui-catalog?view=index` is the catalog without its pictures, origins
+and plans, `?view=index&since=<version>` only the states that changed (with the ids removed), and `?id=<ids>` the full documents of
+the states on screen. A server says it has these with `capabilities.catalogIndex` (and `catalogIndex` in the page config it serves);
+a client that asks a server without them gets the full document, as before. See
+[the UI catalog guide](ui-catalog.md#streaming-and-loading).
+
 ## Reading the report as an agent
 
 The effective report says what each check's result is now. To explore a project, or to answer "what is tested,
@@ -545,6 +554,8 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `GET /api/projects/{project}/reports/artifacts` | read | Recorded results that carry evidence, across the whole history. |
 | `GET /api/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
 | `GET /api/projects/{project}/reports/ui-catalog` | read | The UI catalog: captured UI states per profile, and what is still expected. |
+| `GET /api/reports/ui-catalog/failures` | read | Failed UI catalog cells grouped by fingerprint, for triage. |
+| `GET /api/projects/{project}/reports/ui-catalog/failures` | read | Failed UI catalog cells grouped by fingerprint, for triage. |
 | `GET /api/reports/ui-catalog/detail` | read | One exact screen for a human or agent handoff. |
 | `GET /api/projects/{project}/reports/ui-catalog/detail` | read | One exact screen for a human or agent handoff. |
 | `GET /api/reports/ui-catalog/entries` | read | The UI catalog as a list a critic iterates: captured states with their picture hash and critiques. |
@@ -561,6 +572,14 @@ curl "$ATLAS_SERVER_URL/api/projects/$ATLAS_PROJECT/reports/tests?format=markdow
 | `DELETE /api/projects/{project}/ui-catalog/claims/{id}` | publish | Release a claim. |
 | `GET /api/ui-catalog/queue` | read | What is left to collect, who is collecting it, and how fast. |
 | `GET /api/projects/{project}/ui-catalog/queue` | read | What is left to collect, who is collecting it, and how fast. |
+| `PUT /api/ui-catalog/refreshes/{id}` | publish | Begin a UI catalog refresh, or join it. |
+| `PUT /api/projects/{project}/ui-catalog/refreshes/{id}` | publish | Begin a UI catalog refresh, or join it. |
+| `POST /api/ui-catalog/refreshes/{id}/attempts` | publish | Record an attempt joining a refresh. |
+| `POST /api/projects/{project}/ui-catalog/refreshes/{id}/attempts` | publish | Record an attempt joining a refresh. |
+| `GET /api/ui-catalog/refreshes/{id}` | read | Whether a refresh is complete, and what is outstanding. |
+| `GET /api/projects/{project}/ui-catalog/refreshes/{id}` | read | Whether a refresh is complete, and what is outstanding. |
+| `POST /api/ui-catalog/refreshes/{id}/finalize` | publish | Finalize a refresh: judge it and record the finalization. |
+| `POST /api/projects/{project}/ui-catalog/refreshes/{id}/finalize` | publish | Finalize a refresh: judge it and record the finalization. |
 | `GET /api/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/projects/{project}/reports/runs/detail` | read | Every test one run recorded. |
 | `GET /api/reports/outline` | read | The specs a report is laid over. |
@@ -663,6 +682,10 @@ What makes it so, none of it at the cost of the contract:
   `/readyz`, and recovers by itself. The gate fails closed: unknown is not a pass.
 - **Upgrades.** The layer format is a stable, versioned contract; upgrade the server before the clients that
   publish when a release says the format moved.
+- **Which build is running.** `build` on `/api/server` holds the package version (null for a source build), the source revision
+  (`ATLAS_REVISION`), the build time (`ATLAS_BUILD_TIME`) and an injected image digest (`ATLAS_IMAGE_DIGEST`), each null when
+  unknown; the viewer's **About this deployment** shows them beside the viewer's own. See
+  [deploying](deploying.md#which-build-is-running). Decide what a server can do from `capabilities`, never from a version.
 
 ## Configure from the client
 

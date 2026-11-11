@@ -1,0 +1,414 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-catalog-bundle-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "False on any problem, a missing expected bundle, or no bundle at all (exit 1)"
+    },
+    "command": {
+      "type": "string",
+      "enum": [
+        "validate",
+        "merge",
+        "import"
+      ]
+    },
+    "bundles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bundle": {
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "definition": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "refresh": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "participant": {
+                  "type": "string"
+                },
+                "attempt": {
+                  "type": "string"
+                },
+                "shard": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "participant",
+                "attempt",
+                "shard"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "captures": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "published": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "pending": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "total",
+              "published",
+              "failed",
+              "pending"
+            ],
+            "additionalProperties": {}
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "manifest",
+                    "unsafe-path",
+                    "missing",
+                    "digest",
+                    "unlisted",
+                    "layer",
+                    "incompatible"
+                  ]
+                },
+                "bundle": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "bundle",
+                "message"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "bundle",
+          "valid",
+          "definition",
+          "refresh",
+          "sha",
+          "attempts",
+          "captures",
+          "problems"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "manifest",
+              "unsafe-path",
+              "missing",
+              "digest",
+              "unlisted",
+              "layer",
+              "incompatible"
+            ]
+          },
+          "bundle": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "bundle",
+          "message"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "out": {
+      "description": "The merged bundle (merge)",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Expected participants without a bundle (merge)"
+    },
+    "merged": {
+      "description": "The merged bundle, when one was written (merge)",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "bundle": {
+              "type": "string"
+            },
+            "valid": {
+              "type": "boolean"
+            },
+            "definition": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refresh": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sha": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "attempts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "participant": {
+                    "type": "string"
+                  },
+                  "attempt": {
+                    "type": "string"
+                  },
+                  "shard": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "participant",
+                  "attempt",
+                  "shard"
+                ],
+                "additionalProperties": {}
+              }
+            },
+            "captures": {
+              "type": "object",
+              "properties": {
+                "total": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "published": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "pending": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "total",
+                "published",
+                "failed",
+                "pending"
+              ],
+              "additionalProperties": {}
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "manifest",
+                      "unsafe-path",
+                      "missing",
+                      "digest",
+                      "unlisted",
+                      "layer",
+                      "incompatible"
+                    ]
+                  },
+                  "bundle": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "bundle",
+                  "message"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          },
+          "required": [
+            "bundle",
+            "valid",
+            "definition",
+            "refresh",
+            "sha",
+            "attempts",
+            "captures",
+            "problems"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "store": {
+      "description": "The store imported into (import)",
+      "type": "string"
+    },
+    "imported": {
+      "type": "object",
+      "properties": {
+        "layers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "copied": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "retained": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "layer": {
+                "type": "string"
+              },
+              "shard": {
+                "type": "string"
+              },
+              "attempt": {
+                "type": "string"
+              },
+              "claimId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "publication": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "layer",
+              "shard",
+              "attempt",
+              "claimId",
+              "publication"
+            ],
+            "additionalProperties": {}
+          },
+          "description": "Captures that never reached the server, kept in the bundle (`--reconcile accept` imports them)"
+        }
+      },
+      "required": [
+        "layers",
+        "copied",
+        "skipped",
+        "retained"
+      ],
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "ok",
+    "command",
+    "bundles",
+    "problems",
+    "out",
+    "missing"
+  ],
+  "additionalProperties": {}
+}

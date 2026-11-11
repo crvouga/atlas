@@ -124,6 +124,54 @@ for a readiness check (bounded), photographs the page and returns the capture fo
 a `failed` capture that says why (with a picture of what it showed), never an exception that ends the run. Nothing that reads,
 composes or shows the catalog imports a collection framework, and a test keeps it that way.
 
+### More views, traces and videos of one capture
+
+A state may need more evidence than one picture: a scrolled region, a detail view, a trace, a video. Give it as `attachments`
+beside the primary `screenshot`; it stays **one** state in **one** profile, never a state per file.
+
+```ts
+states: [{
+  id: 'checkout/payment', status: 'failed', detail: 'never stabilised', screenshot: { data: png },
+  attachments: [
+    { label: 'Order summary, scrolled', order: 1, data: summaryPng },          // role defaults to `view`
+    { role: 'trace', contentType: 'application/zip', data: traceZip },
+    { role: 'video', contentType: 'video/webm', uri: 'https://ci.example/run/42/video.webm' },
+    { role: 'log', omitted: 'policy' }                                          // listed as left out, with the reason
+  ]
+}]
+```
+
+- Each is a check attachment with its `role` (open vocabulary: `view`, `trace`, `video`, `log`…), its label as `description`, and
+  `{ supplemental: true, label, order }` under the attachment's `atlas.ui-state` extension. Bytes are stored and served like every
+  other attachment. A supplemental picture is never taken for the primary one.
+- The catalog lists them in order as the optional `capture.attachments` (with `path`, `role`, `label`, `order`, `omitted`); the
+  viewer's capture details and the screen handoff list them too. A capture with only a `screenshot` reads exactly as before.
+- Evidence never decides a result: a trace on a failed capture leaves it failed. An attachment without bytes is published as
+  omitted `not-found`; one past `collectCatalog`'s `maxBufferedBytes` (after the primary pictures) is kept as metadata, omitted
+  `over-budget`; a file `atlas ui-catalog publish` or `collect --exec` cannot read (same safe-path rules as the picture) is omitted
+  `not-found`, `not-allowed` or `too-large`, with a warning. None of these changes a status.
+
+## Readiness policies
+
+`captureUiState` bounds readiness with `readyTimeoutMs` (default 15 s) for `ready` and every policy together. The project's own
+`ready(page, { signal, deadlineAt })` check gets an `AbortSignal` that aborts at the deadline or on cancellation (a one-argument
+`ready` still fits). Opt-in generic policies, all off by default:
+
+| Option | Waits for | Needs |
+| --- | --- | --- |
+| `waitForFonts: true` | `document.fonts.ready` | `page.evaluate` |
+| `waitForImages: true` | every image in the viewport loaded (or failed) and decoded | `page.evaluate` |
+| `stability: true \| { frames, timeoutMs }` | `frames` (default 2) consecutive identical screenshots; the last is the picture | — |
+| `regions: [{ name, selector, label?, maxViews? }]` | a scrolling element captured a viewport at a time as views `<state>--<name>-<n>.png` | `page.locator` |
+
+None sleeps for a fixed time and none waits for the network to go idle; a state that intentionally shows loading or animation stays
+valid by leaving them off. The result carries `readiness: { phases: [{ phase, ms, outcome }], timedOut? }` (not published). When a
+policy is on, the capture's labels hold `atlas.readiness` (`fonts=3ms images=12ms screenshot=8ms`) and, after a timeout,
+`atlas.readiness-timeout` with the phase (`ready`, `fonts`, `images`, `stability`); its detail names the phase. A page that never
+stabilises fails after its budget with its last frame as the diagnostic picture. With `signal`, a cancelled capture throws the
+signal's reason and returns nothing, so `collectCatalog` never publishes a late capture. `evaluate` and `locator` are optional
+members of `CapturePage`, so a stub of `screenshot` and `viewportSize` still fits.
+
 ## The command line
 
 `atlas ui-catalog` does the same without a script. Every subcommand prints a JSON document with `--format json`
@@ -290,8 +338,8 @@ owned by your project: `prepareState` must apply the item's profile as well as n
   prevents starting more units; completed units are published and unfinished units released. Leases stay renewed during
   uploads too. Choose a lease longer than ordinary network stalls; a dead shard's lease must expire before recovery.
 - An `empty` stop means no work is available **to that shard now**: other shards may still hold claims, or retries may be
-  exhausted. After all workers finish, run `atlas ui-catalog status --format json` as the completeness gate.
-  A successful collector alone does not establish full coverage.
+  exhausted. After all workers finish, run `atlas ui-catalog refresh finalize` (see [Refreshes](#refreshes-finalizing-a-collection))
+  or `atlas ui-catalog status --format json` as the completeness gate. A successful collector alone does not establish full coverage.
 
 The API `maxMs` deadline aborts capture signals, ignores late callback results, stops new upload writes and releases
 unfinished work. An in-flight request may finish; a late claim response is released, and a blocked attachment write cannot
@@ -355,11 +403,194 @@ the retry limit, and throughput.
 `atlas ui-catalog status` stays the gate: the plan says what is expected, so a CI job that collected only part of the queue gates on the
 whole catalog, not on its share.
 
+### Scoping to one definition
+
+Changing a matrix or removing a state publishes a new definition version, and the old version's plan layers and results stay
+(a layer is never withdrawn), so by default the catalog counts every state and profile any layer recorded. To ask "is this refresh
+complete?", count exactly one definition instead: its states × profiles, each the catalog's own cell or `missing`, with everything
+else counted under `scope.excluded` and still there under all history.
+
+| Where | How |
+| --- | --- |
+| `GET /api/reports/ui-catalog`, `…/failures` | `?definition=<version>`, `?definition=latest` (resolved; `scope.definition.version` names it) or `?definition=all` |
+| `atlas ui-catalog status`, `export`, `failures` | `--definition <version>` or `latest` (read from the Atlas server among the stores), `--definition <file.json>` (a stored definition), `--catalog <atlas.catalog.ts>`, or `--definition all` |
+| `/catalog` | The **Count** control; the address keeps `definition=<version>`, and `latest` is replaced by the version it names |
+| Code | `scopeUiCatalog(catalog, { kind: 'definition', version, document })` from `@crvouga/atlas/reports/ui-catalog-scope` |
+
+- A definition is named by its version, the SHA-256 of its content, so a link or a CI job that pins one keeps its meaning when another is
+  published. Pin the version `latest` resolved to, not `latest` itself, when a result must not drift.
+- A definition that cannot be read (unknown version, no server, no definition published) gives `scope.status: "unavailable"` and a
+  document with no state; `status` exits 1. It never falls back to every layer's history.
+- The server, the CLI, the export and the viewer all make the same projection (`scopeUiCatalog`), so the same scope gives the same
+  expected, captured, failed and other totals everywhere. Filters narrow within a scope; `scope.excluded` stays the whole scope's.
+- Without `definition` the document is what it always was, with no `scope`.
+
+### Grouping failures
+
+A large failed count is usually a few causes repeated. `atlas ui-catalog failures`, `GET /api/reports/ui-catalog/failures` and the
+**Failure groups** dialog in `/catalog` group the failed cells of the scope and filters chosen (`uiCatalogFailureGroups` from
+`@crvouga/atlas/reports/ui-catalog-failures`, one pass over the cells):
+
+- **By fingerprint**, when the producer supplied one: the capture label `fingerprint` (`labels: { fingerprint: 'auth-timeout' }` in a
+  `publish` captures file, or in what a `collect --exec` collector writes). Fingerprints are compared per producer; cells with different
+  fingerprints never merge, however alike their messages read. Optional labels `phase` and `attempts` (a whole number) are shown too.
+- **Otherwise by exact message**, after whitespace is collapsed and URL query strings, credentials, long tokens and directories are
+  redacted. Such a group is marked `inferred`: the cells read the same, which never shows a shared cause.
+
+Each group has its count, affected states and profiles (each a link to the cell, keeping the scope), first and last occurrence, phase and
+attempts when known, and one redacted sample. `complete: false` lists why the totals are a lower bound: a backend or layer that could not
+be read, an unavailable scope, captures still in progress, or only a page of states. `--format markdown` is for a CI job summary
+(`--viewer-url` links each cell); `failures` exits 0 only when nothing failed and everything was read. Grouping decides nothing: a
+failed cell is failed whichever group it is in.
+
+### Warm workers for a queue
+
+`--exec` starts a process per claim. In code, `catalogWorkerPool` from `@crvouga/atlas/playwright` keeps a bounded pool of warm
+workers instead and returns the `capture` callback for `collectCatalog`. Your `launch` starts a worker once (a browser, or the
+`browser` fixture of a Playwright Test), `newPage(worker, item, signal)` gives every item a fresh page (apply its profile there:
+viewport, color scheme), `closePage` and `teardown` clean up, and `recipes` map state ids to `{ open, ...captureUiState options }`.
+
+```ts
+import { test, expect } from '@playwright/test';
+import { catalogWorkerPool } from '@crvouga/atlas/playwright';
+import { httpStore } from '@crvouga/atlas/reports/http-store';
+import { collectCatalog } from '@crvouga/atlas/reports/ui-catalog-collect';
+
+test('collect the UI catalog', async ({ browser, baseURL }) => {
+  test.setTimeout(30 * 60_000);
+  const pool = catalogWorkerPool({
+    size: 4,
+    launch: async () => browser,                                      // the fixture: Playwright Test owns its lifetime
+    newPage: async (browser, item) => (await browser.newContext({
+      viewport: item.profile.values.device === 'mobile' ? { width: 390, height: 844 } : { width: 1280, height: 800 },
+      colorScheme: item.profile.values.scheme === 'dark' ? 'dark' : 'light'
+    })).newPage(),
+    closePage: page => page.context().close(),                          // per-capture isolation: a context per item
+    recipes: {
+      'checkout/payment': { open: async page => { await page.goto(`${baseURL}/checkout`); }, ready: page => page.getByText('Total').waitFor(), waitForFonts: true }
+    }
+  });
+  try {
+    const result = await collectCatalog({ store: httpStore({ url: process.env.ATLAS_SERVER_URL!, token: process.env.ATLAS_TOKEN }), catalog, shard: { id: 'pw' }, concurrency: 4, capture: pool.capture });
+    expect(result.ok).toBe(true);
+  } finally { await pool.close(); }
+});
+```
+
+- A recipe that throws, or a claimed state without a recipe, fails that item only; the next item gets a fresh page on the same
+  worker. `healthy(worker)` (`browser.isConnected()`) replaces a broken worker; a worker that cannot start is a retryable
+  `CollectorInfrastructureError` (phase `launch`), never an item result.
+- On a lost claim or a stop, the active page is closed at once, the call rejects and nothing late is returned, so nothing is
+  published for the claim.
+- The pool imports no Playwright; reports and core never acquire a Playwright dependency.
+- `bun packages/playwright/bench/worker-pool-bench.ts [items] [batch] [workers] [--real]` compares a spawn per batch with the pool.
+  With stub workers (no browser) on one Linux arm64 machine: 60 items in batches of 5 on 2 workers took 198 ms spawning
+  (3.3 ms/item of process start alone) against 2 ms in the pool. Browser startup comes on top of the spawn cost; measure it with
+  `--real` on your own runner before claiming a number.
+
+### Refreshes: finalizing a collection
+
+A shard's result is only that shard's view. A **refresh** is the whole run, pinned on the server: the definition version, the source
+(`--sha`, `--branch`; with `--require-source` only evidence at that commit counts), the profiles in scope (`--where`), a freshness
+cutoff (`--stale-before`, default when it began: yesterday's captures never satisfy today's refresh) and the collection its shards
+claim under (default the refresh id, so retry limits are counted per refresh). Its receipt is one document in the server's store
+beside the queue.
+
+```sh
+# Once per run (a rerun of the job joins the same refresh: same id, same values).
+atlas ui-catalog refresh begin --id "$GITHUB_RUN_ID" --catalog atlas.catalog.ts --participants-from plan.json
+
+# Each shard joins it as <participant>#<attempt>, so a rerun's work stays distinguishable from the attempt before it.
+atlas ui-catalog collect --catalog atlas.catalog.ts --exec "…" --refresh "$GITHUB_RUN_ID" --participant capture-mobile --attempt "$GITHUB_RUN_ATTEMPT"
+
+# After every shard: exit 0 only when complete.
+atlas ui-catalog refresh finalize --id "$GITHUB_RUN_ID" --format json
+```
+
+`finalize` (and `status`, which records nothing) judges every unit in scope. A unit is satisfied when every item's newest result passed
+at or after the cutoff (and at the source commit when it is required). Otherwise it is outstanding, and says why: `held` (a live claim
+holds it: another shard is still working), `pending`, `failed` (below the retry limit), `stale`, `source` (captured at another commit),
+`exhausted` (failed `maxAttempts` times in the refresh's collection) or `unknown`. The `outcome` is `complete`, `incomplete` (work
+remains that the queue will hand out), `failed` (only exhausted or other-commit units remain: the refresh fails its capture requirement,
+never "empty") or `unknown` (the server, the receipt or a backend could not be read). Only `complete` exits 0.
+
+Worker health is reported apart, in `health`: each attempt that joined (`active`, `idle`, `lost`, `unseen`), the expected participants
+that never joined (`--participant`, or every job of `--participants-from`: optional, only to diagnose a job that never started; elastic
+workers need not be named) and attempts whose claim expired. A refresh can be complete with a lost worker, and incomplete with every
+worker healthy. In code: `beginRefresh`, `joinRefresh` (returns the `collection`, `staleBeforeMs`, `shard` and `origin` to spread into
+`collectCatalog`), `refreshStatus` and `finalizeRefresh` from `@crvouga/atlas/reports/ui-catalog-refresh`. A status that cannot be read
+is `unknown`, never thrown and never complete.
+
+### Capture journals and shard bundles
+
+`collect --journal <dir>` (or `collectCatalog({ journal: captureJournal(dir, { shard, participant, attempt }) })` from
+`@crvouga/atlas/reports/ui-catalog-bundle`) writes every capture layer into a local directory store **before** publishing it, and records
+in `atlas-bundle.json` whether the publish succeeded (`published`, `failed` with the error, or `pending`: never sent because the shard
+stopped or lost its claim). The folder is a **bundle**: the definition's plan layers and the capture layers in Atlas's ordinary layer
+format, plus a manifest naming the definition, source, refresh, shard and attempt, and the size and SHA-256 of every object. When the
+server stops answering, the bytes and what they are remain; upload the folder as a CI artifact whatever the job's outcome.
+
+```sh
+atlas ui-catalog bundle validate bundles/                      # every object's digest, no path outside the bundle, every layer present
+atlas ui-catalog bundle merge bundles/ --out merged --expect-from plan.json   # any order, same result; names jobs whose bundle is missing
+atlas ui-catalog bundle import merged                          # into ATLAS_STORE: the server, a directory or S3
+atlas ui-catalog export --store merged/store --out catalog.html  # offline: no server needed
+```
+
+- `validate` trusts nothing in a bundle: a missing object, a digest or size mismatch, an unsafe path, an unlisted object, a layer that
+  is named but absent, or another definition or commit (`--definition`, `--sha`) is a problem, and an invalid bundle counts for nothing:
+  `import` copies nothing from it and `merge` writes nothing.
+- `merge` joins any number of bundles (or folders holding them, as downloaded artifacts are laid out) in any order into the same bundle.
+  Layers are immutable and addressed by content, so nothing is overwritten: an earlier attempt's captures survive a partial retry,
+  and every capture keeps the attempt that made it. Bundles of different definitions, commits or refreshes are refused.
+- Replaying is not claiming. A capture whose publish never succeeded answers a claim that has since ended, so `import` retains it
+  (listed, not imported) by default; `--reconcile accept` is the explicit policy that imports it as evidence. Imported layers never
+  complete a claim: the queue closes a unit only for the live claim whose label its results carry.
+- Merged locally, the bundle's `store/` is an ordinary directory store: `status`, `export` and `diff` read it, with the plans it carries,
+  so what was not captured shows as missing and failed captures as failed.
+
+### A CI kit: plan, capture, finalize
+
+The kit composes the commands above; it schedules nothing. `plan-matrix` prints a fan-out of the definition, ready for a GitHub Actions
+matrix, and [`examples/ci/ui-catalog.yml`](https://github.com/crvouga/atlas/blob/main/examples/ci/ui-catalog.yml) is a reusable workflow to copy into `.github/workflows/`:
+plan (and begin the refresh) → build once per mode → preflight (fails fast; its diagnostics are uploaded anyway) → capture fan-out →
+finalize (merge every attempt's bundle, import, export, finalize). The build, smoke and capture commands stay yours.
+
+```sh
+atlas ui-catalog plan-matrix --catalog atlas.catalog.ts --job-dimension device --job-dimension scheme \
+  --build-dimension scheme --max-parallel 4 --out plan.json
+```
+
+- Every allowed profile (after the definition's `exclude` and the plan's `--where`) is covered by exactly one job. Each job has a
+  `job` name safe for artifacts and shard ids, the `--where` flags for `collect` (shell-quoted) and the `build` it downloads; `builds`
+  lists each build once. A job is an ordinary queue shard narrowed by `where`: leases and retry limits cover a slow or rerun job, not
+  the plan. A definition whose groups span jobs is refused, since no job could claim such a unit.
+- Costs are yours: `--max-parallel` (default 4) is copied, never raised, and a plan with more jobs than `--max-jobs` (default 256,
+  GitHub's matrix limit) is refused rather than trimmed. Split jobs by fewer dimensions, or narrow with `--where`.
+- Capture jobs journal into a bundle and upload it with `if: always()` under `atlas-ui-bundle-<job>-<run id>-<run attempt>`
+  (`attemptArtifactName` in `@crvouga/atlas/reports/ui-catalog-ci`), so rerunning failed jobs never overwrites the evidence of the
+  attempt before; finalize downloads every attempt's bundle and names the jobs whose bundle never arrived.
+- The same plan runs locally with fewer workers: begin the same refresh, run each job's `collect --refresh … --participant <job>
+  --journal bundles/<job> <where>` one after another (or a few at once), then merge, import, export and finalize exactly as CI does.
+  The definition, the capture contract, the bundle format and the status are the same, whatever the number of workers.
+
 ## Streaming and loading
 
-- **Streaming.** There is no second stream. A viewer holds the report over `/api/events` and reads what changed with
-  `/api/reports/evidence/effective?since=<version>`; the catalog is computed from the report it holds, so a capture appears when
-  its layer arrives, with no reload and no file rebuilt. Events carry metadata only; the picture is fetched when a card is on screen.
+- **Through a server, only the catalog.** A viewer served by an Atlas server (whose page config announces `catalogIndex`, and
+  `capabilities.catalogIndex` on `/api/server`) reads the catalog page from the server's compact index and nothing else of the report:
+  not the report's whole evidence (`/evidence/effective`) and not the test catalog. It reads the index's first page (the summary,
+  facets and first cards) and the whole index (`GET /api/reports/ui-catalog?view=index`: each state's facts, its cells' coverage,
+  status, time and producer, and a `fingerprint`; no pictures, origins or plans), then the full documents of the cards on screen only,
+  a few at a time (`?id=<ids>`). Search, filters and sorting run in the viewer over the whole index, so a word, a typo, a related word
+  or a facet finds exactly the states it finds over a catalog composed in the browser. Until the whole index has arrived, or if it could
+  not be read, the page says how many states it holds (`48 of 5000`), that counts and search cover only those, and never reports "no
+  match" as final. A static export, a store read directly, an older server and a viewer with sources left out compose the catalog in the
+  browser, as below.
+- **Streaming.** There is no second stream. A viewer holds the report over `/api/events`. Through a server, it reads only the
+  states that changed (`?view=index&since=<version>`; the server remembers the fingerprints of the last answers and names the states
+  removed) and the evidence of the changed cards on screen; a version the server no longer remembers is answered with the whole index.
+  Composing in the browser, it reads what changed with `/api/reports/evidence/effective?since=<version>`. Either way a capture appears
+  when its layer arrives, with no reload and no file rebuilt. Events carry metadata only; the picture is fetched when a card is on screen.
 - **Reconnecting.** A viewer that was offline or whose stream dropped reads the delta since the version it holds (or the whole report
   when the server no longer remembers it). Cells are keyed by state and profile, so nothing is missing and nothing is duplicated.
 - **No stream.** A viewer without the stream (or a static export) polls, as the rest of the viewer does, and shows everything that exists.
@@ -530,6 +761,13 @@ The catalog is meant for runs of thousands of captures that are watched while th
   card scrolls into view (`loading="lazy"`, decoded off the main thread, from a content address), offers at most
   100 options in a filter at a time, and rebuilds the catalog for newly arrived layers at low priority, so typing and scrolling are not held up
   while a run streams in.
+- **The viewer's catalog page is bounded.** Through a server it reads the index (about a quarter of the full document: 4.9 MiB for those
+  20,000 cells against 21.9 MiB), the evidence of the cards on screen, and deltas, and never the report's whole evidence. A comparison
+  of two profiles, which compares pictures, and *Download the manifest* read the full document when asked.
+  `packages/visualizer/tests/ui-catalog-scale.test.tsx` opens a filtered link into a synthetic 2,000-state catalog beside 4,000 other
+  checks and holds the requests, decoded bytes, delta bytes, time to the first cards and search latency to the budgets recorded in
+  `ui-catalog-budget.json`, and checks the bytes stay well under what reading the whole evidence decodes. Lower a budget when a change
+  makes the page cheaper; raise one only with the reason.
 - **Pictures are never in the stream.** An event carries metadata; the bytes are fetched on demand, by content.
 - **Keep it so.** Before and after changing the index, the upload path or the viewer's data loading, run the server benchmark of
   [the server guide](server.md); for the catalog's own code, the benchmark above. Speed never buys a weaker guarantee: the same layers in any
@@ -568,7 +806,7 @@ The questions the original proposal left open, and how they are answered here. E
 | A newer definition mid-collection | Claims name their definition and stay valid until they end; new claims use whichever definition they name. Units with the same key are the same unit across versions, so no unit is held twice. |
 | Run identity | The queue is continuous, with no run boundary. `atlas ui-catalog status` gates the whole catalog. |
 | Dimensions and the slot | Every dimension value is a parameter, so it splits the slot; `environment` is set only through a `profile` function. Colliding parameters are refused; a profile that depends on two dimensions is a combined dimension. |
-| Changing a dimension or removing a state | A new definition version. New profiles are expected and empty; results in old profiles, and of removed states, stay readable as they were and are never handed out. The plan layers of the old version are not withdrawn (a layer cannot be), so the catalog keeps showing what it showed. |
+| Changing a dimension or removing a state | A new definition version. New profiles are expected and empty; results in old profiles, and of removed states, stay readable as they were and are never handed out. The plan layers of the old version are not withdrawn (a layer cannot be), so all history keeps showing what it showed; [scope to one definition](#scoping-to-one-definition) to count only the current one. |
 
 ## What stays in your project, and what Atlas does not do
 

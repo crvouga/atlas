@@ -14,6 +14,46 @@
         "null"
       ]
     },
+    "build": {
+      "description": "Where this server was built from. Absent from a server that predates it, which means unknown",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The @crvouga/atlas version, or null for a source build or a build that does not know it",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "description": "The source revision (a git commit) it was built from (`ATLAS_REVISION`), or null",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "builtAt": {
+          "description": "When it was built, ISO 8601 (`ATLAS_BUILD_TIME`), or null",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageDigest": {
+          "description": "The container image digest, only when the deployment injected it (`ATLAS_IMAGE_DIGEST`); an image cannot know its own digest, so null otherwise. Absent for a viewer",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "revision",
+        "builtAt"
+      ],
+      "additionalProperties": {}
+    },
     "role": {
       "type": "string",
       "enum": [

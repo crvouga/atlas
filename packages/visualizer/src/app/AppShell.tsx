@@ -3,7 +3,7 @@ import { Alert, Box, Burger, Button, Container, Drawer, Flex, Group, Paper, Scro
 import { useMediaQuery } from '@mantine/hooks';
 import { Outlet, useLocation, useSearch } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { UiCatalogProvider } from '../catalog/provider';
+import { UiCatalogProvider, useServerCatalog } from '../catalog/provider';
 import { Header } from '../components/Header';
 import { EvidenceProvider, useEvidence } from '../evidence/evidence-context';
 import { SourcesPanel } from '../evidence/sources-panel';
@@ -118,10 +118,13 @@ function Layout() {
 }
 export function AppShell() {
   const { run } = useSearch({ strict: false });
+  const { pathname } = useLocation();
+  // The UI catalog read through the server needs none of the report's other evidence: it is not read for that page.
+  const catalogFromServer = useServerCatalog() && pathname === '/catalog';
   return (
     <LiveRunsProvider enabled={!run}>
       <AtlasProvider run={run}>
-        <EvidenceProvider>
+        <EvidenceProvider deferEffective={catalogFromServer}>
           <TestCatalogProvider>
             <Layout />
           </TestCatalogProvider>

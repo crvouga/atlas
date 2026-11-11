@@ -998,10 +998,14 @@ A browsable inventory of the product's user interface, computed from the winning
 - `surface` (query): Surfaces a state covers.
 - `producer` (query): Producers that captured or planned a state.
 - `attribute` (query): Attributes a producer declared, as `name=value` (a comma or backslash inside a value is written `\,` or `\\`). Several values of one name are alternatives; different names combine with AND.
-- `format` (query): `markdown` for Markdown instead of JSON.
+- `definition` (query): Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer's history with the choice recorded in `scope`; absent is every layer's history as before. A definition the server does not hold gives `scope.status: "unavailable"` and no state, never every layer's history.
+- `id` (query): Only the states with these exact ids (comma-separated, escaped like the other lists): the full documents of the states a viewer shows.
+- `view` (query): `index` for the compact index (`UiCatalogIndex`): every state's facts, coverage and a `fingerprint`, without pictures, origins or plans. A server that predates it answers the full document, which a client can project itself. `capabilities.catalogIndex` on `/api/server` says a server has it.
+- `since` (query): With `view=index`: a `version` of an index this server answered. Only the states that changed since then are sent, with the ids of those removed; a version it does not remember is answered with the whole index and `since.honored` false.
+- `format` (query): `markdown` for Markdown instead of JSON (always the full document).
 - `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
 
-Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+Responses: `200` The catalog, or with `view=index` its index.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `422` A `definition` that is not `all`, `latest` or a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
 ### The UI catalog: captured UI states per profile, and what is still expected
 
@@ -1024,9 +1028,61 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `surface` (query): Surfaces a state covers.
 - `producer` (query): Producers that captured or planned a state.
 - `attribute` (query): Attributes a producer declared, as `name=value` (a comma or backslash inside a value is written `\,` or `\\`). Several values of one name are alternatives; different names combine with AND.
-- `format` (query): `markdown` for Markdown instead of JSON.
+- `definition` (query): Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer's history with the choice recorded in `scope`; absent is every layer's history as before. A definition the server does not hold gives `scope.status: "unavailable"` and no state, never every layer's history.
+- `id` (query): Only the states with these exact ids (comma-separated, escaped like the other lists): the full documents of the states a viewer shows.
+- `view` (query): `index` for the compact index (`UiCatalogIndex`): every state's facts, coverage and a `fingerprint`, without pictures, origins or plans. A server that predates it answers the full document, which a client can project itself. `capabilities.catalogIndex` on `/api/server` says a server has it.
+- `since` (query): With `view=index`: a `version` of an index this server answered. Only the states that changed since then are sent, with the ids of those removed; a version it does not remember is answered with the whole index and `since.honored` false.
+- `format` (query): `markdown` for Markdown instead of JSON (always the full document).
 
-Responses: `200` The catalog.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+Responses: `200` The catalog, or with `view=index` its index.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `422` A `definition` that is not `all`, `latest` or a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Failed UI catalog cells grouped by fingerprint, for triage
+
+`GET /api/reports/ui-catalog/failures` · role: read
+
+The failed cells of the UI catalog, in the scope (`definition`) and filters given (the same as `GET /api/reports/ui-catalog`), grouped by the fingerprint their producer supplied (the capture label `fingerprint`, per producer; cells with different fingerprints are never merged), else by the exact message after whitespace is collapsed and secrets, URL query strings and directories are redacted. A message group is `inferred: true`: the cells read the same, which never shows a shared cause. Each group has its count, phases and attempts when the producer said (`phase`, `attempts` labels), the affected cells (`state` and `profile` key, to link to the catalog), first and last occurrence and one redacted sample. `complete: false` with `incomplete` reasons when a backend or layer could not be read, the definition scope is unavailable or captures are still in progress: the totals are then a lower bound. Nothing here changes a result.
+
+- `definition` (query): Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer's history with the choice recorded in `scope`; absent is every layer's history as before. A definition the server does not hold gives `scope.status: "unavailable"` and no state, never every layer's history.
+- `maxCells` (query): At most this many cells listed per group (default 200); `count` is always the whole group.
+- `q` (query): Words, as for the catalog.
+- `coverage` (query): Coverage values, as for the catalog.
+- `profile` (query): Profile keys.
+- `area` (query): Areas.
+- `route` (query): Routes.
+- `cohort` (query): Cohorts.
+- `flag` (query): Feature flags.
+- `surface` (query): Surfaces.
+- `producer` (query): Producers.
+- `attribute` (query): Attributes, as `name=value`.
+- `format` (query): `markdown` for a CI summary instead of JSON.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The failure groups.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `422` A `definition` that is not `all`, `latest` or a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Failed UI catalog cells grouped by fingerprint, for triage
+
+`GET /api/projects/{project}/reports/ui-catalog/failures` · role: read
+
+The failed cells of the UI catalog, in the scope (`definition`) and filters given (the same as `GET /api/reports/ui-catalog`), grouped by the fingerprint their producer supplied (the capture label `fingerprint`, per producer; cells with different fingerprints are never merged), else by the exact message after whitespace is collapsed and secrets, URL query strings and directories are redacted. A message group is `inferred: true`: the cells read the same, which never shows a shared cause. Each group has its count, phases and attempts when the producer said (`phase`, `attempts` labels), the affected cells (`state` and `profile` key, to link to the catalog), first and last occurrence and one redacted sample. `complete: false` with `incomplete` reasons when a backend or layer could not be read, the definition scope is unavailable or captures are still in progress: the totals are then a lower bound. Nothing here changes a result.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `definition` (query): Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer's history with the choice recorded in `scope`; absent is every layer's history as before. A definition the server does not hold gives `scope.status: "unavailable"` and no state, never every layer's history.
+- `maxCells` (query): At most this many cells listed per group (default 200); `count` is always the whole group.
+- `q` (query): Words, as for the catalog.
+- `coverage` (query): Coverage values, as for the catalog.
+- `profile` (query): Profile keys.
+- `area` (query): Areas.
+- `route` (query): Routes.
+- `cohort` (query): Cohorts.
+- `flag` (query): Feature flags.
+- `surface` (query): Surfaces.
+- `producer` (query): Producers.
+- `attribute` (query): Attributes, as `name=value`.
+- `format` (query): `markdown` for a CI summary instead of JSON.
+
+Responses: `200` The failure groups.; `304` Unchanged since the `If-None-Match` ETag.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `422` A `definition` that is not `all`, `latest` or a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
 ### One exact screen for a human or agent handoff
 
@@ -1247,6 +1303,110 @@ Scoped to one project. The same project may be selected on the unprefixed API us
 - `definition` (query): A definition version. Default: the latest published.
 
 Responses: `200` The queue.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No definition has that version.; `422` Not a version.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Begin a UI catalog refresh, or join it
+
+`PUT /api/ui-catalog/refreshes/{id}` · role: publish
+
+Stores a refresh receipt pinned to a published definition version, an optional source (`sha`, `branch`, and `require` to count only evidence at that commit), the profiles in scope (`where`), a freshness cutoff (`staleBeforeMs`, default now: only evidence recorded since counts) and the `collection` its shards claim under (default the id, so retry limits are counted per refresh). `participants` optionally names the jobs expected to join, only to diagnose one that never started.
+
+Beginning a refresh that exists joins it (`200`, `created: false`): fields left out keep their stored values, and a field given with another value is `409`, since that would be another refresh. The receipt is kept in the server's store.
+
+- `id` (path, required): The refresh id: 1–128 letters, digits, `.`, `_` or `-` (a CI run id fits).
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The refresh existed with these values: joined.; `201` Begun.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No definition has that version.; `409` The refresh exists with other values.; `422` Not a refresh id or request.
+
+### Begin a UI catalog refresh, or join it
+
+`PUT /api/projects/{project}/ui-catalog/refreshes/{id}` · role: publish
+
+Stores a refresh receipt pinned to a published definition version, an optional source (`sha`, `branch`, and `require` to count only evidence at that commit), the profiles in scope (`where`), a freshness cutoff (`staleBeforeMs`, default now: only evidence recorded since counts) and the `collection` its shards claim under (default the id, so retry limits are counted per refresh). `participants` optionally names the jobs expected to join, only to diagnose one that never started.
+
+Beginning a refresh that exists joins it (`200`, `created: false`): fields left out keep their stored values, and a field given with another value is `409`, since that would be another refresh. The receipt is kept in the server's store.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The refresh id: 1–128 letters, digits, `.`, `_` or `-` (a CI run id fits).
+
+Responses: `200` The refresh existed with these values: joined.; `201` Begun.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No definition has that version.; `409` The refresh exists with other values.; `422` Not a refresh id or request.
+
+### Record an attempt joining a refresh
+
+`POST /api/ui-catalog/refreshes/{id}/attempts` · role: publish
+
+Records a participant (a CI job, a laptop) and its attempt number on the receipt; joining again updates when it was last seen. The attempt claims as the shard `<participant>#<attempt>`, so a rerun's work stays distinguishable from the attempt before it. Returns the receipt, whose `collection`, `staleBeforeMs`, `where` and `source` the shard collects under.
+
+- `id` (path, required): The refresh id.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The receipt.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No refresh has that id.; `422` Not a join request.
+
+### Record an attempt joining a refresh
+
+`POST /api/projects/{project}/ui-catalog/refreshes/{id}/attempts` · role: publish
+
+Records a participant (a CI job, a laptop) and its attempt number on the receipt; joining again updates when it was last seen. The attempt claims as the shard `<participant>#<attempt>`, so a rerun's work stays distinguishable from the attempt before it. Returns the receipt, whose `collection`, `staleBeforeMs`, `where` and `source` the shard collects under.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The refresh id.
+
+Responses: `200` The receipt.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No refresh has that id.; `422` Not a join request.
+
+### Whether a refresh is complete, and what is outstanding
+
+`GET /api/ui-catalog/refreshes/{id}` · role: read
+
+Judges every unit in the refresh's scope against its policy. A unit is satisfied when every item's newest result passed and was recorded at or after `staleBeforeMs` (and at the source commit when it is required). Otherwise it is outstanding, with why: `held` (a live claim holds it), `pending`, `failed` (below the retry limit), `stale`, `source` (captured at another commit), `exhausted` (failed `maxAttempts` times in the refresh's collection) or `unknown` (no readable result while a backend could not be read).
+
+`outcome` is `complete` when nothing is outstanding, `failed` when only exhausted or other-commit units remain (the queue will not hand them out again), `unknown` when a backend or layer could not be read, and `incomplete` otherwise. Worker health (`health`: expected participants that never joined, attempts that lost a claim) is reported apart from capture completeness. Nothing is recorded.
+
+- `id` (path, required): The refresh id.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The status.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No refresh has that id.; `422` Not a refresh id.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Whether a refresh is complete, and what is outstanding
+
+`GET /api/projects/{project}/ui-catalog/refreshes/{id}` · role: read
+
+Judges every unit in the refresh's scope against its policy. A unit is satisfied when every item's newest result passed and was recorded at or after `staleBeforeMs` (and at the source commit when it is required). Otherwise it is outstanding, with why: `held` (a live claim holds it), `pending`, `failed` (below the retry limit), `stale`, `source` (captured at another commit), `exhausted` (failed `maxAttempts` times in the refresh's collection) or `unknown` (no readable result while a backend could not be read).
+
+`outcome` is `complete` when nothing is outstanding, `failed` when only exhausted or other-commit units remain (the queue will not hand them out again), `unknown` when a backend or layer could not be read, and `incomplete` otherwise. Worker health (`health`: expected participants that never joined, attempts that lost a claim) is reported apart from capture completeness. Nothing is recorded.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The refresh id.
+
+Responses: `200` The status.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `404` No refresh has that id.; `422` Not a refresh id.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Finalize a refresh: judge it and record the finalization
+
+`POST /api/ui-catalog/refreshes/{id}/finalize` · role: publish
+
+As `GET /api/ui-catalog/refreshes/{id}`, and records the finalization (when, its outcome, and the optional `attempt` that asked) on the receipt, so repeated finalizations of rerun attempts stay distinguishable. A refresh may be finalized any number of times; only `complete` is a pass.
+
+- `id` (path, required): The refresh id.
+- `project` (query): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+
+Responses: `200` The status.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No refresh has that id.; `422` Not a refresh id.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
+
+### Finalize a refresh: judge it and record the finalization
+
+`POST /api/projects/{project}/ui-catalog/refreshes/{id}/finalize` · role: publish
+
+As `GET /api/ui-catalog/refreshes/{id}`, and records the finalization (when, its outcome, and the optional `attempt` that asked) on the receipt, so repeated finalizations of rerun attempts stay distinguishable. A refresh may be finalized any number of times; only `complete` is a pass.
+
+Scoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.
+
+- `project` (path, required): Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.
+- `id` (path, required): The refresh id.
+
+Responses: `200` The status.; `401` No token, or an unknown one. Send `Authorization: Bearer <token>`.; `403` The token is known but its role may not do this.; `404` No refresh has that id.; `422` Not a refresh id.; `503` The server is still reading its backends. Retry after the number of seconds in `Retry-After`.
 
 ### Every test one run recorded
 

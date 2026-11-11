@@ -58,7 +58,16 @@ test('every documented JSON result validates against the same registry that publ
     uiCatalogStatus: { args: ['ui-catalog', 'status'], code: 0 },
     uiCatalogDiff: { args: ['ui-catalog', 'diff', '--from', OLD.slice(0, 12), '--to', NEW.slice(0, 12)], code: 0 },
     uiCatalogExport: { args: ['ui-catalog', 'export', '--out', 'catalog.html'], code: 0 },
+    uiCatalogFailures: { args: ['ui-catalog', 'failures', '--definition', 'all'], code: 0 },
     uiCatalogCollect: { args: ['ui-catalog', 'collect', '--catalog', 'atlas.catalog.mjs', '--exec', `"${process.execPath}" collector.mjs`, '--store', serverUrl, '--shard', 'contract'], code: 0 },
+    // The CI kit: a plan, a refresh judged over what collect captured, and a journal's bundle validated, merged and imported.
+    uiCatalogPlanMatrix: { args: ['ui-catalog', 'plan-matrix', '--catalog', 'atlas.catalog.mjs', '--out', 'plan.json'], code: 0 },
+    uiCatalogRefreshBegin: { args: ['ui-catalog', 'refresh', 'begin', '--id', 'contract-refresh', '--catalog', 'atlas.catalog.mjs', '--store', serverUrl, '--stale-before', '0', '--participants-from', 'plan.json'], code: 0 },
+    uiCatalogRefreshStatus: { args: ['ui-catalog', 'refresh', 'status', '--id', 'contract-refresh', '--store', serverUrl], code: 0 },
+    uiCatalogRefreshFinalize: { args: ['ui-catalog', 'refresh', 'finalize', '--id', 'contract-refresh', '--store', serverUrl, '--attempt', '1'], code: 0 },
+    uiCatalogBundleValidate: { args: ['ui-catalog', 'bundle', 'validate', 'bundle-a'], code: 0, before: [['ui-catalog', 'collect', '--catalog', 'atlas.catalog.mjs', '--exec', `"${process.execPath}" collector.mjs`, '--store', serverUrl, '--shard', 'journaled', '--journal', 'bundle-a']] },
+    uiCatalogBundleMerge: { args: ['ui-catalog', 'bundle', 'merge', 'bundle-a', '--out', 'bundle-merged'], code: 0 },
+    uiCatalogBundleImport: { args: ['ui-catalog', 'bundle', 'import', 'bundle-merged', '--store', 'imported'], code: 0 },
     error: { args: ['report', 'publish'], code: 2 }
   };
   try {

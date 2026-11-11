@@ -7166,9 +7166,48 @@
           },
           {
             "required": false,
+            "name": "definition",
+            "in": "query",
+            "description": "Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer's history with the choice recorded in `scope`; absent is every layer's history as before. A definition the server does not hold gives `scope.status: \"unavailable\"` and no state, never every layer's history.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "id",
+            "in": "query",
+            "description": "Only the states with these exact ids (comma-separated, escaped like the other lists): the full documents of the states a viewer shows.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "view",
+            "in": "query",
+            "description": "`index` for the compact index (`UiCatalogIndex`): every state's facts, coverage and a `fingerprint`, without pictures, origins or plans. A server that predates it answers the full document, which a client can project itself. `capabilities.catalogIndex` on `/api/server` says a server has it.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "index"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "since",
+            "in": "query",
+            "description": "With `view=index`: a `version` of an index this server answered. Only the states that changed since then are sent, with the ids of those removed; a version it does not remember is answered with the whole index and `since.honored` false.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
             "name": "format",
             "in": "query",
-            "description": "`markdown` for Markdown instead of JSON.",
+            "description": "`markdown` for Markdown instead of JSON (always the full document).",
             "schema": {
               "type": "string",
               "enum": [
@@ -7192,11 +7231,18 @@
         ],
         "responses": {
           "200": {
-            "description": "The catalog.",
+            "description": "The catalog, or with `view=index` its index.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UiCatalog"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/UiCatalog"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UiCatalogIndex"
+                    }
+                  ]
                 }
               }
             }
@@ -7206,6 +7252,16 @@
           },
           "401": {
             "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A `definition` that is not `all`, `latest` or a version.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7369,9 +7425,48 @@
           },
           {
             "required": false,
+            "name": "definition",
+            "in": "query",
+            "description": "Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer's history with the choice recorded in `scope`; absent is every layer's history as before. A definition the server does not hold gives `scope.status: \"unavailable\"` and no state, never every layer's history.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "id",
+            "in": "query",
+            "description": "Only the states with these exact ids (comma-separated, escaped like the other lists): the full documents of the states a viewer shows.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "view",
+            "in": "query",
+            "description": "`index` for the compact index (`UiCatalogIndex`): every state's facts, coverage and a `fingerprint`, without pictures, origins or plans. A server that predates it answers the full document, which a client can project itself. `capabilities.catalogIndex` on `/api/server` says a server has it.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "index"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "since",
+            "in": "query",
+            "description": "With `view=index`: a `version` of an index this server answered. Only the states that changed since then are sent, with the ids of those removed; a version it does not remember is answered with the whole index and `since.honored` false.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
             "name": "format",
             "in": "query",
-            "description": "`markdown` for Markdown instead of JSON.",
+            "description": "`markdown` for Markdown instead of JSON (always the full document).",
             "schema": {
               "type": "string",
               "enum": [
@@ -7383,11 +7478,18 @@
         ],
         "responses": {
           "200": {
-            "description": "The catalog.",
+            "description": "The catalog, or with `view=index` its index.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UiCatalog"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/UiCatalog"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UiCatalogIndex"
+                    }
+                  ]
                 }
               }
             }
@@ -7397,6 +7499,416 @@
           },
           "401": {
             "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A `definition` that is not `all`, `latest` or a version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/ui-catalog/failures": {
+      "get": {
+        "operationId": "getUiCatalogFailures",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Failed UI catalog cells grouped by fingerprint, for triage",
+        "description": "The failed cells of the UI catalog, in the scope (`definition`) and filters given (the same as `GET /api/reports/ui-catalog`), grouped by the fingerprint their producer supplied (the capture label `fingerprint`, per producer; cells with different fingerprints are never merged), else by the exact message after whitespace is collapsed and secrets, URL query strings and directories are redacted. A message group is `inferred: true`: the cells read the same, which never shows a shared cause. Each group has its count, phases and attempts when the producer said (`phase`, `attempts` labels), the affected cells (`state` and `profile` key, to link to the catalog), first and last occurrence and one redacted sample. `complete: false` with `incomplete` reasons when a backend or layer could not be read, the definition scope is unavailable or captures are still in progress: the totals are then a lower bound. Nothing here changes a result.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": false,
+            "name": "definition",
+            "in": "query",
+            "description": "Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer's history with the choice recorded in `scope`; absent is every layer's history as before. A definition the server does not hold gives `scope.status: \"unavailable\"` and no state, never every layer's history.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "maxCells",
+            "in": "query",
+            "description": "At most this many cells listed per group (default 200); `count` is always the whole group.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "q",
+            "in": "query",
+            "description": "Words, as for the catalog.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "coverage",
+            "in": "query",
+            "description": "Coverage values, as for the catalog.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "profile",
+            "in": "query",
+            "description": "Profile keys.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "area",
+            "in": "query",
+            "description": "Areas.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "route",
+            "in": "query",
+            "description": "Routes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "cohort",
+            "in": "query",
+            "description": "Cohorts.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "flag",
+            "in": "query",
+            "description": "Feature flags.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "surface",
+            "in": "query",
+            "description": "Surfaces.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "producer",
+            "in": "query",
+            "description": "Producers.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "attribute",
+            "in": "query",
+            "description": "Attributes, as `name=value`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for a CI summary instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The failure groups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiCatalogFailures"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A `definition` that is not `all`, `latest` or a version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/reports/ui-catalog/failures": {
+      "get": {
+        "operationId": "getUiCatalogFailuresForProject",
+        "tags": [
+          "Report"
+        ],
+        "summary": "Failed UI catalog cells grouped by fingerprint, for triage",
+        "description": "The failed cells of the UI catalog, in the scope (`definition`) and filters given (the same as `GET /api/reports/ui-catalog`), grouped by the fingerprint their producer supplied (the capture label `fingerprint`, per producer; cells with different fingerprints are never merged), else by the exact message after whitespace is collapsed and secrets, URL query strings and directories are redacted. A message group is `inferred: true`: the cells read the same, which never shows a shared cause. Each group has its count, phases and attempts when the producer said (`phase`, `attempts` labels), the affected cells (`state` and `profile` key, to link to the catalog), first and last occurrence and one redacted sample. `complete: false` with `incomplete` reasons when a backend or layer could not be read, the definition scope is unavailable or captures are still in progress: the totals are then a lower bound. Nothing here changes a result.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": false,
+            "name": "definition",
+            "in": "query",
+            "description": "Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer's history with the choice recorded in `scope`; absent is every layer's history as before. A definition the server does not hold gives `scope.status: \"unavailable\"` and no state, never every layer's history.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "maxCells",
+            "in": "query",
+            "description": "At most this many cells listed per group (default 200); `count` is always the whole group.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "required": false,
+            "name": "q",
+            "in": "query",
+            "description": "Words, as for the catalog.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "coverage",
+            "in": "query",
+            "description": "Coverage values, as for the catalog.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "profile",
+            "in": "query",
+            "description": "Profile keys.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "area",
+            "in": "query",
+            "description": "Areas.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "route",
+            "in": "query",
+            "description": "Routes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "cohort",
+            "in": "query",
+            "description": "Cohorts.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "flag",
+            "in": "query",
+            "description": "Feature flags.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "surface",
+            "in": "query",
+            "description": "Surfaces.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "producer",
+            "in": "query",
+            "description": "Producers.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "attribute",
+            "in": "query",
+            "description": "Attributes, as `name=value`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "format",
+            "in": "query",
+            "description": "`markdown` for a CI summary instead of JSON.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The failure groups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiCatalogFailures"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the `If-None-Match` ETag."
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A `definition` that is not `all`, `latest` or a version.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9349,6 +9861,920 @@
           },
           "422": {
             "description": "Not a version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-catalog/refreshes/{id}": {
+      "put": {
+        "operationId": "beginUiCatalogRefresh",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Begin a UI catalog refresh, or join it",
+        "description": "Stores a refresh receipt pinned to a published definition version, an optional source (`sha`, `branch`, and `require` to count only evidence at that commit), the profiles in scope (`where`), a freshness cutoff (`staleBeforeMs`, default now: only evidence recorded since counts) and the `collection` its shards claim under (default the id, so retry limits are counted per refresh). `participants` optionally names the jobs expected to join, only to diagnose one that never started.\n\nBeginning a refresh that exists joins it (`200`, `created: false`): fields left out keep their stored values, and a field given with another value is `409`, since that would be another refresh. The receipt is kept in the server's store.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The refresh id: 1–128 letters, digits, `.`, `_` or `-` (a CI run id fits).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "What the refresh is pinned to.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The refresh existed with these values: joined.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/UiRefreshReceipt"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "receipt",
+                    "created"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Begun.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/UiRefreshReceipt"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "receipt",
+                    "created"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The refresh exists with other values.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a refresh id or request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getUiCatalogRefresh",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Whether a refresh is complete, and what is outstanding",
+        "description": "Judges every unit in the refresh's scope against its policy. A unit is satisfied when every item's newest result passed and was recorded at or after `staleBeforeMs` (and at the source commit when it is required). Otherwise it is outstanding, with why: `held` (a live claim holds it), `pending`, `failed` (below the retry limit), `stale`, `source` (captured at another commit), `exhausted` (failed `maxAttempts` times in the refresh's collection) or `unknown` (no readable result while a backend could not be read).\n\n`outcome` is `complete` when nothing is outstanding, `failed` when only exhausted or other-commit units remain (the queue will not hand them out again), `unknown` when a backend or layer could not be read, and `incomplete` otherwise. Worker health (`health`: expected participants that never joined, attempts that lost a claim) is reported apart from capture completeness. Nothing is recorded.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The refresh id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiRefreshStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No refresh has that id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a refresh id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/ui-catalog/refreshes/{id}": {
+      "put": {
+        "operationId": "beginUiCatalogRefreshForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Begin a UI catalog refresh, or join it",
+        "description": "Stores a refresh receipt pinned to a published definition version, an optional source (`sha`, `branch`, and `require` to count only evidence at that commit), the profiles in scope (`where`), a freshness cutoff (`staleBeforeMs`, default now: only evidence recorded since counts) and the `collection` its shards claim under (default the id, so retry limits are counted per refresh). `participants` optionally names the jobs expected to join, only to diagnose one that never started.\n\nBeginning a refresh that exists joins it (`200`, `created: false`): fields left out keep their stored values, and a field given with another value is `409`, since that would be another refresh. The receipt is kept in the server's store.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The refresh id: 1–128 letters, digits, `.`, `_` or `-` (a CI run id fits).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "What the refresh is pinned to.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The refresh existed with these values: joined.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/UiRefreshReceipt"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "receipt",
+                    "created"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Begun.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/UiRefreshReceipt"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "receipt",
+                    "created"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No definition has that version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The refresh exists with other values.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a refresh id or request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getUiCatalogRefreshForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Whether a refresh is complete, and what is outstanding",
+        "description": "Judges every unit in the refresh's scope against its policy. A unit is satisfied when every item's newest result passed and was recorded at or after `staleBeforeMs` (and at the source commit when it is required). Otherwise it is outstanding, with why: `held` (a live claim holds it), `pending`, `failed` (below the retry limit), `stale`, `source` (captured at another commit), `exhausted` (failed `maxAttempts` times in the refresh's collection) or `unknown` (no readable result while a backend could not be read).\n\n`outcome` is `complete` when nothing is outstanding, `failed` when only exhausted or other-commit units remain (the queue will not hand them out again), `unknown` when a backend or layer could not be read, and `incomplete` otherwise. Worker health (`health`: expected participants that never joined, attempts that lost a claim) is reported apart from capture completeness. Nothing is recorded.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `read`.",
+        "x-atlas-role": "read",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "basic": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The refresh id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiRefreshStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No refresh has that id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a refresh id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-catalog/refreshes/{id}/attempts": {
+      "post": {
+        "operationId": "joinUiCatalogRefresh",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Record an attempt joining a refresh",
+        "description": "Records a participant (a CI job, a laptop) and its attempt number on the receipt; joining again updates when it was last seen. The attempt claims as the shard `<participant>#<attempt>`, so a rerun's work stays distinguishable from the attempt before it. Returns the receipt, whose `collection`, `staleBeforeMs`, `where` and `source` the shard collects under.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The refresh id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The participant and attempt.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiRefreshJoin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiRefreshReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No refresh has that id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a join request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/ui-catalog/refreshes/{id}/attempts": {
+      "post": {
+        "operationId": "joinUiCatalogRefreshForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Record an attempt joining a refresh",
+        "description": "Records a participant (a CI job, a laptop) and its attempt number on the receipt; joining again updates when it was last seen. The attempt claims as the shard `<participant>#<attempt>`, so a rerun's work stays distinguishable from the attempt before it. Returns the receipt, whose `collection`, `staleBeforeMs`, `where` and `source` the shard collects under.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The refresh id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The participant and attempt.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiRefreshJoin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiRefreshReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No refresh has that id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a join request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-catalog/refreshes/{id}/finalize": {
+      "post": {
+        "operationId": "finalizeUiCatalogRefresh",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Finalize a refresh: judge it and record the finalization",
+        "description": "As `GET /api/ui-catalog/refreshes/{id}`, and records the finalization (when, its outcome, and the optional `attempt` that asked) on the receipt, so repeated finalizations of rerun attempts stay distinguishable. A refresh may be finalized any number of times; only `complete` is a pass.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The refresh id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "required": false,
+            "name": "project",
+            "in": "query",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "Optionally `{ \"attempt\": \"2\" }`.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "attempt": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiRefreshStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No refresh has that id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a refresh id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is still reading its backends. Retry after the number of seconds in `Retry-After`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project}/ui-catalog/refreshes/{id}/finalize": {
+      "post": {
+        "operationId": "finalizeUiCatalogRefreshForProject",
+        "tags": [
+          "UI catalog queue"
+        ],
+        "summary": "Finalize a refresh: judge it and record the finalization",
+        "description": "As `GET /api/ui-catalog/refreshes/{id}`, and records the finalization (when, its outcome, and the optional `attempt` that asked) on the receipt, so repeated finalizations of rerun attempts stay distinguishable. A refresh may be finalized any number of times; only `complete` is a pass.\n\nScoped to one project. The same project may be selected on the unprefixed API using ?project= or X-Atlas-Project. Unknown projects return 404 on reads and are created by an authenticated upload.\n\nRole needed: `publish`.",
+        "x-atlas-role": "publish",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project slug. Alternatively send X-Atlas-Project or use the project-prefixed route. Omit for the default project. Conflicting selectors are refused.",
+            "example": "todo-app",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+              "maxLength": 64
+            }
+          },
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "description": "The refresh id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "Optionally `{ \"attempt\": \"2\" }`.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "attempt": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiRefreshStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or an unknown one. Send `Authorization: Bearer <token>`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is known but its role may not do this.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No refresh has that id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a refresh id.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12755,6 +14181,46 @@
               "null"
             ]
           },
+          "build": {
+            "description": "Where this server was built from. Absent from a server that predates it, which means unknown",
+            "type": "object",
+            "properties": {
+              "version": {
+                "description": "The @crvouga/atlas version, or null for a source build or a build that does not know it",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "revision": {
+                "description": "The source revision (a git commit) it was built from (`ATLAS_REVISION`), or null",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "builtAt": {
+                "description": "When it was built, ISO 8601 (`ATLAS_BUILD_TIME`), or null",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "imageDigest": {
+                "description": "The container image digest, only when the deployment injected it (`ATLAS_IMAGE_DIGEST`); an image cannot know its own digest, so null otherwise. Absent for a viewer",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "version",
+              "revision",
+              "builtAt"
+            ],
+            "additionalProperties": {}
+          },
           "role": {
             "type": "string",
             "enum": [
@@ -13292,7 +14758,7 @@
                             "type": "boolean"
                           },
                           "screenshot": {
-                            "description": "The check's picture: its `screenshot` attachment, else its first image",
+                            "description": "The check's picture: its `screenshot` attachment, else its first image not marked supplemental",
                             "type": "object",
                             "properties": {
                               "name": {
@@ -13328,6 +14794,59 @@
                               "name"
                             ],
                             "additionalProperties": {}
+                          },
+                          "attachments": {
+                            "description": "Only for a `ui-state` check: its other attachments (more views, a trace, a video), in order. Evidence only",
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "order": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "bundleKey": {
+                                  "type": "string"
+                                },
+                                "uri": {
+                                  "type": "string"
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                },
+                                "width": {
+                                  "type": "number"
+                                },
+                                "height": {
+                                  "type": "number"
+                                },
+                                "bytes": {
+                                  "type": "number"
+                                },
+                                "sha256": {
+                                  "type": "string"
+                                },
+                                "omitted": {
+                                  "description": "Why the producer left the bytes out",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "order"
+                              ],
+                              "additionalProperties": {}
+                            }
                           }
                         },
                         "additionalProperties": {}
@@ -14658,7 +16177,7 @@
                             "type": "boolean"
                           },
                           "screenshot": {
-                            "description": "The check's picture: its `screenshot` attachment, else its first image",
+                            "description": "The check's picture: its `screenshot` attachment, else its first image not marked supplemental",
                             "type": "object",
                             "properties": {
                               "name": {
@@ -14694,6 +16213,59 @@
                               "name"
                             ],
                             "additionalProperties": {}
+                          },
+                          "attachments": {
+                            "description": "Only for a `ui-state` check: its other attachments (more views, a trace, a video), in order. Evidence only",
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "order": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "bundleKey": {
+                                  "type": "string"
+                                },
+                                "uri": {
+                                  "type": "string"
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                },
+                                "width": {
+                                  "type": "number"
+                                },
+                                "height": {
+                                  "type": "number"
+                                },
+                                "bytes": {
+                                  "type": "number"
+                                },
+                                "sha256": {
+                                  "type": "string"
+                                },
+                                "omitted": {
+                                  "description": "Why the producer left the bytes out",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "order"
+                              ],
+                              "additionalProperties": {}
+                            }
                           }
                         },
                         "additionalProperties": {}
@@ -19425,7 +20997,7 @@
                       "type": "boolean"
                     },
                     "screenshot": {
-                      "description": "The check's picture: its `screenshot` attachment, else its first image",
+                      "description": "The check's picture: its `screenshot` attachment, else its first image not marked supplemental",
                       "type": "object",
                       "properties": {
                         "name": {
@@ -19461,6 +21033,59 @@
                         "name"
                       ],
                       "additionalProperties": {}
+                    },
+                    "attachments": {
+                      "description": "Only for a `ui-state` check: its other attachments (more views, a trace, a video), in order. Evidence only",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "order": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "bundleKey": {
+                            "type": "string"
+                          },
+                          "uri": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "bytes": {
+                            "type": "number"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          },
+                          "omitted": {
+                            "description": "Why the producer left the bytes out",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "order"
+                        ],
+                        "additionalProperties": {}
+                      }
                     }
                   },
                   "additionalProperties": {}
@@ -28978,6 +30603,67 @@
                                   }
                                 ]
                               },
+                              "attachments": {
+                                "description": "Supplemental evidence of the same capture, in the producer's order. Absent when there is none. Never changes `coverage`",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "contentType": {
+                                      "type": "string"
+                                    },
+                                    "width": {
+                                      "type": "number"
+                                    },
+                                    "height": {
+                                      "type": "number"
+                                    },
+                                    "bytes": {
+                                      "type": "number"
+                                    },
+                                    "sha256": {
+                                      "type": "string"
+                                    },
+                                    "bundleKey": {
+                                      "type": "string"
+                                    },
+                                    "uri": {
+                                      "description": "An http(s) address, when the picture lives elsewhere",
+                                      "type": "string"
+                                    },
+                                    "path": {
+                                      "description": "Where the stored bytes are, relative to the reports API root (`/api/reports` on a server): `/layers/<layer>/blobs/attachments/<sha256>`",
+                                      "type": "string"
+                                    },
+                                    "omitted": {
+                                      "description": "Why the producer left the bytes out. A picture that is left out is not a picture that was never taken",
+                                      "type": "string"
+                                    },
+                                    "role": {
+                                      "description": "Open vocabulary: `view`, `trace`, `video`, `log`, `snapshot`…",
+                                      "type": "string"
+                                    },
+                                    "label": {
+                                      "description": "For a person",
+                                      "type": "string"
+                                    },
+                                    "order": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "description": "Its position among the capture's supplemental attachments"
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "order"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
                               "labels": {
                                 "type": "object",
                                 "propertyNames": {
@@ -29451,6 +31137,132 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "scope": {
+            "description": "Present when `?definition=` was given: which history the counts are of. Absent: every layer's history, as before",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "`all-history` or `definition`"
+              },
+              "status": {
+                "type": "string",
+                "description": "`applied` or `unavailable`; any other value is an unknown scope"
+              },
+              "definition": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string",
+                    "description": "The SHA-256 of the canonical definition"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "version",
+                  "name"
+                ],
+                "additionalProperties": {}
+              },
+              "expected": {
+                "description": "What the definition expects: its states, its profiles and their product",
+                "type": "object",
+                "properties": {
+                  "states": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "profiles": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cells": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "states",
+                  "profiles",
+                  "cells"
+                ],
+                "additionalProperties": {}
+              },
+              "excluded": {
+                "description": "Recorded history outside the definition: not counted in this document, still in the layers",
+                "type": "object",
+                "properties": {
+                  "states": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "profiles": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cells": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverage": {
+                    "type": "object",
+                    "properties": {
+                      "captured": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      },
+                      "capturing": {
+                        "type": "number"
+                      },
+                      "skipped": {
+                        "type": "number"
+                      },
+                      "missing": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "captured",
+                      "failed",
+                      "capturing",
+                      "skipped",
+                      "missing"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "states",
+                  "profiles",
+                  "cells",
+                  "coverage"
+                ],
+                "additionalProperties": {}
+              },
+              "reason": {
+                "description": "Why the scope is unavailable",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "status"
+            ],
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -29461,6 +31273,799 @@
           "surfaces",
           "facets",
           "sources"
+        ],
+        "additionalProperties": {}
+      },
+      "UiCatalogIndex": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "description": "The report version this was computed from; equal exactly when the report is",
+            "type": "string"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "states": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "profiles": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "cells": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "coverage": {
+                "type": "object",
+                "properties": {
+                  "captured": {
+                    "type": "number"
+                  },
+                  "failed": {
+                    "type": "number"
+                  },
+                  "capturing": {
+                    "type": "number"
+                  },
+                  "skipped": {
+                    "type": "number"
+                  },
+                  "missing": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "captured",
+                  "failed",
+                  "capturing",
+                  "skipped",
+                  "missing"
+                ],
+                "additionalProperties": {}
+              },
+              "undeclared": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Cells captured or failed that no plan expects. Zero when no plan was published"
+              },
+              "planned": {
+                "type": "boolean",
+                "description": "Whether any plan was published. Without one `missing` is always zero: what should exist is unknown"
+              },
+              "surfaces": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "uncoveredSurfaces": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "states",
+              "profiles",
+              "cells",
+              "coverage",
+              "undeclared",
+              "planned",
+              "surfaces",
+              "uncoveredSurfaces"
+            ],
+            "additionalProperties": {}
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "Identifies the profile across layers: the environment and the sorted parameters"
+                },
+                "environment": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "parameters": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "label": {
+                  "type": "string",
+                  "description": "For a person: the client and each parameter's value"
+                }
+              },
+              "required": [
+                "key",
+                "environment",
+                "parameters",
+                "label"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "inventoried": {
+                  "type": "boolean",
+                  "description": "A `ui-plan` inventory entry names it: the product is known to have it"
+                },
+                "states": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "captured": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "type": "string",
+                  "description": "One of `covered`, `uncaptured`, `uncovered`; any other value is not `covered`"
+                }
+              },
+              "required": [
+                "id",
+                "inventoried",
+                "states",
+                "captured",
+                "status"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "facets": {
+            "type": "object",
+            "properties": {
+              "profiles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "coverage": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "areas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "routes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "cohorts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "flags": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "surfaces": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "producers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "attributes": {
+                "description": "Every `name=value` pair of the states' attributes, as the `attribute` filter takes it. Absent from an older server",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "count"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "profiles",
+              "coverage",
+              "areas",
+              "routes",
+              "cohorts",
+              "flags",
+              "surfaces",
+              "producers"
+            ],
+            "additionalProperties": {}
+          },
+          "sources": {
+            "type": "object",
+            "properties": {
+              "layers": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "backends": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "live": {
+                      "type": "boolean",
+                      "description": "Always false on a server"
+                    },
+                    "available": {
+                      "type": "boolean",
+                      "description": "False when the backend could not be read; its results are then unknown, never passed"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "live",
+                    "available"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "layers",
+              "backends",
+              "notices"
+            ],
+            "additionalProperties": {},
+            "description": "What was read. A backend that is unavailable, or a layer that could not be read, is named here; what depended on it is not shown as captured"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "States that matched; with an honored `since`, the states that changed"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "scope": {
+            "description": "Present when `?definition=` was given: which history the counts are of. Absent: every layer's history, as before",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "`all-history` or `definition`"
+              },
+              "status": {
+                "type": "string",
+                "description": "`applied` or `unavailable`; any other value is an unknown scope"
+              },
+              "definition": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string",
+                    "description": "The SHA-256 of the canonical definition"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "version",
+                  "name"
+                ],
+                "additionalProperties": {}
+              },
+              "expected": {
+                "description": "What the definition expects: its states, its profiles and their product",
+                "type": "object",
+                "properties": {
+                  "states": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "profiles": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cells": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "states",
+                  "profiles",
+                  "cells"
+                ],
+                "additionalProperties": {}
+              },
+              "excluded": {
+                "description": "Recorded history outside the definition: not counted in this document, still in the layers",
+                "type": "object",
+                "properties": {
+                  "states": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "profiles": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cells": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverage": {
+                    "type": "object",
+                    "properties": {
+                      "captured": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      },
+                      "capturing": {
+                        "type": "number"
+                      },
+                      "skipped": {
+                        "type": "number"
+                      },
+                      "missing": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "captured",
+                      "failed",
+                      "capturing",
+                      "skipped",
+                      "missing"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "states",
+                  "profiles",
+                  "cells",
+                  "coverage"
+                ],
+                "additionalProperties": {}
+              },
+              "reason": {
+                "description": "Why the scope is unavailable",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "status"
+            ],
+            "additionalProperties": {}
+          },
+          "view": {
+            "type": "string",
+            "const": "index"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "route": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fixture": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cohort": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "area": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "flags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "covers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "producers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "attributes": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "fingerprint": {
+                  "type": "string",
+                  "description": "Changes whenever anything of the state's full document does: compare it, never parse it"
+                },
+                "cells": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "profile": {
+                        "type": "string",
+                        "description": "A `profiles[].key`"
+                      },
+                      "coverage": {
+                        "type": "string",
+                        "description": "As in the full document"
+                      },
+                      "expected": {
+                        "type": "string",
+                        "description": "As in the full document"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "running",
+                              "not-run"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "The winning capture's status, or null when nothing was captured"
+                      },
+                      "detail": {
+                        "description": "Why the capture failed or was skipped",
+                        "type": "string"
+                      },
+                      "recordedAtMs": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "producer": {
+                        "type": "string"
+                      },
+                      "labels": {
+                        "description": "The capture's labels, only for a capture that did not pass",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "coverage",
+                      "expected",
+                      "status",
+                      "recordedAtMs"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "route",
+                "fixture",
+                "cohort",
+                "area",
+                "flags",
+                "covers",
+                "producers",
+                "fingerprint",
+                "cells"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "since": {
+            "type": "object",
+            "properties": {
+              "requested": {
+                "type": "string"
+              },
+              "honored": {
+                "type": "boolean",
+                "description": "False when the server does not remember that version: the answer is then the whole index"
+              }
+            },
+            "required": [
+              "requested",
+              "honored"
+            ],
+            "additionalProperties": {}
+          },
+          "removed": {
+            "description": "With an honored `since`: the ids of states no longer in the catalog",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "summary",
+          "profiles",
+          "surfaces",
+          "facets",
+          "sources",
+          "total",
+          "offset",
+          "limit",
+          "view",
+          "states"
         ],
         "additionalProperties": {}
       },
@@ -29663,6 +32268,67 @@
                                 }
                               ]
                             },
+                            "attachments": {
+                              "description": "Supplemental evidence of the same capture, in the producer's order. Absent when there is none. Never changes `coverage`",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "contentType": {
+                                    "type": "string"
+                                  },
+                                  "width": {
+                                    "type": "number"
+                                  },
+                                  "height": {
+                                    "type": "number"
+                                  },
+                                  "bytes": {
+                                    "type": "number"
+                                  },
+                                  "sha256": {
+                                    "type": "string"
+                                  },
+                                  "bundleKey": {
+                                    "type": "string"
+                                  },
+                                  "uri": {
+                                    "description": "An http(s) address, when the picture lives elsewhere",
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "description": "Where the stored bytes are, relative to the reports API root (`/api/reports` on a server): `/layers/<layer>/blobs/attachments/<sha256>`",
+                                    "type": "string"
+                                  },
+                                  "omitted": {
+                                    "description": "Why the producer left the bytes out. A picture that is left out is not a picture that was never taken",
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "description": "Open vocabulary: `view`, `trace`, `video`, `log`, `snapshot`…",
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "description": "For a person",
+                                    "type": "string"
+                                  },
+                                  "order": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991,
+                                    "description": "Its position among the capture's supplemental attachments"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "order"
+                                ],
+                                "additionalProperties": {}
+                              }
+                            },
                             "labels": {
                               "type": "object",
                               "propertyNames": {
@@ -29856,6 +32522,357 @@
           "version",
           "state",
           "sources"
+        ],
+        "additionalProperties": {}
+      },
+      "UiCatalogFailures": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "version": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "`all-history` or `definition`"
+              },
+              "status": {
+                "type": "string",
+                "description": "`applied` or `unavailable`; any other value is an unknown scope"
+              },
+              "definition": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string",
+                    "description": "The SHA-256 of the canonical definition"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "version",
+                  "name"
+                ],
+                "additionalProperties": {}
+              },
+              "expected": {
+                "description": "What the definition expects: its states, its profiles and their product",
+                "type": "object",
+                "properties": {
+                  "states": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "profiles": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cells": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "states",
+                  "profiles",
+                  "cells"
+                ],
+                "additionalProperties": {}
+              },
+              "excluded": {
+                "description": "Recorded history outside the definition: not counted in this document, still in the layers",
+                "type": "object",
+                "properties": {
+                  "states": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "profiles": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cells": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverage": {
+                    "type": "object",
+                    "properties": {
+                      "captured": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      },
+                      "capturing": {
+                        "type": "number"
+                      },
+                      "skipped": {
+                        "type": "number"
+                      },
+                      "missing": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "captured",
+                      "failed",
+                      "capturing",
+                      "skipped",
+                      "missing"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "states",
+                  "profiles",
+                  "cells",
+                  "coverage"
+                ],
+                "additionalProperties": {}
+              },
+              "reason": {
+                "description": "Why the scope is unavailable",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "status"
+            ],
+            "additionalProperties": {}
+          },
+          "total": {
+            "type": "object",
+            "properties": {
+              "failed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Failed cells in the scope and filters"
+              },
+              "groups": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "fingerprinted": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Failed cells grouped by a producer's fingerprint"
+              },
+              "inferred": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Failed cells grouped by message only"
+              }
+            },
+            "required": [
+              "failed",
+              "groups",
+              "fingerprinted",
+              "inferred"
+            ],
+            "additionalProperties": {}
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "False when a backend or layer could not be read, the definition scope is unavailable, captures are still in progress or only a page was given"
+          },
+          "incomplete": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "basis": {
+                  "type": "string",
+                  "description": "`fingerprint` or `message`"
+                },
+                "inferred": {
+                  "type": "boolean",
+                  "description": "True for a message group: inferred from text, not a shared cause"
+                },
+                "fingerprint": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "producers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "states": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "profiles": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "phases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "attempts": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "type": "number"
+                        },
+                        "max": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "firstRecordedAtMs": {
+                  "type": "number"
+                },
+                "lastRecordedAtMs": {
+                  "type": "number"
+                },
+                "sample": {
+                  "type": "string",
+                  "description": "The newest failure's message, redacted"
+                },
+                "cells": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "profile": {
+                        "type": "string",
+                        "description": "The profile key: with `state`, the cell to link to"
+                      },
+                      "profileLabel": {
+                        "type": "string"
+                      },
+                      "recordedAtMs": {
+                        "type": "number"
+                      },
+                      "producer": {
+                        "type": "string"
+                      },
+                      "layer": {
+                        "type": "string"
+                      },
+                      "backend": {
+                        "type": "string"
+                      },
+                      "phase": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "attempts": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "title",
+                      "profile",
+                      "profileLabel",
+                      "recordedAtMs",
+                      "producer",
+                      "layer",
+                      "backend",
+                      "phase",
+                      "attempts"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  "description": "The affected cells, newest first, at most `maxCells`; `count` is all of them"
+                }
+              },
+              "required": [
+                "key",
+                "basis",
+                "inferred",
+                "fingerprint",
+                "producers",
+                "count",
+                "states",
+                "profiles",
+                "phases",
+                "attempts",
+                "firstRecordedAtMs",
+                "lastRecordedAtMs",
+                "sample",
+                "cells"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "total",
+          "complete",
+          "incomplete",
+          "groups"
         ],
         "additionalProperties": {}
       },
@@ -31916,6 +34933,696 @@
           "claims",
           "shards",
           "throughput",
+          "time"
+        ],
+        "additionalProperties": {}
+      },
+      "UiRefreshRequest": {
+        "type": "object",
+        "properties": {
+          "definition": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "The version of a published definition"
+          },
+          "collection": {
+            "description": "What its shards claim under, so retry limits are counted per refresh. Default: the refresh id",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "sha": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "branch": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "require": {
+                "description": "Only evidence recorded at this commit satisfies the refresh. Default false: the source is provenance",
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "where": {
+            "description": "The profiles in scope: only units whose every item has one of these values in each named dimension",
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "additionalProperties": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          },
+          "staleBeforeMs": {
+            "description": "Only evidence recorded at or after this time satisfies the refresh. Default: when it began",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "participants": {
+            "description": "Optional names of the jobs expected to join, to diagnose one that never started. Never required for elastic workers",
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        },
+        "required": [
+          "definition"
+        ],
+        "additionalProperties": false
+      },
+      "UiRefreshReceipt": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "id": {
+            "type": "string"
+          },
+          "definition": {
+            "type": "string"
+          },
+          "collection": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "sha": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "branch": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "require": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "sha",
+              "branch",
+              "require"
+            ],
+            "additionalProperties": {}
+          },
+          "where": {
+            "anyOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "additionalProperties": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "staleBeforeMs": {
+            "type": "number"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAtMs": {
+            "type": "number"
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "participant": {
+                  "type": "string"
+                },
+                "attempt": {
+                  "type": "string"
+                },
+                "shard": {
+                  "type": "string",
+                  "description": "`<participant>#<attempt>`: what its claims and layers are labelled with"
+                },
+                "joinedAtMs": {
+                  "type": "number"
+                },
+                "lastSeenAtMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "participant",
+                "attempt",
+                "shard",
+                "joinedAtMs",
+                "lastSeenAtMs"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Every attempt that joined, in order (at most 1000)"
+          },
+          "finalizations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "atMs": {
+                  "type": "number"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "complete",
+                    "incomplete",
+                    "failed",
+                    "unknown"
+                  ]
+                },
+                "attempt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "atMs",
+                "outcome",
+                "attempt"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Each finalization, newest last (at most 100)"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "id",
+          "definition",
+          "collection",
+          "source",
+          "where",
+          "staleBeforeMs",
+          "participants",
+          "createdAtMs",
+          "attempts",
+          "finalizations"
+        ],
+        "additionalProperties": {}
+      },
+      "UiRefreshJoin": {
+        "type": "object",
+        "properties": {
+          "participant": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "attempt": {
+            "default": "1",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "participant"
+        ],
+        "additionalProperties": false
+      },
+      "UiRefreshStatus": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True only when `outcome` is `complete`"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "incomplete",
+              "failed",
+              "unknown"
+            ]
+          },
+          "refresh": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "definition": {
+                    "type": "string"
+                  },
+                  "collection": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "sha": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "branch": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "require": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "sha",
+                      "branch",
+                      "require"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  "where": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "additionalProperties": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "staleBeforeMs": {
+                    "type": "number"
+                  },
+                  "participants": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "createdAtMs": {
+                    "type": "number"
+                  },
+                  "attempts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "participant": {
+                          "type": "string"
+                        },
+                        "attempt": {
+                          "type": "string"
+                        },
+                        "shard": {
+                          "type": "string",
+                          "description": "`<participant>#<attempt>`: what its claims and layers are labelled with"
+                        },
+                        "joinedAtMs": {
+                          "type": "number"
+                        },
+                        "lastSeenAtMs": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "participant",
+                        "attempt",
+                        "shard",
+                        "joinedAtMs",
+                        "lastSeenAtMs"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "description": "Every attempt that joined, in order (at most 1000)"
+                  },
+                  "finalizations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "atMs": {
+                          "type": "number"
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": [
+                            "complete",
+                            "incomplete",
+                            "failed",
+                            "unknown"
+                          ]
+                        },
+                        "attempt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "atMs",
+                        "outcome",
+                        "attempt"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "description": "Each finalization, newest last (at most 100)"
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "id",
+                  "definition",
+                  "collection",
+                  "source",
+                  "where",
+                  "staleBeforeMs",
+                  "participants",
+                  "createdAtMs",
+                  "attempts",
+                  "finalizations"
+                ],
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the receipt itself could not be read"
+          },
+          "capture": {
+            "type": "object",
+            "properties": {
+              "units": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Units in scope"
+              },
+              "satisfied": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "held": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Held by a live claim: a shard is still working on them"
+              },
+              "pending": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Never captured (or only skipped) and claimable"
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Their latest capture failed; below the retry limit, so claimable again"
+              },
+              "stale": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Captured only before the cutoff; claimable as stale"
+              },
+              "source": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Captured after the cutoff at another commit while the source is required"
+              },
+              "exhausted": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Failed `maxAttempts` times within the refresh's collection: the queue will not hand them out again"
+              },
+              "unknown": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "No readable result while a backend or layer could not be read"
+              }
+            },
+            "required": [
+              "units",
+              "satisfied",
+              "held",
+              "pending",
+              "failed",
+              "stale",
+              "source",
+              "exhausted",
+              "unknown"
+            ],
+            "additionalProperties": {}
+          },
+          "outstanding": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "held",
+                    "pending",
+                    "failed",
+                    "stale",
+                    "source",
+                    "exhausted",
+                    "unknown"
+                  ]
+                },
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "claimId": {
+                  "type": "string"
+                },
+                "shard": {
+                  "type": "string"
+                },
+                "expiresAtMs": {
+                  "type": "number"
+                },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "unit",
+                "reason",
+                "items"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "The units not satisfied, most actionable first (at most 200)"
+          },
+          "health": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "healthy",
+                  "degraded",
+                  "unknown"
+                ],
+                "description": "Worker and infrastructure health, separate from capture completeness"
+              },
+              "expected": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "missing": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Expected participants with no attempt joined"
+              },
+              "attempts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "participant": {
+                      "type": "string"
+                    },
+                    "attempt": {
+                      "type": "string"
+                    },
+                    "shard": {
+                      "type": "string",
+                      "description": "`<participant>#<attempt>`: what its claims and layers are labelled with"
+                    },
+                    "joinedAtMs": {
+                      "type": "number"
+                    },
+                    "lastSeenAtMs": {
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "idle",
+                        "lost",
+                        "unseen"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "participant",
+                    "attempt",
+                    "shard",
+                    "joinedAtMs",
+                    "lastSeenAtMs",
+                    "status"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "lost": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Shards of this refresh whose last claim expired"
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "status",
+              "expected",
+              "missing",
+              "attempts",
+              "lost",
+              "notices"
+            ],
+            "additionalProperties": {}
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The outcome, in sentences"
+          },
+          "time": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "ok",
+          "outcome",
+          "refresh",
+          "capture",
+          "outstanding",
+          "health",
+          "reasons",
           "time"
         ],
         "additionalProperties": {}

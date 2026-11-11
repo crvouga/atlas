@@ -17,6 +17,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { ServerConfigSchema, type ServerConfig, type ServerRole } from '../../schema/src/server-config';
+import { buildInfo, type BuildInfo } from './build-info';
 import { resolveS3Config, S3_VARIABLES, type S3Config } from './storage';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -32,6 +33,8 @@ export type ResolvedServerConfig = Omit<ServerConfig, 'auth'> & {
   readonly insecure: boolean;
   /** Where the config came from, for the first line of the log. */
   readonly configFile: string | null;
+  /** Where this server was built from (`ATLAS_REVISION`, `ATLAS_BUILD_TIME`, `ATLAS_IMAGE_DIGEST` and the installed version), for `GET /api/server`. */
+  readonly build: BuildInfo;
 };
 
 /** A configuration that cannot be used. The message says what to change; `atlas serve` prints it and exits 2. */
@@ -109,7 +112,11 @@ export const SERVER_SETTINGS: readonly ServerSetting[] = [
   { summary: 'Live connection heartbeat in seconds', key: 'heartbeatSeconds', flag: null, env: ['ATLAS_HEARTBEAT_SECONDS'], default: '`15`', example: { value: '20', read: c => c.heartbeatSeconds, expected: 20 } },
   { summary: 'Live producer heartbeat timeout in seconds', key: 'runTimeoutSeconds', flag: null, env: ['ATLAS_RUN_TIMEOUT_SECONDS'], default: '`30`', example: { value: '60', read: c => c.runTimeoutSeconds, expected: 60 } },
   { summary: 'Live run progress stall timeout in seconds (0 disables)', key: 'runStallSeconds', flag: null, env: ['ATLAS_RUN_STALL_SECONDS'], default: '`900`', example: { value: '0', read: c => c.runStallSeconds, expected: 0 } },
-  { summary: 'No request log', key: 'log', flag: '--no-log', env: ['ATLAS_LOG'], default: 'one JSON line per request', example: { value: 'false', read: c => c.log, expected: false } }
+  { summary: 'No request log', key: 'log', flag: '--no-log', env: ['ATLAS_LOG'], default: 'one JSON line per request', example: { value: 'false', read: c => c.log, expected: false } },
+  // Provenance only, shown by `GET /api/server` and the viewer's About dialog; never part of the file or the saved settings.
+  { summary: 'The source revision this server was built from (the official image sets it from its build argument)', key: 'build.revision', flag: null, env: ['ATLAS_REVISION'], default: 'unknown', example: { value: '8a5f090', read: c => c.build.revision, expected: '8a5f090' } },
+  { summary: 'When this server was built, ISO 8601 or seconds since the epoch (the official image sets it)', key: 'build.builtAt', flag: null, env: ['ATLAS_BUILD_TIME'], default: 'unknown', example: { value: '2026-11-10T12:00:00Z', read: c => c.build.builtAt, expected: '2026-11-10T12:00:00.000Z' } },
+  { summary: 'The container image digest, when the deployment injects it (an image cannot know its own)', key: 'build.imageDigest', flag: null, env: ['ATLAS_IMAGE_DIGEST'], default: 'unknown', example: { value: `sha256:${'0'.repeat(64)}`, read: c => c.build.imageDigest, expected: `sha256:${'0'.repeat(64)}` } }
 ];
 
 /** The text `atlas serve --help` prints. Also the source of the `atlas serve` section of `docs/reference/cli.md`. */
@@ -215,7 +222,7 @@ export function loadServerConfig(argv: readonly string[], env: Env, cwd: string,
   if (new Set(tokens.map(item => item.token)).size !== tokens.length) throw new ConfigError('Two tokens are the same: each token must say who it is');
 
   const { auth: _auth, ...rest } = config;
-  const resolved: ResolvedServerConfig = { ...rest, s3, tokens, anonymousRead: config.auth.anonymousRead, insecure: config.auth.insecure, configFile: file, ...(config.site ? { site: path.resolve(base, config.site) } : {}) };
+  const resolved: ResolvedServerConfig = { ...rest, s3, tokens, anonymousRead: config.auth.anonymousRead, insecure: config.auth.insecure, configFile: file, build: buildInfo(env), ...(config.site ? { site: path.resolve(base, config.site) } : {}) };
   assertSafeToListen(resolved);
   return resolved;
 }

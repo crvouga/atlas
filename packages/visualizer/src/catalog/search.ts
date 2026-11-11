@@ -46,11 +46,13 @@ export const CatalogSearchFields = {
   /** The comparison's after side. */
   to: text,
   /** `1` shows the pairs that did not change too. */
-  all: text
+  all: text,
+  /** The definition scope: a definition version (pinned, so a link never drifts), `latest` (resolved to a version on arrival) or absent for all history. */
+  definition: text
 };
 
 /** The parts of the address that are not filters of the catalog's states. */
-const NOT_FILTERS = ['state', 'layout', 'image', 'panel', 'compare', 'from', 'to', 'all'];
+const NOT_FILTERS = ['state', 'layout', 'image', 'panel', 'compare', 'from', 'to', 'all', 'definition'];
 
 /** The address's parts, as the router holds them. */
 export type CatalogSearch = { readonly [K in keyof typeof CatalogSearchFields]?: string | undefined };

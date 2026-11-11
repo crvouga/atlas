@@ -104,7 +104,8 @@ recognise screens and tap or type (`screen`, `recognize`, `locate`, the signal c
 the media tools (`captureScreen`, `ScreencastRecorder`, `ffmpeg`, `PHONE` and the pacing presets). Needs the
 `playwright` package; clips and thumbnails need FFmpeg on the PATH.
 
-Also `captureUiState`, the optional Playwright adapter of the UI catalog (it needs no Playwright import itself).
+Also `captureUiState`, the optional Playwright adapter of the UI catalog with its opt-in readiness policies, and
+`catalogWorkerPool`, warm reusable capture workers for `collectCatalog` (neither needs a Playwright import itself).
 
 See docs/statecharts.md
 See docs/ui-catalog.md
@@ -305,6 +306,107 @@ const states = {
 };
 ```
 
+### Reusable capture workers for a UI catalog queue
+
+Source: `packages/playwright/src/ui-catalog-pool.ts`
+
+`catalogWorkerPool` turns declared capture recipes into the `capture` callback of `collectCatalog`
+(`@crvouga/atlas/reports/ui-catalog-collect`), with a bounded pool of warm workers instead of a process per claim. A worker is
+whatever the project's `launch` returns (normally a Playwright `Browser`, or the `browser` fixture of a Playwright Test) and is
+started once and reused; every captured item gets a fresh page from `newPage` (normally a new browser context sized and
+themed for the item's profile), so no mutable state crosses from one capture to the next, and the page is closed afterwards.
+
+Claimed items are matched to recipes by state id, and run through `captureUiState`. A recipe that throws, or a state without a
+recipe, is that item's failure only. When the claim is lost or the shard stops, the active page is closed at once, the call
+rejects with the signal's reason, and nothing it captured is returned, so the collector never publishes it. Nothing here
+imports Playwright: the pool knows the worker and the page only through the project's callbacks, and reports and core never
+acquire a Playwright dependency.
+
+See docs/ui-catalog.md#warm-workers-for-a-queue
+
+#### `CatalogRecipeContext`
+
+```ts
+export type CatalogRecipeContext<W> = { readonly item: CollectItem; readonly worker: W; readonly signal: AbortSignal };
+```
+
+What a recipe's `open` is given: the item it captures, the worker it runs on, and the signal to stop on.
+
+#### `CatalogRecipe`
+
+```ts
+export type CatalogRecipe<P extends CapturePage = CapturePage, W = unknown> = Omit<CaptureUiStateOptions, 'id' | 'signal'> & {
+  readonly open?: (page: P, context: CatalogRecipeContext<W>) => Promise<void>;
+};
+```
+
+How to bring a page to one declared state: `open` navigates and arranges fixture data, then `captureUiState` runs with the rest
+(its `ready` check, readiness policies, regions). The state id, title and facts come from the claimed item.
+
+#### `CatalogWorkerPoolOptions`
+
+```ts
+export type CatalogWorkerPoolOptions<W, P extends CapturePage> = {
+  /** How many workers at most; default 1. Give `collectCatalog` the same `concurrency`. */
+  readonly size?: number;
+  /** Start one worker, once (`chromium.launch()`, or return a Playwright Test `browser` fixture). A failure is an infrastructure error, never an item result. */
+  readonly launch: (index: number) => Promise<W>;
+  /** A fresh page for one item, isolated from every other capture: apply its profile here (`viewport`, `colorScheme`). */
+  readonly newPage: (worker: W, item: CollectItem, signal: AbortSignal) => Promise<P>;
+  /** Close what `newPage` made (its context too). Default `page.close()` when the page has one. Called once per page, also on cancellation. */
+  readonly closePage?: (page: P, worker: W) => Promise<void>;
+  /** Stop one worker when the pool closes (`browser.close()`). Default nothing: a fixture's owner closes it. */
+  readonly teardown?: (worker: W) => Promise<void>;
+  /** Whether a worker can still be used after a capture (`browser.isConnected()`). One that cannot is torn down and replaced. */
+  readonly healthy?: (worker: W) => boolean;
+  /** The recipes, by state id, or a function that finds one. A claimed state without a recipe is a failed item. */
+  readonly recipes: Readonly<Record<string, CatalogRecipe<P, W>>> | ((item: CollectItem) => CatalogRecipe<P, W> | undefined);
+};
+```
+
+How the pool runs. `W` is the worker (a browser), `P` the page each capture gets.
+
+#### `CatalogWorkerPoolStats`
+
+```ts
+export type CatalogWorkerPoolStats = { readonly launched: number; readonly captures: number; readonly pagesOpen: number; readonly busy: number };
+```
+
+What the pool tells about itself, for a log line or a test.
+
+#### `CatalogWorkerPool`
+
+```ts
+export type CatalogWorkerPool = {
+  readonly capture: (unit: CollectUnit, signal: AbortSignal) => Promise<readonly CapturedItem[]>;
+  /** Wait for active captures to end, then tear every worker down. Captures after it reject. */
+  readonly close: () => Promise<void>;
+  readonly stats: () => CatalogWorkerPoolStats;
+};
+```
+
+A pool: `capture` goes to `collectCatalog`, `close` ends it.
+
+#### `catalogWorkerPool`
+
+```ts
+export function catalogWorkerPool<W, P extends CapturePage>(options: CatalogWorkerPoolOptions<W, P>): CatalogWorkerPool
+```
+
+A bounded pool of warm capture workers for `collectCatalog`. Throws for a `size` that is not a positive integer.
+
+**Example**
+
+```ts
+const pool = catalogWorkerPool({
+  size: 4, launch: () => chromium.launch(), teardown: browser => browser.close(), healthy: browser => browser.isConnected(),
+  newPage: async (browser, item) => (await browser.newContext({ viewport: viewportOf(item.profile), colorScheme: item.profile.parameters.scheme === 'dark' ? 'dark' : 'light' })).newPage(),
+  closePage: page => page.context().close(),
+  recipes: { 'checkout/payment': { open: page => page.goto(`${base}/checkout`).then(() => undefined), ready: page => page.getByText('Total').waitFor() } }
+});
+try { await collectCatalog({ store, catalog, shard: { id: 'ci-1' }, concurrency: 4, capture: pool.capture }); } finally { await pool.close(); }
+```
+
 ### Playwright adapter for the UI catalog
 
 Source: `packages/playwright/src/ui-catalog.ts`
@@ -312,10 +414,28 @@ Source: `packages/playwright/src/ui-catalog.ts`
 The optional Playwright side of the UI catalog: take a page to a state, wait until it is ready, photograph it, and hand the
 result to `uiStateLayer` (`@crvouga/atlas/reports/ui-catalog-publish`) as a capture. This is the only Playwright-specific code
 of the feature; reading, composing and exploring the catalog know nothing about it, and any other program that writes the
-same layer produces the same catalog. The page is typed by the three methods used, so no `playwright` import is needed here
+same layer produces the same catalog. The page is typed by the methods used, so no `playwright` import is needed here
 and a Playwright Test `page`, a `Page` of the driver, or a stub all fit.
 
-See docs/ui-catalog.md
+Readiness is bounded and cancellable. The project's own `ready` check (its business state: a locator, a route) receives a
+signal and a deadline; opt-in generic policies wait for web fonts, for visible images to load and decode, and for the
+picture to stop changing, and explicitly named scrolling regions are captured as supplemental views of the same state.
+None of them is on by default, none sleeps for a fixed time, and none waits for the network to go idle: a state that
+intentionally shows loading or animation stays valid by leaving them off. Each phase is timed; a phase that runs out of
+budget fails the capture naming the phase, with a picture of what the page showed.
+
+See docs/ui-catalog.md#readiness-policies
+
+#### `CaptureLocator`
+
+```ts
+export type CaptureLocator = {
+  screenshot(options?: { readonly animations?: 'disabled' | 'allow'; readonly type?: 'png'; readonly timeout?: number }): Promise<Uint8Array>;
+  evaluate<R, A>(pageFunction: (element: HTMLElement, arg: A) => R | Promise<R>, arg: A): Promise<R>;
+};
+```
+
+The part of a Playwright `Locator` that capturing a scrolling region uses.
 
 #### `CapturePage`
 
@@ -323,10 +443,100 @@ See docs/ui-catalog.md
 export type CapturePage = {
   screenshot(options?: { readonly fullPage?: boolean; readonly animations?: 'disabled' | 'allow'; readonly type?: 'png' }): Promise<Uint8Array>;
   viewportSize(): { readonly width: number; readonly height: number } | null;
+  /** Run a function in the page. Needed by `waitForFonts` and `waitForImages`. */
+  evaluate?<R>(pageFunction: () => R | Promise<R>): Promise<R>;
+  /** Find an element. Needed by `regions`. */
+  locator?(selector: string): CaptureLocator;
 };
 ```
 
-The part of a Playwright `Page` that capturing uses.
+The part of a Playwright `Page` that capturing uses. `evaluate` and `locator` are optional: only the readiness policies
+and scrolling regions need them, so a stub with the first two methods still fits.
+
+#### `CaptureReadyContext`
+
+```ts
+export type CaptureReadyContext = {
+  /** Aborts when the readiness budget runs out or the capture is cancelled (the claim was lost, the shard is stopping). */
+  readonly signal: AbortSignal;
+  /** When the readiness budget runs out, epoch milliseconds. */
+  readonly deadlineAt: number;
+};
+```
+
+What a `ready` check is given besides the page: abort when `signal` does, and finish by `deadlineAt` (epoch ms).
+
+#### `CapturePhase`
+
+```ts
+export type CapturePhase = 'ready' | 'fonts' | 'images' | 'stability' | 'screenshot' | 'regions';
+```
+
+A phase of readiness or capture, timed and named in a timeout.
+
+#### `CapturePhaseTiming`
+
+```ts
+export type CapturePhaseTiming = { readonly phase: CapturePhase; readonly ms: number; readonly outcome: 'ok' | 'timeout' | 'failed' };
+```
+
+How one phase went: `ok`, `timeout` (it ran out of budget), or `failed` (it threw).
+
+#### `CaptureReadiness`
+
+```ts
+export type CaptureReadiness = { readonly phases: readonly CapturePhaseTiming[]; readonly timedOut?: CapturePhase };
+```
+
+What `captureUiState` reports about readiness besides the capture: each phase's time, and the phase that ran out of budget.
+
+#### `CaptureResult`
+
+```ts
+export type CaptureResult = UiStateCapture & { readonly readiness: CaptureReadiness };
+```
+
+A capture with its readiness report. `readiness` is not published; the timings are in the `atlas.readiness` label when a policy is on.
+
+#### `StabilityPolicy`
+
+```ts
+export type StabilityPolicy = { readonly frames?: number; readonly timeoutMs?: number };
+```
+
+Wait for the picture to stop changing: `frames` consecutive identical screenshots (default 2) within `timeoutMs`.
+
+#### `CaptureRegion`
+
+```ts
+export type CaptureRegion = {
+  /** Stable: part of each view's name (`<state>--<name>-<n>.png`). */
+  readonly name: string;
+  /** A selector the page's `locator` understands. */
+  readonly selector: string;
+  /** For a person; default the name. */
+  readonly label?: string;
+  readonly maxViews?: number;
+};
+```
+
+A scrolling element captured as named supplemental views: its content a viewport at a time, at most `maxViews` (default 5).
+
+#### `READINESS_LABEL`
+
+```ts
+export const READINESS_LABEL = …
+```
+
+The label holding each phase's time when a readiness policy is on (`ready=12ms fonts=3ms …`).
+
+#### `READINESS_TIMEOUT_LABEL`
+
+```ts
+export const READINESS_TIMEOUT_LABEL = …
+```
+
+The label naming the phase that ran out of budget (`fonts`, `images`, `stability`…), when a readiness policy is on.
 
 #### `CaptureUiStateOptions`
 
@@ -335,14 +545,31 @@ export type CaptureUiStateOptions = UiStateFacts & {
   /** The state's stable id: how a later capture replaces this one. */
   readonly id: string;
   readonly title?: string;
-  /** Resolves when the page shows the state (a locator is visible, the network is idle). A rejection or a timeout makes the capture `failed`, with the reason as its detail. */
-  readonly ready?: (page: CapturePage) => Promise<void>;
-  /** How long to wait for `ready`; default 15 seconds. */
+  /**
+   * Resolves when the page shows the state (a locator is visible, a request has answered). A rejection or a timeout makes the
+   * capture `failed`, with the reason as its detail. It is given a signal and deadline: stop when the signal aborts.
+   */
+  readonly ready?: (page: CapturePage, context: CaptureReadyContext) => Promise<void>;
+  /** The readiness budget: how long `ready` and every policy may take together; default 15 seconds. */
   readonly readyTimeoutMs?: number;
   /** Photograph the whole scrollable page rather than the viewport. */
   readonly fullPage?: boolean;
   /** Extra labels for the capture (`browser`, `os`), which never split it. */
   readonly labels?: Readonly<Record<string, string>>;
+  /** Cancel the capture: it throws the signal's reason and returns nothing, so no late capture is ever published. */
+  readonly signal?: AbortSignal;
+  /** Opt in: wait for `document.fonts.ready`. Needs `page.evaluate`. */
+  readonly waitForFonts?: boolean;
+  /** Opt in: wait until every image in the viewport has loaded and decoded. Needs `page.evaluate`. */
+  readonly waitForImages?: boolean;
+  /** Opt in: wait for consecutive identical frames, within the budget. The last frame is the picture. */
+  readonly stability?: boolean | StabilityPolicy;
+  /** Opt in: scrolling elements to capture as supplemental views of this state. Needs `page.locator`. */
+  readonly regions?: readonly CaptureRegion[];
+  /** Supplemental evidence the caller already has (a trace, a video), kept after any region views. */
+  readonly attachments?: readonly UiCaptureAttachment[];
+  /** The clock; default `Date.now`. */
+  readonly now?: () => number;
 };
 ```
 
@@ -351,16 +578,22 @@ What to capture and how to know the page is ready.
 #### `captureUiState`
 
 ```ts
-export async function captureUiState(page: CapturePage, options: CaptureUiStateOptions): Promise<UiStateCapture>
+export async function captureUiState(page: CapturePage, options: CaptureUiStateOptions): Promise<CaptureResult>
 ```
 
 Wait for the page to be ready, photograph it, and return the capture to publish. Never throws for the page's sake: a page
 that never became ready, or could not be photographed, is a `failed` capture that says why, so a broken state shows in the
 catalog instead of ending the run. A readiness failure still attaches a picture of what the page showed, for diagnosis.
 
+Throws only when `signal` aborts (with its reason): a cancelled capture returns nothing, so a collector whose claim was
+lost never publishes it. With no policy enabled it behaves as it always has.
+
 **Example**
 
 ```ts
-const shot = await captureUiState(page, { id: 'checkout/payment', route: '/checkout', ready: p => expectVisible(p, '#total') });
+const shot = await captureUiState(page, {
+  id: 'checkout/payment', route: '/checkout', ready: (p, { signal }) => waitForTotal(p, signal),
+  waitForFonts: true, waitForImages: true, stability: { frames: 2 }, regions: [{ name: 'summary', selector: '#summary' }]
+});
 await publishChecks(store, uiStateLayer({ producer: 'playwright', recordedAtMs: Date.now(), environment: 'desktop-web', profile: { viewport: '1280x800' }, states: [shot] }));
 ```

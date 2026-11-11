@@ -1,0 +1,162 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-refresh-receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string"
+    },
+    "definition": {
+      "type": "string"
+    },
+    "collection": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "sha": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "require": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sha",
+        "branch",
+        "require"
+      ],
+      "additionalProperties": {}
+    },
+    "where": {
+      "anyOf": [
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "staleBeforeMs": {
+      "type": "number"
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "createdAtMs": {
+      "type": "number"
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "participant": {
+            "type": "string"
+          },
+          "attempt": {
+            "type": "string"
+          },
+          "shard": {
+            "type": "string",
+            "description": "`<participant>#<attempt>`: what its claims and layers are labelled with"
+          },
+          "joinedAtMs": {
+            "type": "number"
+          },
+          "lastSeenAtMs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "participant",
+          "attempt",
+          "shard",
+          "joinedAtMs",
+          "lastSeenAtMs"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "Every attempt that joined, in order (at most 1000)"
+    },
+    "finalizations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "atMs": {
+            "type": "number"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "incomplete",
+              "failed",
+              "unknown"
+            ]
+          },
+          "attempt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "atMs",
+          "outcome",
+          "attempt"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "Each finalization, newest last (at most 100)"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "definition",
+    "collection",
+    "source",
+    "where",
+    "staleBeforeMs",
+    "participants",
+    "createdAtMs",
+    "attempts",
+    "finalizations"
+  ],
+  "additionalProperties": {}
+}

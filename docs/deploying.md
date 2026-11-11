@@ -309,6 +309,21 @@ back, replace `latest` with the full commit SHA. To build from this repository, 
 [`examples/deploy/Dockerfile`](https://github.com/crvouga/atlas/blob/main/examples/deploy/Dockerfile) is the
 alternative for building from an npm version or a local package tarball.
 
+#### Which build is running
+
+The image records the commit it was built from and when: build it with `--build-arg ATLAS_REVISION=$(git rev-parse HEAD)
+--build-arg ATLAS_BUILD_TIME=$(git log -1 --format=%cI)` (the published images do). The server reports them in `build` on
+`/api/server`, beside its package version, which is `null` for an image built from source: the revision is what names it. The
+viewer records the same facts in its own bundle, because a viewer and a server can be deployed apart. **About this deployment**
+(in the viewer's view options) shows the two side by side, `unknown` for whatever a build did not record, and copies a support
+summary that holds only these facts: no token, storage setting, backend name or project data. An image cannot know its own
+digest; a deployment that knows it may set `ATLAS_IMAGE_DIGEST=sha256:<hex>` (or `<repository>@sha256:<hex>`) and it is shown too.
+None of this decides anything: clients check `capabilities`, never versions.
+
+```sh
+curl -s https://YOUR-DOMAIN/api/server -H "Authorization: Bearer $ATLAS_READ_TOKEN" | jq .build
+```
+
 The bucket's account needs the combined **both** policy (including `server/live/*` for producer leases and `server/state.json`
 for user state) plus `s3:DeleteObject` for garbage collection. The server does not use ambient AWS roles: pass the keys.
 

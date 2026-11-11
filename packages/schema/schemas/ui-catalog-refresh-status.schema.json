@@ -1,0 +1,428 @@
+{
+  "$id": "https://github.com/crvouga/atlas/schemas/ui-catalog-refresh-status.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True only when `outcome` is `complete`"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "incomplete",
+        "failed",
+        "unknown"
+      ]
+    },
+    "refresh": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string"
+            },
+            "definition": {
+              "type": "string"
+            },
+            "collection": {
+              "type": "string"
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "sha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "branch": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "require": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "sha",
+                "branch",
+                "require"
+              ],
+              "additionalProperties": {}
+            },
+            "where": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "additionalProperties": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "staleBeforeMs": {
+              "type": "number"
+            },
+            "participants": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "createdAtMs": {
+              "type": "number"
+            },
+            "attempts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "participant": {
+                    "type": "string"
+                  },
+                  "attempt": {
+                    "type": "string"
+                  },
+                  "shard": {
+                    "type": "string",
+                    "description": "`<participant>#<attempt>`: what its claims and layers are labelled with"
+                  },
+                  "joinedAtMs": {
+                    "type": "number"
+                  },
+                  "lastSeenAtMs": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "participant",
+                  "attempt",
+                  "shard",
+                  "joinedAtMs",
+                  "lastSeenAtMs"
+                ],
+                "additionalProperties": {}
+              },
+              "description": "Every attempt that joined, in order (at most 1000)"
+            },
+            "finalizations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "atMs": {
+                    "type": "number"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "complete",
+                      "incomplete",
+                      "failed",
+                      "unknown"
+                    ]
+                  },
+                  "attempt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "atMs",
+                  "outcome",
+                  "attempt"
+                ],
+                "additionalProperties": {}
+              },
+              "description": "Each finalization, newest last (at most 100)"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "id",
+            "definition",
+            "collection",
+            "source",
+            "where",
+            "staleBeforeMs",
+            "participants",
+            "createdAtMs",
+            "attempts",
+            "finalizations"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Null when the receipt itself could not be read"
+    },
+    "capture": {
+      "type": "object",
+      "properties": {
+        "units": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Units in scope"
+        },
+        "satisfied": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "held": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Held by a live claim: a shard is still working on them"
+        },
+        "pending": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Never captured (or only skipped) and claimable"
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Their latest capture failed; below the retry limit, so claimable again"
+        },
+        "stale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Captured only before the cutoff; claimable as stale"
+        },
+        "source": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Captured after the cutoff at another commit while the source is required"
+        },
+        "exhausted": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Failed `maxAttempts` times within the refresh's collection: the queue will not hand them out again"
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "No readable result while a backend or layer could not be read"
+        }
+      },
+      "required": [
+        "units",
+        "satisfied",
+        "held",
+        "pending",
+        "failed",
+        "stale",
+        "source",
+        "exhausted",
+        "unknown"
+      ],
+      "additionalProperties": {}
+    },
+    "outstanding": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "held",
+              "pending",
+              "failed",
+              "stale",
+              "source",
+              "exhausted",
+              "unknown"
+            ]
+          },
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "claimId": {
+            "type": "string"
+          },
+          "shard": {
+            "type": "string"
+          },
+          "expiresAtMs": {
+            "type": "number"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "unit",
+          "reason",
+          "items"
+        ],
+        "additionalProperties": {}
+      },
+      "description": "The units not satisfied, most actionable first (at most 200)"
+    },
+    "health": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "healthy",
+            "degraded",
+            "unknown"
+          ],
+          "description": "Worker and infrastructure health, separate from capture completeness"
+        },
+        "expected": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Expected participants with no attempt joined"
+        },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "participant": {
+                "type": "string"
+              },
+              "attempt": {
+                "type": "string"
+              },
+              "shard": {
+                "type": "string",
+                "description": "`<participant>#<attempt>`: what its claims and layers are labelled with"
+              },
+              "joinedAtMs": {
+                "type": "number"
+              },
+              "lastSeenAtMs": {
+                "type": "number"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "idle",
+                  "lost",
+                  "unseen"
+                ]
+              }
+            },
+            "required": [
+              "participant",
+              "attempt",
+              "shard",
+              "joinedAtMs",
+              "lastSeenAtMs",
+              "status"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "lost": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Shards of this refresh whose last claim expired"
+        },
+        "notices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "expected",
+        "missing",
+        "attempts",
+        "lost",
+        "notices"
+      ],
+      "additionalProperties": {}
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The outcome, in sentences"
+    },
+    "time": {
+      "type": "number"
+    },
+    "store": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "ok",
+    "outcome",
+    "refresh",
+    "capture",
+    "outstanding",
+    "health",
+    "reasons",
+    "time",
+    "store"
+  ],
+  "additionalProperties": {}
+}

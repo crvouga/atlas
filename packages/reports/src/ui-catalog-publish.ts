@@ -28,6 +28,33 @@ export type UiPicture = {
   readonly height?: number;
 };
 
+/**
+ * More evidence of the same capture, beside its primary {@link UiPicture}: another view of the state (a scrolled region, a
+ * detail), a trace, a video, a log. It stays with its state and profile (one result, never a state per file), keeps its
+ * `label` and `order`, and never decides the result: a trace on a failed capture leaves it failed.
+ *
+ * Give the bytes (`data`, `base64`, `text`), an address (`uri`), or nothing but `omitted` (why they are not here: `not-found`,
+ * `too-large`, `over-budget`, `policy`…). One with none of these is published as omitted `not-found`, so a missing file is
+ * shown as missing and never as evidence that exists.
+ */
+export type UiCaptureAttachment = Omit<UiPicture, 'contentType'> & {
+  /** What it is, in the open vocabulary of attachment roles: `view` (default), `trace`, `video`, `log`, `snapshot`, `har`… `screenshot` is the primary picture's role; give that as `screenshot` instead. */
+  readonly role?: string;
+  /** For a person (`Order summary, scrolled`). Default the name. */
+  readonly label?: string;
+  /** Where it is listed among the capture's attachments, lowest first; ties keep the order given. */
+  readonly order?: number;
+  /** Default `image/png` for a `view`, `application/octet-stream` otherwise. */
+  readonly contentType?: string;
+  /** A small UTF-8 value inline (a log excerpt). */
+  readonly text?: string;
+  /** Why the bytes are not here. Recorded as the attachment's `omitted`. */
+  readonly omitted?: string;
+};
+
+/** The attachment extension `uiStateLayer` writes on each supplemental attachment: its label and order, so a reader keeps both. */
+export type UiAttachmentFacts = { readonly supplemental: true; readonly label?: string; readonly order: number };
+
 /** One captured state. `id` must be stable across runs: it is how a new capture replaces an old one. */
 export type UiStateCapture = UiStateFacts & {
   readonly id: string;
@@ -38,6 +65,8 @@ export type UiStateCapture = UiStateFacts & {
   /** Why it failed or was skipped: a readiness check that never became true, a console error. */
   readonly detail?: string;
   readonly screenshot?: UiPicture;
+  /** Supplemental evidence of this capture (more views, a trace, a video), in order after the primary picture. See {@link UiCaptureAttachment}. */
+  readonly attachments?: readonly UiCaptureAttachment[];
   readonly durationMs?: number;
   /** More facts about the capture that never split it (`browser`, `os`). */
   readonly labels?: Readonly<Record<string, string>>;
@@ -79,6 +108,31 @@ function common(origin: UiLayerOrigin, kind: string, title: string) {
   };
 }
 
+const slug = (text: string) => text.replace(/[^\w.-]+/g, '-');
+const EXTENSIONS: Readonly<Record<string, string>> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'video/webm': '.webm', 'video/mp4': '.mp4', 'application/zip': '.zip', 'text/plain': '.txt', 'application/json': '.json' };
+
+/** The layer attachments of a state's supplemental evidence, ordered, uniquely named, and each either holding its bytes or saying why not. */
+function supplemental(state: UiStateCapture, taken: Set<string>) {
+  const ordered = (state.attachments ?? []).map((item, index) => ({ item, index })).sort((a, b) => (a.item.order ?? a.index) - (b.item.order ?? b.index) || a.index - b.index);
+  return ordered.map(({ item }, position) => {
+    const role = item.role ?? 'view';
+    const contentType = item.contentType ?? (role === 'view' ? 'image/png' : item.text !== undefined ? 'text/plain' : 'application/octet-stream');
+    let name = item.name ?? `${slug(state.id)}-${slug(item.label ?? role)}${EXTENSIONS[contentType] ?? ''}`;
+    for (let n = 2; taken.has(name); n++) name = name.replace(/(-\d+)?(\.[^.]*)?$/, (_whole, _n, ext) => `-${n}${ext ?? ''}`);
+    taken.add(name);
+    const held = item.data !== undefined || item.base64 !== undefined || item.uri !== undefined || item.text !== undefined;
+    const omitted = item.omitted ?? (held ? undefined : 'not-found');
+    const extension: UiAttachmentFacts = { supplemental: true, ...(item.label ? { label: item.label } : {}), order: position };
+    return {
+      name, role, contentType, ...(item.label ? { description: item.label } : {}),
+      ...(!omitted && item.data ? { data: item.data } : {}), ...(!omitted && item.base64 ? { base64: item.base64 } : {}), ...(!omitted && item.uri ? { uri: item.uri } : {}), ...(!omitted && item.text !== undefined ? { text: item.text } : {}),
+      ...(item.width !== undefined ? { width: item.width } : {}), ...(item.height !== undefined ? { height: item.height } : {}),
+      ...(omitted ? { omitted } : {}),
+      extensions: { [UI_STATE_EXTENSION]: extension }
+    };
+  });
+}
+
 function facts(source: UiStateFacts): UiStateFacts {
   const { route, fixture, cohort, area, kind, flags, covers, attributes, inventory } = source;
   return { ...(route ? { route } : {}), ...(fixture ? { fixture } : {}), ...(cohort ? { cohort } : {}), ...(area ? { area } : {}), ...(kind ? { kind } : {}), ...(flags?.length ? { flags } : {}), ...(covers?.length ? { covers } : {}), ...(attributes && Object.keys(attributes).length ? { attributes } : {}), ...(inventory ? { inventory } : {}) };
@@ -102,11 +156,13 @@ export function uiStateLayer(input: UiLayerOrigin & { readonly states: readonly 
     if (seen.has(state.id)) throw new Error(`uiStateLayer: the state "${state.id}" appears twice; give each state of one profile its own id`);
     seen.add(state.id);
     const shot = state.screenshot;
-    const attachments = shot ? [{
-      name: shot.name ?? `${state.id.replace(/[^\w.-]+/g, '-')}.png`, role: 'screenshot', contentType: shot.contentType ?? 'image/png',
+    const primary = shot ? [{
+      name: shot.name ?? `${slug(state.id)}.png`, role: 'screenshot', contentType: shot.contentType ?? 'image/png',
       ...(shot.data ? { data: shot.data } : {}), ...(shot.base64 ? { base64: shot.base64 } : {}), ...(shot.uri ? { uri: shot.uri } : {}),
       ...(shot.width !== undefined ? { width: shot.width } : {}), ...(shot.height !== undefined ? { height: shot.height } : {})
-    }] : undefined;
+    }] : [];
+    const more = state.attachments?.length ? supplemental(state, new Set(primary.map(item => item.name))) : [];
+    const attachments = primary.length || more.length ? [...primary, ...more] : undefined;
     const labels = { ...state.labels, ...(input.shard ? { shard: input.shard } : {}) };
     return {
       id: state.id, title: state.title ?? state.id, status: state.status ?? 'passed', detail: state.detail ?? '',
