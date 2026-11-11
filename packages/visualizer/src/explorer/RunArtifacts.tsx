@@ -69,7 +69,7 @@ function TestLinks({ tests }: { tests: readonly RunResult[] }) {
       {tests.slice(0, TESTS_NAMED).map((result, index) => (
         <Text span inherit key={result.key}>
           {index > 0 && ', '}
-          <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, artifact: undefined, test: result.key, layer: result.layer })} resetScroll={false} activeOptions={{ exact: true }} />}>
+          <Anchor underline="always" renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, artifact: undefined, test: result.key, layer: result.layer })} resetScroll={false} activeOptions={{ exact: true }} />}>
             {result.title}
           </Anchor>
         </Text>

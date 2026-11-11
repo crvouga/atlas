@@ -8,24 +8,47 @@ Look up unfamiliar interactions before writing them; component props and compoun
 
 - `packages/visualizer/src/ui/theme.tsx` owns the only theme and `AtlasThemeProvider`.
 - Both `src/main.tsx` (reports) and `src/admin/main.tsx` (settings) use that provider and Mantine's styles.
-- Keep Atlas's blue navigation, neutral surfaces, system typography, and light color scheme. Outcome colors
-  come from `statusColor`: green passed, red failed, orange flaky, blue running, gray unknown/unrun.
+- The look is neutral and calm, in the manner of a monitoring dashboard: zinc surfaces, hairline borders, a near-black
+  primary action (near-white on dark surfaces), and color reserved for outcomes and links. Light and dark color schemes
+  are both supported; the scheme follows the system until the person chooses one with the header's color scheme button.
+  Never hardcode `white`, `black` or a fixed shade (`gray.0`, `blue.0`) as a surface: use `var(--mantine-color-body)` for
+  cards, `GROUND` (exported by the theme) for the page behind them, `var(--mantine-color-primary-light)` for a selected
+  row, `var(--mantine-color-default-border)` for rules and `c="dimmed"` for supporting text.
+- Outcome colors come from `statusColor`: green passed, red failed, orange flaky, blue running, gray unknown/unrun.
   Always accompany color with text or a named status mark. Unknown evidence must never look passed.
-- The theme darkens the existing Mantine outcome scales and muted text to meet small-text contrast requirements. Use the default sizes, radii, font sizes, shadows and variants. Defaults belong in the theme, not in features.
+- The theme darkens the Mantine outcome scales to meet small-text contrast requirements. Use the default sizes, radii,
+  font sizes, shadows and variants. Defaults belong in the theme, not in features.
   The spacing vocabulary is Mantine's `xs`, `sm`, `md`, `lg`, `xl`.
 
 ## Compose directly
 
-Use `AppShell` for persistent navigation, `Container size="xl"` for report pages (`md` for settings),
-`Stack` for vertical flow, `Group` for horizontal flow, and `SimpleGrid` for responsive metrics/forms.
-Page headers contain a `Title order={1}`, descriptive `Text c="dimmed"`, then the page's controls.
-Use `Title order={2}` for sections and `order={3}` for subsections; do not choose heading sizes per page.
+The shell (`app/AppShell.tsx`) is a floating header card over one centered `Container`, which supplies the page padding
+and the ground. A page never renders its own outer `Container` or background: it returns a `Stack` of cards built from
+the three compositions in `components/Page.tsx`.
 
+- `PageHeader`: the one `Title order={1}` of a page, an optional line above it (a path, a way back), one dimmed sentence,
+  and the page's actions on the right.
+- `Panel`: a card with a heading row (`Title order={2}`, a dimmed description, controls on the right). `flush` lets a table
+  or list meet the card's edges. Use `order={3}` inside a panel; do not choose heading sizes per page.
+- `Metric`: one figure with its label above and what qualifies it below.
+
+A list screen is one main `Panel`: its search and one sort or view control in the heading row, secondary filters in a
+single compact row or behind a **Filters** popover, then the table or grid. A detail screen is a header (name, status,
+one quiet row of metadata) followed by panels, and **the recording or picture comes first and largest**: people come
+here to review videos and screenshots, and the numbers explain them. Explanations keep their wording and are quiet
+(`c="dimmed"`). Empty, loading and unavailable states sit centered in their panel: an icon, a short title, one
+sentence, one action.
+
+The spec, place and project indexes are a card beside the page on wide screens and a drawer (the header's
+**Toggle navigation** button) on narrow ones; the test explorer always keeps its index in that drawer so the list has
+the full width.
+
+Use `Stack` for vertical flow, `Group` for horizontal flow, and `SimpleGrid` for responsive metrics/forms.
 Use Mantine components directly. Do not add wrappers for ordinary buttons, inputs, cards, menus, or dialogs.
 Shared product compositions include `SpecHeader`, `ResultRow`, `StatusMark`, `Origin`, `Stage`, and `TestDetail`:
 they preserve evidence semantics, provenance, URL selection, or playback behavior.
 
-- Primary action: `Button variant="filled"`. Secondary: default `Button` (light). Quiet: `variant="subtle"`.
+- Primary action (one per view): `Button variant="filled"`. Secondary: default `Button` (outlined). Selected chip: `variant="light"`. Quiet: `variant="subtle"`.
   Destructive action: `color="red"`. Icon-only action: `ActionIcon` with an `aria-label`, usually a `Tooltip`.
 - Filter chips put counts and removal icons in Button's `rightSection`; numbered step buttons use `leftSection`.
   Mantine supplies the gap. Whitespace between a label and a nested span disappears in the flex label, so it
@@ -562,24 +585,25 @@ it lazily bundles the shared React settings entry once, so API-only servers do n
 
 ## Report browsing hierarchy
 
-The explorer uses neutral page surfaces, a descriptive header and direct desktop review destinations.
-The exploration menu remains available on mobile, and destination changes preserve the selected run.
-Published specs are a secondary disclosure on the Tests tab only; the sidebar keeps direct spec links.
-Find tests groups search, status and evidence filters with visible labels. Mobile insights start as a compact
-summary with a View insights action. The environment metric shows the largest environment and selected
-filters, with the full list disclosed below the metric grid so it cannot stretch every summary card.
-Behaviors and critiques use the full content width. Optional behavior release fields are disclosed until
-a release is named; evidence filters remain visible. The behavior selection panel explains Read, Watch and Inspect.
+The header carries the review destinations (Tests, Behaviors, UI catalog) directly on wide screens, the **Explore** menu
+with every spec type and destination at all widths, search, the color scheme and view options. Destination changes
+preserve the selected run. The test explorer opens with its tabs and a row of figures, then the Tests panel: search,
+grouping, sorting and **Filters** in its heading row, the status filter as one row of chips, and the grouped list
+directly below. Published specs and the slowest, flakiest and failing lists are secondary panels after the list.
+Behaviors is a two-pane review: the searchable list on the left and the selected behavior's Read, Watch and Inspect
+beside it, with the recording as large as the pane allows. Optional release fields are disclosed until a release is named.
 
 ## Storybook review loop
 
-Storybook renders the real viewer with deterministic report adapters and the shared `AtlasThemeProvider`.
-The screen/state inventory and fixture notes live in `packages/visualizer/stories/README.md`.
-Review desktop and narrow layouts, keyboard navigation, loading and unavailable evidence before assigning a score.
-For each UI improvement round, record the council members' votes, five scores (clarity, consistency,
-accessibility, responsiveness and task completion), screenshots and unresolved findings in the pull request.
-An 8/10 average requires no unresolved critical usability or accessibility blockers; it is a review judgment,
-not a certification or a claim that every data combination was tested.
+Storybook renders the real viewer with deterministic report adapters and the shared `AtlasThemeProvider`; its toolbar
+switches the color scheme. Every screen, surface, state and variation has a named story, grouped by product area, and
+`Foundations` shows the theme and the page compositions themselves. The inventory and fixture notes live in
+`packages/visualizer/stories/README.md`; `stories/inventory.test.ts` fails when a story or stories file is added or
+removed without the inventory. Add a story with every new product branch.
+`bun packages/visualizer/stories/screenshots.ts <directory>` captures every built story for review
+(`ATLAS_STORYBOOK_SCHEME=dark` for the dark scheme). Review desktop and narrow layouts, both schemes, keyboard
+navigation, loading and unavailable evidence. A successful build or browser smoke is not a visual quality rating or an
+accessibility certification.
 
 ## Checks
 

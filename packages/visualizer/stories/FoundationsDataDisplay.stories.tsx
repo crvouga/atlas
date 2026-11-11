@@ -97,7 +97,7 @@ export const EmptyAndLoading: Story = { args: { title: 'Empty and loading', desc
         {[92, 84, 88, 70].map((width) => <Group key={width} wrap="nowrap"><Skeleton h={16} w={16} circle /><Skeleton h={14} w={`${width}%`} /></Group>)}
         <Divider />
         <Group gap="xs"><Loader size="sm" /><Text c="dimmed">Loading results…</Text></Group>
-        <Progress.Root size="sm" aria-label="2 of 4 results"><Progress.Section value={50} color="blue" /></Progress.Root>
+        <Progress.Root size="sm" aria-label="2 of 4 results"><Progress.Section value={50} color="blue" aria-label="2 results" /></Progress.Root>
       </Stack>
     </Panel>
   </SimpleGrid>

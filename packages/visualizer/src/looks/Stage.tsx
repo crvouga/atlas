@@ -272,6 +272,7 @@ export function Stage({ looks, prefer, empty, notice, moment, onMoment, renderMo
           </ActionIcon.Group>
           <Slider
             aria-label={noun}
+            thumbLabel={noun}
             min={0}
             max={count - 1}
             value={index}

@@ -19,7 +19,7 @@ const TIERS = [
   { tier: 'failed', label: 'failed', color: 'red' },
   { tier: 'empty', label: 'not collected yet', color: 'gray' },
   { tier: 'unknown', label: 'unknown', color: 'orange' },
-  { tier: 'stale', label: 'stale', color: 'yellow' },
+  { tier: 'stale', label: 'stale', color: 'orange' },
   { tier: 'fresh', label: 'up to date', color: 'green' }
 ] as const;
 

@@ -193,7 +193,7 @@ export function Timeline({ report, fileUrl, css, moment, onMoment }: Props) {
                         <SnapshotData text={current.step.detail} />
                       </Stack>
                     )}
-                    <Stack aria-label="Recorded snapshots">
+                    <Stack role="group" aria-label="Recorded snapshots">
                       {pictures.map((entry) => (
                         <Snapshot
                           key={entry.blob!.file}

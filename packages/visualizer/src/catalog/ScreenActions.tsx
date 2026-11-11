@@ -32,7 +32,7 @@ export function ScreenActions({ state, cell, selection, share = true, compact = 
     ? <Button variant="subtle" onClick={() => setOpened(true)}>Select Markdown manually</Button>
     : <Textarea label="Screen Markdown" value={handoff?.markdown ?? ''} readOnly autosize minRows={4} maxRows={8} onFocus={event => event.currentTarget.select()} />;
   return <>
-    {compact ? <Popover opened={denied} onChange={open => { if (!open) clipboard.reset(); }} position="bottom-end" width={320} shadow="md">
+    {compact ? <Popover opened={denied} onChange={open => { if (!open) clipboard.reset(); }} position="bottom-end" width={320} shadow="md" withRoles={false}>
       <Popover.Target>
         <Group gap={2} wrap="nowrap">
           <IconAction label="Copy as Markdown" onClick={() => copy(buildHandoff().markdown)}>

@@ -344,7 +344,7 @@ export function SeekStep({ step }: { step: Step }) {
       variant="subtle"
       data-seek={aligned ? 'aligned' : 'unavailable'}
       leftSection={<IconPlayerPlay size={14} aria-hidden="true" />}
-      aria-label={aligned ? `Show “${step.name}” in the recording at ${at}` : `Show “${step.name}” in the recording (alignment unavailable)`}
+      aria-label={aligned ? `Recording ${at}: show “${step.name}” in the recording` : `Not aligned: “${step.name}” cannot be shown in the recording (alignment unavailable)`}
       onClick={() => playback.seek(moment.index)}
     >
       {aligned ? `Recording ${at}` : 'Not aligned'}

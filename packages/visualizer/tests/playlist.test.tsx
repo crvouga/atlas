@@ -246,7 +246,7 @@ test('an unselected clip shows the poster and length the catalog named, loaded l
   expect(poster.getAttribute('alt')).toBe('');
   expect(poster.getAttribute('src')).toContain('/blobs/attachments/');
   expect(declined.textContent).toContain('4.0 s recording');
-  expect(declined.querySelector('button')!.getAttribute('aria-label')).toContain('4.0 s long');
+  expect(declined.querySelector('button')!.textContent).toContain('4.0 s recording');
   // A clip that declared neither shows neither, and says nothing it was not told.
   expect(itemOf('Pay with a card').querySelector('img')).toBeNull();
   expect(itemOf('Pay with a card').textContent).not.toContain('recording ·');

@@ -2,7 +2,7 @@ import { SpecLogo } from './SpecLogo';
 import { IconAdjustmentsHorizontal, IconDeviceDesktop, IconFlask, IconLayoutGrid, IconListSearch, IconMap2, IconMoon, IconSparkles, IconSun, IconTopologyStar } from '@tabler/icons-react';
 import { isUiKind } from '@crvouga/atlas/reports/ui-state';
 import { isStatechartFile } from '@crvouga/atlas/schema';
-import { ActionIcon, Anchor, Badge, Box, Button, Divider, Group, Kbd, Menu, NativeSelect, Popover, Stack, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Anchor, Badge, Box, Button, Divider, Group, Menu, NativeSelect, Popover, Stack, Tooltip, useMantineColorScheme, VisuallyHidden } from '@mantine/core';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAtlas } from '../app/atlas-context';
@@ -157,7 +157,10 @@ export function Header() {
         <Anchor c="inherit" fw={700} size="md" underline="never" renderRoot={(props) => <Link {...props} to="/" search={(prev) => runOnly(prev)} />}>
           <Group gap={6} wrap="nowrap" component="span">
             <IconMap2 size={20} aria-hidden="true" />
-            Atlas
+            <Box component="span" visibleFrom="xs">
+              Atlas
+            </Box>
+            <VisuallyHidden hiddenFrom="xs">Atlas</VisuallyHidden>
           </Group>
         </Anchor>
         <Divider orientation="vertical" visibleFrom="lg" />
@@ -184,6 +187,7 @@ export function Header() {
           <Menu.Target>
             <Button
               variant="subtle"
+              flex="none"
               aria-label="Explore"
               leftSection={kind ? <SpecLogo kind={kind} /> : undefined}
               rightSection={<ChevronDownIcon aria-hidden="true" size={12} />}
@@ -192,7 +196,7 @@ export function Header() {
             </Button>
           </Menu.Target>
           <Menu.Dropdown>
-            <Box component="nav" aria-label="Spec type">
+            <Box component="nav" role="group" aria-label="Spec type">
               <Menu.Item
                 leftSection={hasCharts || !evidence.ready ? <IconTopologyStar size={16} aria-hidden="true" /> : <IconFlask size={16} aria-hidden="true" />}
                 aria-current={pathname.startsWith('/specs/') || (testsOpen && hasCharts) || catalogOpen || behaviorsOpen || critiquesOpen ? undefined : 'page'}
@@ -264,18 +268,21 @@ export function Header() {
         <Box visibleFrom="sm">
           <ServerConnection />
         </Box>
-        <Button
-          visibleFrom="md"
-          c="dimmed"
-          fw={400}
-          aria-label="Search and commands"
-          aria-keyshortcuts="Meta+K Control+K Meta+Shift+P Control+Shift+P"
-          leftSection={<SearchIcon aria-hidden="true" size={16} />}
-          rightSection={<Kbd size="xs">⌘K</Kbd>}
-          onClick={() => setFinderOpen(true)}
-        >
-          Search
-        </Button>
+        <Tooltip label="Search and commands (⌘K / Ctrl+K)">
+          <Button
+            visibleFrom="md"
+            c="dimmed"
+            fw={400}
+            miw={180}
+            justify="flex-start"
+            aria-label="Search and commands"
+            aria-keyshortcuts="Meta+K Control+K Meta+Shift+P Control+Shift+P"
+            leftSection={<SearchIcon aria-hidden="true" size={16} />}
+            onClick={() => setFinderOpen(true)}
+          >
+            Search and commands
+          </Button>
+        </Tooltip>
         <Tooltip label="Search and commands (⌘K / Ctrl+K)">
           <ActionIcon hiddenFrom="md" aria-label="Search and commands" aria-keyshortcuts="Meta+K Control+K Meta+Shift+P Control+Shift+P" onClick={() => setFinderOpen(true)}>
             <SearchIcon aria-hidden="true" size={18} />

@@ -482,7 +482,8 @@ export function Notes({ notes }: { notes: readonly Annotation[] }) {
   return (
     <List aria-label="Annotations" spacing="xs" listStyleType="none">
       {notes.map((note, index) => (
-        <Alert key={index} color={note.level === 'error' ? 'red' : note.level === 'warning' ? 'orange' : 'gray'} p="xs">
+        <List.Item key={index}>
+        <Alert color={note.level === 'error' ? 'red' : note.level === 'warning' ? 'orange' : 'gray'} p="xs">
           <Text data-level={note.level ?? 'info'} span inherit fw={600} tt="capitalize">
             {note.level && ['info', 'warning', 'error'].includes(note.level) ? note.level : note.type}
           </Text>{' '}
@@ -503,6 +504,7 @@ export function Notes({ notes }: { notes: readonly Annotation[] }) {
             )}
           </Text>
         </Alert>
+        </List.Item>
       ))}
     </List>
   );

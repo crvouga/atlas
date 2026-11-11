@@ -315,7 +315,7 @@ export function RecordingTextSearch({ entries, total }: { entries: readonly Play
                           size="compact-sm"
                           variant="light"
                           leftSection={<IconPlayerPlay size={16} aria-hidden="true" />}
-                          aria-label={`Open the recording of ${item.entry.title}${item.attemptLabel ? `, ${item.attemptLabel}` : ''} at ${rangeWord(item)}`}
+                          aria-label={`${item.segment.startMs === null ? 'Open recording' : 'Open here'}: the recording of ${item.entry.title}${item.attemptLabel ? `, ${item.attemptLabel}` : ''} at ${rangeWord(item)}`}
                           onClick={() => setOpened(focusOf(item))}
                         >
                           {item.segment.startMs === null ? 'Open recording' : 'Open here'}

@@ -51,7 +51,7 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
   light: {
     '--atlas-ground': '#f8f8f9',
     '--mantine-color-dimmed': 'var(--mantine-color-gray-6)',
-    '--mantine-color-anchor': 'var(--mantine-color-blue-8)',
+    '--mantine-color-anchor': 'var(--mantine-color-blue-9)',
     '--mantine-color-primary-light': 'rgba(24, 24, 27, 0.06)',
     '--mantine-color-primary-light-hover': 'rgba(24, 24, 27, 0.1)',
     '--mantine-color-primary-light-color': 'var(--mantine-color-ink-8)',

@@ -120,7 +120,7 @@ function FocusedGallery({ state, states, profile, scope, onProfile, onSelect, on
             <Title ref={heading} tabIndex={-1} order={1}>{state.title}</Title>
             <Text c="dimmed" size="sm">{state.id}{state.route ? ` · ${state.route}` : ''}</Text>
           </Stack>
-          <Stack component="nav" aria-label="Catalog item navigation" gap="xs" align="flex-end" maw="100%" tabIndex={-1} ref={navigation}>
+          <Stack component="nav" aria-label="Catalog item navigation" gap="xs" align="flex-end" maw="100%" miw={{ base: '100%', sm: 360 }} tabIndex={-1} ref={navigation}>
             <Group gap="xs" wrap="nowrap" maw="100%">
               <Text role="status" aria-live="polite" aria-atomic="true" size="sm" c="dimmed" truncate>{index >= 0 ? `Item ${index + 1} of ${states.length}: ${state.title}` : `${state.title} is outside the current filters.`}</Text>
               {index >= 0 && <ActionIcon.Group>

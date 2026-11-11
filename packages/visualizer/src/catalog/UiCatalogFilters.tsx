@@ -101,7 +101,7 @@ export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues, 
         <VisuallyHidden renderRoot={props => <label {...props} htmlFor={`${id}-area`} />}>Area</VisuallyHidden>
         <VisuallyHidden renderRoot={props => <label {...props} htmlFor={`${id}-profile`} />}>Profile</VisuallyHidden>
         <VisuallyHidden renderRoot={props => <label {...props} htmlFor={`${id}-sort`} />}>Sort by</VisuallyHidden>
-        <Group gap="sm" wrap="nowrap" grow flex={1} w={{ md: 480 }}>
+        <Group gap="sm" wrap="nowrap" grow flex={1} w={{ md: 560 }}>
           <NativeSelect id={`${id}-area`} value={chosen('area')} onChange={event => choose('area', event.currentTarget.value)} data={[{ value: '', label: 'All areas' }, ...catalog.facets.areas.map(facet => ({ value: facet.value, label: `${facet.label ?? facet.value} (${facet.count})` }))]} />
           <NativeSelect id={`${id}-profile`} value={chosen('profile')} onChange={event => choose('profile', event.currentTarget.value)} data={[{ value: '', label: 'All profiles' }, ...catalog.profiles.map(profile => ({ value: profile.key, label: profile.label }))]} />
           <NativeSelect id={`${id}-sort`} leftSection={<IconArrowsSort size={16} aria-hidden="true" />} value={chosen('sort') || 'relevance'} onChange={event => choose('sort', event.currentTarget.value)} data={Object.entries(CATALOG_SORTS).map(([value, label]) => ({ value, label }))} />

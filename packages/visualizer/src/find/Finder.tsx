@@ -346,8 +346,8 @@ export function Finder() {
                     rightSection={
                       <Group gap="xs" wrap="nowrap">
                         {hit.exact && <Badge color="blue" size="sm">Exact</Badge>}
-                        {hit.partial && <Badge color="gray" variant="outline" size="sm">Partial</Badge>}
-                        <Text size="xs" c="dimmed">{hit.doc.group === 'Commands' ? 'Command' : KIND_WORD[hit.doc.kind]}</Text>
+                        {hit.partial && <Badge variant="default" size="sm">Partial</Badge>}
+                        <Text size="xs" inherit>{hit.doc.group === 'Commands' ? 'Command' : KIND_WORD[hit.doc.kind]}</Text>
                       </Group>
                     }
                   />

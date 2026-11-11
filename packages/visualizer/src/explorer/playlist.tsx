@@ -627,7 +627,6 @@ export function WatchPlaylist({
                           p="xs"
                           bdrs="md"
                           aria-current={here ? 'true' : undefined}
-                          aria-label={`${index + 1}. ${entry.title}, ${statusWord(entry.status)}, ${failedIds.has(entry.id) ? 'could not be loaded' : RECORDING_STATE_TEXT[state].label}${hints.durationMs ? `, ${duration(hints.durationMs)} long` : ''}`}
                           onClick={() => select(entry, state === 'playable')}
                           leftSection={<ClipThumb entry={entry} w={104} length={false} />}
                           label={

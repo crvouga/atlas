@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { INVENTORY, ROUTES } from './inventory';
 
 test('every screen/state story is explicitly inventoried and every inventory item has a story', () => {
@@ -8,6 +8,8 @@ test('every screen/state story is explicitly inventoried and every inventory ite
     const actual = [...source.matchAll(/export const (\w+): Story\b/g)].map(match => match[1]!).sort();
     expect(actual).toEqual([...stories].sort());
   }
+  const files = readdirSync(new URL('.', import.meta.url)).filter(name => name.endsWith('.stories.tsx')).map(name => name.replace('.stories.tsx', ''));
+  expect(files.sort()).toEqual(Object.keys(INVENTORY).sort());
 });
 test('every viewer route family has an audit inventory entry', () => {
   const router = readFileSync(new URL('../src/app/router.tsx', import.meta.url), 'utf8');

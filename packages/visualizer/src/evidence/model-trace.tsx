@@ -1,4 +1,4 @@
-import { Badge, Button, Code, Group, List, Stack, Table, Text } from '@mantine/core';
+import { Badge, Button, Code, Group, List, Stack, Table, Text, VisuallyHidden } from '@mantine/core';
 import { useState } from 'react';
 import type { ModelState } from './quint';
 function shown(value: unknown) {
@@ -27,11 +27,10 @@ export function ModelTrace({ states }: { states: readonly ModelState[] }) {
             <Button
               type="button"
               size="compact-sm"
-              aria-label={`State ${index + 1}`}
               aria-pressed={at === index}
               onClick={() => setSelected(index)}
               variant={at === index ? 'light' : 'subtle'}
-              leftSection={<Text span inherit c="dimmed">{index + 1}</Text>}
+              leftSection={<Text span inherit c="dimmed"><VisuallyHidden>State </VisuallyHidden>{index + 1}</Text>}
             >
               {' '}
               <Text span inherit>

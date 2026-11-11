@@ -70,7 +70,7 @@ test('selecting a step seeks the recording to the moment its timing gives, by th
   // 2 s + 3 s + the 1 s title card put into the recording before this step.
   await press(seek(/includes tea/));
   expect(video.currentTime).toBe(6);
-  expect(seek(/includes tea/).getAttribute('aria-label')).toContain('at 0:06.0');
+  expect(seek(/includes tea/).getAttribute('aria-label')).toContain('Recording 0:06.0');
   // The test clock stays visible beside the recording's.
   expect(row('adding tea').textContent).toContain('+1.5 s');
 });
