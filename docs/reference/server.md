@@ -44,6 +44,8 @@ export type AtlasServerOptions = {
   readonly log?: (line: Record<string, unknown>) => void;
   readonly now?: () => number;
   readonly version?: string;
+  /** Where this server was built from, for `GET /api/server` (`build`). Unknown fields are null; absent, all are. */
+  readonly build?: BuildInfo;
   /** Admin configuration persistence, supplied by atlas serve; kept in S3. Changes apply on restart. */
   readonly settings?: ServerSettings;
   /** The garbage collection policy, kept in S3 and read from there each time the server collects. Supplied by atlas serve. */
@@ -144,6 +146,93 @@ export type Auth = ReturnType<typeof createAuth>;
 
 The authentication of one server: `identify` (who is this), `check` (may they, for a needed role) and `open` (the server has no tokens).
 
+### Build provenance
+
+Source: `packages/server/src/build-info.ts`
+
+Where the running server was built from, for `GET /api/server` (`build`) and the viewer's About dialog: the installed
+`@crvouga/atlas` version when the package knows it, the source revision (`ATLAS_REVISION`), the build time
+(`ATLAS_BUILD_TIME`) and the container image digest a deployment injects (`ATLAS_IMAGE_DIGEST`). Nothing is guessed: a
+value that is missing, a placeholder or malformed is `null`, which a reader shows as unknown. The official image sets
+the revision and build time from its build arguments; an image cannot know its own digest, so only the deployment can
+supply that one. Provenance is for people diagnosing a deployment; clients decide what a server can do from
+`capabilities`, never by comparing versions.
+
+See docs/deploying.md#which-build-is-running
+
+#### `BuildInfo`
+
+```ts
+export type BuildInfo = {
+  /** The `@crvouga/atlas` version, or null for a source build (whose package.json holds the release placeholder). */
+  readonly version: string | null;
+  /** The source revision it was built from, such as a git commit. */
+  readonly revision: string | null;
+  /** When it was built, ISO 8601. */
+  readonly builtAt: string | null;
+  /** The container image digest (`sha256:<64 hex>`, optionally after `<repository>@`), only when the deployment injected it. */
+  readonly imageDigest: string | null;
+};
+```
+
+Where a build came from. Every field is null when unknown.
+
+#### `cleanVersion`
+
+```ts
+export function cleanVersion(value: unknown): string | null
+```
+
+A version as npm writes it, or null.
+
+#### `cleanRevision`
+
+```ts
+export function cleanRevision(value: string | undefined): string | null
+```
+
+A revision (a commit hash, a tag): up to 128 characters of letters, digits, `.`, `_`, `-` and `/`. `unknown` and empty are null.
+
+#### `cleanBuildTime`
+
+```ts
+export function cleanBuildTime(value: string | undefined): string | null
+```
+
+A date and time, normalized to ISO 8601 UTC, or null when it cannot be read. Seconds since the epoch are accepted too (`date +%s`).
+
+#### `cleanImageDigest`
+
+```ts
+export function cleanImageDigest(value: string | undefined): string | null
+```
+
+An image digest (`sha256:<64 hex>`, or `<repository>@sha256:<64 hex>`), or null.
+
+#### `installedPackageVersion`
+
+```ts
+export function installedPackageVersion(read: (file: URL) => string = file => readFileSync(file, 'utf8')): string | null
+```
+
+The version of the installed `@crvouga/atlas`, read from its package.json, or null when it is a source checkout (the
+placeholder version) or cannot be read. Reads the file each time it is called; call it once at startup.
+
+#### `buildInfo`
+
+```ts
+export function buildInfo(env: Env, version: string | null = installedPackageVersion()): BuildInfo
+```
+
+The provenance of this server from its environment and the installed package.
+
+**Example**
+
+```ts
+buildInfo({ ATLAS_REVISION: 'abc1234', ATLAS_BUILD_TIME: '2026-11-10T12:00:00Z' }, null);
+// { version: null, revision: 'abc1234', builtAt: '2026-11-10T12:00:00.000Z', imageDigest: null }
+```
+
 ### Server configuration
 
 Source: `packages/server/src/config.ts`
@@ -177,6 +266,8 @@ export type ResolvedServerConfig = Omit<ServerConfig, 'auth'> & {
   readonly insecure: boolean;
   /** Where the config came from, for the first line of the log. */
   readonly configFile: string | null;
+  /** Where this server was built from (`ATLAS_REVISION`, `ATLAS_BUILD_TIME`, `ATLAS_IMAGE_DIGEST` and the installed version), for `GET /api/server`. */
+  readonly build: BuildInfo;
 };
 ```
 
@@ -1052,12 +1143,14 @@ const claim = await queue.claim({ shard: 'ci-1', definition: version, batchSize:
 
 - `readonly ready: Promise<void>;` — Resolves once the stored state is read; rejects when the store cannot be read (each request then retries).
 - `async publish(input: unknown, version: string): Promise<{ readonly version: string; readonly created: boolean; readonly latest: boolean; readonly profiles: number; readonly items: number; readonly units: number; readonly layers: number }>` — Store a definition and publish it as plan layers. The version must be the SHA-256 of the canonical document. Publishing the definition that is already the latest changes nothing; publishing another stored one makes it the latest again and publishes its plan anew. Throws a {@link CatalogQueueError} (422) for a document that cannot be used.
+- `async latestDefinition(): Promise<string | null>` — The version of the latest published definition, or null when none was published.
 - `async definition(version: string): Promise<UiCatalogDefinitionDocument | null>` — A stored definition document, or null.
 - `async claim(input: z.input<typeof UiClaimRequestSchema>, owner: string): Promise<UiClaim | null>` — Hand out the most urgent units of a definition that no live claim holds, match `where` and are below the retry limit, or null when there are none. A request repeated with the same idempotency key answers the same claim; once that claim has ended, a {@link CatalogQueueError} 410; reusing a live key for another definition, shard or collection throws 409. Throws 404 for an unknown definition and 422 for an unknown dimension or value.
 - `async heartbeat(id: string, owner: string): Promise<{ readonly expiresAtMs: number; readonly done: number; readonly units: number }>` — Extend a live claim's lease by its length. Throws {@link CatalogQueueError} 410 once it expired or ended, 403 for another publisher's claim.
 - `async release(id: string, owner: string): Promise<{ readonly released: number; readonly done: number }>` — Release a claim: units without a result go back to the queue at once, as empty. Throws {@link CatalogQueueError} 410 when it already ended.
 - `get active(): boolean { return this.claims.size > 0; }` — Whether any claim is live: without one, a change to the report has nothing to close.
 - `async sweep(): Promise<void>` — Expire lapsed claims and close answered units. Called on a timer and when the report changes.
+- `async progress(version: string, collection: string): Promise<{ readonly expanded: ExpandedCatalog; readonly results: ReadonlyMap<string, UiItemResult>; readonly incomplete: boolean; readonly notices: readonly string[]; readonly held: ReadonlyMap<string, { readonly claimId: string; readonly shard: string; readonly expiresAtMs: number }>; readonly attempts: Readonly<Record<string, number>>; readonly shards: Readonly<Record<string, { readonly lastOutcome: string; readonly lastSeenAtMs: number }>>; } | null>` — What a refresh needs to judge itself, after expiring lapsed claims and closing answered units: the expanded definition, the newest result of every item (and whether the report could be read whole), which units live claims hold, the failure counts of one collection, and every shard's last outcome. Null for a definition that was never published.
 - `async summary(version?: string): Promise<UiQueueSummary>` — What is left to collect of a definition (default the latest published), who holds what, and how fast it goes.
 
 #### `CatalogQueueDeps`
@@ -1084,6 +1177,69 @@ export function mountCatalogQueue(app: Hono, deps: CatalogQueueDeps): void
 Registers the collection queue routes on `app`: `PUT` and `GET /api/ui-catalog/definitions/:version`,
 `POST /api/ui-catalog/claims`, `POST /api/ui-catalog/claims/:id/heartbeat`, `DELETE /api/ui-catalog/claims/:id` and
 `GET /api/ui-catalog/queue`. Changes need a Bearer token with the `publish` role; reading needs a reader.
+
+### UI catalog refreshes
+
+Source: `packages/server/src/ui-catalog-refresh.ts`
+
+The server side of a refresh receipt ({@link ../../schema/src/ui-catalog-refresh}): one run of collecting a UI catalog,
+pinned to a definition version, an optional source, the profiles in scope, a freshness cutoff and a collection id. A
+receipt is one JSON document in the server's store (`server/ui-catalog/refreshes/<id>.json`, in S3 like every other piece
+of server state). Beginning the same refresh again joins it; attempts (a CI job and its rerun) join under their own names.
+
+Its status is computed, never stored: it reads the queue's own view ({@link CatalogQueue.progress}): which units live
+claims hold, how often each failed within the refresh's collection, and the newest result of every item. It then judges
+every unit in scope against the refresh's policy. Capture completeness (`outcome`) is kept apart from worker health
+(`health`): a refresh can be complete with a lost worker, and incomplete with every worker healthy.
+
+See docs/ui-catalog.md#refreshes-finalizing-a-collection
+
+#### `CatalogRefreshes`
+
+```ts
+export class CatalogRefreshes
+```
+
+One project's refresh receipts. Every change is made under one lock and stored before it is answered.
+
+**Example**
+
+```ts
+const refreshes = new CatalogRefreshes({ store, queue });
+await refreshes.begin('run-42', { definition: version, staleBeforeMs: Date.now() });
+const status = await refreshes.status('run-42');
+```
+
+- `async receipt(id: string): Promise<UiRefreshReceipt | null>` — The stored receipt, or null when none has that id. Throws when the store cannot be read or the receipt is not one.
+- `async begin(id: string, input: unknown): Promise<{ readonly receipt: UiRefreshReceipt; readonly created: boolean }>` — Begin a refresh, or join it when it exists. A repeated begin may leave fields out (they keep their stored values) but may not change one: a different definition, collection, source, scope, cutoff or participant list is a {@link CatalogQueueError} 409, since it would be another refresh. 404 for a definition that was never published.
+- `async join(id: string, input: unknown): Promise<UiRefreshReceipt>` — Record that an attempt joined (again). Throws {@link CatalogQueueError} 404 for an unknown refresh.
+- `async status(id: string): Promise<UiRefreshStatus>` — Judge a refresh. Throws {@link CatalogQueueError} 404 for an unknown refresh.
+- `async finalize(id: string, attempt: string | null): Promise<UiRefreshStatus>` — Judge a refresh and record the finalization (its outcome, and the attempt that asked).
+
+#### `CatalogRefreshDeps`
+
+```ts
+export type CatalogRefreshDeps = {
+  readonly refreshes: CatalogRefreshes;
+  readonly auth: Auth;
+  /** Is the report read yet? A status before it would judge an empty report. */
+  readonly ready: () => boolean;
+  readonly maxBytes: number;
+  readonly unauthorized: (verdict: Extract<ReturnType<Auth['check']>, { ok: false }>) => Response;
+};
+```
+
+What the refresh routes need from the server around them.
+
+#### `mountCatalogRefresh`
+
+```ts
+export function mountCatalogRefresh(app: Hono, deps: CatalogRefreshDeps): void
+```
+
+Registers the refresh routes on `app`: `PUT /api/ui-catalog/refreshes/:id` (begin or join), `POST …/:id/attempts` (an
+attempt joins), `GET …/:id` (status) and `POST …/:id/finalize`. Changes need a Bearer token with the `publish` role;
+reading needs a reader.
 
 ### User state in S3
 

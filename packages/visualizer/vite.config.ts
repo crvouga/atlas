@@ -10,6 +10,7 @@ import { servesExampleReports } from './vite/example-reports';
 import { reportsDevPlugin } from './vite/reports-dev-plugin';
 import { atlasDevPlugin } from './vite/atlas-dev-plugin';
 import { atlasServerPage, atlasServerProxy } from './vite/atlas-server-proxy';
+import { viewerBuildPlugin } from './vite/build-info';
 
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,8 +29,8 @@ export default defineConfig({
   cacheDir: viewerCacheDir(appRoot, [process.cwd(), process.env.INIT_CWD, serverUrl, reportsModule,
     process.env.ATLAS_SPECS_ROOT, process.env.ATLAS_RUNS_ROOT, process.env.ATLAS_FIXTURE]),
   plugins: serverUrl
-    ? [react(), atlasServerPage()]
-    : [react(), atlasDevPlugin(), ...(reportsModule ? [reportsDevPlugin({ repoRoot: process.env.INIT_CWD || process.cwd(), appModule: reportsModule })] : [])],
+    ? [react(), viewerBuildPlugin(appRoot), atlasServerPage()]
+    : [react(), viewerBuildPlugin(appRoot), atlasDevPlugin(), ...(reportsModule ? [reportsDevPlugin({ repoRoot: process.env.INIT_CWD || process.cwd(), appModule: reportsModule })] : [])],
   worker: { format: 'es' },
   server: {
     port: Number(process.env.PORT ?? 5180),

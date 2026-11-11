@@ -49,8 +49,10 @@ export type PublishSpecSetInput = {
  * writes the same set. The catalog entry is written last.
  *
  * The set's `id` is the SHA-256 of the branch, sha, freshness and each file's path and digest, so the same specs from a
- * developer's edited worktree and from CI are different sets. Store errors reject; a failure part-way leaves bodies
- * no set names, never a set whose bodies are missing.
+ * developer's edited worktree and from CI are different sets. Publishers of the same specs racing each other both
+ * succeed, even with different `recordedAtMs`: when a store refuses the set because another publisher stored it first, the
+ * stored set is used. Other store errors reject; a failure part-way leaves bodies no set names, never a set whose bodies
+ * are missing.
  */
 export async function publishSpecSet(store: ObjectStore, input: PublishSpecSetInput): Promise<SpecSet> {
   const files = await Promise.all([...input.files].sort((a, b) => (a.path < b.path ? -1 : 1)).map(async file => {
@@ -68,7 +70,16 @@ export async function publishSpecSet(store: ObjectStore, input: PublishSpecSetIn
     ...(input.freshness ? { freshness: input.freshness } : {}),
     files: files.map(({ text: _text, ...file }) => file)
   };
-  if (!(await store.head(`${SET_PREFIX}${id}.json`))) await writeUtf8(store, `${SET_PREFIX}${id}.json`, JSON.stringify(set), 'application/json');
+  if (!(await store.head(`${SET_PREFIX}${id}.json`))) {
+    try {
+      await writeUtf8(store, `${SET_PREFIX}${id}.json`, JSON.stringify(set), 'application/json');
+    } catch (error) {
+      // Another publisher of the same specs may have stored the set first, with its own `recordedAtMs`: an immutable store
+      // then refuses these bytes. The set is named by its content, so the stored one is this set; anything else rethrows.
+      const stored = await readSpecSet(store, id).catch(() => null);
+      if (stored?.id !== id) throw error;
+    }
+  }
   const inverse = String(Number.MAX_SAFE_INTEGER - Math.max(0, Math.floor(input.recordedAtMs))).padStart(16, '0');
   // The branch and whether the checkout was clean are in the key, so the outline is found without opening every set.
   await writeUtf8(store, `${INDEX_PREFIX}${inverse}-${branchSlug(input.branch)}-${flagOf(input.freshness)}-${id}.json`, JSON.stringify({ id }), 'application/json');

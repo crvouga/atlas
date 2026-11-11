@@ -21,7 +21,7 @@ import type { EvidenceStatus } from './explorer-types';
 import { joinList, splitList } from './artifact-query';
 import { combineEvidence, parameterKey, replaces, type EvidenceResult } from './layer-merge';
 import { environmentLabel } from './layer-axes';
-import { UI_PLAN_KIND, UI_STATE_KIND, type UiScreenshot } from './ui-state';
+import { UI_PLAN_KIND, UI_STATE_KIND, type UiScreenshot, type UiStateAttachment } from './ui-state';
 
 /** The `schemaVersion` of the catalog document. */
 export const UI_CATALOG_VERSION = 1;
@@ -54,6 +54,12 @@ export type UiImage = UiScreenshot & {
   readonly path?: string;
 };
 
+/** Supplemental evidence of a capture (another view, a trace, a video), with the address a browser loads it from. */
+export type UiAttachment = UiStateAttachment & {
+  /** Where the stored bytes are, relative to the reports API root, like {@link UiImage.path}. Absent for an address-only or omitted one. */
+  readonly path?: string;
+};
+
 /** Where a capture came from: the layer, the backend that holds it, and the provenance the layer recorded. */
 export type UiOrigin = {
   readonly layer: string;
@@ -74,6 +80,8 @@ export type UiCapture = {
   readonly durationMs: number | null;
   /** The picture, or null when the capture has none (or it was left out: see `omitted`). */
   readonly image: UiImage | null;
+  /** Supplemental evidence of the same capture, in the producer's order: more views, a trace, a video. Absent when there is none. Never decides coverage: a failed capture with a trace is still failed. */
+  readonly attachments?: readonly UiAttachment[];
   /** The check's labels: what describes the capture without splitting it (a `shard`, a `browser`). */
   readonly labels: Readonly<Record<string, string>>;
   readonly origin: UiOrigin;
@@ -169,6 +177,28 @@ export type UiCatalog = {
   readonly facets: UiCatalogFacets;
   /** What could not be read. A state that depended on it is not in the catalog as captured. Filled by the caller who read the backends. */
   readonly sources: { readonly layers: number; readonly backends: readonly BackendInfo[]; readonly notices: readonly string[] };
+  /** Which history the document counts, when a caller chose one (`?definition=`, `--definition`). Absent: every layer's history, as before. */
+  readonly scope?: UiCatalogScope;
+};
+
+/**
+ * The history a catalog counts. `all-history`: every state and profile any layer ever recorded or planned. `definition`: only
+ * the exact states × profiles of one catalog definition version, with what that leaves out counted in `excluded`, never
+ * deleted. A definition that could not be found is `status: 'unavailable'` and the document then holds no state at all: it
+ * never falls back to every layer's history. Readers treat an unknown `kind` or `status` as an unknown scope.
+ */
+export type UiCatalogScope = {
+  readonly kind: 'all-history' | 'definition';
+  /** `applied`: the counts are the definition's. `unavailable`: the definition could not be read, so nothing is counted. */
+  readonly status: 'applied' | 'unavailable';
+  /** The definition version (the SHA-256 of its canonical JSON) and its name, for `kind: 'definition'`. */
+  readonly definition?: { readonly version: string; readonly name: string | null };
+  /** What the definition expects: its states, its profiles and their product (cells). */
+  readonly expected?: { readonly states: number; readonly profiles: number; readonly cells: number };
+  /** Recorded history outside the definition: states it does not name, profiles it does not have, and the cells of both, by coverage. Still in the layers; select all history to see it. */
+  readonly excluded?: { readonly states: number; readonly profiles: number; readonly cells: number; readonly coverage: Readonly<Record<UiCoverage, number>> };
+  /** Why the scope is unavailable. */
+  readonly reason?: string;
 };
 
 /** What a caller may say about how the layers were read. */
@@ -212,12 +242,25 @@ function layerPath(layer: LayerHeader): string {
 
 function imageOf(result: EvidenceResult): UiImage | null {
   const shot = result.row.state?.screenshot;
-  if (!shot) return null;
+  return shot ? addressed(result, shot) : null;
+}
+
+function attachmentsOf(result: EvidenceResult): readonly UiAttachment[] | undefined {
+  const given = result.row.state?.attachments;
+  return given?.length ? given.map(item => addressed(result, item)) : undefined;
+}
+
+function addressed<T extends UiScreenshot>(result: EvidenceResult, shot: T): Omit<T, 'uri'> & { readonly uri?: string; readonly path?: string } {
   const webAddress = shot.uri && /^https?:\/\//i.test(shot.uri) ? shot.uri : undefined;
   const { uri: _uri, ...rest } = shot;
   // A live layer has no stored files; an archived one serves them by their key.
   const path = shot.bundleKey && !result.layer.live ? `${layerPath(result.layer)}${encodeKey(shot.bundleKey)}` : undefined;
   return { ...rest, ...(webAddress ? { uri: webAddress } : {}), ...(path ? { path } : {}) };
+}
+
+function withAttachments(result: EvidenceResult): { readonly attachments?: readonly UiAttachment[] } {
+  const attachments = attachmentsOf(result);
+  return attachments ? { attachments } : {};
 }
 
 // A layer holds thousands of captures that share one profile and one origin, so each is made once per layer, not once per cell.
@@ -334,7 +377,7 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
       const best = newest(cell.captures);
       const plan = newest(cell.plans);
       const capture: UiCapture | null = best ? {
-        status: best.row.status, detail: best.row.detail, durationMs: best.row.durationMs, image: imageOf(best),
+        status: best.row.status, detail: best.row.detail, durationMs: best.row.durationMs, image: imageOf(best), ...withAttachments(best),
         labels: best.row.evidence?.labels ?? {}, origin: originOf(best.layer), alternatives: cell.captures.length - 1
       } : null;
       return {
@@ -353,6 +396,33 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
     });
   }
 
+  return assembleUiCatalog(catalogStates, {
+    inventory, planned, profiles: [...profiles.values()], ...(options.version ? { version: options.version } : {}),
+    sources: { layers: taking.length, backends: options.backends ?? [], notices: options.notices ?? [] }
+  });
+}
+
+/** What {@link assembleUiCatalog} needs besides the states. */
+export type UiCatalogParts = {
+  /** Surface ids an inventory names. */
+  readonly inventory: Iterable<string>;
+  /** Whether an expected set exists (`summary.planned`). */
+  readonly planned: boolean;
+  /** The profiles, in any order; by default those of the cells. */
+  readonly profiles?: readonly UiProfile[];
+  readonly version?: string;
+  readonly sources: UiCatalog['sources'];
+  readonly scope?: UiCatalogScope;
+};
+
+/**
+ * A catalog document from its states (in id order, each with its cells in profile order): the surfaces, the summary and the
+ * facets are worked out from them in one pass each. `uiCatalog` ends with it, and so does a projection of a catalog onto a
+ * definition ({@link ./ui-catalog-scope}), so both count a cell the same way.
+ */
+export function assembleUiCatalog(catalogStates: readonly UiCatalogState[], parts: UiCatalogParts): UiCatalog {
+  const inventory = new Set(parts.inventory);
+  const planned = parts.planned;
   const surfaces = new Map<string, { states: number; captured: number }>();
   for (const id of inventory) surfaces.set(id, { states: 0, captured: 0 });
   for (const state of catalogStates) {
@@ -376,11 +446,17 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
     cells += 1;
     if (cell.expected === 'undeclared') undeclared += 1;
   }
-  const profileList = [...profiles.values()].sort((a, b) => compare(a.label, b.label) || compare(a.key, b.key));
+  let given = parts.profiles;
+  if (!given) {
+    const seen = new Map<string, UiProfile>();
+    for (const state of catalogStates) for (const cell of state.cells) seen.set(cell.profile.key, cell.profile);
+    given = [...seen.values()];
+  }
+  const profileList = given.slice().sort((a, b) => compare(a.label, b.label) || compare(a.key, b.key));
   const labels = new Map(profileList.map(profile => [profile.key, profile.label]));
   return {
     schemaVersion: UI_CATALOG_VERSION,
-    ...(options.version ? { version: options.version } : {}),
+    ...(parts.version ? { version: parts.version } : {}),
     summary: { states: catalogStates.length, profiles: profileList.length, cells, coverage, undeclared, planned, surfaces: surfaceList.length, uncoveredSurfaces: surfaceList.filter(surface => surface.status !== 'covered').length },
     profiles: profileList,
     states: catalogStates,
@@ -396,7 +472,8 @@ export function uiCatalog(layers: readonly LayerEvidence[], options: UiCatalogOp
       producers: facetOf(catalogStates.map(state => state.producers)),
       attributes: facetOf(catalogStates.map(state => attributePairs(state)))
     },
-    sources: { layers: taking.length, backends: options.backends ?? [], notices: options.notices ?? [] }
+    sources: parts.sources,
+    ...(parts.scope ? { scope: parts.scope } : {})
   };
 }
 
@@ -502,6 +579,20 @@ export function pageUiCatalog(catalog: UiCatalog, page: { readonly limit?: numbe
   return { ...catalog, total: catalog.states.length, offset, limit, states: catalog.states.slice(offset, offset + limit) };
 }
 
+/** One line for a person: which history the counts are of, and what a definition scope leaves out. Empty for an unscoped catalog. */
+export function uiScopeSentence(scope: UiCatalogScope | undefined): string {
+  if (!scope) return '';
+  if (scope.kind === 'all-history') return 'Scope: all history (every state and profile any layer recorded or planned).';
+  const name = scope.definition?.name ? `"${scope.definition.name}" ` : '';
+  const version = scope.definition?.version.slice(0, 12) ?? 'unknown';
+  if (scope.status !== 'applied') return `Scope: definition ${name}${version} is unavailable${scope.reason ? ` (${scope.reason})` : ''}; nothing is counted.`;
+  const left = scope.excluded;
+  const history = left && left.cells > 0
+    ? ` History outside it is not counted: ${left.states} state${left.states === 1 ? '' : 's'}, ${left.profiles} profile${left.profiles === 1 ? '' : 's'}, ${left.cells} cell${left.cells === 1 ? '' : 's'} (${UI_COVERAGE.filter(value => left.coverage[value] > 0).map(value => `${left.coverage[value]} ${value}`).join(', ')}).`
+    : ' No recorded history lies outside it.';
+  return `Scope: definition ${name}${version}: ${scope.expected?.states ?? 0} states × ${scope.expected?.profiles ?? 0} profiles = ${scope.expected?.cells ?? 0} expected cells.${history}`;
+}
+
 /**
  * The catalog as Markdown for a person or an agent reading text: the summary in words, the surfaces that are not covered, and
  * one line per state with its coverage in each profile. Only `captured` is called captured.
@@ -513,6 +604,7 @@ export function uiCatalogMarkdown(catalog: UiCatalog): string {
     `${summary.states} states in ${summary.profiles} profiles: ${UI_COVERAGE.map(value => `${summary.coverage[value]} ${value}`).join(', ')}.`,
     summary.planned ? `${summary.undeclared} captured cells are not in any plan.` : 'No plan was published, so what should exist is unknown and nothing is shown as missing.'
   ];
+  if (catalog.scope) lines.push('', uiScopeSentence(catalog.scope));
   for (const notice of catalog.sources.notices) lines.push('', `> ${notice}`);
   const open = catalog.surfaces.filter(surface => surface.status !== 'covered');
   if (open.length) lines.push('', '## Surfaces without a captured state', '', ...open.map(surface => `- ${surface.id}: ${surface.status === 'uncovered' ? 'no state covers it' : 'covered by states that are not captured'}`));
@@ -590,6 +682,9 @@ export function uiScreenMarkdown(state: UiCatalogState, options: UiScreenMarkdow
       if (Object.keys(capture.labels).length) lines.push(`- Labels: ${screenCode(JSON.stringify(capture.labels))}`);
       if (capture.image?.sha256) lines.push(`- Image SHA-256: ${screenCode(capture.image.sha256)}`);
       if (capture.image?.width && capture.image.height) lines.push(`- Image dimensions: ${capture.image.width}×${capture.image.height}`);
+      for (const attachment of capture.attachments ?? []) {
+        lines.push(`- More evidence: ${screenCode(attachment.label ?? attachment.name)}${attachment.role ? ` (${screenCode(attachment.role)})` : ''}${attachment.omitted ? `, left out: ${screenCode(attachment.omitted)}` : ''}`);
+      }
     }
     if (cell.planned) lines.push(`- Plan layer: ${screenCode(cell.planned.layer)} in backend ${screenCode(cell.planned.backend)}`);
     const picture = cell.coverage === 'captured' || cell.coverage === 'failed' ? screenLink(`Image: ${cell.profile.label}`, options.imageUrls?.[cell.profile.key]) : null;

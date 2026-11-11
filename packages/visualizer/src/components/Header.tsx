@@ -1,5 +1,5 @@
 import { SpecLogo } from './SpecLogo';
-import { IconAdjustmentsHorizontal, IconDeviceDesktop, IconFlask, IconLayoutGrid, IconListSearch, IconMap2, IconMoon, IconSparkles, IconSun, IconTopologyStar } from '@tabler/icons-react';
+import { IconAdjustmentsHorizontal, IconInfoCircle, IconDeviceDesktop, IconFlask, IconLayoutGrid, IconListSearch, IconMap2, IconMoon, IconSparkles, IconSun, IconTopologyStar } from '@tabler/icons-react';
 import { isUiKind } from '@crvouga/atlas/reports/ui-state';
 import { isStatechartFile } from '@crvouga/atlas/schema';
 import { ActionIcon, Anchor, Badge, Box, Button, Divider, Group, Menu, NativeSelect, Popover, Stack, Tooltip, useMantineColorScheme, VisuallyHidden } from '@mantine/core';
@@ -20,6 +20,7 @@ import { ActivityIndicator } from './ActivityIndicator';
 import { DataIssues } from './DataIssues';
 import { IconChevronDown as ChevronDownIcon, IconSearch as SearchIcon } from '@tabler/icons-react';
 import { ProjectNotice, ProjectPicker } from './ProjectPicker';
+import { AboutDialog } from '../about/AboutDialog';
 const dateTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 export function formatRunTime(iso: string) {
   const d = new Date(iso);
@@ -118,6 +119,7 @@ export function Header() {
   const hasCharts = evidence.files.some(isStatechartFile);
   const sourcesOpen = useUiStore((s) => s.sourcesOpen);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const optionsTarget = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (sourcesOpen) setOptionsOpen(false);
@@ -320,11 +322,25 @@ export function Header() {
               />
               {!kind && !testsOpen && view && <DataIssues issues={view.issues} />}
               {runtimeConfig()?.api && <Anchor href={`/admin${project ? `?project=${encodeURIComponent(project)}` : ''}`}>Settings</Anchor>}
+              <Button
+                type="button"
+                variant="subtle"
+                justify="flex-start"
+                leftSection={<IconInfoCircle size={16} aria-hidden="true" />}
+                onClick={() => {
+                  setOptionsOpen(false);
+                  optionsTarget.current?.focus();
+                  setAboutOpen(true);
+                }}
+              >
+                About this deployment
+              </Button>
               <ProjectNotice />
             </Stack>
           </Popover.Dropdown>
         </Popover>
         <ProjectPicker />
+        <AboutDialog opened={aboutOpen} onClose={() => setAboutOpen(false)} />
       </Group>
     </Group>
   );

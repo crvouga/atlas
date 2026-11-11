@@ -284,6 +284,12 @@ export class CatalogQueue {
     });
   }
 
+  /** The version of the latest published definition, or null when none was published. */
+  async latestDefinition(): Promise<string | null> {
+    await this.ready;
+    return this.state.latest;
+  }
+
   /** A stored definition document, or null. */
   async definition(version: string): Promise<UiCatalogDefinitionDocument | null> {
     await this.ready;
@@ -404,6 +410,32 @@ export class CatalogQueue {
     await this.ready;
     const changed = await this.exclusive(() => this.reconcile());
     if (changed) await this.persist();
+  }
+
+  /**
+   * What a refresh needs to judge itself, after expiring lapsed claims and closing answered units: the expanded definition,
+   * the newest result of every item (and whether the report could be read whole), which units live claims hold, the
+   * failure counts of one collection, and every shard's last outcome. Null for a definition that was never published.
+   */
+  async progress(version: string, collection: string): Promise<{
+    readonly expanded: ExpandedCatalog; readonly results: ReadonlyMap<string, UiItemResult>; readonly incomplete: boolean; readonly notices: readonly string[];
+    readonly held: ReadonlyMap<string, { readonly claimId: string; readonly shard: string; readonly expiresAtMs: number }>;
+    readonly attempts: Readonly<Record<string, number>>; readonly shards: Readonly<Record<string, { readonly lastOutcome: string; readonly lastSeenAtMs: number }>>;
+  } | null> {
+    await this.ready;
+    await this.sweep();
+    const expanded = await this.expanded(version);
+    if (!expanded) return null;
+    const results = this.currentResults();
+    const held = new Map<string, { claimId: string; shard: string; expiresAtMs: number }>();
+    for (const [unit, id] of this.held) {
+      const claim = this.claims.get(id);
+      if (claim && claim.definition === version) held.set(unit, { claimId: claim.id, shard: claim.shard, expiresAtMs: claim.expiresAtMs });
+    }
+    return {
+      expanded, results: results.map, incomplete: results.incomplete, notices: results.notices, held,
+      attempts: { ...(this.state.attempts[collection] ?? {}) }, shards: structuredClone(this.state.shards)
+    };
   }
 
   /** What is left to collect of a definition (default the latest published), who holds what, and how fast it goes. */

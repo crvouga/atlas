@@ -53,6 +53,16 @@ export const ReadySchema = …
 
 What `GET /readyz` answers: whether the backends were read, and counts for logs. `ready` false comes with status 503.
 
+#### `BuildInfoSchema`
+
+```ts
+export const BuildInfoSchema = …
+```
+
+Where a build came from, as far as it knows: the package version, the source revision, when it was built, and the image
+digest a deployment injected. Every field is null when unknown, never guessed. A provenance record only: compare
+`capabilities`, not versions, to decide what a server can do.
+
 #### `ServerInfoSchema`
 
 ```ts
@@ -555,6 +565,14 @@ export const UiImageSchema = …
 
 The picture of a capture.
 
+#### `UiAttachmentSchema`
+
+```ts
+export const UiAttachmentSchema = …
+```
+
+Supplemental evidence of a capture: another view, a trace, a video, a log. Evidence only; it never decides coverage.
+
 #### `UiCellSchema`
 
 ```ts
@@ -562,6 +580,17 @@ export const UiCellSchema = …
 ```
 
 One state in one profile.
+
+#### `UiCatalogScopeSchema`
+
+```ts
+export const UiCatalogScopeSchema = …
+```
+
+Which history a UI catalog document counts, when the caller chose one (`?definition=`). `all-history`: every state and
+profile any layer recorded or planned. `definition`: exactly one definition version's states × profiles, with what that
+leaves out counted in `excluded` (still stored, never deleted). `status: unavailable` means the definition could not be read
+and nothing is counted: never read it as every layer's history. Treat an unknown `kind` or `status` as an unknown scope.
 
 #### `UiCatalogSchema`
 
@@ -571,6 +600,29 @@ export const UiCatalogSchema = …
 
 `GET /api/reports/ui-catalog`: the UI catalog, computed from the winning results of the `ui-state` and `ui-plan` parts
 of every layer. States are in id order and cells in profile order, so the same layers always give the same document.
+
+#### `UiCatalogIndexSchema`
+
+```ts
+export const UiCatalogIndexSchema = …
+```
+
+`GET /api/reports/ui-catalog?view=index`: the catalog without the evidence a card draws, for a viewer that searches the
+whole catalog and reads the evidence of the states it shows (`?id=`). The summary, profiles, surfaces, facets and sources are
+the full document's. With `?since=<version>` the server sends only the states that changed since that version (and the
+ids of those removed) when it remembers it, else the whole index with `since.honored` false. A projection, never a judgement:
+a cell's `coverage` and `expected` are the full document's.
+
+#### `UiCatalogFailuresSchema`
+
+```ts
+export const UiCatalogFailuresSchema = …
+```
+
+`GET /api/reports/ui-catalog/failures` and `atlas ui-catalog failures --format json`: failed catalog cells grouped by the
+fingerprint their producer supplied (the capture label `fingerprint`), else by exact normalized, redacted message. A message
+group is `inferred`: it shows the cells read the same, never that they share a cause. When `complete` is false the totals are
+a lower bound and `incomplete` says why.
 
 #### `UiCatalogDetailSchema`
 
@@ -846,6 +898,14 @@ export const UiCatalogExportResultSchema = …
 
 What `atlas ui-catalog export --format json` prints.
 
+#### `UiCatalogFailuresResultSchema`
+
+```ts
+export const UiCatalogFailuresResultSchema = …
+```
+
+What `atlas ui-catalog failures --format json` prints: the failure groups, and `ok` (exit 0) only when nothing failed and every source was read.
+
 #### `UiCatalogCollectResultSchema`
 
 ```ts
@@ -853,6 +913,38 @@ export const UiCatalogCollectResultSchema = …
 ```
 
 What `atlas ui-catalog collect --format json` prints: what one shard collected from the shared queue, and why it stopped.
+
+#### `UiCatalogMatrixResultSchema`
+
+```ts
+export const UiCatalogMatrixResultSchema = …
+```
+
+What `atlas ui-catalog plan-matrix --format json` prints: a CI fan-out of one definition.
+
+#### `UiCatalogRefreshBeginResultSchema`
+
+```ts
+export const UiCatalogRefreshBeginResultSchema = …
+```
+
+What `atlas ui-catalog refresh begin --format json` prints.
+
+#### `UiCatalogRefreshStatusResultSchema`
+
+```ts
+export const UiCatalogRefreshStatusResultSchema = …
+```
+
+What `atlas ui-catalog refresh status|finalize --format json` prints: the refresh status, and the server.
+
+#### `UiCatalogBundleResultSchema`
+
+```ts
+export const UiCatalogBundleResultSchema = …
+```
+
+What `atlas ui-catalog bundle validate|merge|import --format json` prints.
 
 #### `CLI_RESULTS`
 
@@ -2600,6 +2692,151 @@ export function isStatechartFile(path: string)
 
 Whether a spec-relative path (using `/`) matches `STATECHART_FILE_PATTERNS`.
 
+### UI catalog shard bundles
+
+Source: `packages/schema/src/ui-catalog-bundle.ts`
+
+A **bundle** is a folder a collecting shard writes as it goes: a directory store (`store/`) holding its capture layers (and
+the definition's plan layers) in Atlas's ordinary layer format, and a manifest (`atlas-bundle.json`) naming who wrote it
+(definition, source, refresh, shard and attempt), each capture with whether it reached the server, and the SHA-256 and size
+of every object in the store. It survives a server that stopped answering, travels as a CI artifact, and is validated,
+merged and imported later. It is not a second report format: the layers in it are the layers a server would have
+received. Within this version only optional fields are added.
+
+See docs/ui-catalog.md#capture-journals-and-shard-bundles
+
+#### `UI_CATALOG_BUNDLE_VERSION`
+
+```ts
+export const UI_CATALOG_BUNDLE_VERSION = …
+```
+
+The `schemaVersion` of a bundle manifest.
+
+#### `UI_CATALOG_BUNDLE_MANIFEST`
+
+```ts
+export const UI_CATALOG_BUNDLE_MANIFEST = …
+```
+
+The name of the manifest file at a bundle's root.
+
+#### `UiBundlePublicationSchema`
+
+```ts
+export const UiBundlePublicationSchema = …
+```
+
+Whether a capture reached the server: `published`, `failed` (the publish was attempted and failed) or `pending` (never sent: the shard stopped, or lost its claim).
+
+#### `UiBundleAttemptSchema`
+
+```ts
+export const UiBundleAttemptSchema = …
+```
+
+One attempt that wrote into a bundle (a merged bundle has several).
+
+#### `UiBundleCaptureSchema`
+
+```ts
+export const UiBundleCaptureSchema = …
+```
+
+One capture layer in a bundle, with the attempt that made it and whether it reached the server.
+
+#### `UiBundleManifestSchema`
+
+```ts
+export const UiBundleManifestSchema = …
+```
+
+`atlas-bundle.json`.
+
+#### `UiBundleProblemSchema`
+
+```ts
+export const UiBundleProblemSchema = …
+```
+
+A problem found in a bundle.
+
+#### `UiBundleManifest`
+
+```ts
+export type UiBundleManifest = z.output<typeof UiBundleManifestSchema>;
+```
+
+A bundle manifest.
+
+#### `UiBundleCapture`
+
+```ts
+export type UiBundleCapture = z.output<typeof UiBundleCaptureSchema>;
+```
+
+One capture of a bundle.
+
+#### `UiBundleProblem`
+
+```ts
+export type UiBundleProblem = z.output<typeof UiBundleProblemSchema>;
+```
+
+A bundle problem.
+
+#### `UiBundlePublication`
+
+```ts
+export type UiBundlePublication = z.output<typeof UiBundlePublicationSchema>;
+```
+
+A capture's publication status.
+
+### UI catalog CI matrix plans
+
+Source: `packages/schema/src/ui-catalog-matrix.ts`
+
+What `atlas ui-catalog plan-matrix` prints: a CI fan-out for one resolved catalog definition, ready for a GitHub Actions
+`strategy.matrix` (`fromJSON(…).matrix`). Each row (`job`) covers a distinct combination of the dimensions chosen to
+split jobs; together the rows cover every allowed profile exactly once. `builds` lists each distinct build (the
+combinations of the dimensions that change what is built) once, so a build runs once per mode and the capture jobs that
+need it download it. The definition document is carried whole, so every job collects the same immutable definition.
+
+See docs/ui-catalog.md#a-ci-kit-plan-capture-finalize
+
+#### `UI_CATALOG_MATRIX_VERSION`
+
+```ts
+export const UI_CATALOG_MATRIX_VERSION = …
+```
+
+The `schemaVersion` of a matrix plan.
+
+#### `UiMatrixJobSchema`
+
+```ts
+export const UiMatrixJobSchema = …
+```
+
+One capture job of a matrix plan.
+
+#### `UiMatrixPlanSchema`
+
+```ts
+export const UiMatrixPlanSchema = …
+```
+
+`atlas ui-catalog plan-matrix --format json`.
+
+#### `UiMatrixPlan`
+
+```ts
+export type UiMatrixPlan = z.output<typeof UiMatrixPlanSchema>;
+```
+
+A matrix plan.
+
 ### UI catalog collection queue protocol
 
 Source: `packages/schema/src/ui-catalog-queue.ts`
@@ -2740,6 +2977,127 @@ export type UiQueueSummary = z.output<typeof UiQueueSummarySchema>;
 ```
 
 The queue summary.
+
+### UI catalog refresh receipts
+
+Source: `packages/schema/src/ui-catalog-refresh.ts`
+
+A **refresh** is one run of collecting a UI catalog to a stated standard: a fixed definition version, an optional source
+(commit and branch), the profiles it covers (`where`), a freshness cutoff (`staleBeforeMs`) and a collection id that its
+shards claim under (so retry limits are counted per refresh). A shard's `collectCatalog` result (`stoppedBy: empty`) is only
+that shard's view; the **refresh status** a server answers is the whole: whether every unit in scope has evidence that
+satisfies the refresh's policy, which units are still outstanding and why, and, separately, how the workers fared.
+
+The receipt lives in the server's store beside the queue (`server/ui-catalog/refreshes/<id>.json`). Beginning the same
+refresh again (a rerun CI attempt) joins it rather than starting another, and every attempt that joins is recorded under
+its own name. None of these documents is part of the layer format: evidence is still ordinary `ui-state` layers. Within
+this version only optional fields are added.
+
+See docs/ui-catalog.md#refreshes-finalizing-a-collection
+
+#### `UI_CATALOG_REFRESH_VERSION`
+
+```ts
+export const UI_CATALOG_REFRESH_VERSION = …
+```
+
+The `schemaVersion` of a refresh receipt and a refresh status.
+
+#### `UiRefreshIdSchema`
+
+```ts
+export const UiRefreshIdSchema = …
+```
+
+A refresh id: letters, digits, `.`, `_` and `-`, starting with a letter or digit (a CI run id fits).
+
+#### `UiRefreshRequestSchema`
+
+```ts
+export const UiRefreshRequestSchema = …
+```
+
+What a refresh is pinned to, as `PUT /api/ui-catalog/refreshes/{id}` takes it. Fields left out of a repeated begin keep their stored values.
+
+#### `UiRefreshAttemptSchema`
+
+```ts
+export const UiRefreshAttemptSchema = …
+```
+
+One attempt that joined a refresh: a participant (a CI job, a laptop) and its attempt number, and the shard id it claims as.
+
+#### `UiRefreshOutcomeSchema`
+
+```ts
+export const UiRefreshOutcomeSchema = …
+```
+
+The outcome of a refresh: `complete` (every unit in scope satisfied), `incomplete` (work remains), `failed` (work remains that the queue will not hand out again), `unknown` (it could not be read).
+
+#### `UiRefreshReceiptSchema`
+
+```ts
+export const UiRefreshReceiptSchema = …
+```
+
+A refresh receipt as it is stored.
+
+#### `UiRefreshReasonSchema`
+
+```ts
+export const UiRefreshReasonSchema = …
+```
+
+Why a unit in scope is not satisfied yet.
+
+#### `UiRefreshStatusSchema`
+
+```ts
+export const UiRefreshStatusSchema = …
+```
+
+`GET /api/ui-catalog/refreshes/{id}` and `POST …/finalize`: whether a refresh is complete, what is outstanding, and how its workers fared.
+
+#### `UiRefreshJoinSchema`
+
+```ts
+export const UiRefreshJoinSchema = …
+```
+
+What a shard sends to join a refresh.
+
+#### `UiRefreshRequest`
+
+```ts
+export type UiRefreshRequest = z.input<typeof UiRefreshRequestSchema>;
+```
+
+A refresh request.
+
+#### `UiRefreshReceipt`
+
+```ts
+export type UiRefreshReceipt = z.output<typeof UiRefreshReceiptSchema>;
+```
+
+A stored refresh receipt.
+
+#### `UiRefreshStatus`
+
+```ts
+export type UiRefreshStatus = z.output<typeof UiRefreshStatusSchema>;
+```
+
+A refresh status.
+
+#### `UiRefreshOutcome`
+
+```ts
+export type UiRefreshOutcome = z.output<typeof UiRefreshOutcomeSchema>;
+```
+
+A refresh outcome.
 
 ### User state schema
 

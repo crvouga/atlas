@@ -7,6 +7,7 @@ import { publishChecks } from '../../reports/src/publish-checks';
 import { ReportIndex } from '../../reports/src/report-index';
 import { catalogEntries } from '../../reports/src/ui-catalog-entries';
 import { filterUiCatalog, pageUiCatalog, uiCatalog, uiCatalogMarkdown } from '../../reports/src/ui-catalog';
+import { UiCatalogIndexes } from '../../reports/src/ui-catalog-index';
 import { uiPlanLayer, uiStateLayer } from '../../reports/src/ui-catalog-publish';
 import { memoryStore } from '../../reports/tests/memory-store';
 
@@ -54,3 +55,11 @@ line('  whole bytes', `${(JSON.stringify(catalog).length / 1024 / 1024).toFixed(
 time('markdown', () => uiCatalogMarkdown(page));
 const entries = time('catalogEntries', () => catalogEntries(snapshot.layers));
 line('  entries', String(entries.entries.length));
+
+// What a viewer browsing through the server reads: the compact index, once, then deltas (issue #94).
+const indexes = new UiCatalogIndexes();
+const indexed = time('index (whole, fingerprints)', () => indexes.answer(catalog, { version: 'v1', scope: '', limit: 1_000_000, offset: 0 }));
+line('  index bytes', `${(JSON.stringify(indexed).length / 1024 / 1024).toFixed(2)} MiB`);
+const again = uiCatalog(snapshot.layers, { version: snapshot.version });
+const delta = time('index delta (nothing changed)', () => indexes.answer(again, { version: 'v2', scope: '', since: 'v1', limit: 1_000_000, offset: 0 }));
+line('  delta states / bytes', `${delta.states.length} / ${(JSON.stringify(delta).length / 1024).toFixed(0)} KiB`);

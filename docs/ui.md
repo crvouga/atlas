@@ -74,7 +74,11 @@ they preserve evidence semantics, provenance, URL selection, or playback behavio
   A missing spec or layer is an explicit unavailable state with its path, never an endless `Loading…`. Layers that
   fail to read are counted (`EvidenceIncomplete`) and the rest stays usable. Search disclosed as incomplete (still
   reading, or specs it could not read) never reports "no match" as final. `tests/resilient-navigation.test.tsx`
-  holds the request budgets for a large catalog.
+  holds the request budgets for a large catalog. The UI catalog page served by a server reads the catalog's index and
+  the evidence of the cards on screen, never the whole report (`catalog/provider.tsx`); `tests/ui-catalog-scale.test.tsx`
+  holds its byte, request and time budgets.
+- **About this deployment** (view options) shows the viewer's and the server's builds apart, `unknown` for what a build
+  did not record (`about/`). Its support summary is built from an allow-list of provenance facts only.
 - Spec overview links use a centered `Group`: status, flexible title/folder, then outcome and time. Keep gaps
   explicit with theme spacing; stack metadata on narrow screens instead of crowding the title.
 
@@ -510,6 +514,13 @@ or zoom the gallery behind the dialog.
 
 Catalog-wide surface coverage and collection status have separate lazy dialogs on the index; opening
 an item does not read collection diagnostics or load every other item's full-size image.
+
+The **Count** control (`catalog/DefinitionScope.tsx`, a `NativeSelect`) chooses all history or one definition version
+(`definition` in the address; `latest` is resolved and replaced by its version, so a shared link never drifts). While the
+definition is read nothing is counted, and one that cannot be read is an orange alert with a way back to all history, never all
+history in its place. **Failure groups** (`catalog/FailureGroups.tsx`) is a third lazy dialog over the catalog as filtered and
+scoped: an `Accordion` of groups, each with its drilldown links (which keep the scope), a message group labelled as inferred, and
+an alert whenever the totals may be incomplete.
 
 ## Accessibility and responsive behavior
 

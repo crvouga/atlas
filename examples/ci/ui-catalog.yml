@@ -1,0 +1,174 @@
+# A reusable GitHub Actions workflow that collects a UI catalog: plan → build → preflight → capture fan-out → finalize.
+# It composes Atlas commands only; it schedules nothing (the server's queue hands out work) and decides no fan-out
+# (max-parallel is yours). Copy it to .github/workflows/atlas-ui-catalog.yml and call it from your own workflow:
+#
+#   jobs:
+#     catalog:
+#       uses: ./.github/workflows/atlas-ui-catalog.yml
+#       with:
+#         catalog: atlas.catalog.ts
+#         job-dimensions: device scheme        # a capture job per device × scheme
+#         build-dimensions: scheme             # one build per scheme, shared by its jobs
+#         max-parallel: 4                      # a cost ceiling: never raised for you
+#         build: npm run build -- --scheme "$ATLAS_BUILD_SCHEME"
+#         preflight: npx playwright install --with-deps chromium && node scripts/smoke.mjs
+#         exec: node scripts/capture-batch.mjs # reads $ATLAS_UI_BATCH, writes $ATLAS_UI_CAPTURES
+#       secrets:
+#         atlas-token: ${{ secrets.ATLAS_PUBLISH_TOKEN }}
+#       # with ATLAS_URL as a repository variable (https://atlas.example.com).
+#
+# The build, smoke and capture commands are yours: Atlas never drives the product, never deploys it, and needs no
+# product website. Every capture job journals its captures into a bundle and uploads it under a name unique to the
+# job and the run attempt, even when the job fails or times out, so a rerun of failed jobs never overwrites the
+# evidence of the attempt before it. Finalize merges every bundle that arrived (naming jobs whose bundle did not),
+# imports what never reached the server only as the policy says, judges the refresh, and exports the catalog.
+# The same steps run on a laptop with fewer workers: docs/ui-catalog.md#a-ci-kit-plan-capture-finalize.
+name: atlas-ui-catalog
+
+on:
+  workflow_call:
+    inputs:
+      catalog: { type: string, required: true, description: 'The defineCatalog module' }
+      job-dimensions: { type: string, required: false, default: '', description: 'Dimensions that split capture jobs (space-separated). Default every dimension' }
+      build-dimensions: { type: string, required: false, default: '', description: 'Dimensions that change what is built (space-separated)' }
+      where: { type: string, required: false, default: '', description: 'Narrow the plan: dimension=value pairs (space-separated)' }
+      max-parallel: { type: number, required: false, default: 4, description: 'Capture jobs at once' }
+      build: { type: string, required: false, default: '', description: 'Build command, run once per build with ATLAS_BUILD_<DIMENSION> set. Its output in build/ is shared' }
+      preflight: { type: string, required: false, default: '', description: 'Fails fast before any capture job starts' }
+      exec: { type: string, required: true, description: 'The collector atlas ui-catalog collect --exec runs per claimed batch' }
+      max-minutes: { type: number, required: false, default: 30, description: 'Each capture job stops claiming after this' }
+      timeout-minutes: { type: number, required: false, default: 45, description: 'A capture job is killed after this; its bundle is still uploaded' }
+      reconcile: { type: string, required: false, default: 'retain', description: 'retain or accept: captures that never reached the server' }
+      setup: { type: string, required: false, default: 'npm ci', description: 'Installs the project (and @crvouga/atlas)' }
+      atlas: { type: string, required: false, default: 'npx atlas', description: 'How to run the atlas command' }
+    secrets:
+      atlas-token: { required: true }
+
+permissions:
+  contents: read
+
+env:
+  ATLAS_STORE: ${{ vars.ATLAS_URL }}
+  ATLAS_TOKEN: ${{ secrets.atlas-token }}
+  REFRESH: ${{ github.run_id }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      builds: ${{ steps.plan.outputs.builds }}
+      max-parallel: ${{ steps.plan.outputs.max-parallel }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ${{ inputs.setup }}
+      - id: plan
+        name: Plan the fan-out from the definition
+        shell: bash
+        run: |
+          args=()
+          for d in ${{ inputs.job-dimensions }}; do args+=(--job-dimension "$d"); done
+          for d in ${{ inputs.build-dimensions }}; do args+=(--build-dimension "$d"); done
+          for w in ${{ inputs.where }}; do args+=(--where "$w"); done
+          ${{ inputs.atlas }} ui-catalog plan-matrix --catalog "${{ inputs.catalog }}" --max-parallel "${{ inputs.max-parallel }}" "${args[@]}" --out plan.json
+          echo "matrix=$(jq -c .matrix plan.json)" >> "$GITHUB_OUTPUT"
+          echo "builds=$(jq -c .builds plan.json)" >> "$GITHUB_OUTPUT"
+          echo "max-parallel=$(jq -c .maxParallel plan.json)" >> "$GITHUB_OUTPUT"
+      - name: Begin the refresh (a rerun joins it)
+        shell: bash
+        run: |
+          where=(); for w in ${{ inputs.where }}; do where+=(--where "$w"); done
+          ${{ inputs.atlas }} ui-catalog refresh begin --id "$REFRESH" --catalog "${{ inputs.catalog }}" --participants-from plan.json "${where[@]}"
+      - uses: actions/upload-artifact@v4
+        with: { name: 'atlas-ui-plan-${{ github.run_id }}', path: plan.json, overwrite: true }
+
+  build:
+    needs: plan
+    if: inputs.build != '' && fromJSON(needs.plan.outputs.builds).include[0] != null
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.plan.outputs.builds) }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ${{ inputs.setup }}
+      - name: Build once for this mode
+        shell: bash
+        env: { ATLAS_BUILD: '${{ toJSON(matrix.values) }}' }
+        run: |
+          eval "$(jq -r 'to_entries[] | "export ATLAS_BUILD_\(.key | ascii_upcase | gsub("[^A-Z0-9]"; "_"))=\(.value | @sh)"' <<< "$ATLAS_BUILD")"
+          ${{ inputs.build }}
+      - uses: actions/upload-artifact@v4
+        with: { name: 'atlas-build-${{ matrix.build }}-${{ github.run_id }}', path: build/, overwrite: true }
+
+  preflight:
+    needs: [plan, build]
+    if: always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ${{ inputs.setup }}
+      - name: Preflight (fails fast, before any capture job starts)
+        if: inputs.preflight != ''
+        shell: bash
+        run: |
+          mkdir -p diagnostics
+          ( ${{ inputs.preflight }} ) 2>&1 | tee diagnostics/preflight.log; exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: 'atlas-ui-preflight-${{ github.run_id }}-${{ github.run_attempt }}', path: diagnostics/, if-no-files-found: ignore }
+
+  capture:
+    needs: [plan, preflight]
+    if: always() && needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(needs.plan.outputs.max-parallel) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ${{ inputs.setup }}
+      - uses: actions/download-artifact@v4
+        if: matrix.build != null
+        with: { name: 'atlas-build-${{ matrix.build }}-${{ github.run_id }}', path: build/ }
+      - name: Collect as one shard of the refresh
+        shell: bash
+        run: >
+          ${{ inputs.atlas }} ui-catalog collect --catalog "${{ inputs.catalog }}" --exec "${{ inputs.exec }}"
+          --refresh "$REFRESH" --participant "${{ matrix.job }}" --attempt "${{ github.run_attempt }}"
+          --journal bundle --max-minutes "${{ inputs.max-minutes }}" ${{ matrix.where }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 'atlas-ui-bundle-${{ matrix.job }}-${{ github.run_id }}-${{ github.run_attempt }}'
+          path: bundle/
+          if-no-files-found: warn
+
+  finalize:
+    needs: [plan, capture]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ${{ inputs.setup }}
+      - uses: actions/download-artifact@v4
+        with: { name: 'atlas-ui-plan-${{ github.run_id }}', path: . }
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'atlas-ui-bundle-*-${{ github.run_id }}-*', path: bundles/ }
+      - name: Merge every attempt's bundle (and name the jobs whose bundle never arrived)
+        run: mkdir -p bundles && ${{ inputs.atlas }} ui-catalog bundle merge bundles --out merged --expect-from plan.json
+        continue-on-error: true
+      - name: Import what the server lacks
+        run: ${{ inputs.atlas }} ui-catalog bundle import merged --reconcile "${{ inputs.reconcile }}"
+        continue-on-error: true
+      - name: Export the catalog from the merged bundle (no server needed to read it)
+        if: always()
+        run: ${{ inputs.atlas }} ui-catalog export --store merged/store --out catalog/index.html --manifest catalog/manifest.json
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: 'atlas-ui-catalog-${{ github.run_id }}-${{ github.run_attempt }}', path: 'catalog/', if-no-files-found: warn }
+      - name: Finalize the refresh (exit 1 unless complete)
+        run: ${{ inputs.atlas }} ui-catalog refresh finalize --id "$REFRESH" --attempt "${{ github.run_attempt }}"

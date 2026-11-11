@@ -9778,8 +9778,10 @@ costs nothing, and the set is named by what it holds: publishing the same specs 
 writes the same set. The catalog entry is written last.
 
 The set's `id` is the SHA-256 of the branch, sha, freshness and each file's path and digest, so the same specs from a
-developer's edited worktree and from CI are different sets. Store errors reject; a failure part-way leaves bodies
-no set names, never a set whose bodies are missing.
+developer's edited worktree and from CI are different sets. Publishers of the same specs racing each other both
+succeed, even with different `recordedAtMs`: when a store refuses the set because another publisher stored it first, the
+stored set is used. Other store errors reject; a failure part-way leaves bodies no set names, never a set whose bodies
+are missing.
 
 #### `readSpecSet`
 
@@ -10845,11 +10847,300 @@ export type ReportData = HtmlReportBundle & {
 
 A run's tests (`HtmlReportBundle`) plus the document title shown for them, for the standalone / Solid report viewer.
 
+### Capture journals and shard bundles
+
+Source: `packages/reports/src/ui-catalog-bundle.ts`. Import: `@crvouga/atlas/reports/ui-catalog-bundle`
+
+A collecting shard can keep a **journal**: before it publishes a capture layer to the server, it writes the same layer
+(the same input, so the same content-addressed id) into a local directory store, and records in a manifest whether the
+publish then succeeded. The folder is a **bundle** ({@link ../../schema/src/ui-catalog-bundle}): when the server stops
+answering, or the claim is lost, or the job is killed after a capture, the bytes and what they are remain, ready to be
+uploaded as a CI artifact.
+
+Later, `validateBundle` checks a bundle without trusting it (every object's digest and size, no path that leaves the
+store, every layer the manifest names present, the definition and source it was made for); `mergeBundles` joins any
+number of them in any order into one (layers are immutable and addressed by content, so nothing is overwritten and
+every attempt stays named); `importBundle` copies a valid bundle's layers into any store (a server, a directory, S3).
+
+Replaying is not claiming: a capture whose publish never succeeded answers a claim that has since ended, so by default
+(`reconcile: 'retain'`) it is kept in the bundle and listed, not imported into a store where it would count as current
+evidence. `reconcile: 'accept'` is the explicit policy that imports it anyway. Node/Bun only.
+
+See docs/ui-catalog.md#capture-journals-and-shard-bundles
+
+#### `JournalIdentity`
+
+```ts
+export type JournalIdentity = {
+  readonly shard: string;
+  /** The CI job or machine; default the shard. */
+  readonly participant?: string;
+  /** The attempt of that participant (`GITHUB_RUN_ATTEMPT`); default `1`. */
+  readonly attempt?: string;
+  readonly refresh?: string | null;
+  readonly collection?: string | null;
+  readonly source?: { readonly sha?: string | null; readonly branch?: string | null };
+  readonly now?: () => number;
+};
+```
+
+Who writes a journal: the shard id its claims carry, and optionally the participant (a CI job), attempt, refresh and source.
+
+#### `JournalEntry`
+
+```ts
+export type JournalEntry = {
+  readonly layer: string;
+  /** Record the publish's outcome. Never throws for a journal that can no longer be written: the capture is already on disk. */
+  settle(publication: Exclude<UiBundlePublication, 'pending'>, error?: string): Promise<void>;
+};
+```
+
+One journaled capture: its layer id, and how to record whether its publish succeeded.
+
+#### `CatalogJournal`
+
+```ts
+export type CatalogJournal = {
+  /** The bundle folder. */
+  readonly dir: string;
+  /** Called once the definition is known: writes its plan layers, so an offline export expects every item. */
+  open(definition: { readonly version: string; readonly document: UiCatalogDefinitionDocument }): Promise<void>;
+  /** Write a capture layer before it is published. Throws when the folder cannot be written. */
+  record(input: PublishChecksInput, context: { readonly claimId: string | null; readonly units: readonly string[] }): Promise<JournalEntry>;
+  /** The manifest as it stands. */
+  manifest(): UiBundleManifest;
+};
+```
+
+What `collectCatalog` asks of a journal. {@link captureJournal} is the implementation; a test may give its own.
+
+#### `isSafeBundlePath`
+
+```ts
+export function isSafeBundlePath(key: string): boolean
+```
+
+Whether a manifest path may name an object of a bundle's store: relative, inside `layers/`, no `.`/`..`/empty segment or backslash.
+
+#### `layerObjectKeys`
+
+```ts
+export function layerObjectKeys(layer: Pick<ReportLayer, 'id' | 'recordedAtMs' | 'bundle'>): string[]
+```
+
+Every object key of one layer in a store: its blobs, its manifest, then its catalog entry (the order to copy them in).
+
+#### `readBundleManifest`
+
+```ts
+export async function readBundleManifest(dir: string): Promise<UiBundleManifest>
+```
+
+Read a bundle's manifest. Throws when it is missing, not JSON or not a manifest, saying which.
+
+#### `captureJournal`
+
+```ts
+export function captureJournal(dir: string, identity: JournalIdentity): CatalogJournal
+```
+
+Open (or resume) a capture journal in `dir`. Pass it to `collectCatalog({ journal })`: every capture layer is written
+here before it is published, and its manifest says whether the publish succeeded. Resuming a folder that already holds
+a bundle keeps what is there and adds this attempt. Writes are atomic, and the manifest is rewritten after every capture,
+so a job killed mid-collection leaves a valid bundle of what it captured. `open` throws when the folder already holds a
+bundle of another definition.
+
+**Example**
+
+```ts
+const journal = captureJournal('atlas-bundle', { shard, participant: 'capture-mobile', attempt: process.env.GITHUB_RUN_ATTEMPT });
+await collectCatalog({ store, catalog, shard: { id: shard }, journal, capture });
+```
+
+#### `BundleValidation`
+
+```ts
+export type BundleValidation = {
+  readonly bundle: string;
+  readonly valid: boolean;
+  readonly manifest: UiBundleManifest | null;
+  readonly problems: readonly UiBundleProblem[];
+};
+```
+
+What `validateBundle` found. `valid` is false on any problem; an invalid bundle's captures count for nothing.
+
+#### `BundleExpectation`
+
+```ts
+export type BundleExpectation = { readonly definition?: string; readonly sha?: string };
+```
+
+What a bundle must have been made for.
+
+#### `validateBundle`
+
+```ts
+export async function validateBundle(dir: string, expect: BundleExpectation = {}): Promise<BundleValidation>
+```
+
+Check a bundle without trusting it: its manifest parses; every object it lists has a safe path, exists, and has the
+listed size and SHA-256; every object in its store is listed; every plan and capture layer it names is present and
+readable with all of its blobs; and, when `expect` says so, it was made for that definition and commit. Never throws for
+a bad bundle: every problem is listed, and `valid` is false.
+
+#### `findBundles`
+
+```ts
+export async function findBundles(paths: readonly string[]): Promise<string[]>
+```
+
+Find bundles: each path that is a bundle, or the bundles found under it (up to four levels down, as downloaded CI artifacts are laid out). Sorted.
+
+#### `BundleMerge`
+
+```ts
+export type BundleMerge = {
+  readonly ok: boolean;
+  readonly out: string;
+  readonly bundles: readonly BundleValidation[];
+  readonly problems: readonly UiBundleProblem[];
+  /** The merged manifest, or null when nothing was merged. */
+  readonly manifest: UiBundleManifest | null;
+  /** Expected participants with no attempt in any bundle (a job whose artifact never arrived). */
+  readonly missing: readonly string[];
+};
+```
+
+What `mergeBundles` did. Nothing is written unless every input is valid and compatible.
+
+#### `mergeBundles`
+
+```ts
+export async function mergeBundles(dirs: readonly string[], out: string, options: { readonly expect?: readonly string[] } & BundleExpectation = {}): Promise<BundleMerge>
+```
+
+Merge bundles into one at `out`, in any order with the same result: every object (copied once; layers are immutable and
+addressed by content), every attempt, every capture with the attempt that made it (a capture two attempts made is listed
+for each), the plans. When `out` already holds a bundle it is merged too, so merging is incremental. Refuses (writes
+nothing, `ok: false`) when any bundle is invalid, or when they were made for different definitions, commits or refreshes.
+`expect` lists participants (the jobs of a matrix plan) that should each have an attempt: those without are `missing`,
+and make `ok` false while still merging what arrived.
+
+#### `BundleImport`
+
+```ts
+export type BundleImport = {
+  readonly ok: boolean;
+  readonly bundle: BundleValidation;
+  /** Layers now in the target (plans and captures). */
+  readonly layers: number;
+  readonly copied: number;
+  readonly skipped: number;
+  /** Captures kept in the bundle and not imported, because they never reached the server and the policy is `retain`. */
+  readonly retained: readonly UiBundleCapture[];
+};
+```
+
+What `importBundle` did.
+
+#### `importBundle`
+
+```ts
+export async function importBundle(dir: string, target: ObjectStore, options: { readonly reconcile?: 'retain' | 'accept'; readonly plans?: boolean } & BundleExpectation = {}): Promise<BundleImport>
+```
+
+Copy a valid bundle's layers into a store (a server's `httpStore`, a directory, S3), each layer's blobs before its
+manifest and its manifest before its catalog entry, skipping what the store has. Plans are copied unless
+`plans: false` (a server that already holds the definition has them). A capture that was published is copied (it is
+there already, or the copy restores it); one that never reached the server answers a claim that has since ended, so it
+is copied only with the explicit `reconcile: 'accept'`, and otherwise retained and listed. An invalid bundle imports
+nothing (`ok: false`). Throws when the target refuses a write.
+
+### A CI kit for UI catalogs: matrix plans and attempt names
+
+Source: `packages/reports/src/ui-catalog-ci.ts`. Import: `@crvouga/atlas/reports/ui-catalog-ci`
+
+The thin, scheduler-free part of running a UI catalog collection in CI. `planMatrix` turns one resolved definition into a
+fan-out: a job per distinct combination of the dimensions chosen to split jobs, which together cover every allowed
+profile (after the definition's `exclude` and the plan's `where`) exactly once, and a build per distinct combination of
+the dimensions that change what is built, so each build runs once and every job names the build it needs. The jobs do
+not divide the work: each one is an ordinary queue shard narrowed with `where`, so a slow or rerun job is covered by the
+queue's leases and retry limits, never by the plan. `attemptArtifactName` names a job's bundle so a rerun attempt never
+overwrites an earlier one.
+
+The same plan runs on a laptop with fewer workers: the definition, the bundles and the refresh are the same, only the
+number of shards differs. Atlas never picks the fan-out: `maxParallel` is what the caller asked for, and a plan larger
+than `maxJobs` (GitHub's matrix limit, 256, by default) is refused rather than trimmed.
+
+See docs/ui-catalog.md#a-ci-kit-plan-capture-finalize
+
+#### `MatrixPlanOptions`
+
+```ts
+export type MatrixPlanOptions = {
+  /** Dimensions that split jobs: one job per distinct combination of their values. Default every dimension (a job per profile). */
+  readonly jobDimensions?: readonly string[];
+  /** Dimensions that change what is built: one build per distinct combination. Default none. */
+  readonly buildDimensions?: readonly string[];
+  /** Only these profiles (`{ device: ['mobile'] }`). */
+  readonly where?: Readonly<Record<string, readonly string[]>>;
+  /** `strategy.max-parallel`. Required in spirit: default 4, never more than the jobs. */
+  readonly maxParallel?: number;
+  /** Refuse a plan with more jobs than this. Default 256, GitHub's limit for one matrix. */
+  readonly maxJobs?: number;
+};
+```
+
+How to fan a definition out.
+
+#### `shellWord`
+
+```ts
+export function shellWord(value: string): string
+```
+
+A value as one POSIX shell word: single-quoted unless it is plainly safe.
+
+#### `planMatrix`
+
+```ts
+export function planMatrix(resolved: { readonly version: string; readonly document: UiCatalogDefinitionDocument }, options: MatrixPlanOptions = {}): UiMatrixPlan
+```
+
+Plan a CI fan-out for a resolved definition: every allowed profile (honouring `exclude` and `where`) is covered by exactly
+one job, each distinct build once. Throws a {@link CatalogDefinitionError} for an unknown dimension or value, a
+`maxParallel` that is not a positive integer, or a plan with more jobs than `maxJobs`; it never trims a plan.
+
+**Example**
+
+```ts
+const plan = planMatrix(await resolveCatalog(catalog), { jobDimensions: ['device', 'scheme'], buildDimensions: ['scheme'], maxParallel: 8 });
+// strategy: { matrix: plan.matrix, 'max-parallel': plan.maxParallel }
+```
+
+#### `attemptArtifactName`
+
+```ts
+export function attemptArtifactName(input: { readonly prefix?: string; readonly job: string; readonly runId: string; readonly runAttempt: string }): string
+```
+
+The name of a job's bundle artifact for one attempt: `<prefix>-<job>-<run>-<attempt>`, cleaned to what artifact stores
+accept. Distinct attempts of one job never collide, so a rerun never overwrites the evidence of the attempt before it.
+Throws for an empty job, run or attempt.
+
+**Example**
+
+```ts
+attemptArtifactName({ job: 'device-mobile', runId: '123', runAttempt: '2' }); // 'atlas-ui-bundle-device-mobile-123-2'
+```
+
 ### The `atlas ui-catalog` command
 
 Source: `packages/reports/src/ui-catalog-cli.ts`. Import: `@crvouga/atlas/reports/ui-catalog-cli`
 
-`uiCatalogMain` is `atlas ui-catalog plan | publish | status | diff | export | collect`: the UI catalog ({@link ./ui-catalog}) without
+`uiCatalogMain` is `atlas ui-catalog plan | publish | status | diff | export | failures | collect`: the UI catalog ({@link ./ui-catalog}) without
 a script. `plan` and `publish` turn a small JSON file (and the pictures beside it) into the layers of the expected set and of
 the captures; `status` reads every store and says whether the catalog is complete and free of failures; `diff` sets two
 commits against each other; `export` writes the catalog as one HTML file that needs no server; `collect` is one shard of
@@ -11751,6 +12042,11 @@ Hosting platforms cap the size of one file, which is the reason a catalog is als
 budget ({@link gatherUiPictures}): pictures past it are listed as left out with the reason, never silently dropped, and the
 manifest stays complete.
 
+A capture's supplemental evidence (more views, a trace, a video: `UiCapture.attachments`) is listed with its cell. Its
+pictures are embedded after every primary picture, within the same budget; anything else (a trace, a video, a log) is
+never embedded. Every supplemental attachment that is not embedded is listed with the reason, in the page and in the
+evidence manifest (`<script type="application/json" id="ui-catalog-evidence">`, {@link uiExportEvidence}).
+
 Everything in the page is data from a test run. Text is escaped; only PNG, JPEG, GIF and WebP bytes whose first bytes say so
 are embedded (never SVG, never what a layer merely claims); a page address is linked only when it is `http` or `https`; the
 page carries a Content-Security-Policy that allows no network request at all.
@@ -11790,6 +12086,14 @@ export function uiPictureKey(capture: Pick<UiCapture, 'origin' | 'image'> | null
 
 The key of a capture's picture in {@link UiExportOptions.pictures}: its layer and its bundle key, or `null` when the picture is not stored in a layer.
 
+#### `uiAttachmentKey`
+
+```ts
+export function uiAttachmentKey(capture: Pick<UiCapture, 'origin'> | null | undefined, attachment: Pick<UiAttachment, 'bundleKey'>): string | null
+```
+
+The key of a supplemental attachment in {@link UiExportOptions.pictures}, made like {@link uiPictureKey}; `null` when it is not stored in a layer.
+
 #### `UiPictureWant`
 
 ```ts
@@ -11805,7 +12109,35 @@ export function uiPicturesWanted(catalog: UiCatalog): UiPictureWant[]
 ```
 
 The pictures of a catalog an export would embed, once each, in the order the page shows them. Only a cell that was captured, or
-that failed (a picture of what the page showed), and whose picture is stored in a layer, has one.
+that failed (a picture of what the page showed), and whose picture is stored in a layer, has one. The pictures among the
+captures' supplemental attachments come after every primary picture, so a budget leaves those out first.
+
+#### `UiExportEvidence`
+
+```ts
+export type UiExportEvidence = {
+  readonly state: string;
+  readonly profile: string;
+  readonly name: string;
+  readonly role: string | null;
+  readonly label: string | null;
+  readonly order: number;
+  readonly embedded: boolean;
+  /** Why it is not embedded: left out by its producer, not a picture, past the export's budget… Absent when embedded. */
+  readonly reason?: string;
+};
+```
+
+One supplemental attachment of an export: whether its bytes are in the page and, when they are not, why.
+
+#### `uiExportEvidence`
+
+```ts
+export function uiExportEvidence(catalog: UiCatalog, options: Pick<UiExportOptions, 'pictures' | 'left'> = {}): UiExportEvidence[]
+```
+
+Every supplemental attachment of the catalog's captures, in page order, saying whether the export embeds it and why not.
+Empty for a catalog whose producers wrote only primary pictures. The page embeds the same list as its evidence manifest.
 
 #### `sniffImage`
 
@@ -11857,6 +12189,396 @@ const { pictures, left } = await gatherUiPictures(wanted, want => readPicture(wa
 await writeFile('catalog.html', uiCatalogHtml(catalog, { pictures, left }));
 ```
 
+### UI catalog failure groups
+
+Source: `packages/reports/src/ui-catalog-failures.ts`. Import: `@crvouga/atlas/reports/ui-catalog-failures`
+
+A large population of failed catalog cells is usually a few causes repeated. `uiCatalogFailureGroups` groups the failed
+cells of a catalog (already narrowed to the scope a person looks at: a definition, filters, a profile) in one pass:
+
+- by the **fingerprint the producer supplied** on the capture, the `fingerprint` label (and per producer, so two
+  collectors' words never merge). Cells with different fingerprints stay apart however alike their messages read.
+- otherwise by the **exact message** after whitespace is collapsed and volatile or secret parts are redacted. Such a
+  group is marked `inferred`: the cells only read the same, which never proves a shared cause.
+
+Each group has its count, the phase and attempts when the producer said (`phase` and `attempts` labels), the affected
+states and profiles (each a cell a viewer can link to), first and last occurrence and one redacted sample. A document says
+whether it is complete: a backend or layer that could not be read, a definition scope that is unavailable, captures still
+in progress or a page of a catalog are named, so the visible groups are never taken for all the failures.
+
+Nothing here changes a result: the groups describe failed cells and decide nothing about them.
+
+See docs/ui-catalog.md#grouping-failures
+
+#### `UI_FAILURES_VERSION`
+
+```ts
+export const UI_FAILURES_VERSION = …
+```
+
+The `schemaVersion` of the failure groups document.
+
+#### `UI_FAILURE_LABELS`
+
+```ts
+export const UI_FAILURE_LABELS = …
+```
+
+The capture labels a producer sets to describe a failure: its fingerprint, the phase it failed in, and how many attempts it took. All optional.
+
+#### `UiFailureCell`
+
+```ts
+export type UiFailureCell = {
+  readonly state: string;
+  readonly title: string;
+  /** The profile key (`UiProfile.key`): with `state`, the cell to link to. */
+  readonly profile: string;
+  readonly profileLabel: string;
+  readonly recordedAtMs: number;
+  readonly producer: string;
+  readonly layer: string;
+  readonly backend: string;
+  readonly phase: string | null;
+  readonly attempts: number | null;
+};
+```
+
+One affected cell of a group: a state in a profile, with where its failed capture came from.
+
+#### `UiFailureGroup`
+
+```ts
+export type UiFailureGroup = {
+  /** Stable within a document: `fingerprint:<producer>:<fingerprint>` or `message:<normalized message>`. */
+  readonly key: string;
+  /** `fingerprint`: the producer said these share a fingerprint. `message`: only the normalized messages are equal. */
+  readonly basis: 'fingerprint' | 'message';
+  /** True for a message group: the grouping is inferred from text and does not show a shared cause. */
+  readonly inferred: boolean;
+  readonly fingerprint: string | null;
+  readonly producers: readonly string[];
+  /** Failed cells in the group. */
+  readonly count: number;
+  /** Distinct states and profiles affected. */
+  readonly states: number;
+  readonly profiles: number;
+  /** The phases the producer named, in name order; empty when none did. */
+  readonly phases: readonly string[];
+  /** The fewest and most attempts the producer reported, or null when none did. */
+  readonly attempts: { readonly min: number; readonly max: number } | null;
+  readonly firstRecordedAtMs: number;
+  readonly lastRecordedAtMs: number;
+  /** The newest failure's message, redacted ({@link redactFailureMessage}). */
+  readonly sample: string;
+  /** The affected cells, newest first, at most `maxCells`; `count` is all of them. */
+  readonly cells: readonly UiFailureCell[];
+};
+```
+
+Cells that failed the same way.
+
+#### `UiCatalogFailures`
+
+```ts
+export type UiCatalogFailures = {
+  readonly schemaVersion: typeof UI_FAILURES_VERSION;
+  readonly version?: string;
+  /** The catalog's scope, when it had one. */
+  readonly scope?: UiCatalogScope;
+  readonly total: {
+    /** Failed cells in the catalog given. */
+    readonly failed: number;
+    readonly groups: number;
+    /** Failed cells grouped by a producer's fingerprint, and by message only. */
+    readonly fingerprinted: number;
+    readonly inferred: number;
+  };
+  /** False when something may hide failures: then `incomplete` says what, and the totals are a lower bound. */
+  readonly complete: boolean;
+  readonly incomplete: readonly string[];
+  /** Largest first. */
+  readonly groups: readonly UiFailureGroup[];
+};
+```
+
+The failure groups of a catalog.
+
+#### `UiFailureOptions`
+
+```ts
+export type UiFailureOptions = {
+  /** Most cells listed per group (default 200); `count` is always the whole group. */
+  readonly maxCells?: number;
+  /** Most groups listed (default all); `total.groups` is all of them. */
+  readonly maxGroups?: number;
+};
+```
+
+How failures are grouped and how much of each group is listed.
+
+#### `redactFailureMessage`
+
+```ts
+export function redactFailureMessage(message: string): string
+```
+
+A failure message with what should not be copied into a summary taken out: the query and fragment of a URL and any user
+and password in it, the value after a word like `token`, `secret`, `password` or `authorization`, `Bearer` credentials,
+long hex or base64 runs, and the directories of an absolute path (its last part is kept). Whitespace is collapsed and the
+text is cut at 500 characters. Conservative: it may leave something sensitive in a message it does not recognize, so a
+producer should not put secrets in a failure detail in the first place.
+
+#### `uiCatalogFailureGroups`
+
+```ts
+export function uiCatalogFailureGroups(catalog: UiCatalog & { readonly total?: number }, options: UiFailureOptions = {}): UiCatalogFailures
+```
+
+The failed cells of `catalog` grouped by producer-supplied fingerprint, else by exact normalized message (marked
+`inferred`). One pass over the cells; groups are sorted by count, then key. Give it the catalog as the person sees it
+(scoped with `scopeUiCatalog`, narrowed with `filterUiCatalog`) and its groups and drilldowns are exactly that scope.
+
+**Example**
+
+```ts
+const failures = uiCatalogFailureGroups(filterUiCatalog(scopeUiCatalog(whole, selection), query));
+failures.groups[0]; // { basis: 'fingerprint', count: 40, cells: [{ state, profile, … }], … }
+```
+
+#### `UiFailureMarkdownOptions`
+
+```ts
+export type UiFailureMarkdownOptions = {
+  /** The address of a cell in a viewer, such as `https://atlas.example/#/catalog?state=…&image=…`. */
+  readonly link?: (cell: UiFailureCell) => string | undefined;
+  /** Most cells listed per group in the text (default 10). */
+  readonly cellsPerGroup?: number;
+};
+```
+
+Where a failure group's cells link to: a function of a cell, or nothing (no links).
+
+#### `uiCatalogFailuresMarkdown`
+
+```ts
+export function uiCatalogFailuresMarkdown(failures: UiCatalogFailures, options: UiFailureMarkdownOptions = {}): string
+```
+
+The failure groups as Markdown for a CI summary: the totals and whether they are complete, then one section per group
+with its basis (a message group says it is inferred, not a shared cause), count, phases, attempts, occurrence, the redacted
+sample and the affected cells.
+
+### UI catalog index
+
+Source: `packages/reports/src/ui-catalog-index.ts`. Import: `@crvouga/atlas/reports/ui-catalog-index`
+
+A compact view of the UI catalog for a viewer that browses it through a server: every state with the facts that search,
+filters, sorting and counts read, and none of the evidence a card draws (pictures, attachments, origins, labels, plans).
+`GET /api/reports/ui-catalog?view=index` answers with it, and `?view=index&since=<version>` with only the states that
+changed since a version the server remembers, plus the ids of those removed. A viewer reads the evidence of the states it
+shows with `?id=<ids>` (the full document, for those states only).
+
+The index is a projection, never a judgement: a cell's `coverage` and `expected` are the full catalog's, unchanged. A
+state's `fingerprint` changes whenever anything of its full document does (a new winner, picture, attachment or plan), so
+a viewer can tell which held evidence is out of date. A viewer that is given a full catalog in place of an index (an older
+server) projects it itself ({@link uiCatalogIndexOf}).
+
+See docs/ui-catalog.md#streaming-and-loading
+
+#### `UiCatalogIndexCell`
+
+```ts
+export type UiCatalogIndexCell = {
+  readonly profile: string;
+  readonly coverage: UiCoverage;
+  readonly expected: UiCell['expected'];
+  /** The winning capture's status, or null when nothing was captured. */
+  readonly status: EvidenceStatus | null;
+  /** Why the capture failed or was skipped; absent when empty. */
+  readonly detail?: string;
+  /** When the winning capture was recorded, or null when nothing was captured. */
+  readonly recordedAtMs: number | null;
+  /** The producer of the winning capture; absent when nothing was captured. */
+  readonly producer?: string;
+  /** The winning capture's labels, only for one that did not pass (its failure `fingerprint`, `phase`, `attempts`, …); absent otherwise. */
+  readonly labels?: Readonly<Record<string, string>>;
+};
+```
+
+One cell of an index state: its profile (a key of the document's `profiles`) and how it stands.
+
+#### `UiCatalogIndexState`
+
+```ts
+export type UiCatalogIndexState = Omit<UiCatalogState, 'cells'> & {
+  readonly cells: readonly UiCatalogIndexCell[];
+  /** Changes whenever anything in the state's full document does. Compare, never parse. */
+  readonly fingerprint: string;
+};
+```
+
+A state as the index holds it: its facts, its cells, and a fingerprint of its whole document.
+
+#### `UiCatalogIndex`
+
+```ts
+export type UiCatalogIndex = Omit<UiCatalog, 'states'> & {
+  readonly view: 'index';
+  readonly states: readonly UiCatalogIndexState[];
+  /** States that match the query (all pages); with an honored `since`, the states that changed. */
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  /** Present when `since` was asked. With `honored`, `states` holds only what changed and `removed` what went. */
+  readonly since?: { readonly requested: string; readonly honored: boolean };
+  /** With an honored `since`: the ids of the states that are no longer in the catalog. */
+  readonly removed?: readonly string[];
+};
+```
+
+`GET /api/reports/ui-catalog?view=index`: the catalog's summary, facets and sources, with index states.
+
+#### `uiIndexState`
+
+```ts
+export function uiIndexState(state: UiCatalogState): UiCatalogIndexState
+```
+
+The index form of one full state. Made once per state object.
+
+#### `uiCatalogIndexOf`
+
+```ts
+export function uiCatalogIndexOf(catalog: UiCatalog & { readonly total?: number; readonly offset?: number; readonly limit?: number }): UiCatalogIndex
+```
+
+The index of a full catalog document (or of a page of one), with paging fields.
+
+#### `selectUiStates`
+
+```ts
+export function selectUiStates(catalog: UiCatalog, ids: readonly string[]): UiCatalog
+```
+
+Only the states with these exact ids (`?id=`), in the catalog's order. Nothing asked is everything.
+
+#### `uiStateIds`
+
+```ts
+export function uiStateIds(params: URLSearchParams): string[]
+```
+
+The `id` parameters of a request, comma-separated or repeated, as {@link selectUiStates} takes them.
+
+#### `UiCatalogIndexes`
+
+```ts
+export class UiCatalogIndexes
+```
+
+Remembers the fingerprints of the index answers it gave, a few versions back, so that a later `since` is answered with
+only what changed. Keyed by version and by the question's scope (its filters and definition), because a delta is only
+meaningful against the same question. Bounded: the oldest is forgotten first, and a forgotten version is answered whole.
+
+- `answer(catalog: UiCatalog, options: { readonly version: string; readonly scope: string; readonly since?: string | null; readonly limit: number; readonly offset: number }): UiCatalogIndex` — The index answer for a (filtered) catalog at `version`: one page of it, or with `since` the states that changed since that version and the ids that went, when that version is remembered for the same `scope`; otherwise the whole catalog with `since.honored` false.
+
+#### `applyUiCatalogIndexDelta`
+
+```ts
+export function applyUiCatalogIndexDelta(held: UiCatalogIndex, answer: UiCatalogIndex): UiCatalogIndex
+```
+
+The index a viewer holds after a `since` answer: changed states replaced or added in id order, removed ones dropped, and
+the summary, facets and sources taken from the answer. An answer that is not an honored delta replaces what was held.
+
+#### `uiCatalogFromIndex`
+
+```ts
+export function uiCatalogFromIndex(index: UiCatalogIndex): UiCatalog
+```
+
+The index as a {@link UiCatalog}, for code that searches, filters, sorts and counts it. Each cell's `capture` holds only
+the status, detail, time, producer and (for a capture that did not pass) labels the index carries: no picture,
+attachments or origin beyond those. Such a
+state answers true to {@link isIndexState}; read its full document (`?id=`) before drawing its evidence.
+
+#### `isIndexState`
+
+```ts
+export function isIndexState(state: UiCatalogState): boolean
+```
+
+Whether a state came from an index ({@link uiCatalogFromIndex}): its evidence (pictures, origins, plans) must be read before it is drawn.
+
+### The CI kit commands of `atlas ui-catalog`
+
+Source: `packages/reports/src/ui-catalog-kit-cli.ts`. Import: `@crvouga/atlas/reports/ui-catalog-kit-cli`
+
+`atlas ui-catalog plan-matrix | refresh begin|status|finalize | bundle validate|merge|import`, and the `--refresh` and
+`--journal` flags of `collect`: the commands a CI workflow (or a laptop running the same plan with fewer workers) uses
+around the shared queue. `plan-matrix` fans a definition out into matrix JSON ({@link ./ui-catalog-ci}); `refresh` pins a
+run and judges it whole ({@link ./ui-catalog-refresh}); `bundle` checks, merges and imports the journals shards wrote
+({@link ./ui-catalog-bundle}). None of them schedules anything: shards still coordinate only through the server.
+
+Exit codes as for every `atlas ui-catalog` command: 0 it worked (a refresh is complete, every bundle is valid), 1 the
+answer is no (incomplete, failed or unknown; an invalid or missing bundle; a server that could not be reached), 2 the
+command was wrong (thrown, and turned into a message by the caller).
+
+See docs/ui-catalog.md#a-ci-kit-plan-capture-finalize
+
+#### `UI_CATALOG_KIT_SYNOPSIS`
+
+```ts
+export const UI_CATALOG_KIT_SYNOPSIS = …
+```
+
+The synopsis lines of the kit commands, for `atlas ui-catalog --help`.
+
+#### `UI_CATALOG_KIT_HELP`
+
+```ts
+export const UI_CATALOG_KIT_HELP = …
+```
+
+The explanation of the kit commands and `collect`'s kit flags, for `atlas ui-catalog --help`.
+
+#### `uiCatalogKitMain`
+
+```ts
+export async function uiCatalogKitMain(command: string, rest: readonly string[], context: { readonly base: string; readonly env: Env; readonly json: boolean; readonly io: ReportIo }): Promise<number>
+```
+
+`atlas ui-catalog plan-matrix | refresh … | bundle …`. Returns the exit code; throws on a mistake in the command (exit 2).
+
+**Example**
+
+```ts
+const code = await uiCatalogKitMain('refresh', ['finalize', '--id', runId, '--store', url], { base, env, json: true, io });
+```
+
+#### `CollectKit`
+
+```ts
+export type CollectKit = {
+  readonly shard: string | null;
+  readonly options: Pick<CollectOptions, 'collection' | 'staleBeforeMs' | 'journal'> & { readonly where?: Readonly<Record<string, string | readonly string[]>> };
+  readonly origin: { readonly sha: string | null; readonly branch: string | null } | null;
+  readonly summary: () => { readonly refresh?: { readonly id: string; readonly shard: string }; readonly journal?: { readonly dir: string; readonly captures: number; readonly published: number; readonly failed: number; readonly pending: number } };
+};
+```
+
+What `collect` adds for `--refresh` and `--journal`: the options its `collectCatalog` call takes, the shard id, and a summary for its result.
+
+#### `collectKit`
+
+```ts
+export async function collectKit(rest: readonly string[], context: { readonly base: string; readonly env: Env; readonly server: HttpStore; readonly shard: string; readonly where: Readonly<Record<string, readonly string[]>> }): Promise<CollectKit>
+```
+
+Join a refresh (`--refresh`) and open a journal (`--journal`) for `collect`. Throws a usage error for `--collection` or
+`--stale-before` given with `--refresh` (the refresh decides them), and an `AtlasHttpError` when the refresh cannot be joined.
+
 ### Writing a UI catalog from any collector
 
 Source: `packages/reports/src/ui-catalog-publish.ts`. Import: `@crvouga/atlas/reports/ui-catalog-publish`
@@ -11890,6 +12612,41 @@ export type UiPicture = {
 
 A picture to store with a capture: its bytes (`data`, `base64`), or where it already is (`uri`).
 
+#### `UiCaptureAttachment`
+
+```ts
+export type UiCaptureAttachment = Omit<UiPicture, 'contentType'> & {
+  /** What it is, in the open vocabulary of attachment roles: `view` (default), `trace`, `video`, `log`, `snapshot`, `har`… `screenshot` is the primary picture's role; give that as `screenshot` instead. */
+  readonly role?: string;
+  /** For a person (`Order summary, scrolled`). Default the name. */
+  readonly label?: string;
+  /** Where it is listed among the capture's attachments, lowest first; ties keep the order given. */
+  readonly order?: number;
+  /** Default `image/png` for a `view`, `application/octet-stream` otherwise. */
+  readonly contentType?: string;
+  /** A small UTF-8 value inline (a log excerpt). */
+  readonly text?: string;
+  /** Why the bytes are not here. Recorded as the attachment's `omitted`. */
+  readonly omitted?: string;
+};
+```
+
+More evidence of the same capture, beside its primary {@link UiPicture}: another view of the state (a scrolled region, a
+detail), a trace, a video, a log. It stays with its state and profile (one result, never a state per file), keeps its
+`label` and `order`, and never decides the result: a trace on a failed capture leaves it failed.
+
+Give the bytes (`data`, `base64`, `text`), an address (`uri`), or nothing but `omitted` (why they are not here: `not-found`,
+`too-large`, `over-budget`, `policy`…). One with none of these is published as omitted `not-found`, so a missing file is
+shown as missing and never as evidence that exists.
+
+#### `UiAttachmentFacts`
+
+```ts
+export type UiAttachmentFacts = { readonly supplemental: true; readonly label?: string; readonly order: number };
+```
+
+The attachment extension `uiStateLayer` writes on each supplemental attachment: its label and order, so a reader keeps both.
+
 #### `UiStateCapture`
 
 ```ts
@@ -11902,6 +12659,8 @@ export type UiStateCapture = UiStateFacts & {
   /** Why it failed or was skipped: a readiness check that never became true, a console error. */
   readonly detail?: string;
   readonly screenshot?: UiPicture;
+  /** Supplemental evidence of this capture (more views, a trace, a video), in order after the primary picture. See {@link UiCaptureAttachment}. */
+  readonly attachments?: readonly UiCaptureAttachment[];
   readonly durationMs?: number;
   /** More facts about the capture that never split it (`browser`, `os`). */
   readonly labels?: Readonly<Record<string, string>>;
@@ -12010,6 +12769,8 @@ export type UiItemResult = {
   readonly layer: string;
   /** The claim it answers (its {@link UI_CLAIM_LABEL} label), or null. */
   readonly claim: string | null;
+  /** The commit its layer recorded, when it recorded one. */
+  readonly sha?: string | null;
 };
 ```
 
@@ -12104,6 +12865,177 @@ export function claimedItem(expanded: ExpandedCatalog, index: number)
 
 One item of a unit as a claim carries it: its key, its state with the declared facts, and its profile.
 
+### Refreshing a UI catalog: begin, join, status, finalize
+
+Source: `packages/reports/src/ui-catalog-refresh.ts`. Import: `@crvouga/atlas/reports/ui-catalog-refresh`
+
+A shard's `collectCatalog` result is only that shard's view: `stoppedBy: empty` says the queue had nothing left *for it*,
+not that the catalog is complete. A **refresh** is the whole run: `beginRefresh` pins it on the server to a definition
+version, an optional source (commit, branch), the profiles in scope (`where`), a freshness cutoff and a collection id;
+`joinRefresh` records an attempt (a CI job, its rerun) and returns the options its `collectCatalog` call takes;
+`finalizeRefresh` judges every unit in scope against that policy and says `complete`, `incomplete` (naming what is
+outstanding and why), `failed` (what is left will not be handed out again) or `unknown` (something could not be read),
+with worker health reported apart from capture completeness.
+
+Nothing here is a scheduler: shards still coordinate only through the server's queue. A status that cannot be read (the
+server is down, the refresh was never begun, an older server without refreshes) is `unknown`, never complete.
+
+See docs/ui-catalog.md#refreshes-finalizing-a-collection
+
+#### `BeginRefreshOptions`
+
+```ts
+export type BeginRefreshOptions = Omit<UiRefreshRequest, 'definition'> & {
+  /** The refresh id: a CI run id fits. Beginning it again joins it. */
+  readonly id: string;
+  /** The definition, as the project wrote it or resolved. */
+  readonly catalog: CollectOptions['catalog'];
+};
+```
+
+What a refresh is pinned to. The definition is published first (idempotent), so its version is what the refresh names.
+
+#### `refreshShard`
+
+```ts
+export function refreshShard(participant: string, attempt: string): string
+```
+
+The shard id an attempt claims and publishes as: `<participant>#<attempt>`, so a rerun's work stays distinguishable.
+
+#### `beginRefresh`
+
+```ts
+export async function beginRefresh(store: HttpStore, options: BeginRefreshOptions): Promise<{ readonly receipt: UiRefreshReceipt; readonly created: boolean; readonly definition: { readonly version: string; readonly name: string } }>
+```
+
+Begin a refresh on a server, or join the one that has this id with the same values. Publishes the definition first.
+Throws an `AtlasHttpError` when the server refuses (409: the id exists with other values) or cannot be reached.
+
+**Example**
+
+```ts
+const { receipt } = await beginRefresh(store, { id: process.env.GITHUB_RUN_ID!, catalog, source: { sha, branch }, participants: plan.participants });
+```
+
+#### `joinRefresh`
+
+```ts
+export async function joinRefresh(store: HttpStore, id: string, attempt: { readonly participant: string; readonly attempt?: string; readonly where?: Readonly<Record<string, readonly string[]>> }): Promise<{
+  readonly receipt: UiRefreshReceipt;
+  readonly collect: Required<Pick<CollectOptions, 'collection' | 'staleBeforeMs' | 'shard'>> & { readonly origin: { readonly sha: string | null; readonly branch: string | null } };
+}>
+```
+
+Record that an attempt joined a refresh, and return the receipt with the options its shard passes to `collectCatalog`
+(`collection`, `staleBeforeMs`, `shard`, `origin`). Throws an `AtlasHttpError` for an unknown refresh (404) or a server
+that cannot be reached.
+
+**Example**
+
+```ts
+const joined = await joinRefresh(store, runId, { participant: 'capture-mobile', attempt: process.env.GITHUB_RUN_ATTEMPT ?? '1' });
+await collectCatalog({ store, catalog, ...joined.collect, capture });
+```
+
+#### `unknownRefresh`
+
+```ts
+export function unknownRefresh(reason: string, now = Date.now()): UiRefreshStatus
+```
+
+A status for a refresh that could not be read: `unknown`, never complete.
+
+#### `refreshStatus`
+
+```ts
+export function refreshStatus(store: HttpStore, id: string): Promise<UiRefreshStatus>
+```
+
+Judge a refresh without recording anything. Never throws for a server or receipt that cannot be read: that is an
+`unknown` status with the reason, whose `ok` is false.
+
+#### `finalizeRefresh`
+
+```ts
+export function finalizeRefresh(store: HttpStore, id: string, options: { readonly attempt?: string } = {}): Promise<UiRefreshStatus>
+```
+
+Judge a refresh and record the finalization on its receipt (with the attempt that asked, so repeated finalizations of
+rerun attempts stay distinguishable). `ok` is true only when `outcome` is `complete`. Never throws for a server or
+receipt that cannot be read: that is an `unknown` status.
+
+**Example**
+
+```ts
+const status = await finalizeRefresh(store, runId, { attempt: process.env.GITHUB_RUN_ATTEMPT });
+if (!status.ok) process.exitCode = 1;
+```
+
+### UI catalog definition scope
+
+Source: `packages/reports/src/ui-catalog-scope.ts`. Import: `@crvouga/atlas/reports/ui-catalog-scope`
+
+A catalog counts every state and profile any layer ever recorded or planned, so after a definition's matrix changes its
+old profiles and removed states stay beside the current ones. `scopeUiCatalog` projects a catalog onto exactly one
+definition version: the definition's states × profiles, each the catalog's own cell when one exists and `missing`
+otherwise, with every cell outside it counted in `scope.excluded` and nothing deleted. A definition is named by its
+version (the SHA-256 of its canonical JSON), so a link that pins one never drifts when another is published. A definition
+that cannot be read gives an explicit unavailable scope with no state in it, never every layer's history in its place.
+
+The projection is one pass over the catalog and one over the definition's items. It reads no store: the caller finds the
+definition (`GET /api/ui-catalog/definitions/{version}`, a stored definition file, or a `defineCatalog` module) and the
+server, the CLI, the export and the viewer all project the same way, so the same scope gives the same totals.
+
+See docs/ui-catalog.md#scoping-to-one-definition
+
+#### `UiDefinitionSelection`
+
+```ts
+export type UiDefinitionSelection =
+  | { readonly kind: 'all-history' }
+  | { readonly kind: 'definition'; readonly version: string; readonly document: UiCatalogDefinitionDocument | null; readonly reason?: string };
+```
+
+What a person chooses: every layer's history, or one definition version (with its document, or null when it could not be read).
+
+#### `UI_DEFINITION_WORDS`
+
+```ts
+export const UI_DEFINITION_WORDS = …
+```
+
+The words `?definition=` and `--definition` take besides a version: `all` (every layer's history) and `latest` (the server's latest published definition, resolved to its version).
+
+#### `isDefinitionVersion`
+
+```ts
+export function isDefinitionVersion(text: string): boolean
+```
+
+Whether a text is a definition version: 64 lowercase hex digits.
+
+#### `scopeUiCatalog`
+
+```ts
+export function scopeUiCatalog(catalog: UiCatalog, selection: UiDefinitionSelection): UiCatalog
+```
+
+The catalog as one definition sees it, or as all history with the choice recorded. Under a definition: exactly its states
+in exactly its profiles (cells it expects and nobody captured are `missing`, every kept cell is `expected: 'declared'`),
+its inventory as the surfaces, and `scope.excluded` counting the recorded states, profiles and cells it leaves out. An
+unavailable definition (`document: null`) gives a catalog with no state, `scope.status: 'unavailable'` and a notice. The
+profiles, facets and summary are those of what is kept, so filters and totals agree with the scope. Throws a
+`CatalogDefinitionError` only for a document that `expandCatalog` refuses.
+
+**Example**
+
+```ts
+const whole = uiCatalog(layers);
+const current = scopeUiCatalog(whole, { kind: 'definition', version, document });
+current.summary.cells === current.scope!.expected!.cells; // exactly the definition's items
+```
+
 ### UI catalog
 
 Source: `packages/reports/src/ui-catalog.ts`. Import: `@crvouga/atlas/reports/ui-catalog`
@@ -12177,6 +13109,17 @@ export type UiImage = UiScreenshot & {
 
 A picture, with the address a browser loads it from.
 
+#### `UiAttachment`
+
+```ts
+export type UiAttachment = UiStateAttachment & {
+  /** Where the stored bytes are, relative to the reports API root, like {@link UiImage.path}. Absent for an address-only or omitted one. */
+  readonly path?: string;
+};
+```
+
+Supplemental evidence of a capture (another view, a trace, a video), with the address a browser loads it from.
+
 #### `UiOrigin`
 
 ```ts
@@ -12204,6 +13147,8 @@ export type UiCapture = {
   readonly durationMs: number | null;
   /** The picture, or null when the capture has none (or it was left out: see `omitted`). */
   readonly image: UiImage | null;
+  /** Supplemental evidence of the same capture, in the producer's order: more views, a trace, a video. Absent when there is none. Never decides coverage: a failed capture with a trace is still failed. */
+  readonly attachments?: readonly UiAttachment[];
   /** The check's labels: what describes the capture without splitting it (a `shard`, a `browser`). */
   readonly labels: Readonly<Record<string, string>>;
   readonly origin: UiOrigin;
@@ -12334,10 +13279,35 @@ export type UiCatalog = {
   readonly facets: UiCatalogFacets;
   /** What could not be read. A state that depended on it is not in the catalog as captured. Filled by the caller who read the backends. */
   readonly sources: { readonly layers: number; readonly backends: readonly BackendInfo[]; readonly notices: readonly string[] };
+  /** Which history the document counts, when a caller chose one (`?definition=`, `--definition`). Absent: every layer's history, as before. */
+  readonly scope?: UiCatalogScope;
 };
 ```
 
 The catalog, as `GET /api/reports/ui-catalog` answers it (`version` is the report's, when the caller knows it).
+
+#### `UiCatalogScope`
+
+```ts
+export type UiCatalogScope = {
+  readonly kind: 'all-history' | 'definition';
+  /** `applied`: the counts are the definition's. `unavailable`: the definition could not be read, so nothing is counted. */
+  readonly status: 'applied' | 'unavailable';
+  /** The definition version (the SHA-256 of its canonical JSON) and its name, for `kind: 'definition'`. */
+  readonly definition?: { readonly version: string; readonly name: string | null };
+  /** What the definition expects: its states, its profiles and their product (cells). */
+  readonly expected?: { readonly states: number; readonly profiles: number; readonly cells: number };
+  /** Recorded history outside the definition: states it does not name, profiles it does not have, and the cells of both, by coverage. Still in the layers; select all history to see it. */
+  readonly excluded?: { readonly states: number; readonly profiles: number; readonly cells: number; readonly coverage: Readonly<Record<UiCoverage, number>> };
+  /** Why the scope is unavailable. */
+  readonly reason?: string;
+};
+```
+
+The history a catalog counts. `all-history`: every state and profile any layer ever recorded or planned. `definition`: only
+the exact states × profiles of one catalog definition version, with what that leaves out counted in `excluded`, never
+deleted. A definition that could not be found is `status: 'unavailable'` and the document then holds no state at all: it
+never falls back to every layer's history. Readers treat an unknown `kind` or `status` as an unknown scope.
 
 #### `UiCatalogOptions`
 
@@ -12382,6 +13352,34 @@ capture passed; a plan that nothing has captured is `missing`. When no plan exis
 const catalog = uiCatalog(effective.layers, { version: effective.version, backends: effective.backends });
 catalog.states.map(state => [state.id, state.cells.map(cell => cell.coverage)]);
 ```
+
+#### `UiCatalogParts`
+
+```ts
+export type UiCatalogParts = {
+  /** Surface ids an inventory names. */
+  readonly inventory: Iterable<string>;
+  /** Whether an expected set exists (`summary.planned`). */
+  readonly planned: boolean;
+  /** The profiles, in any order; by default those of the cells. */
+  readonly profiles?: readonly UiProfile[];
+  readonly version?: string;
+  readonly sources: UiCatalog['sources'];
+  readonly scope?: UiCatalogScope;
+};
+```
+
+What {@link assembleUiCatalog} needs besides the states.
+
+#### `assembleUiCatalog`
+
+```ts
+export function assembleUiCatalog(catalogStates: readonly UiCatalogState[], parts: UiCatalogParts): UiCatalog
+```
+
+A catalog document from its states (in id order, each with its cells in profile order): the surfaces, the summary and the
+facets are worked out from them in one pass each. `uiCatalog` ends with it, and so does a projection of a catalog onto a
+definition ({@link  ./ui-catalog-scope}), so both count a cell the same way.
 
 #### `UiCatalogQuery`
 
@@ -12448,6 +13446,14 @@ export function pageUiCatalog(catalog: UiCatalog, page: { readonly limit?: numbe
 ```
 
 A page of a catalog's states, for a document that would otherwise be large. The summary, facets and sources are the whole catalog's.
+
+#### `uiScopeSentence`
+
+```ts
+export function uiScopeSentence(scope: UiCatalogScope | undefined): string
+```
+
+One line for a person: which history the counts are of, and what a definition scope leaves out. Empty for an unscoped catalog.
 
 #### `uiCatalogMarkdown`
 
@@ -12601,12 +13607,28 @@ export type UiStateFacts = {
 
 The facts a producer declares about a state, under the `atlas.ui-state` extension. All optional, all strings or lists of strings.
 
+#### `UiStateAttachment`
+
+```ts
+export type UiStateAttachment = UiScreenshot & {
+  readonly role?: string;
+  readonly label?: string;
+  readonly order: number;
+};
+```
+
+Supplemental evidence of a capture: every attachment of a `ui-state` check other than its picture (another view, a trace,
+a video, a log), in the order the producer gave. `role` is open (`view`, `trace`, `video`, `log`…); `label` and `order`
+are what `uiStateLayer` wrote (see `UiCaptureAttachment`), else the attachment's description and position.
+
 #### `UiStateFact`
 
 ```ts
 export type UiStateFact = UiStateFacts & {
-  /** The check's picture: its `screenshot` attachment, else its first image. */
+  /** The check's picture: its `screenshot` attachment, else its first image that is not marked supplemental. */
   readonly screenshot?: UiScreenshot;
+  /** The check's other attachments, in order; absent when it has none. Evidence only: never decides a result. */
+  readonly attachments?: readonly UiStateAttachment[];
 };
 ```
 

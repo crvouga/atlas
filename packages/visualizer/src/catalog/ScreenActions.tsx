@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 
 import { useUiCatalog } from './provider';
 import { screenHandoff } from './handoff';
+import { withEvidence } from './server-catalog';
 import { IconAction } from './IconAction';
 import { useCatalogSearch, type CatalogSearch } from './search';
 
@@ -22,7 +23,10 @@ export function ScreenActions({ state, cell, selection, share = true, compact = 
   const [opened, setOpened] = useState(false);
   const clipboard = useClipboard();
   const notices = [...(catalog?.sources.notices ?? []), ...(catalog?.sources.backends ?? []).filter(backend => !backend.available).map(backend => `Backend ${backend.id} is unavailable; its evidence is unknown.`)];
-  const fullState = catalog?.states.find(item => item.id === state.id) ?? state;
+  // Every profile of the state, with the evidence of the given state where it has it: read through a server, the catalog's
+  // own copy is an index without pictures or origins, and the state drawn carries the evidence that was read.
+  const listed = catalog?.states.find(item => item.id === state.id);
+  const fullState = listed ? withEvidence(listed, state) : state;
   const buildHandoff = () => screenHandoff(fullState, cell, { ...search, ...selection }, catalog?.version, notices);
   const handoff = opened || clipboard.error ? buildHandoff() : null;
   useEffect(() => { setOpened(false); clipboard.reset(); }, [state.id]);

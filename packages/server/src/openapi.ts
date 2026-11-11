@@ -15,8 +15,9 @@
 import { z } from 'zod/v4';
 import { ProjectsSchema } from '../../schema/src/project';
 import { UiCatalogDefinitionSchema, UiClaimRequestSchema, UiClaimSchema, UiQueueSummarySchema } from '../../schema/src/ui-catalog-queue';
+import { UiRefreshJoinSchema, UiRefreshReceiptSchema, UiRefreshRequestSchema, UiRefreshStatusSchema } from '../../schema/src/ui-catalog-refresh';
 
-import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, UiCatalogDetailSchema, CatalogEntriesSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema, RecordingVerificationSchema, RecordingVerifyRequestSchema } from '../../schema/src/api';
+import { EffectiveDeltaSchema, EffectiveEvidenceSchema, EvidencePageSchema, HealthSchema, LayerRowsSchema, CheckDetailSchema, OutlineSchema, ProblemSchema, ReadySchema, ServerInfoSchema, StoreListingSchema, StoreWriteResultSchema, ChecksResultSchema, HelloEventSchema, ReportEventSchema, PingEventSchema, TestCatalogSchema, CatalogHealthSchema, TestHistorySchema, TestReliabilitySchema, RunListSchema, RunDetailSchema, ArtifactListSchema, UiCatalogSchema, UiCatalogIndexSchema, UiCatalogDetailSchema, UiCatalogFailuresSchema, CatalogEntriesSchema, ArtifactTagEditSchema, ArtifactTagEntrySchema, ArtifactTagsSchema, ReviewCollectionRequestSchema, ReviewCollectionSchema, ReviewCollectionListSchema, ReviewCollectionDetailSchema, ReviewNoteInputSchema, ReviewNoteSchema, ReviewManifestSchema, RecordingVerificationSchema, RecordingVerifyRequestSchema } from '../../schema/src/api';
 import { LiveRunSchema, LiveRunStartSchema, LiveRunUpdateSchema, ServerEditableSettingsSchema, ServerSettingsSnapshotSchema, GcPolicySchema, GcSnapshotSchema, GcRunResultSchema, AtlasChangeSchema, PublishChecksSchema, ReportSourcesSchema, ReportStatusSchema, RunsIndexSchema, SpecIndexSchema } from '../../schema/src/index';
 
 /** The version of the API described, `major.minor.patch`: the minor grows when an operation or field is added, the major never within `/api`. */
@@ -69,8 +70,9 @@ const COMPONENTS = {
   ArtifactTagEdit: [ArtifactTagEditSchema, 'input'], ArtifactTagEntry: [ArtifactTagEntrySchema, 'output'], ArtifactTags: [ArtifactTagsSchema, 'output'],
   ReviewCollectionRequest: [ReviewCollectionRequestSchema, 'input'], ReviewCollection: [ReviewCollectionSchema, 'output'], ReviewCollectionList: [ReviewCollectionListSchema, 'output'], ReviewCollectionDetail: [ReviewCollectionDetailSchema, 'output'], ReviewNoteInput: [ReviewNoteInputSchema, 'input'], ReviewNote: [ReviewNoteSchema, 'output'], ReviewManifest: [ReviewManifestSchema, 'output'],
   RecordingVerification: [RecordingVerificationSchema, 'output'], RecordingVerifyRequest: [RecordingVerifyRequestSchema, 'input'],
-  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], UiCatalogDetail: [UiCatalogDetailSchema, 'output'], CatalogEntries: [CatalogEntriesSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
+  TestCatalog: [TestCatalogSchema, 'output'], CatalogHealth: [CatalogHealthSchema, 'output'], TestHistory: [TestHistorySchema, 'output'], TestReliability: [TestReliabilitySchema, 'output'], RunList: [RunListSchema, 'output'], ArtifactList: [ArtifactListSchema, 'output'], UiCatalog: [UiCatalogSchema, 'output'], UiCatalogIndex: [UiCatalogIndexSchema, 'output'], UiCatalogDetail: [UiCatalogDetailSchema, 'output'], UiCatalogFailures: [UiCatalogFailuresSchema, 'output'], CatalogEntries: [CatalogEntriesSchema, 'output'], RunDetail: [RunDetailSchema, 'output'],
   UiCatalogDefinition: [UiCatalogDefinitionSchema, 'input'], UiClaimRequest: [UiClaimRequestSchema, 'input'], UiClaim: [UiClaimSchema, 'output'], UiQueueSummary: [UiQueueSummarySchema, 'output'],
+  UiRefreshRequest: [UiRefreshRequestSchema, 'input'], UiRefreshReceipt: [UiRefreshReceiptSchema, 'output'], UiRefreshJoin: [UiRefreshJoinSchema, 'input'], UiRefreshStatus: [UiRefreshStatusSchema, 'output'],
   SpecIndex: [SpecIndexSchema, 'output'], ReportSources: [ReportSourcesSchema, 'output'], RunsIndex: [RunsIndexSchema, 'output'],
   RunEvent: [LiveRunSchema, 'output'], HelloEvent: [HelloEventSchema, 'output'], ReportEvent: [ReportEventSchema, 'output'], AtlasChangeEvent: [AtlasChangeSchema, 'output'], PingEvent: [PingEventSchema, 'output']
 } as const satisfies Record<string, readonly [z.ZodType, 'input' | 'output']>;
@@ -82,6 +84,12 @@ const problem = (description: string): Response => ({ description, contentType: 
 const json = (description: string, name: ComponentName): Response => ({ description, contentType: 'application/json', schema: ref(name) });
 const NOT_READY = problem('The server is still reading its backends. Retry after the number of seconds in `Retry-After`.');
 const UNAUTHORIZED = problem('No token, or an unknown one. Send `Authorization: Bearer <token>`.');
+/** `?definition=` of the UI catalog reports: which history the counts are of. */
+const DEFINITION_PARAMETER = {
+  name: 'definition', in: 'query',
+  description: 'Count only the exact states × profiles of one catalog definition: a version (64 lowercase hex digits, as `PUT /api/ui-catalog/definitions/{version}` stored it), or `latest` (the latest published, resolved to its version in `scope.definition`: pin that version in a link so it never drifts). History outside it is counted in `scope.excluded`, never deleted. `all` is every layer\'s history with the choice recorded in `scope`; absent is every layer\'s history as before. A definition the server does not hold gives `scope.status: "unavailable"` and no state, never every layer\'s history.',
+  schema: str
+} as const;
 const FORBIDDEN = problem('The token is known but its role may not do this.');
 const KEY: Param = { name: 'key', in: 'path', required: true, description: 'An object key under `layers/`, such as `layers/manifests/<id>.json`. It contains slashes, which are not percent-encoded; every other character is.', schema: str, example: 'layers/index/9007199254740985-0f3a….json' };
 const BACKEND: Param = { name: 'backend', in: 'path', required: true, description: 'A backend id from `/api/server`.', schema: str };
@@ -534,9 +542,34 @@ const BASE_OPERATIONS: readonly Operation[] = [
       { name: 'surface', in: 'query', description: 'Surfaces a state covers.', schema: str },
       { name: 'producer', in: 'query', description: 'Producers that captured or planned a state.', schema: str },
       { name: 'attribute', in: 'query', description: 'Attributes a producer declared, as `name=value` (a comma or backslash inside a value is written `\\,` or `\\\\`). Several values of one name are alternatives; different names combine with AND.', schema: str },
-      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+      DEFINITION_PARAMETER,
+      { name: 'id', in: 'query', description: 'Only the states with these exact ids (comma-separated, escaped like the other lists): the full documents of the states a viewer shows.', schema: str },
+      { name: 'view', in: 'query', description: '`index` for the compact index (`UiCatalogIndex`): every state\'s facts, coverage and a `fingerprint`, without pictures, origins or plans. A server that predates it answers the full document, which a client can project itself. `capabilities.catalogIndex` on `/api/server` says a server has it.', schema: { type: 'string', enum: ['index'] } },
+      { name: 'since', in: 'query', description: 'With `view=index`: a `version` of an index this server answered. Only the states that changed since then are sent, with the ids of those removed; a version it does not remember is answered with the whole index and `since.honored` false.', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for Markdown instead of JSON (always the full document).', schema: { type: 'string', enum: ['json', 'markdown'] } }
     ],
-    responses: { '200': json('The catalog.', 'UiCatalog'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '503': NOT_READY }
+    responses: { '200': { description: 'The catalog, or with `view=index` its index.', contentType: 'application/json', schema: { oneOf: [ref('UiCatalog'), ref('UiCatalogIndex')] } }, '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '422': problem('A `definition` that is not `all`, `latest` or a version.'), '503': NOT_READY }
+  },
+  {
+    route: 'GET /api/reports/ui-catalog/failures', path: '/api/reports/ui-catalog/failures', operationId: 'getUiCatalogFailures', tag: 'Report', role: 'read',
+    summary: 'Failed UI catalog cells grouped by fingerprint, for triage',
+    description: 'The failed cells of the UI catalog, in the scope (`definition`) and filters given (the same as `GET /api/reports/ui-catalog`), grouped by the fingerprint their producer supplied (the capture label `fingerprint`, per producer; cells with different fingerprints are never merged), else by the exact message after whitespace is collapsed and secrets, URL query strings and directories are redacted. A message group is `inferred: true`: the cells read the same, which never shows a shared cause. Each group has its count, phases and attempts when the producer said (`phase`, `attempts` labels), the affected cells (`state` and `profile` key, to link to the catalog), first and last occurrence and one redacted sample. `complete: false` with `incomplete` reasons when a backend or layer could not be read, the definition scope is unavailable or captures are still in progress: the totals are then a lower bound. Nothing here changes a result.',
+    parameters: [
+      DEFINITION_PARAMETER,
+      { name: 'maxCells', in: 'query', description: 'At most this many cells listed per group (default 200); `count` is always the whole group.', schema: { type: 'integer', minimum: 0 } },
+      { name: 'q', in: 'query', description: 'Words, as for the catalog.', schema: str },
+      { name: 'coverage', in: 'query', description: 'Coverage values, as for the catalog.', schema: str },
+      { name: 'profile', in: 'query', description: 'Profile keys.', schema: str },
+      { name: 'area', in: 'query', description: 'Areas.', schema: str },
+      { name: 'route', in: 'query', description: 'Routes.', schema: str },
+      { name: 'cohort', in: 'query', description: 'Cohorts.', schema: str },
+      { name: 'flag', in: 'query', description: 'Feature flags.', schema: str },
+      { name: 'surface', in: 'query', description: 'Surfaces.', schema: str },
+      { name: 'producer', in: 'query', description: 'Producers.', schema: str },
+      { name: 'attribute', in: 'query', description: 'Attributes, as `name=value`.', schema: str },
+      { name: 'format', in: 'query', description: '`markdown` for a CI summary instead of JSON.', schema: { type: 'string', enum: ['json', 'markdown'] } }
+    ],
+    responses: { '200': json('The failure groups.', 'UiCatalogFailures'), '304': { description: 'Unchanged since the `If-None-Match` ETag.' }, '401': UNAUTHORIZED, '422': problem('A `definition` that is not `all`, `latest` or a version.'), '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/ui-catalog/detail', path: '/api/reports/ui-catalog/detail', operationId: 'getUiCatalogDetail', tag: 'Report', role: 'read',
@@ -621,6 +654,49 @@ const BASE_OPERATIONS: readonly Operation[] = [
     description: 'For the latest published definition (or `definition`): units by tier (`failed`, `empty`, `unknown`, `stale`, `fresh`; a unit held by a live claim is counted in `held`), units that hit the retry limit, units re-queued after a failure, unknown units with the notices that make them unknown, the live claims, every shard seen with whether it is `active` (holds a claim), `idle` or `lost` (its last claim expired), and throughput over the last ten minutes with an estimate of the time to empty.',
     parameters: [{ name: 'definition', in: 'query', description: 'A definition version. Default: the latest published.', schema: { type: 'string', pattern: '^[0-9a-f]{64}$' } }],
     responses: { '200': json('The queue.', 'UiQueueSummary'), '401': UNAUTHORIZED, '404': problem('No definition has that version.'), '422': problem('Not a version.'), '503': NOT_READY }
+  },
+  {
+    route: 'PUT /api/ui-catalog/refreshes/:id', path: '/api/ui-catalog/refreshes/{id}', operationId: 'beginUiCatalogRefresh', tag: 'UI catalog queue', role: 'publish',
+    summary: 'Begin a UI catalog refresh, or join it',
+    description: [
+      'Stores a refresh receipt pinned to a published definition version, an optional source (`sha`, `branch`, and `require` to count only evidence at that commit), the profiles in scope (`where`), a freshness cutoff (`staleBeforeMs`, default now: only evidence recorded since counts) and the `collection` its shards claim under (default the id, so retry limits are counted per refresh). `participants` optionally names the jobs expected to join, only to diagnose one that never started.',
+      '',
+      'Beginning a refresh that exists joins it (`200`, `created: false`): fields left out keep their stored values, and a field given with another value is `409`, since that would be another refresh. The receipt is kept in the server\'s store.'
+    ].join('\n'),
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The refresh id: 1–128 letters, digits, `.`, `_` or `-` (a CI run id fits).', schema: str }],
+    body: { description: 'What the refresh is pinned to.', contentType: 'application/json', required: true, schema: ref('UiRefreshRequest') },
+    responses: {
+      '200': { description: 'The refresh existed with these values: joined.', contentType: 'application/json', schema: { type: 'object', properties: { receipt: ref('UiRefreshReceipt'), created: { type: 'boolean' } }, required: ['receipt', 'created'] } },
+      '201': { description: 'Begun.', contentType: 'application/json', schema: { type: 'object', properties: { receipt: ref('UiRefreshReceipt'), created: { type: 'boolean' } }, required: ['receipt', 'created'] } },
+      '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('No definition has that version.'), '409': problem('The refresh exists with other values.'), '422': problem('Not a refresh id or request.')
+    }
+  },
+  {
+    route: 'POST /api/ui-catalog/refreshes/:id/attempts', path: '/api/ui-catalog/refreshes/{id}/attempts', operationId: 'joinUiCatalogRefresh', tag: 'UI catalog queue', role: 'publish',
+    summary: 'Record an attempt joining a refresh',
+    description: 'Records a participant (a CI job, a laptop) and its attempt number on the receipt; joining again updates when it was last seen. The attempt claims as the shard `<participant>#<attempt>`, so a rerun\'s work stays distinguishable from the attempt before it. Returns the receipt, whose `collection`, `staleBeforeMs`, `where` and `source` the shard collects under.',
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The refresh id.', schema: str }],
+    body: { description: 'The participant and attempt.', contentType: 'application/json', required: true, schema: ref('UiRefreshJoin') },
+    responses: { '200': json('The receipt.', 'UiRefreshReceipt'), '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('No refresh has that id.'), '422': problem('Not a join request.') }
+  },
+  {
+    route: 'GET /api/ui-catalog/refreshes/:id', path: '/api/ui-catalog/refreshes/{id}', operationId: 'getUiCatalogRefresh', tag: 'UI catalog queue', role: 'read',
+    summary: 'Whether a refresh is complete, and what is outstanding',
+    description: [
+      'Judges every unit in the refresh\'s scope against its policy. A unit is satisfied when every item\'s newest result passed and was recorded at or after `staleBeforeMs` (and at the source commit when it is required). Otherwise it is outstanding, with why: `held` (a live claim holds it), `pending`, `failed` (below the retry limit), `stale`, `source` (captured at another commit), `exhausted` (failed `maxAttempts` times in the refresh\'s collection) or `unknown` (no readable result while a backend could not be read).',
+      '',
+      '`outcome` is `complete` when nothing is outstanding, `failed` when only exhausted or other-commit units remain (the queue will not hand them out again), `unknown` when a backend or layer could not be read, and `incomplete` otherwise. Worker health (`health`: expected participants that never joined, attempts that lost a claim) is reported apart from capture completeness. Nothing is recorded.'
+    ].join('\n'),
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The refresh id.', schema: str }],
+    responses: { '200': json('The status.', 'UiRefreshStatus'), '401': UNAUTHORIZED, '404': problem('No refresh has that id.'), '422': problem('Not a refresh id.'), '503': NOT_READY }
+  },
+  {
+    route: 'POST /api/ui-catalog/refreshes/:id/finalize', path: '/api/ui-catalog/refreshes/{id}/finalize', operationId: 'finalizeUiCatalogRefresh', tag: 'UI catalog queue', role: 'publish',
+    summary: 'Finalize a refresh: judge it and record the finalization',
+    description: 'As `GET /api/ui-catalog/refreshes/{id}`, and records the finalization (when, its outcome, and the optional `attempt` that asked) on the receipt, so repeated finalizations of rerun attempts stay distinguishable. A refresh may be finalized any number of times; only `complete` is a pass.',
+    parameters: [{ name: 'id', in: 'path', required: true, description: 'The refresh id.', schema: str }],
+    body: { description: 'Optionally `{ "attempt": "2" }`.', contentType: 'application/json', required: false, schema: { type: 'object', properties: { attempt: str } } },
+    responses: { '200': json('The status.', 'UiRefreshStatus'), '401': UNAUTHORIZED, '403': FORBIDDEN, '404': problem('No refresh has that id.'), '422': problem('Not a refresh id.'), '503': NOT_READY }
   },
   {
     route: 'GET /api/reports/runs/detail', path: '/api/reports/runs/detail', operationId: 'getReportRun', tag: 'Report', role: 'read',

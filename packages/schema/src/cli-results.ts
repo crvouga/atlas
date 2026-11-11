@@ -14,6 +14,10 @@
  */
 import { z } from 'zod/v4';
 import { RecordingReceiptSchema, ReportStatusSchema } from './layer';
+import { UiCatalogFailuresSchema, UiCatalogScopeSchema } from './api';
+import { UiBundleProblemSchema } from './ui-catalog-bundle';
+import { UiMatrixPlanSchema } from './ui-catalog-matrix';
+import { UiRefreshReceiptSchema, UiRefreshStatusSchema } from './ui-catalog-refresh';
 
 /** What was written for one layer by `atlas report publish`. */
 export const PublishedLayerSchema = z.looseObject({
@@ -394,7 +398,8 @@ export const UiCatalogStatusSchema = z.looseObject({
   }),
   profiles: z.array(z.looseObject({ key: z.string(), label: z.string() })),
   problems: z.array(UiCatalogProblemSchema),
-  sources: z.looseObject({ layers: z.number().int().nonnegative(), backends: z.array(z.looseObject({ id: z.string(), label: z.string(), available: z.boolean() })), notices: z.array(z.string()) })
+  sources: z.looseObject({ layers: z.number().int().nonnegative(), backends: z.array(z.looseObject({ id: z.string(), label: z.string(), available: z.boolean() })), notices: z.array(z.string()) }),
+  scope: UiCatalogScopeSchema.optional().describe('With `--definition` or `--catalog`: which history the summary counts. An unavailable scope counts nothing and is a problem')
 });
 
 /** One side of `atlas ui-catalog diff`. */
@@ -435,7 +440,14 @@ export const UiCatalogExportResultSchema = z.looseObject({
     left: z.number().int().nonnegative().describe('Pictures not embedded (over the size limit, not stored, not an image, or `--images none`); each is listed on the page with the reason')
   }),
   manifest: z.string().nullable().describe('The JSON manifest written beside it with `--manifest`, or null'),
-  warnings: z.array(z.string()).describe('Backends and layers that could not be read, and pictures left out. The page says so too')
+  warnings: z.array(z.string()).describe('Backends and layers that could not be read, and pictures left out. The page says so too'),
+  scope: UiCatalogScopeSchema.optional().describe('With `--definition` or `--catalog`: which history the page counts'),
+  summary: UiCatalogStatusSchema.shape.summary.optional().describe('With a scope: the counts of the page, the same as `status` gives for that scope')
+});
+
+/** What `atlas ui-catalog failures --format json` prints: the failure groups, and `ok` (exit 0) only when nothing failed and every source was read. */
+export const UiCatalogFailuresResultSchema = UiCatalogFailuresSchema.extend({
+  ok: z.boolean().describe('True only when no cell failed and the groups are complete (otherwise the exit code is 1)')
 });
 
 /** What `atlas ui-catalog collect --format json` prints: what one shard collected from the shared queue, and why it stopped. */
@@ -458,7 +470,50 @@ export const UiCatalogCollectResultSchema = z.looseObject({
   lostClaims: z.array(z.string()),
   layers: z.number().int().nonnegative().describe('Capture layers published'),
   warnings: z.array(z.string()).describe('Pictures that could not be read, and the like. Never fatal'),
-  error: z.string().optional().describe('Why the server could not be reached, when `stoppedBy` is `unreachable`')
+  error: z.string().optional().describe('Why the server could not be reached, when `stoppedBy` is `unreachable`'),
+  refresh: z.looseObject({ id: z.string(), shard: z.string() }).optional().describe('With `--refresh`: the refresh joined, and the shard id this attempt claimed as'),
+  journal: z.looseObject({
+    dir: z.string(), captures: z.number().int().nonnegative(), published: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative().describe('Captures whose publish failed: kept in the bundle'), pending: z.number().int().nonnegative().describe('Captures never sent (a stop, a lost claim): kept in the bundle')
+  }).optional().describe('With `--journal`: the bundle folder and what it holds')
+});
+
+/** What `atlas ui-catalog plan-matrix --format json` prints: a CI fan-out of one definition. */
+export const UiCatalogMatrixResultSchema = UiMatrixPlanSchema;
+
+/** What `atlas ui-catalog refresh begin --format json` prints. */
+export const UiCatalogRefreshBeginResultSchema = z.looseObject({
+  ok: z.boolean().describe('False when the server could not be reached or refused (exit 1)'),
+  store: z.string(), created: z.boolean().describe('False when the refresh existed and this joined it'),
+  definition: z.looseObject({ version: z.string(), name: z.string() }),
+  refresh: UiRefreshReceiptSchema.nullable(),
+  error: z.string().optional()
+});
+
+/** What `atlas ui-catalog refresh status|finalize --format json` prints: the refresh status, and the server. */
+export const UiCatalogRefreshStatusResultSchema = UiRefreshStatusSchema.extend({ store: z.string() });
+
+const BundleSummary = z.looseObject({
+  bundle: z.string(), valid: z.boolean(), definition: z.string().nullable(), refresh: z.string().nullable(), sha: z.string().nullable(),
+  attempts: z.array(z.looseObject({ participant: z.string(), attempt: z.string(), shard: z.string() })),
+  captures: z.looseObject({ total: z.number().int().nonnegative(), published: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), pending: z.number().int().nonnegative() }),
+  problems: z.array(UiBundleProblemSchema)
+});
+
+/** What `atlas ui-catalog bundle validate|merge|import --format json` prints. */
+export const UiCatalogBundleResultSchema = z.looseObject({
+  ok: z.boolean().describe('False on any problem, a missing expected bundle, or no bundle at all (exit 1)'),
+  command: z.enum(['validate', 'merge', 'import']),
+  bundles: z.array(BundleSummary),
+  problems: z.array(UiBundleProblemSchema),
+  out: z.string().nullable().describe('The merged bundle (merge)'),
+  missing: z.array(z.string()).describe('Expected participants without a bundle (merge)'),
+  merged: BundleSummary.nullable().optional().describe('The merged bundle, when one was written (merge)'),
+  store: z.string().optional().describe('The store imported into (import)'),
+  imported: z.looseObject({
+    layers: z.number().int().nonnegative(), copied: z.number().int().nonnegative(), skipped: z.number().int().nonnegative(),
+    retained: z.array(z.looseObject({ layer: z.string(), shard: z.string(), attempt: z.string(), claimId: z.string().nullable(), publication: z.string() })).describe('Captures that never reached the server, kept in the bundle (`--reconcile accept` imports them)')
+  }).optional()
 });
 
 /**
@@ -485,6 +540,14 @@ export const CLI_RESULTS = {
   uiCatalogStatus: { command: 'atlas ui-catalog status', schemaName: 'ui-catalog-status', schema: UiCatalogStatusSchema },
   uiCatalogDiff: { command: 'atlas ui-catalog diff', schemaName: 'ui-catalog-diff-result', schema: UiCatalogDiffResultSchema },
   uiCatalogExport: { command: 'atlas ui-catalog export', schemaName: 'ui-catalog-export-result', schema: UiCatalogExportResultSchema },
+  uiCatalogFailures: { command: 'atlas ui-catalog failures', schemaName: 'ui-catalog-failures-result', schema: UiCatalogFailuresResultSchema },
   uiCatalogCollect: { command: 'atlas ui-catalog collect', schemaName: 'ui-catalog-collect-result', schema: UiCatalogCollectResultSchema },
+  uiCatalogPlanMatrix: { command: 'atlas ui-catalog plan-matrix', schemaName: 'ui-catalog-matrix', schema: UiCatalogMatrixResultSchema },
+  uiCatalogRefreshBegin: { command: 'atlas ui-catalog refresh begin', schemaName: 'ui-catalog-refresh-begin-result', schema: UiCatalogRefreshBeginResultSchema },
+  uiCatalogRefreshStatus: { command: 'atlas ui-catalog refresh status', schemaName: 'ui-catalog-refresh-status', schema: UiCatalogRefreshStatusResultSchema },
+  uiCatalogRefreshFinalize: { command: 'atlas ui-catalog refresh finalize', schemaName: 'ui-catalog-refresh-status', schema: UiCatalogRefreshStatusResultSchema },
+  uiCatalogBundleValidate: { command: 'atlas ui-catalog bundle validate', schemaName: 'ui-catalog-bundle-result', schema: UiCatalogBundleResultSchema },
+  uiCatalogBundleMerge: { command: 'atlas ui-catalog bundle merge', schemaName: 'ui-catalog-bundle-result', schema: UiCatalogBundleResultSchema },
+  uiCatalogBundleImport: { command: 'atlas ui-catalog bundle import', schemaName: 'ui-catalog-bundle-result', schema: UiCatalogBundleResultSchema },
   error: { command: 'a command that was wrong (standard error)', schemaName: 'command-error', schema: CommandErrorSchema }
 } as const;

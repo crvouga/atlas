@@ -90,7 +90,11 @@ function hasExclusions(excluded: SourceSelection): boolean {
   return Object.values(excluded).some((list) => list.length > 0);
 }
 
-export function EvidenceProvider({ children }: { children: ReactNode }) {
+/**
+ * Reads the evidence every page of the viewer shares. `deferEffective` holds back a server's effective report while the
+ * page open reads what it needs from the server itself (the UI catalog through its index): what was already read stays.
+ */
+export function EvidenceProvider({ children, deferEffective = false }: { children: ReactNode; deferEffective?: boolean }) {
   const adapter = useAdapter();
   const source = specKey(adapter);
   const excluded = useUiStore((s) => s.excluded);
@@ -136,7 +140,7 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
       if (!isEffectiveDelta(answer)) return answer;
       return (held && applyEffectiveDelta(held, answer)) ?? reportJson<EffectiveEvidence>('/evidence/effective', signal);
     },
-    enabled: effective,
+    enabled: effective && !deferEffective,
     staleTime: 0,
     refetchOnWindowFocus: 'always',
     refetchOnReconnect: 'always',

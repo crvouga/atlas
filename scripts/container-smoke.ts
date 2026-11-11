@@ -48,9 +48,11 @@ try {
   }
   await start();
   assert.equal((await fetch(url)).status, insecure ? 200 : 401);
-  const info = await (await fetch(`${url}/api/server`, { headers: authorization })).json() as { open: boolean; role: string };
+  const info = await (await fetch(`${url}/api/server`, { headers: authorization })).json() as { open: boolean; role: string; build?: { revision: string | null } };
   assert.equal(info.open, insecure);
   assert.equal(info.role, 'admin');
+  // An image built from a known commit says so, even though a source build does not know its package version.
+  if (process.env.ATLAS_EXPECT_REVISION) assert.equal(info.build?.revision, process.env.ATLAS_EXPECT_REVISION, '/api/server must carry the revision the image was built from');
   const page = await fetch(url, { headers: authorization });
   assert.equal(page.status, 200);
   const html = await page.text();

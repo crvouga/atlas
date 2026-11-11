@@ -11,7 +11,10 @@ COPY tsconfig.base.json tsconfig.build.json ./
 COPY scripts/build-package.ts ./scripts/build-package.ts
 COPY packages ./packages
 RUN bun run build
-RUN bun packages/visualizer/bin/atlas-client.mjs build --no-data --out /app/site
+# The viewer records where it was built from (shown in its About dialog), so a deployment can tell its viewer and server apart.
+ARG ATLAS_REVISION=unknown
+ARG ATLAS_BUILD_TIME=
+RUN ATLAS_REVISION="${ATLAS_REVISION}" ATLAS_BUILD_TIME="${ATLAS_BUILD_TIME}" bun packages/visualizer/bin/atlas-client.mjs build --no-data --out /app/site
 # The runtime uses the same compiled entry points as the npm package.
 RUN bun -e 'const p = await Bun.file("package.json").json(); p.exports = p.publishConfig.exports; await Bun.write("runtime-package.json", JSON.stringify(p));'
 
@@ -22,10 +25,15 @@ RUN bun install --production --frozen-lockfile --ignore-scripts
 
 FROM runtime-dependencies AS runtime
 ARG ATLAS_REVISION=unknown
+ARG ATLAS_BUILD_TIME=
 LABEL org.opencontainers.image.source="https://github.com/crvouga/atlas" \
       org.opencontainers.image.description="Atlas report server and live viewer" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.revision="${ATLAS_REVISION}"
+      org.opencontainers.image.revision="${ATLAS_REVISION}" \
+      org.opencontainers.image.created="${ATLAS_BUILD_TIME}"
+# The server reports its provenance on /api/server (`build`). The image cannot know its own digest: a deployment that
+# knows it may set ATLAS_IMAGE_DIGEST=sha256:<hex> at runtime.
+ENV ATLAS_REVISION=${ATLAS_REVISION} ATLAS_BUILD_TIME=${ATLAS_BUILD_TIME}
 COPY --from=build /app/runtime-package.json ./package.json
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/packages/core/bin ./packages/core/bin

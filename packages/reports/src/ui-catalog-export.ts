@@ -11,13 +11,18 @@
  * budget ({@link gatherUiPictures}): pictures past it are listed as left out with the reason, never silently dropped, and the
  * manifest stays complete.
  *
+ * A capture's supplemental evidence (more views, a trace, a video: `UiCapture.attachments`) is listed with its cell. Its
+ * pictures are embedded after every primary picture, within the same budget; anything else (a trace, a video, a log) is
+ * never embedded. Every supplemental attachment that is not embedded is listed with the reason, in the page and in the
+ * evidence manifest (`<script type="application/json" id="ui-catalog-evidence">`, {@link uiExportEvidence}).
+ *
  * Everything in the page is data from a test run. Text is escaped; only PNG, JPEG, GIF and WebP bytes whose first bytes say so
  * are embedded (never SVG, never what a layer merely claims); a page address is linked only when it is `http` or `https`; the
  * page carries a Content-Security-Policy that allows no network request at all.
  *
  * @see docs/ui-catalog.md
  */
-import { UI_COVERAGE, type UiCapture, type UiCatalog, type UiCatalogState, type UiCell, type UiCoverage } from './ui-catalog';
+import { UI_COVERAGE, uiScopeSentence, type UiAttachment, type UiCapture, type UiCatalog, type UiCatalogState, type UiCell, type UiCoverage } from './ui-catalog';
 
 /** A picture ready to embed. */
 export type UiExportPicture = { readonly contentType: string; readonly data: Uint8Array };
@@ -40,12 +45,20 @@ export function uiPictureKey(capture: Pick<UiCapture, 'origin' | 'image'> | null
   return capture && key ? `${capture.origin.layer}/${key}` : null;
 }
 
+/** The key of a supplemental attachment in {@link UiExportOptions.pictures}, made like {@link uiPictureKey}; `null` when it is not stored in a layer. */
+export function uiAttachmentKey(capture: Pick<UiCapture, 'origin'> | null | undefined, attachment: Pick<UiAttachment, 'bundleKey'>): string | null {
+  return capture && attachment.bundleKey ? `${capture.origin.layer}/${attachment.bundleKey}` : null;
+}
+
+const embeddable = (attachment: UiAttachment) => !attachment.omitted && !!attachment.bundleKey && (attachment.contentType ?? '').startsWith('image/');
+
 /** One picture an export may embed. */
 export type UiPictureWant = { readonly key: string; readonly layer: string; readonly backend: string; readonly bundleKey: string; readonly bytes?: number };
 
 /**
  * The pictures of a catalog an export would embed, once each, in the order the page shows them. Only a cell that was captured, or
- * that failed (a picture of what the page showed), and whose picture is stored in a layer, has one.
+ * that failed (a picture of what the page showed), and whose picture is stored in a layer, has one. The pictures among the
+ * captures' supplemental attachments come after every primary picture, so a budget leaves those out first.
  */
 export function uiPicturesWanted(catalog: UiCatalog): UiPictureWant[] {
   const seen = new Set<string>();
@@ -57,7 +70,53 @@ export function uiPicturesWanted(catalog: UiCatalog): UiPictureWant[] {
     seen.add(key);
     wanted.push({ key, layer: cell.capture.origin.layer, backend: cell.capture.origin.backend, bundleKey: cell.capture.image.bundleKey, ...(cell.capture.image.bytes !== undefined ? { bytes: cell.capture.image.bytes } : {}) });
   }
+  for (const state of catalog.states) for (const cell of state.cells) {
+    if ((cell.coverage !== 'captured' && cell.coverage !== 'failed') || !cell.capture?.attachments) continue;
+    for (const attachment of cell.capture.attachments) {
+      const key = uiAttachmentKey(cell.capture, attachment);
+      if (!key || seen.has(key) || !embeddable(attachment)) continue;
+      seen.add(key);
+      wanted.push({ key, layer: cell.capture.origin.layer, backend: cell.capture.origin.backend, bundleKey: attachment.bundleKey!, ...(attachment.bytes !== undefined ? { bytes: attachment.bytes } : {}) });
+    }
+  }
   return wanted;
+}
+
+/** One supplemental attachment of an export: whether its bytes are in the page and, when they are not, why. */
+export type UiExportEvidence = {
+  readonly state: string;
+  readonly profile: string;
+  readonly name: string;
+  readonly role: string | null;
+  readonly label: string | null;
+  readonly order: number;
+  readonly embedded: boolean;
+  /** Why it is not embedded: left out by its producer, not a picture, past the export's budget… Absent when embedded. */
+  readonly reason?: string;
+};
+
+function evidenceOf(state: UiCatalogState, cell: UiCell, options: UiExportOptions): UiExportEvidence[] {
+  const capture = cell.capture;
+  if (!capture?.attachments) return [];
+  return capture.attachments.map(attachment => {
+    const key = uiAttachmentKey(capture, attachment);
+    const embedded = !!key && embeddable(attachment) && !!options.pictures?.has(key);
+    const reason = embedded ? undefined
+      : attachment.omitted ? `was left out by its producer (${attachment.omitted})`
+      : key && options.left?.get(key) ? options.left.get(key)!
+      : !(attachment.contentType ?? '').startsWith('image/') ? 'is not embedded: an export embeds only pictures'
+      : !attachment.bundleKey ? 'is not stored in a layer'
+      : 'is not embedded';
+    return { state: state.id, profile: cell.profile.key, name: attachment.name, role: attachment.role ?? null, label: attachment.label ?? null, order: attachment.order, embedded, ...(reason ? { reason } : {}) };
+  });
+}
+
+/**
+ * Every supplemental attachment of the catalog's captures, in page order, saying whether the export embeds it and why not.
+ * Empty for a catalog whose producers wrote only primary pictures. The page embeds the same list as its evidence manifest.
+ */
+export function uiExportEvidence(catalog: UiCatalog, options: Pick<UiExportOptions, 'pictures' | 'left'> = {}): UiExportEvidence[] {
+  return catalog.states.flatMap(state => state.cells.flatMap(cell => evidenceOf(state, cell, options)));
 }
 
 /** The media type a picture's first bytes say it has (`image/png`, `image/jpeg`, `image/gif`, `image/webp`), or `null` for anything else, SVG included. */
@@ -120,6 +179,11 @@ function scriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
 
+function evidenceScript(catalog: UiCatalog, options: UiExportOptions): string {
+  const evidence = uiExportEvidence(catalog, options);
+  return evidence.length ? `<script type="application/json" id="ui-catalog-evidence">${scriptJson(evidence)}</script>\n` : '';
+}
+
 const webAddress = (uri: string | undefined) => (uri && /^https?:\/\//i.test(uri) ? uri : null);
 
 const STYLE = `
@@ -136,6 +200,7 @@ li.state[hidden],figure[hidden]{display:none}
 .cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:1rem;margin-top:.75rem}
 figure{margin:0;border:1px solid var(--soft);border-radius:6px;padding:.5rem}
 figure img{display:block;max-width:100%;height:auto;margin:0 auto;border:1px solid var(--soft)}
+ul.evidence{margin:.5rem 0 0;padding-left:1rem}
 .nopic{padding:1.5rem .5rem;text-align:center;opacity:.8;border:1px dashed var(--line)}
 figcaption{margin-top:.5rem}
 .tag{display:inline-block;padding:0 .5rem;border:1px solid currentColor;border-radius:999px;font-size:.8rem}
@@ -185,7 +250,16 @@ function cellHtml(state: UiCatalogState, cell: UiCell, options: UiExportOptions)
     `<time datetime="${esc(new Date(origin.recordedAtMs).toISOString())}">${esc(new Date(origin.recordedAtMs).toISOString().slice(0, 19).replace('T', ' '))} UTC</time>`,
     origin.freshness === 'modified' ? 'recorded with local changes' : origin.freshness === 'unknown' ? 'origin not captured' : ''
   ].filter(Boolean).join(', ') : cell.planned ? `expected by plan layer <code>${esc(cell.planned.layer.slice(0, 12))}</code>; nothing has been captured` : '';
-  return `<figure data-coverage="${esc(cell.coverage)}" data-profile="${esc(cell.profile.key)}">${figure}<figcaption><strong>${esc(cell.profile.label)}</strong> <span class="tag">${esc(word(cell.coverage))}</span>${cell.expected === 'undeclared' ? ' <span class="small muted">not in the expected set</span>' : ''}${capture?.detail ? `<div class="small">${esc(capture.detail)}</div>` : ''}${where ? `<div class="small muted">${where}</div>` : ''}</figcaption></figure>`;
+  const evidence = evidenceOf(state, cell, options);
+  const more = evidence.length ? `<ul class="small evidence" aria-label="More evidence">${evidence.map((item, index) => {
+    const attachment = capture!.attachments![index]!;
+    const named = `${esc(item.label ?? item.name)}${item.role ? ` <span class="muted">(${esc(item.role)})</span>` : ''}`;
+    const embedded = item.embedded ? options.pictures?.get(uiAttachmentKey(capture, attachment)!) : undefined;
+    if (embedded) return `<li><details><summary>${named}</summary><img alt="${esc(`${state.title}, ${cell.profile.label}, ${item.label ?? item.name}`)}" loading="lazy" src="data:${embedded.contentType};base64,${base64(embedded.data)}"${attachment.width && attachment.height ? ` width="${esc(attachment.width)}" height="${esc(attachment.height)}"` : ''}></details></li>`;
+    const link = webAddress(attachment.uri);
+    return `<li>${named}: ${link ? `<a href="${esc(link)}" rel="noopener noreferrer">open it at its address</a>` : esc(item.reason ?? '')}</li>`;
+  }).join('')}</ul>` : '';
+  return `<figure data-coverage="${esc(cell.coverage)}" data-profile="${esc(cell.profile.key)}">${figure}<figcaption><strong>${esc(cell.profile.label)}</strong> <span class="tag">${esc(word(cell.coverage))}</span>${cell.expected === 'undeclared' ? ' <span class="small muted">not in the expected set</span>' : ''}${capture?.detail ? `<div class="small">${esc(capture.detail)}</div>` : ''}${where ? `<div class="small muted">${where}</div>` : ''}${more}</figcaption></figure>`;
 }
 
 function stateHtml(state: UiCatalogState, index: number, options: UiExportOptions): string {
@@ -212,7 +286,7 @@ export function uiCatalogHtml(catalog: UiCatalog, options: UiExportOptions = {})
   const made = new Date(options.generatedAtMs ?? Date.now()).toISOString();
   const open = catalog.surfaces.filter(surface => surface.status !== 'covered');
   const unavailable = catalog.sources.backends.filter(backend => !backend.available);
-  const notices = [...catalog.sources.notices, ...unavailable.map(backend => `${backend.label} is not available: captures held there are not shown, and nothing that depends on them is shown as captured.`)];
+  const notices = [...(catalog.scope ? [uiScopeSentence(catalog.scope)] : []), ...catalog.sources.notices, ...unavailable.map(backend => `${backend.label} is not available: captures held there are not shown, and nothing that depends on them is shown as captured.`)];
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
@@ -230,7 +304,7 @@ ${open.length ? `<section aria-label="Surfaces without a captured state"><h3>Sur
 ${catalog.states.map((state, index) => stateHtml(state, index, options)).join('\n')}
 </ul>${catalog.states.length ? '' : '<p class="muted">No UI states have been recorded.</p>'}</main>
 <script type="application/json" id="ui-catalog">${scriptJson(catalog)}</script>
-<script>${SCRIPT}</script>
+${evidenceScript(catalog, options)}<script>${SCRIPT}</script>
 </body></html>
 `;
 }

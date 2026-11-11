@@ -9,6 +9,8 @@ export type RuntimeConfig = {
   readonly dataUrl?: string;
   readonly eventsUrl?: string;
   readonly effective?: boolean;
+  /** The server answers the UI catalog's compact index (`/ui-catalog?view=index`), so the catalog page need not read the whole report. */
+  readonly catalogIndex?: boolean;
   readonly projectsUrl?: string;
 };
 
@@ -32,4 +34,10 @@ export const runtimeConfig = (): RuntimeConfig | undefined => {
 /** An address from the config, resolved against the page, as an absolute URL. */
 export function runtimeUrl(value: string | undefined): string | undefined {
   return value ? new URL(value, window.location.href).href : undefined;
+}
+
+/** `GET /api/server` of the server that served this page, which is the same for every project; undefined without a server. */
+export function serverInfoUrl(): string | undefined {
+  const api = (globalThis as { __ATLAS_CONFIG__?: RuntimeConfig }).__ATLAS_CONFIG__?.api;
+  return api && typeof window !== 'undefined' ? `${new URL(api, window.location.href).href.replace(/\/$/, '')}/server` : undefined;
 }

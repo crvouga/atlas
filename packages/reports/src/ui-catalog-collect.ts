@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import type { UiCatalogDefinitionDocument, UiClaim } from '../../schema/src/ui-catalog-queue';
 import { AtlasHttpError, type HttpStore } from './http-store';
 import { publishChecks } from './publish-checks';
+import type { CatalogJournal, JournalEntry } from './ui-catalog-bundle';
 import { checkWhere, resolveCatalog, type CatalogDefinition } from './ui-catalog-definition';
 import { uiStateLayer, type UiStateCapture } from './ui-catalog-publish';
 import { UI_CLAIM_LABEL } from './ui-catalog-queue';
@@ -89,6 +90,8 @@ export type CollectOptions = {
   readonly infrastructureRetries?: number;
   /** Stop the shard after this many unrecovered infrastructure incidents; default 1. */
   readonly infrastructureFailureLimit?: number;
+  /** Write every capture layer here before publishing it, with whether the publish succeeded ({@link ./ui-catalog-bundle}). A journal that cannot be written stops the shard with that error. */
+  readonly journal?: CatalogJournal;
   /** Told what happens, for a log line. */
   readonly onEvent?: (event: CollectEvent) => void;
   readonly now?: () => number;
@@ -189,6 +192,7 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
   if (where) checkWhere(resolved.document, where);
   const published = await publishCatalogDefinition(options.store, resolved);
   options.onEvent?.({ type: 'definition', version: published.version, created: published.created });
+  await options.journal?.open(resolved);
   const producer = options.producer ?? `ui-catalog:${resolved.document.name}`;
   const leaseSeconds = options.leaseSeconds ?? 120;
   const batchSize = options.batchSize ?? 25;
@@ -287,15 +291,30 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
         }
         const publishedProfiles = new Set<string>();
         let publishedFailures = 0;
-        for (const entries of perProfile.values()) {
-          if (lost.signal.aborted || deadline.signal.aborted) break;
+        // Each layer's input is made once, so a journal holds exactly the layer the server receives (the same id).
+        const inputs = new Map([...perProfile].map(([key, entries]) => {
           const profile = entries[0]!.item.profile;
-          await untilStopped(publishChecks(publishingStore, uiStateLayer({
+          return [key, uiStateLayer({
             producer, recordedAtMs: now(), ...(profile.environment ? { environment: profile.environment } : {}), profile: profile.parameters, shard: options.shard.id,
             ...(options.origin?.sha !== undefined ? { sha: options.origin.sha } : {}), ...(options.origin?.branch !== undefined ? { branch: options.origin.branch } : {}),
             ...(options.origin?.runUrl !== undefined ? { runUrl: options.origin.runUrl } : {}), ...(options.origin?.run ? { run: options.origin.run } : {}),
             states: entries.map(entry => entry.capture)
-          })), publishSignal);
+          })] as const;
+        }));
+        // Journaled before anything is published: what was captured survives a server that stops answering or a lost claim.
+        const journaled = new Map<string, JournalEntry>();
+        if (options.journal) {
+          for (const [key, input] of inputs) {
+            const units = [...new Set(finished.filter(unit => unit.items.some(item => item.profile.key === key)).map(unit => unit.key))];
+            journaled.set(key, await options.journal.record(input, { claimId: claim.claimId, units }));
+          }
+        }
+        for (const entries of perProfile.values()) {
+          if (lost.signal.aborted || deadline.signal.aborted) break;
+          const profile = entries[0]!.item.profile;
+          try { await untilStopped(publishChecks(publishingStore, inputs.get(profile.key)!), publishSignal); }
+          catch (failure) { await journaled.get(profile.key)?.settle('failed', sentence(failure)); throw failure; }
+          await journaled.get(profile.key)?.settle('published');
           layers++;
           publishedProfiles.add(profile.key);
           for (const { capture } of entries) {
@@ -312,10 +331,7 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
         const failAll = (list: readonly CollectUnit[], reason: string) => list.flatMap(unit => unit.items.map(item => ({ item: item.key, status: 'failed' as const, detail: reason })));
         // A collector stopped by the shard's own stop signal did not fail: its unit goes back to the queue instead.
         const stopped = () => signal.aborted;
-        const checkBytes = (captures: readonly CapturedItem[]) => {
-          const bytes = captures.reduce((sum, capture) => sum + (capture.screenshot?.data?.byteLength ?? 0) + Math.ceil((capture.screenshot?.base64?.length ?? 0) * 3 / 4), 0);
-          if (bytes > maxBufferedBytes) throw new Error(`Captured unit exceeds maxBufferedBytes (${bytes} > ${maxBufferedBytes})`);
-        };
+        const checkBytes = (captures: readonly CapturedItem[]) => withinBudget(captures, maxBufferedBytes);
         if (options.captureStream) {
           const iterator = options.captureStream(claim.units, { claimId: claim.claimId, signal })[Symbol.asyncIterator]();
           const remaining = new Map(claim.units.map(unit => [unit.key, unit]));
@@ -325,8 +341,7 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
               if (next.done) break;
               const unit = remaining.get(next.value.unit);
               if (!unit) throw new Error('captureStream returned an unknown or duplicate unit');
-              checkBytes(next.value.captures);
-              await flush([unit], next.value.captures);
+              await flush([unit], checkBytes(next.value.captures));
               remaining.delete(unit.key);
             }
             if (!signal.aborted && remaining.size) await flush([...remaining.values()], failAll([...remaining.values()], 'The collector returned no capture for this unit'));
@@ -348,7 +363,7 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
               let captures: readonly CapturedItem[];
               try {
                 captures = await retry(() => options.capture!(unit, signal), signal);
-                if (options.maxBufferedBytes !== undefined) checkBytes(captures);
+                if (options.maxBufferedBytes !== undefined) captures = checkBytes(captures);
               } catch (error) {
                 if (error instanceof CollectorInfrastructureError) throw error;
                 if (stopped()) break;
@@ -397,6 +412,30 @@ export async function collectCatalog(options: CollectOptions): Promise<CollectRe
   }
 
   return { ok: items.failed === 0 && error === undefined && infrastructureFailures === 0 && !infrastructure.signal.aborted, definition: published.version, shard: options.shard.id, stoppedBy, claims, units, items, lostClaims, layers, ...(diagnostics.length ? { diagnostics } : {}), ...(error ? { error } : {}) };
+}
+
+const sizeOf = (picture: { readonly data?: Uint8Array; readonly base64?: string; readonly text?: string } | undefined) =>
+  (picture?.data?.byteLength ?? 0) + Math.ceil((picture?.base64?.length ?? 0) * 3 / 4) + (picture?.text?.length ?? 0);
+
+/**
+ * Holds a unit's captures to the byte budget. The primary pictures count first, and a unit whose pictures alone pass the
+ * budget fails as before. Supplemental attachments are then kept in order while they fit; one that would pass the budget is
+ * kept as metadata, omitted `over-budget`, so its absence is explicit and never changes the capture's status.
+ */
+function withinBudget(captures: readonly CapturedItem[], maxBytes: number): readonly CapturedItem[] {
+  let bytes = captures.reduce((sum, capture) => sum + sizeOf(capture.screenshot), 0);
+  if (bytes > maxBytes) throw new Error(`Captured unit exceeds maxBufferedBytes (${bytes} > ${maxBytes})`);
+  if (!captures.some(capture => capture.attachments?.length)) return captures;
+  return captures.map(capture => {
+    if (!capture.attachments?.length) return capture;
+    const attachments = capture.attachments.map(item => {
+      const size = sizeOf(item);
+      if (size === 0 || bytes + size <= maxBytes) { bytes += size; return item; }
+      const { data: _data, base64: _base64, text: _text, ...kept } = item;
+      return { ...kept, omitted: 'over-budget' };
+    });
+    return { ...capture, attachments };
+  });
 }
 
 function stateFacts(item: CollectItem): Partial<UiStateCapture> {

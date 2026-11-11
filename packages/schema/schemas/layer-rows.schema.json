@@ -433,7 +433,7 @@
                 "type": "boolean"
               },
               "screenshot": {
-                "description": "The check's picture: its `screenshot` attachment, else its first image",
+                "description": "The check's picture: its `screenshot` attachment, else its first image not marked supplemental",
                 "type": "object",
                 "properties": {
                   "name": {
@@ -469,6 +469,59 @@
                   "name"
                 ],
                 "additionalProperties": {}
+              },
+              "attachments": {
+                "description": "Only for a `ui-state` check: its other attachments (more views, a trace, a video), in order. Evidence only",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "order": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "bundleKey": {
+                      "type": "string"
+                    },
+                    "uri": {
+                      "type": "string"
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "width": {
+                      "type": "number"
+                    },
+                    "height": {
+                      "type": "number"
+                    },
+                    "bytes": {
+                      "type": "number"
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "omitted": {
+                      "description": "Why the producer left the bytes out",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "order"
+                  ],
+                  "additionalProperties": {}
+                }
               }
             },
             "additionalProperties": {}

@@ -191,12 +191,25 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
                            [--fail-on-change] [--format text|json|markdown]
   atlas ui-catalog export  --out <file.html> [--store …]... [--backends <module>] [filters]
                            [--images inline|none] [--max-mb <n>] [--manifest <file.json>] [--title <t>]
+  atlas ui-catalog failures [--store …]... [--backends <module>] [filters] [--max-cells <n>] [--viewer-url <url>]
+                           [--format text|json|markdown]
   atlas ui-catalog collect --catalog <atlas.catalog.ts> --exec "<command>" [--store https://…] [--shard <name>]
                            [--where dimension=value]... [--batch-size <n>] [--lease-seconds <n>]
                            [--max-units <n>] [--max-minutes <n>] [--collection <id>] [--stale-before <iso|ms>]
                            [--producer <name>] [--attach-root <dir>]... [--max-picture-mb <n>]
+                           [--refresh <id> [--participant <name>] [--attempt <n>]] [--journal <dir>]
+  atlas ui-catalog plan-matrix --catalog <atlas.catalog.ts> [--job-dimension <name>]... [--build-dimension <name>]...
+                           [--where dimension=value]... [--max-parallel <n>] [--max-jobs <n>] [--out <plan.json>]
+  atlas ui-catalog refresh begin --id <id> --catalog <atlas.catalog.ts> [--store https://…] [--where dimension=value]...
+                           [--stale-before <iso|ms>] [--sha <s>] [--branch <b>] [--require-source] [--collection <id>]
+                           [--participant <name>]... [--participants-from <plan.json>]
+  atlas ui-catalog refresh status|finalize --id <id> [--store https://…] [--attempt <n>]
+  atlas ui-catalog bundle validate <dir>... [--definition <version>] [--sha <s>]
+  atlas ui-catalog bundle merge <dir>... --out <dir> [--expect <participant>]... [--expect-from <plan.json>]
+  atlas ui-catalog bundle import <dir>... [--store <dir|s3://…|https://…>] [--reconcile retain|accept] [--plans|--no-plans]
 
-  filters (status, diff, export): --q <words> --coverage a,b --profile <key|label>... --area a --route r --cohort c
+  scope (status, export, failures): --definition <version|latest|all|definition.json> or --catalog <atlas.catalog.ts>
+  filters (status, diff, export, failures): --q <words> --coverage a,b --profile <key|label>... --area a --route r --cohort c
                            --flag f --surface s --producer p --attribute name=value
 
   plan      Write one layer of kind ui-plan: the states (and with "inventory": true, the surfaces) that should exist under
@@ -205,9 +218,12 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
   publish   Write one layer of kind ui-state: the states one collector or shard captured under this profile. The file is
             {"states":[{"id":…,"title"?,"status"?:"passed|failed|running|not-run","detail"?,"route"?,"fixture"?,"cohort"?,
             "area"?,"kind"?,"flags"?,"covers"?,"attributes"?,"labels"?,"tags"?,"durationMs"?,"screenshot"?:"file.png"|{"path"|"uri",
-            "width"?,"height"?,"contentType"?}}]}. A picture file is read from beside the file and each --attach-root, never
-            from a hidden file or a link out. A passed state whose picture cannot be read is published as failed, with the
-            reason: a state without its picture is not shown as captured.
+            "width"?,"height"?,"contentType"?},"attachments"?:[{"path"|"uri"|"omitted","name"?,"role"?:"view|trace|video|log…",
+            "label"?,"order"?,"contentType"?,"width"?,"height"?}]}]}. A picture file is read from beside the file and each
+            --attach-root, never from a hidden file or a link out. A passed state whose picture cannot be read is published as
+            failed, with the reason: a state without its picture is not shown as captured. Attachments are more evidence of
+            the same state (more views, a trace, a video), kept in order with their labels; one that cannot be read is
+            published as omitted with the reason and never changes the state's status.
             --environment and each --param key=value are the profile (a viewport, a color scheme, a device): another
             profile is another result side by side. --shard only describes the layer; it never splits a result.
             --recorded-at defaults to the modification time of the file, so publishing the same file twice is one layer.
@@ -222,7 +238,19 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
   export    Write the catalog as one HTML file with its pictures embedded and its manifest in it: no server, no network.
             It is the catalog at the moment it was made. --images none leaves the pictures out. --max-mb (default 32) limits
             the embedded pictures; those past it are listed in the page as left out, and the manifest stays complete.
-            --manifest writes the catalog's JSON manifest too.
+            --manifest writes the catalog's JSON manifest too. Supplemental evidence (more views, a trace, a video) is
+            listed with its cell; only its pictures are embedded, after every primary picture, and whatever is not
+            embedded is listed with the reason in the page and in the manifest ("exportEvidence").
+  failures  Group the failed cells (in the scope and filters given) by the fingerprint their producer supplied (the capture
+            label "fingerprint", with "phase" and "attempts" when known), else by the exact message with secrets, query
+            strings and directories redacted: such a group is inferred from text and never claims a shared cause. Each
+            group has its count, affected states and profiles, first and last occurrence and one redacted sample;
+            --viewer-url links each cell. Exit 0 only when nothing failed and every backend and layer was read.
+  --definition  Count only the exact states × profiles of one catalog definition version (status, export, failures):
+            a version (64 hex digits) or latest, read from the Atlas server among the stores; a stored definition file;
+            or the module given with --catalog. History outside it is counted under "scope.excluded", never deleted;
+            all selects every layer's history explicitly. A definition that cannot be read is an unavailable scope that
+            counts nothing (status exits 1), never every layer's history.
   collect   Be one shard of a collection that any number of shards share through an Atlas server: publish the catalog's
             definition (the default export of --catalog, made with defineCatalog; the same definition is the same
             version), claim the most urgent work units (failed, then empty, then unknown, then stale), run --exec for each
@@ -234,10 +262,36 @@ atlas ui-catalog — a browsable inventory of captured UI states, from any colle
             also collects captured items recorded before that time, oldest first. On SIGINT or SIGTERM the claim is
             released, so its units go back to the queue at once. Needs a server: there is no order other shards cannot
             see. Exit 0 when nothing collected failed, 1 when something did or the server could not be reached.
+  collect --refresh <id> [--participant <name>] [--attempt <n>] [--journal <dir>]
+            --refresh joins a refresh (atlas ui-catalog refresh begin) as <participant>#<attempt> (defaults: --shard or
+            GITHUB_JOB, and GITHUB_RUN_ATTEMPT or 1) and collects under its collection, cutoff, scope and source.
+            --journal writes every capture layer into a bundle folder before publishing it, with whether the publish
+            succeeded: what was captured survives a server that stops answering. Upload the folder as a CI artifact.
+  plan-matrix  Print a CI fan-out for the definition: a job per distinct combination of the --job-dimension values
+            (default every dimension: a job per profile), covering every allowed profile once, and each distinct
+            --build-dimension combination once as a build (build dimensions also split jobs). Each job has "job" (safe for
+            artifact names), "where" (the --where flags for collect, shell-quoted) and "build". --max-parallel (default 4)
+            is copied, never raised; more jobs than --max-jobs (default 256) is exit 2, never trimmed. --out writes the plan.
+  refresh   begin pins a refresh on the server: the definition (published first), the source (--sha/--branch, default the
+            checkout; --require-source counts only evidence at that commit), the scope (--where), the cutoff (--stale-before,
+            default now: only evidence recorded since counts) and the collection its shards claim under (default the id).
+            Beginning it again with the same values joins it. --participant names jobs expected to join (or every job of
+            --participants-from), only to name one that never started. status judges it; finalize judges it and records
+            the finalization. Exit 0 only when complete; incomplete names each outstanding unit and why (held by a live
+            claim, pending, failed, stale, at another commit, out of retries); unknown when the server, the receipt or a
+            backend cannot be read. Worker health (missing participants, lost claims) is reported apart.
+  bundle    validate checks bundles without trusting them: every object's size and SHA-256, no path outside the bundle,
+            every layer present, the definition and commit (--definition, --sha). merge joins bundles (or folders holding
+            them) in any order into --out: every attempt and capture stays named; different definitions, commits or
+            refreshes are refused; --expect names jobs whose bundle must be there. import copies valid bundles' layers into
+            a store. A capture whose publish never succeeded answers a claim that has ended, so it is retained (listed,
+            not imported) unless --reconcile accept. Plans are imported unless the store is a server (--plans to force).
+            export --store <bundle>/store renders a bundle offline.
 
   --format json (alias --json)   every subcommand prints one JSON document instead of prose
                        (schemas: ui-catalog-publish-result, ui-catalog-status, ui-catalog-diff-result, ui-catalog-export-result,
-                       ui-catalog-collect-result).
+                       ui-catalog-failures-result, ui-catalog-collect-result, ui-catalog-matrix, ui-catalog-refresh-begin-result,
+                       ui-catalog-refresh-status, ui-catalog-bundle-result).
                        A command that is wrong is {"ok":false,"error":{"message":…,"code":"usage"}} on standard error.
   A store is a directory, s3://bucket/prefix or an Atlas server (https://…), exactly as for atlas report; select a project
   with --project <slug> or ATLAS_PROJECT. When no --store is given, ATLAS_STORE is used.

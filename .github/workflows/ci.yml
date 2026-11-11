@@ -249,7 +249,9 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          build-args: ATLAS_REVISION=${{ github.sha }}
+          build-args: |
+            ATLAS_REVISION=${{ github.sha }}
+            ATLAS_BUILD_TIME=${{ github.event.head_commit.timestamp }}
           load: true
           tags: atlas-server:ci
           cache-from: type=gha,scope=atlas-server
@@ -257,6 +259,8 @@ jobs:
       - name: Exercise the container as a Railway image service
         id: smoke
         run: bun scripts/container-smoke.ts atlas-server:ci
+        env:
+          ATLAS_EXPECT_REVISION: ${{ github.sha }}
       - name: Log in to personal GHCR
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: docker/login-action@v4.1.0
@@ -319,7 +323,9 @@ jobs:
           context: .
           target: insecure
           platforms: linux/amd64
-          build-args: ATLAS_REVISION=${{ github.sha }}
+          build-args: |
+            ATLAS_REVISION=${{ github.sha }}
+            ATLAS_BUILD_TIME=${{ github.event.head_commit.timestamp }}
           load: true
           tags: atlas-insecure-server:ci
           cache-from: type=gha,scope=atlas-insecure-server
@@ -327,6 +333,8 @@ jobs:
       - name: Exercise the container as a Railway image service
         id: smoke
         run: bun scripts/container-smoke.ts atlas-insecure-server:ci --insecure
+        env:
+          ATLAS_EXPECT_REVISION: ${{ github.sha }}
       - name: Log in to personal GHCR
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: docker/login-action@v4.1.0

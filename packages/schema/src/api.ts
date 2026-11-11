@@ -48,10 +48,23 @@ export const ReadySchema = z.looseObject({
   backends: z.array(z.looseObject({ id: z.string(), available: z.boolean() }))
 });
 
+/**
+ * Where a build came from, as far as it knows: the package version, the source revision, when it was built, and the image
+ * digest a deployment injected. Every field is null when unknown, never guessed. A provenance record only: compare
+ * `capabilities`, not versions, to decide what a server can do.
+ */
+export const BuildInfoSchema = z.looseObject({
+  version: z.string().nullable().describe('The @crvouga/atlas version, or null for a source build or a build that does not know it'),
+  revision: z.string().nullable().describe('The source revision (a git commit) it was built from (`ATLAS_REVISION`), or null'),
+  builtAt: z.string().nullable().describe('When it was built, ISO 8601 (`ATLAS_BUILD_TIME`), or null'),
+  imageDigest: z.string().nullable().optional().describe('The container image digest, only when the deployment injected it (`ATLAS_IMAGE_DIGEST`); an image cannot know its own digest, so null otherwise. Absent for a viewer')
+});
+
 /** What `GET /api/server` answers: what the server is, who is asking, and what it can do. */
 export const ServerInfoSchema = z.looseObject({
   name: z.literal('atlas'),
   version: z.string().nullable().describe('The @crvouga/atlas version the server runs, or null when it does not know'),
+  build: BuildInfoSchema.optional().describe('Where this server was built from. Absent from a server that predates it, which means unknown'),
   role: z.enum(['read', 'critic', 'publish', 'admin']).describe('What the token of this request may do. A server with no tokens treats everyone as admin'),
   open: z.boolean().describe('True when the server has no tokens at all'),
   write: z.string().describe('The id of the backend uploads go to'),
@@ -158,7 +171,13 @@ export const LayerRowSchema = z.looseObject({
       name: z.string(), bundleKey: z.string().optional(), uri: z.string().optional(), contentType: z.string().optional(),
       width: z.number().optional(), height: z.number().optional(), bytes: z.number().optional(), sha256: z.string().optional(),
       omitted: z.string().optional().describe('Why the producer left the bytes out')
-    }).optional().describe('The check\'s picture: its `screenshot` attachment, else its first image')
+    }).optional().describe('The check\'s picture: its `screenshot` attachment, else its first image not marked supplemental'),
+    attachments: z.array(z.looseObject({
+      name: z.string(), role: z.string().optional(), label: z.string().optional(), order: z.number().int().nonnegative(),
+      bundleKey: z.string().optional(), uri: z.string().optional(), contentType: z.string().optional(),
+      width: z.number().optional(), height: z.number().optional(), bytes: z.number().optional(), sha256: z.string().optional(),
+      omitted: z.string().optional().describe('Why the producer left the bytes out')
+    })).optional().describe('Only for a `ui-state` check: its other attachments (more views, a trace, a video), in order. Evidence only')
   }).optional().describe('Only for a check of a `ui-state` or `ui-plan` part: its picture and the facts its producer declared under the `atlas.ui-state` extension. See the UI catalog guide. Never decides a result'),
   critique: CritiqueSchema.optional().describe('Only for a check of a `critique` part whose `atlas.critique` extension can be read: the opinion of an automated reviewer. An opinion, never a result: it does not decide `status`, a slot or the gate. See the critics guide'),
   critiqueMark: CritiqueMarkSchema.optional().describe('Only for a check of a `critique` part whose `atlas.critique-mark` extension can be read: a person\'s accept or dismiss of a critic\'s opinion. Evidence, never a result: it does not decide `status`, a slot or the gate. See the critics guide'),
@@ -842,6 +861,13 @@ export const UiImageSchema = z.looseObject({
   omitted: z.string().optional().describe('Why the producer left the bytes out. A picture that is left out is not a picture that was never taken')
 });
 
+/** Supplemental evidence of a capture: another view, a trace, a video, a log. Evidence only; it never decides coverage. */
+export const UiAttachmentSchema = UiImageSchema.extend({
+  role: z.string().optional().describe('Open vocabulary: `view`, `trace`, `video`, `log`, `snapshot`…'),
+  label: z.string().optional().describe('For a person'),
+  order: z.number().int().nonnegative().describe('Its position among the capture\'s supplemental attachments')
+});
+
 /** One state in one profile. */
 export const UiCellSchema = z.looseObject({
   profile: UiProfileSchema,
@@ -849,6 +875,7 @@ export const UiCellSchema = z.looseObject({
   expected: OpenWord.describe('One of `declared`, `undeclared`, `unknown`; a value this version does not know is `unknown`. `declared`: a plan expects it. `undeclared`: plans exist and none names it. `unknown`: no plan was published, so nothing is known to be unexpected'),
   capture: z.looseObject({
     status: EvidenceStatusSchema, detail: z.string(), durationMs: z.number().nullable(), image: UiImageSchema.nullable(),
+    attachments: z.array(UiAttachmentSchema).optional().describe('Supplemental evidence of the same capture, in the producer\'s order. Absent when there is none. Never changes `coverage`'),
     labels: z.record(z.string(), z.string()).describe('What describes the capture without splitting it: a `shard`, a `browser`'),
     origin: z.looseObject({
       layer: z.string(), backend: z.string(), producer: z.string(), recordedAtMs: z.number(), sha: z.string().nullable(), branch: z.string().nullable(), runUrl: z.string().nullable(),
@@ -860,6 +887,24 @@ export const UiCellSchema = z.looseObject({
 });
 
 const UiFacetSchema = z.array(z.looseObject({ value: z.string(), count: z.number().int().nonnegative(), label: z.string().optional() }));
+
+/**
+ * Which history a UI catalog document counts, when the caller chose one (`?definition=`). `all-history`: every state and
+ * profile any layer recorded or planned. `definition`: exactly one definition version's states × profiles, with what that
+ * leaves out counted in `excluded` (still stored, never deleted). `status: unavailable` means the definition could not be read
+ * and nothing is counted: never read it as every layer's history. Treat an unknown `kind` or `status` as an unknown scope.
+ */
+export const UiCatalogScopeSchema = z.looseObject({
+  kind: OpenWord.describe('`all-history` or `definition`'),
+  status: OpenWord.describe('`applied` or `unavailable`; any other value is an unknown scope'),
+  definition: z.looseObject({ version: z.string().describe('The SHA-256 of the canonical definition'), name: z.string().nullable() }).optional(),
+  expected: z.looseObject({ states: z.number().int().nonnegative(), profiles: z.number().int().nonnegative(), cells: z.number().int().nonnegative() }).optional().describe('What the definition expects: its states, its profiles and their product'),
+  excluded: z.looseObject({
+    states: z.number().int().nonnegative(), profiles: z.number().int().nonnegative(), cells: z.number().int().nonnegative(),
+    coverage: z.looseObject({ captured: z.number(), failed: z.number(), capturing: z.number(), skipped: z.number(), missing: z.number() })
+  }).optional().describe('Recorded history outside the definition: not counted in this document, still in the layers'),
+  reason: z.string().optional().describe('Why the scope is unavailable')
+});
 
 /**
  * `GET /api/reports/ui-catalog`: the UI catalog, computed from the winning results of the `ui-state` and `ui-plan` parts
@@ -895,7 +940,68 @@ export const UiCatalogSchema = z.looseObject({
   }),
   sources: z.looseObject({ layers: z.number().int().nonnegative(), backends: z.array(BackendInfoSchema), notices: z.array(z.string()) }).describe('What was read. A backend that is unavailable, or a layer that could not be read, is named here; what depended on it is not shown as captured'),
   total: z.number().int().nonnegative().optional().describe('States that matched, before `offset` and `limit`'),
-  offset: z.number().int().nonnegative().optional(), limit: z.number().int().nonnegative().optional()
+  offset: z.number().int().nonnegative().optional(), limit: z.number().int().nonnegative().optional(),
+  scope: UiCatalogScopeSchema.optional().describe('Present when `?definition=` was given: which history the counts are of. Absent: every layer\'s history, as before')
+});
+
+/**
+ * `GET /api/reports/ui-catalog?view=index`: the catalog without the evidence a card draws, for a viewer that searches the
+ * whole catalog and reads the evidence of the states it shows (`?id=`). The summary, profiles, surfaces, facets and sources are
+ * the full document's. With `?since=<version>` the server sends only the states that changed since that version (and the
+ * ids of those removed) when it remembers it, else the whole index with `since.honored` false. A projection, never a judgement:
+ * a cell's `coverage` and `expected` are the full document's.
+ */
+export const UiCatalogIndexSchema = UiCatalogSchema.omit({ states: true }).extend({
+  view: z.literal('index'),
+  states: z.array(z.looseObject({
+    id: z.string(), title: z.string(),
+    route: z.string().nullable(), fixture: z.string().nullable(), cohort: z.string().nullable(), area: z.string().nullable(), kind: z.string().nullable().optional(),
+    flags: z.array(z.string()), covers: z.array(z.string()), producers: z.array(z.string()), attributes: z.record(z.string(), z.string()).optional(),
+    fingerprint: z.string().describe('Changes whenever anything of the state\'s full document does: compare it, never parse it'),
+    cells: z.array(z.looseObject({
+      profile: z.string().describe('A `profiles[].key`'),
+      coverage: OpenWord.describe('As in the full document'), expected: OpenWord.describe('As in the full document'),
+      status: EvidenceStatusSchema.nullable().describe('The winning capture\'s status, or null when nothing was captured'),
+      detail: z.string().optional().describe('Why the capture failed or was skipped'),
+      recordedAtMs: z.number().nullable(), producer: z.string().optional(),
+      labels: z.record(z.string(), z.string()).optional().describe('The capture\'s labels, only for a capture that did not pass')
+    }))
+  })),
+  total: z.number().int().nonnegative().describe('States that matched; with an honored `since`, the states that changed'),
+  offset: z.number().int().nonnegative(), limit: z.number().int().nonnegative(),
+  since: z.looseObject({ requested: z.string(), honored: z.boolean().describe('False when the server does not remember that version: the answer is then the whole index') }).optional(),
+  removed: z.array(z.string()).optional().describe('With an honored `since`: the ids of states no longer in the catalog')
+});
+
+/**
+ * `GET /api/reports/ui-catalog/failures` and `atlas ui-catalog failures --format json`: failed catalog cells grouped by the
+ * fingerprint their producer supplied (the capture label `fingerprint`), else by exact normalized, redacted message. A message
+ * group is `inferred`: it shows the cells read the same, never that they share a cause. When `complete` is false the totals are
+ * a lower bound and `incomplete` says why.
+ */
+export const UiCatalogFailuresSchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  version: z.string().optional(),
+  scope: UiCatalogScopeSchema.optional(),
+  total: z.looseObject({
+    failed: z.number().int().nonnegative().describe('Failed cells in the scope and filters'),
+    groups: z.number().int().nonnegative(),
+    fingerprinted: z.number().int().nonnegative().describe('Failed cells grouped by a producer\'s fingerprint'),
+    inferred: z.number().int().nonnegative().describe('Failed cells grouped by message only')
+  }),
+  complete: z.boolean().describe('False when a backend or layer could not be read, the definition scope is unavailable, captures are still in progress or only a page was given'),
+  incomplete: z.array(z.string()),
+  groups: z.array(z.looseObject({
+    key: z.string(), basis: OpenWord.describe('`fingerprint` or `message`'), inferred: z.boolean().describe('True for a message group: inferred from text, not a shared cause'),
+    fingerprint: z.string().nullable(), producers: z.array(z.string()), count: z.number().int().nonnegative(),
+    states: z.number().int().nonnegative(), profiles: z.number().int().nonnegative(), phases: z.array(z.string()),
+    attempts: z.looseObject({ min: z.number(), max: z.number() }).nullable(),
+    firstRecordedAtMs: z.number(), lastRecordedAtMs: z.number(), sample: z.string().describe('The newest failure\'s message, redacted'),
+    cells: z.array(z.looseObject({
+      state: z.string(), title: z.string(), profile: z.string().describe('The profile key: with `state`, the cell to link to'), profileLabel: z.string(),
+      recordedAtMs: z.number(), producer: z.string(), layer: z.string(), backend: z.string(), phase: z.string().nullable(), attempts: z.number().nullable()
+    })).describe('The affected cells, newest first, at most `maxCells`; `count` is all of them')
+  }))
 });
 
 /** One exact UI screen, with report version and read warnings; GET /api/reports/ui-catalog/detail. */

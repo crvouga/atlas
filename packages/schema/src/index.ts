@@ -23,3 +23,6 @@ export * from './cli-results';
 export * from './live-run';
 export * from './project';
 export * from './ui-catalog-queue';
+export * from './ui-catalog-refresh';
+export * from './ui-catalog-bundle';
+export * from './ui-catalog-matrix';

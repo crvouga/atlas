@@ -5,7 +5,7 @@
  * Item navigation uses the index's complete filtered order, independently of the selected profile.
  */
 import type { UiCapture, UiCatalogState, UiCell } from '@crvouga/atlas/reports/ui-catalog';
-import { ActionIcon, Badge, Box, Button, Card, Code, Divider, Group, NativeSelect, Modal, Pagination, Stack, Table, Text, Title } from '@mantine/core';
+import { ActionIcon, Anchor, Badge, Box, Button, Card, Code, Divider, Group, List, NativeSelect, Modal, Pagination, Stack, Table, Text, Title } from '@mantine/core';
 import { IconArrowLeft, IconArrowRight, IconArrowsMaximize, IconCamera, IconChevronLeft, IconChevronRight, IconListDetails } from '@tabler/icons-react';
 import { useEffect, useId, useRef } from 'react';
 
@@ -13,7 +13,7 @@ import { ago, exactTime, plural, shortSha, useNow } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { GalleryProvider, ImageInspection, useGallery } from './Gallery';
 import { IconAction } from './IconAction';
-import { galleryImage, Picture } from './Picture';
+import { galleryImage, imageSource, Picture } from './Picture';
 import { ScreenActions } from './ScreenActions';
 import { useCatalogNavigate, useCatalogSearch } from './search';
 import { coverageStatus, coverageWord } from './words';
@@ -47,11 +47,28 @@ function CoverageLine({ cell }: { cell: UiCell }) {
   </Group>;
 }
 
+/** Supplemental evidence of the capture (more views, a trace, a video): each opens from its stored file, or says why it was left out. */
+function MoreEvidence({ capture }: { capture: UiCapture }) {
+  if (!capture.attachments?.length) return null;
+  return <List size="sm" spacing={4} listStyleType="none" aria-label="More evidence">
+    {capture.attachments.map(attachment => {
+      const source = attachment.omitted ? null : imageSource(attachment);
+      const name = attachment.label ?? attachment.name;
+      return <List.Item key={`${attachment.order}-${attachment.name}`}>
+        {source ? <Anchor href={source} target="_blank" rel="noopener noreferrer">{name}</Anchor> : name}
+        {attachment.role ? <Text span c="dimmed" inherit> ({attachment.role})</Text> : null}
+        {attachment.omitted ? <Text span c="dimmed" inherit>: left out ({attachment.omitted})</Text> : source ? null : <Text span c="dimmed" inherit>: not stored</Text>}
+      </List.Item>;
+    })}
+  </List>;
+}
+
 function CaptureDetails({ cell }: { cell: UiCell }) {
   const now = useNow();
   return <Stack gap="xs">
     <CoverageLine cell={cell} />
     {cell.capture?.detail && <Text size="sm" role="note">{cell.capture.detail}</Text>}
+    {cell.capture && <MoreEvidence capture={cell.capture} />}
     {cell.capture ? <Origin capture={cell.capture} now={now} /> : cell.planned ? <Text c="dimmed" size="xs">Expected by plan layer <Code>{cell.planned.layer.slice(0, 12)}</Code> in backend <Code>{cell.planned.backend}</Code>. Nothing has been captured.</Text> : null}
   </Stack>;
 }

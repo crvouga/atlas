@@ -16,7 +16,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { PageHeader } from '../components/Page';
 
-import { useEvidence } from '../evidence/evidence-context';
 import { plural } from '../evidence/format';
 import { EvidenceIncomplete, EvidenceWaiting } from '../evidence/load-state';
 import { StatusMark } from '../evidence/marks';
@@ -24,8 +23,13 @@ import { Picture } from './Picture';
 import { ScreenActions } from './ScreenActions';
 import { StateGallery } from './StateGallery';
 import { CollectionPanel } from './CollectionPanel';
+import { DefinitionScope, useDefinitionScope } from './DefinitionScope';
+import { FailureGroups } from './FailureGroups';
+import { scopeUiCatalog } from '@crvouga/atlas/reports/ui-catalog-scope';
 import { UiCatalogCompare } from './UiCatalogCompare';
-import { useUiCatalog } from './provider';
+import { CatalogLoadNotice, useUiCatalog, useUiCatalogStates, useUiCatalogStatus } from './provider';
+import { readFullCatalog, STATES_PER_READ } from './server-catalog';
+import { reportJson } from '../evidence/api';
 import { useCatalogNavigate, useCatalogSearch, type CatalogSearch } from './search';
 import { coverageStatus, coverageWord } from './words';
 import { UiCatalogFilters } from './UiCatalogFilters';
@@ -47,15 +51,18 @@ function CoverageBadge({ cell }: { cell: UiCell }) {
   );
 }
 
-function StateCard({ state, shown, list, selection, onRemember, onSelect }: {
+function StateCard({ state, shown, list, selection, onRemember, onSelect, reading = false }: {
   state: UiCatalogState; shown: UiCell; list: boolean; selection: CatalogSearch;
   onRemember: (id: string, kind: 'a' | 'button') => void; onSelect: () => void;
+  /** Its picture is still being read (a catalog read through a server reads the evidence of the cards on screen only). */
+  reading?: boolean;
 }) {
   return (
     <Card padding="sm" role="listitem" data-state={state.id}>
       <Flex direction={{ base: 'column', sm: list ? 'row' : 'column' }} gap={list ? 'md' : 'sm'} align={{ sm: list ? 'center' : 'stretch' }}>
         <Box w={{ base: '100%', sm: list ? 200 : '100%' }} flex="0 0 auto">
-          <Picture cell={shown} title={state.title} height={list ? 120 : 240} onInspect={() => { onRemember(state.id, 'button'); onSelect(); }} />
+          {reading ? <Skeleton h={list ? 120 : 240} radius="md" aria-label={`Reading the picture of ${state.title}`} />
+            : <Picture cell={shown} title={state.title} height={list ? 120 : 240} onInspect={() => { onRemember(state.id, 'button'); onSelect(); }} />}
         </Box>
         <Stack gap={6} flex={1} miw={0} px={4} pb={list ? 0 : 4}>
           <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
@@ -90,7 +97,9 @@ function StateCard({ state, shown, list, selection, onRemember, onSelect }: {
   );
 }
 
-function download(catalog: UiCatalog) {
+async function download(catalog: UiCatalog, fromServer: boolean) {
+  // Read through a server, the catalog held is an index without pictures or origins: the manifest is the full document.
+  if (fromServer) catalog = await readFullCatalog(reportJson, catalog);
   const url = URL.createObjectURL(new Blob([JSON.stringify(catalog, null, 2)], { type: 'application/json' }));
   const link = document.createElement('a');
   link.href = url;
@@ -218,12 +227,15 @@ function Surfaces({ catalog, onSelect }: { catalog: UiCatalog; onSelect: () => v
 
 /** The `/catalog` route. */
 export function UiCatalogPage() {
-  const evidence = useEvidence();
-  const whole = useUiCatalog();
+  const evidence = useUiCatalogStatus();
+  const recorded = useUiCatalog();
   const { search } = useCatalogSearch();
+  const scope = useDefinitionScope(search.definition);
+  // The catalog in the scope the address names. While a definition is read nothing is counted, never all history in its place.
+  const whole = useMemo(() => !recorded || scope.pending ? null : scope.selection ? scopeUiCatalog(recorded, scope.selection) : recorded, [recorded, scope.pending, scope.selection]);
   const go = useCatalogNavigate();
   const [shown, setShown] = useState(CARDS);
-  const [detailsOpened, setDetailsOpened] = useState<'surfaces' | 'collection' | null>(null);
+  const [detailsOpened, setDetailsOpened] = useState<'surfaces' | 'collection' | 'failures' | null>(null);
   const article = useRef<HTMLDivElement>(null);
   const wasFocused = useRef(!!search.state);
   const returning = useRef<{ id: string; kind: 'a' | 'button'; scroll: number } | null>(null);
@@ -255,6 +267,18 @@ export function UiCatalogPage() {
   const narrowed = Boolean(expression || draft);
   const unavailable = evidence.backends.filter((backend) => !backend.available);
   const open = catalog && search.state ? whole?.states.find((state) => state.id === search.state) ?? null : null;
+  // The evidence of what is drawn: the cards on screen, or the open state with its neighbors in the gallery's order (read in
+  // the same groups as the cards, so opening a card reads nothing new and the arrows rarely wait).
+  const drawn = useMemo(() => {
+    if (!search.state) return catalog?.states.slice(0, shown) ?? [];
+    if (!open) return [];
+    const list = catalog?.states ?? [];
+    const at = list.findIndex((state) => state.id === open.id);
+    if (at < 0) return [open];
+    const from = Math.floor(Math.max(0, at - 1) / STATES_PER_READ) * STATES_PER_READ;
+    return list.slice(from, (Math.floor(Math.min(list.length - 1, at + 1) / STATES_PER_READ) + 1) * STATES_PER_READ);
+  }, [search.state, open, catalog, shown]);
+  const visible = useUiCatalogStates(drawn);
   const notices = <>
         {evidence.unavailable && (
           <Alert role="alert" color="red" title="Recorded results cannot be read">
@@ -275,6 +299,15 @@ export function UiCatalogPage() {
           </Alert>
         )}
         <EvidenceIncomplete />
+        <CatalogLoadNotice />
+        {visible.failed > 0 && (
+          <Alert role="alert" color="orange" title="Some pictures could not be read">
+            <Group gap="sm">
+              <Text span inherit>The states are listed, but the evidence of some of them could not be read.</Text>
+              <Button type="button" variant="subtle" onClick={visible.retry}>Try again</Button>
+            </Group>
+          </Alert>
+        )}
         {!evidence.ready && !evidence.unavailable && <EvidenceWaiting label="Reading the recorded states…" />}
         {evidence.ready && evidence.pending > 0 && (
           <Text role="status" c="dimmed" component="div">
@@ -295,12 +328,13 @@ export function UiCatalogPage() {
   if (search.state) return (
     <Stack gap="md" component="article" aria-label="UI catalog">
       {notices}
-      {open ? <StateGallery state={open} states={catalog?.states ?? []} scope={expression} profile={search.image ?? initialProfile}
+      {open && visible.pending(open) ? <EvidenceWaiting label="Reading the evidence of this state…" />
+        : open ? <StateGallery state={visible.get(open)} states={catalog?.states ?? []} scope={expression} profile={search.image ?? initialProfile}
         onProfile={image => go({ image }, { replace: true })} onSelect={state => go({ state, image: undefined, panel: undefined })} onClose={close} />
         : <Card>
           <Stack gap="sm" align="flex-start">
             <Button variant="subtle" color="gray" size="compact-sm" ml={-8} leftSection={<IconArrowLeft size={16} aria-hidden="true" />} onClick={close}>Back to catalog</Button>
-            {evidence.ready && evidence.pending === 0 && <Alert role="status" color="gray" w="100%" title="That state is not in the catalog">
+            {evidence.ready && evidence.pending === 0 && !evidence.partial && <Alert role="status" color="gray" w="100%" title="That state is not in the catalog">
               <Text span inherit>{search.state}</Text> has no recorded capture or plan yet. It appears here if a layer that holds it arrives.
             </Alert>}
           </Stack>
@@ -316,6 +350,7 @@ export function UiCatalogPage() {
           {whole && <>
             <Button variant="subtle" color="gray" onClick={() => setDetailsOpened('surfaces')}>Surface coverage</Button>
             <Button variant="subtle" color="gray" onClick={() => setDetailsOpened('collection')}>Collection status</Button>
+            <Button variant="subtle" color="gray" onClick={() => setDetailsOpened('failures')}>Failure groups</Button>
           </>}
           {catalog && catalog.states.length > 0 && (
             <>
@@ -324,20 +359,21 @@ export function UiCatalogPage() {
                   Compare
                 </Button>
               )}
-              <Button type="button" leftSection={<IconDownload size={16} aria-hidden="true" />} onClick={() => download(catalog)}>
+              <Button type="button" leftSection={<IconDownload size={16} aria-hidden="true" />} onClick={() => void download(catalog, evidence.source === 'server')}>
                 Download the manifest
               </Button>
             </>
           )}
         </>}
       />
+      <DefinitionScope scope={scope} catalog={whole} />
       {whole && <UiCatalogFilters catalog={whole} expression={expression} draft={draft} onDraft={setDraft} issues={committed?.issues ?? []} end={layoutControl} />}
       {notices}
       {!evidence.ready && !evidence.unavailable && <GridSkeleton />}
       {catalog && whole && search.compare && <UiCatalogCompare whole={whole} expression={`${expression} ${draft}`} />}
       {catalog && whole && !search.compare && (
         <>
-          {whole.states.length === 0 && evidence.ready && (
+          {(recorded?.states.length ?? 0) === 0 && evidence.ready && (
             <Blank data-empty icon={<IconPhotoOff size={22} aria-hidden="true" />} title="No UI states have been recorded yet.">
               <Text c="dimmed" size="sm" ta="center" maw={520}>
                 A collector publishes a layer with a part of kind <Code>ui-state</Code>; states appear here the moment it arrives.
@@ -350,7 +386,7 @@ export function UiCatalogPage() {
             )} />
           )}
           {whole.states.length > 0 && catalog.states.length === 0 && (
-            <Blank data-no-match icon={<IconSearchOff size={22} aria-hidden="true" />} title="Nothing matches these filters.">
+            <Blank data-no-match icon={<IconSearchOff size={22} aria-hidden="true" />} title={evidence.partial ? 'Nothing matches among the states read so far.' : 'Nothing matches these filters.'}>
               <Button type="button" onClick={() => { setDraft(''); go(CLEAR_CATALOG_SEARCH); }}>
                 Clear filters
               </Button>
@@ -359,10 +395,11 @@ export function UiCatalogPage() {
           {catalog.states.length > 0 && (
             <>
               <SimpleGrid role="list" cols={search.layout === 'list' ? 1 : { base: 1, sm: 2, lg: 3 }} spacing="md" aria-label="States">
-                {catalog.states.slice(0, shown).map(state => {
+                {catalog.states.slice(0, shown).map(listed => {
+                  const state = visible.get(listed);
                   const cell = state.cells.find(cell => cell.coverage === 'captured') ?? state.cells[0]!;
                   const selection = { state: state.id, image: cell.profile.key, ...(draft ? { ...CLEAR_CATALOG_SEARCH, find: `${expression} ${draft}`.trim() } : {}) };
-                  return <StateCard key={state.id} state={state} shown={cell} list={search.layout === 'list'} selection={selection} onRemember={remember} onSelect={() => go(selection)} />;
+                  return <StateCard key={state.id} state={state} shown={cell} list={search.layout === 'list'} selection={selection} onRemember={remember} onSelect={() => go(selection)} reading={visible.pending(listed)} />;
                 })}
               </SimpleGrid>
               {catalog.states.length > shown && (
@@ -376,9 +413,10 @@ export function UiCatalogPage() {
           )}
         </>
       )}
-      <Modal opened={!!detailsOpened} onClose={() => setDetailsOpened(null)} title={detailsOpened === 'collection' ? 'Collection status' : 'Surface coverage'} size="xl" closeButtonProps={{ 'aria-label': 'Close catalog details' }}>
+      <Modal opened={!!detailsOpened} onClose={() => setDetailsOpened(null)} title={detailsOpened === 'collection' ? 'Collection status' : detailsOpened === 'failures' ? 'Failure groups' : 'Surface coverage'} size="xl" closeButtonProps={{ 'aria-label': 'Close catalog details' }}>
         {detailsOpened === 'surfaces' && whole && <Surfaces catalog={whole} onSelect={() => setDetailsOpened(null)} />}
         {detailsOpened === 'collection' && <CollectionPanel standalone />}
+        {detailsOpened === 'failures' && catalog && <FailureGroups catalog={catalog} onSelect={() => setDetailsOpened(null)} />}
       </Modal>
     </Stack>
   );

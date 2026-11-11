@@ -1,0 +1,10 @@
+{
+  "$comment": "Budgets of tests/ui-catalog-scale.test.tsx for the catalog page of a synthetic 2000-state, 2-profile catalog beside 4000 other checks, read through a server. Recorded 2026-11-10: 4 requests, 1,555,193 decoded bytes (the report's evidence alone: 3,946,101), a 76,730-byte delta, 345 ms to the first cards of the whole index, 174 ms for a search. Bytes and requests are exact and leave about 15% headroom; times are generous because CI machines vary. Lower a budget when a change makes the page cheaper; raise one only with the reason in the commit.",
+  "states": 2000,
+  "requests": 5,
+  "decodedBytes": 1800000,
+  "deltaBytes": 100000,
+  "openMs": 3000,
+  "searchMs": 1500,
+  "smallerThanWholeEvidenceBy": 2
+}

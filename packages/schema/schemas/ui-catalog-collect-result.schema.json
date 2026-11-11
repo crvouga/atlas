@@ -164,6 +164,62 @@
     "error": {
       "description": "Why the server could not be reached, when `stoppedBy` is `unreachable`",
       "type": "string"
+    },
+    "refresh": {
+      "description": "With `--refresh`: the refresh joined, and the shard id this attempt claimed as",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "shard": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "shard"
+      ],
+      "additionalProperties": {}
+    },
+    "journal": {
+      "description": "With `--journal`: the bundle folder and what it holds",
+      "type": "object",
+      "properties": {
+        "dir": {
+          "type": "string"
+        },
+        "captures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "published": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Captures whose publish failed: kept in the bundle"
+        },
+        "pending": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Captures never sent (a stop, a lost claim): kept in the bundle"
+        }
+      },
+      "required": [
+        "dir",
+        "captures",
+        "published",
+        "failed",
+        "pending"
+      ],
+      "additionalProperties": {}
     }
   },
   "required": [
