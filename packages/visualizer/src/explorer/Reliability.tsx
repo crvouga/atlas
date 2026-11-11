@@ -8,7 +8,7 @@
  * shows the same figure and the same executions. It is worked out from the history the page already holds
  * (`reliability` in the reports library), so it needs no further request.
  */
-import { Accordion, Alert, Anchor, Badge, Box, Button, Checkbox, Code, CopyButton, Flex, List, MultiSelect, SimpleGrid, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
+import { Accordion, Alert, Anchor, Badge, Button, Checkbox, Code, CopyButton, Flex, List, MultiSelect, Paper, SimpleGrid, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
 import { IconLink } from '@tabler/icons-react';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { reliability, type ReliabilityExecution } from '@crvouga/atlas/reports/reliability';
@@ -19,6 +19,7 @@ import { exactTime, plural, shortSha, STATUS_WORD } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { joined, reliabilityScopeOf, values } from './search';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
+import { Fact } from './parts';
 
 /** A recorded status as a mark and a word; one this viewer does not know is shown by its own name and as unknown, never as a pass. */
 const known = (status: string) => (Object.hasOwn(STATUS_WORD, status) && status !== 'none' ? (status as keyof typeof STATUS_WORD) : 'none');
@@ -138,14 +139,12 @@ export function Reliability({ testKey, entries }: { testKey: string; entries: re
   }, [entries]);
   if (!document)
     return (
-      <Box aria-label="Reliability" component="section" mb="lg">
-        <Title order={3} mb="sm" c="dimmed">
-          Reliability
-        </Title>
+      <Stack aria-label="Reliability" component="section" gap="xs">
+        <Title order={3}>Reliability</Title>
         <Text role="status" component="div" c="dimmed">
           Reading the history…
         </Text>
-      </Box>
+      </Stack>
     );
   const { eventual, firstAttempt } = document;
   const label = (list: readonly { value: string; count: number }[], format: (value: string) => string = (value) => value) => list.map(({ value, count }) => ({ value, label: `${format(value)} (${count})` }));
@@ -153,15 +152,15 @@ export function Reliability({ testKey, entries }: { testKey: string; entries: re
   const infos = document.notes.filter((note) => note.severity === 'info');
   const scoped = Object.keys(scope).length > 0;
   return (
-    <Box aria-label="Reliability" component="section" mb="lg">
-      <Title order={3} mb="sm" c="dimmed">
-        Reliability
-      </Title>
-      <Text component="div" c="dimmed" mb="sm">
-        Counted over independent executions: the snapshots one run recorded for one environment are one execution, and a retry is a try of it, not another
-        execution. This describes the checks Atlas holds, not how often the product fails in production.
-      </Text>
-      <Stack gap="sm" mb="md">
+    <Stack aria-label="Reliability" component="section" gap="sm">
+      <Stack gap={2}>
+        <Title order={3}>Reliability</Title>
+        <Text component="div" c="dimmed">
+          Counted over independent executions: the snapshots one run recorded for one environment are one execution, and a retry is a try of it, not another
+          execution. This describes the checks Atlas holds, not how often the product fails in production.
+        </Text>
+      </Stack>
+      <Stack gap="sm">
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
           <Choice label="Environment" param="relEnv" options={label(document.available.environments, environmentLabel)} chosen={values(search.relEnv)} />
           <Choice label="Producer" param="relProducer" options={label(document.available.producers)} chosen={values(search.relProducer)} />
@@ -180,7 +179,7 @@ export function Reliability({ testKey, entries }: { testKey: string; entries: re
         )}
       </Stack>
 
-      <Flex gap="xs" align="center" wrap="wrap" mb="sm" role="status" aria-label="Reliability sample">
+      <Flex gap="xs" align="center" wrap="wrap" fz="sm" role="status" aria-label="Reliability sample">
         <Badge color={document.sample === 'sufficient' ? 'gray' : 'orange'} variant="light">
           {document.sample === 'none' ? 'No independent executions' : document.sample === 'insufficient' ? 'Insufficient evidence' : 'Sample large enough to read as a rate'}
         </Badge>
@@ -193,60 +192,44 @@ export function Reliability({ testKey, entries }: { testKey: string; entries: re
         </Text>
       </Flex>
 
-      <SimpleGrid component="dl" cols={{ base: 1, sm: 2, md: 3 }}>
-        <Stack gap="sm">
-          <Box component="dt">Eventual success</Box>
-          <Box component="dd" m={0}>
-            {eventual.executions ? `${outOf(eventual.passed, eventual.executions)} (${percent(eventual.rate)})` : 'No rate: nothing completed in this scope'}
-          </Box>
-        </Stack>
-        <Stack gap="sm">
-          <Box component="dt">First-try success</Box>
-          <Box component="dd" m={0}>
-            {firstAttempt.executions ? `${outOf(firstAttempt.passed, firstAttempt.executions)} first time (${percent(firstAttempt.rate)})` : 'Unknown: no tries recorded'}
-            {document.unrecordedAttempts > 0 && firstAttempt.executions > 0 && (
-              <Text span inherit c="dimmed">
-                {' '}
-                · {document.unrecordedAttempts} recorded no tries
-              </Text>
-            )}
-          </Box>
-        </Stack>
-        <Stack gap="sm">
-          <Box component="dt">Tries</Box>
-          <Box component="dd" m={0}>
-            {document.attempts.total
-              ? `${document.attempts.total} recorded; ${plural(document.attempts.retried, 'execution', 'executions')} retried, ${document.attempts.recovered} failed first and passed after`
-              : 'None recorded'}
-          </Box>
-        </Stack>
-        <Stack gap="sm">
-          <Box component="dt">Interval (95%)</Box>
-          <Box component="dd" m={0} title={document.interval?.assumptions}>
-            {document.interval ? `${percent(document.interval.lower)} to ${percent(document.interval.upper)} (Wilson)` : '—'}
-          </Box>
-        </Stack>
-        <Stack gap="sm">
-          <Box component="dt">Recorded snapshots</Box>
-          <Box component="dd" m={0}>
-            {document.snapshots} behind the counted {plural(eventual.executions, 'execution', 'executions')}
-          </Box>
-        </Stack>
-        <Stack gap="sm">
-          <Box component="dt">Not counted</Box>
-          <Box component="dd" m={0}>
-            {document.outsideScope} outside the scope
-            {Object.entries(document.excluded)
-              .filter(([, count]) => count > 0)
-              .map(([reason, count]) => `, ${count} ${(REASONS[reason] ?? reason).toLowerCase()}`)
-              .join('')}
-          </Box>
-        </Stack>
-      </SimpleGrid>
+      <Paper withBorder>
+        <SimpleGrid component="dl" cols={{ base: 1, sm: 2, md: 3 }} m={0} spacing="md">
+          <Fact label="Eventual success">
+              {eventual.executions ? `${outOf(eventual.passed, eventual.executions)} (${percent(eventual.rate)})` : 'No rate: nothing completed in this scope'}
+          </Fact>
+          <Fact label="First-try success">
+              {firstAttempt.executions ? `${outOf(firstAttempt.passed, firstAttempt.executions)} first time (${percent(firstAttempt.rate)})` : 'Unknown: no tries recorded'}
+              {document.unrecordedAttempts > 0 && firstAttempt.executions > 0 && (
+                <Text span inherit c="dimmed">
+                  {' '}
+                  · {document.unrecordedAttempts} recorded no tries
+                </Text>
+              )}
+          </Fact>
+          <Fact label="Tries">
+              {document.attempts.total
+                ? `${document.attempts.total} recorded; ${plural(document.attempts.retried, 'execution', 'executions')} retried, ${document.attempts.recovered} failed first and passed after`
+                : 'None recorded'}
+          </Fact>
+          <Fact label="Interval (95%)" title={document.interval?.assumptions}>
+              {document.interval ? `${percent(document.interval.lower)} to ${percent(document.interval.upper)} (Wilson)` : '—'}
+          </Fact>
+          <Fact label="Recorded snapshots">
+              {document.snapshots} behind the counted {plural(eventual.executions, 'execution', 'executions')}
+          </Fact>
+          <Fact label="Not counted">
+              {document.outsideScope} outside the scope
+              {Object.entries(document.excluded)
+                .filter(([, count]) => count > 0)
+                .map(([reason, count]) => `, ${count} ${(REASONS[reason] ?? reason).toLowerCase()}`)
+                .join('')}
+          </Fact>
+        </SimpleGrid>
+      </Paper>
 
       {warnings.length > 0 && (
-        <Alert color="orange" title="Read this figure with care" mt="sm">
-          <List>
+        <Alert color="orange" title="Read this figure with care">
+          <List size="sm">
             {warnings.map((note) => (
               <List.Item key={note.code}>{note.message}</List.Item>
             ))}
@@ -254,25 +237,25 @@ export function Reliability({ testKey, entries }: { testKey: string; entries: re
         </Alert>
       )}
       {infos.length > 0 && (
-        <List mt="sm" c="dimmed">
+        <List size="sm" c="dimmed">
           {infos.map((note) => (
             <List.Item key={note.code}>{note.message}</List.Item>
           ))}
         </List>
       )}
       {document.interval && (
-        <Text component="div" c="dimmed" mt="sm">
+        <Text component="div" size="xs" c="dimmed">
           Interval assumes: {document.interval.assumptions}
         </Text>
       )}
       {document.historical.executions > 0 && (
-        <Text component="div" c="dimmed" mt="sm">
+        <Text component="div" c="dimmed">
           Earlier spec revisions, shown as context and not counted: {outOf(document.historical.passed, document.historical.executions)}.
         </Text>
       )}
 
       {document.cohorts.length > 1 && (
-        <Table.ScrollContainer minWidth={500} mt="sm">
+        <Table.ScrollContainer minWidth={500}>
           <Table>
             <Table.Caption>Each environment, producer and parameter set on its own</Table.Caption>
             <Table.Thead>
@@ -307,23 +290,25 @@ export function Reliability({ testKey, entries }: { testKey: string; entries: re
         </Table.ScrollContainer>
       )}
 
-      <Accordion variant="separated" mt="sm" value={search.relOpen ? 'denominator' : null} onChange={(value) => go({ relOpen: value ? true : undefined }, { replace: true })}>
+      <Accordion variant="contained" value={search.relOpen ? 'denominator' : null} onChange={(value) => go({ relOpen: value ? true : undefined }, { replace: true })}>
         <Accordion.Item value="denominator">
           <Accordion.Control>
-            Executions behind this figure: {document.executions.filter((execution) => execution.counted).length} counted
-            {document.executions.some((execution) => !execution.counted) ? `, ${document.executions.filter((execution) => !execution.counted).length} not counted` : ''}
+            <Text span fw={500}>
+              Executions behind this figure: {document.executions.filter((execution) => execution.counted).length} counted
+              {document.executions.some((execution) => !execution.counted) ? `, ${document.executions.filter((execution) => !execution.counted).length} not counted` : ''}
+            </Text>
           </Accordion.Control>
           <Accordion.Panel>
             <Stack gap="sm">
               <Flex gap="xs" align="center" wrap="wrap">
                 <CopyButton value={typeof window === 'undefined' ? '' : window.location.href}>
                   {({ copied, copy }) => (
-                    <Button type="button" variant="default" onClick={copy} leftSection={<IconLink size={16} aria-hidden="true" />}>
+                    <Button type="button" size="compact-sm" onClick={copy} leftSection={<IconLink size={16} aria-hidden="true" />}>
                       {copied ? 'Link copied' : 'Copy link to this scope'}
                     </Button>
                   )}
                 </CopyButton>
-                <Text span inherit c="dimmed">
+                <Text span size="xs" c="dimmed">
                   The link opens this scope and these executions.
                 </Text>
               </Flex>
@@ -332,6 +317,6 @@ export function Reliability({ testKey, entries }: { testKey: string; entries: re
           </Accordion.Panel>
         </Accordion.Item>
       </Accordion>
-    </Box>
+    </Stack>
   );
 }

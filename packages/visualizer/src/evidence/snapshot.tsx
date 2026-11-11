@@ -1,7 +1,8 @@
 import { PHONE_H, PHONE_W } from '@crvouga/atlas/reports/phone';
 import type { ReportSnapshotBlob, ReportStepHit } from '@crvouga/atlas/reports/report-types';
 import { createSnapshotHost, paintSnapshotHost, type HitResult } from '@crvouga/atlas/reports/snapshot-surface';
-import { Accordion, Anchor, Box, Button, Code, Image, Stack, Text } from '@mantine/core';
+import { Accordion, Anchor, Badge, Box, Button, Code, Group, Image, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core';
+import { IconDownload } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { reportAssetUrl, reportResponse } from './api';
@@ -47,7 +48,7 @@ export function SnapshotPicture({
     <>
       <Stack ref={frame} role="img" aria-label={`Recorded ${who}`} w={PHONE_W * SCALE} h={PHONE_H * SCALE} maw="100%" gap="sm" />
       {found === 'missing' && (
-        <Text component="div" c="dimmed">
+        <Text component="div" c="dimmed" size="xs">
           The recorded control cannot be found in this picture.
         </Text>
       )}
@@ -77,34 +78,49 @@ export function Snapshot({
   const who = blob.nodeId ?? blob.name;
   const picture = blob.media === 'html' || blob.media === 'png' || blob.media === 'video';
   return (
-    <Box data-picture={picture || undefined} component="figure" m={0}>
-      <Box component="figcaption">
+    <Stack data-picture={picture || undefined} component="figure" m={0} gap="xs" miw={0}>
+      <Group component="figcaption" gap="xs" align="center" fz="sm">
         <Text span inherit fw={600}>
           {who}
         </Text>
         {blob.nodeId && blob.name !== blob.nodeId && (
-          <Text span inherit>
+          <Text span inherit c="dimmed">
             {blob.name}
           </Text>
         )}
         {earlier && (
-          <Text span inherit>
+          <Badge color="gray" size="sm">
             Earlier picture
-          </Text>
+          </Badge>
         )}
-      </Box>
+      </Group>
       {blob.media === 'video' && (
-        <Box src={reportAssetUrl(url)} controls playsInline aria-label={`Recorded ${who}`} component="video" maw="100%" w="100%" />
+        <Box
+          src={reportAssetUrl(url)}
+          controls
+          playsInline
+          aria-label={`Recorded ${who}`}
+          component="video"
+          display="block"
+          maw="100%"
+          w="100%"
+          mah="min(70vh, 40rem)"
+          bg="dark.9"
+          bdrs="md"
+        />
       )}
       {blob.media !== 'video' && content.isPending && (
-        <Text role="status" component="div" c="dimmed">
-          Loading…
-        </Text>
+        <Stack gap="xs">
+          <Text role="status" component="div" c="dimmed" size="xs">
+            Loading…
+          </Text>
+          <Skeleton height="8rem" radius="md" />
+        </Stack>
       )}
       {content.isError && (
         <Text role="alert" component="div" c="dimmed">
           {content.error.message}{' '}
-          <Button type="button" onClick={() => void content.refetch()} variant="subtle">
+          <Button type="button" onClick={() => void content.refetch()} variant="subtle" size="compact-sm">
             Try again
           </Button>
         </Text>
@@ -112,14 +128,23 @@ export function Snapshot({
       {content.data !== undefined && blob.media === 'html' && (
         <SnapshotPicture file={blob.file} html={content.data} css={css} hit={hit} who={who} />
       )}
-      {content.data !== undefined && blob.media === 'png' && <Image alt={`Recorded ${who}`} src={content.data} fit="contain" maw="100%" />}
+      {content.data !== undefined && blob.media === 'png' && (
+        <Image alt={`Recorded ${who}`} src={content.data} fit="contain" w="auto" maw="100%" mah="min(70vh, 40rem)" radius="md" bd="1px solid var(--mantine-color-default-border)" />
+      )}
       {content.data !== undefined && blob.media === 'bytes' && (
-        <Anchor download={blob.file.split('/').at(-1)} href={content.data}>
+        <Button
+          component="a"
+          download={blob.file.split('/').at(-1)}
+          href={content.data}
+          w="fit-content"
+          size="compact-sm"
+          leftSection={<IconDownload size={14} aria-hidden="true" />}
+        >
           Download captured data
-        </Anchor>
+        </Button>
       )}
       {content.data !== undefined && (blob.media === 'json' || blob.media === 'text') && <SnapshotData text={content.data} />}
-    </Box>
+    </Stack>
   );
 }
 /** A recorded value: a model trace when it is one, otherwise its fields. */
@@ -138,13 +163,15 @@ function DataValue({ value }: { value: unknown }) {
   const entries = Object.entries(value);
   if (!entries.length) return <Code>{Array.isArray(value) ? '[]' : '{}'}</Code>;
   return (
-    <Box component="dl">
+    <SimpleGrid component="dl" cols={1} spacing={6} m={0}>
       {entries.map(([key, item]) => (
-        <Stack key={key} gap="sm">
-          <Box component="dt">{key}</Box>
-          <Box component="dd" m={0}>
+        <Group key={key} gap="sm" align="flex-start" wrap="nowrap">
+          <Text component="dt" c="dimmed" size="xs" w="8rem" miw="5rem" pt={2}>
+            {key}
+          </Text>
+          <Box component="dd" m={0} flex={1} miw={0}>
             {item !== null && typeof item === 'object' ? (
-              <Accordion variant="separated" my="sm">
+              <Accordion variant="separated">
                 <Accordion.Item value="content">
                   <Accordion.Control>
                     {Array.isArray(item) ? `${item.length} items` : `${Object.keys(item).length} fields`}
@@ -158,8 +185,8 @@ function DataValue({ value }: { value: unknown }) {
               <DataValue value={item} />
             )}
           </Box>
-        </Stack>
+        </Group>
       ))}
-    </Box>
+    </SimpleGrid>
   );
 }

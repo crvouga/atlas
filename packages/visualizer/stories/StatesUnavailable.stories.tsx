@@ -1,0 +1,18 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { FEATURE, MOBILE, behaviors, catalog, critiques, screen, spec, tests, type ScreenStory } from './support';
+const meta = { ...screen, title: 'States/Unavailable', args: { at: tests(), state: 'error' } } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+export const UnavailableReports: Story = {};
+export const UnavailableRuns: Story = { args: { at: tests({ tab: 'runs' }) } };
+export const UnavailableArtifacts: Story = { args: { at: tests({ tab: 'artifacts' }) } };
+export const UnavailableCollections: Story = { args: { at: tests({ tab: 'collections' }) } };
+export const UnavailableBehaviors: Story = { args: { at: behaviors() } };
+export const UnavailableCatalog: Story = { args: { at: catalog() } };
+export const UnavailableCritiques: Story = { args: { at: critiques() } };
+export const UnavailableSpec: Story = { args: { at: spec('gherkin', { spec: FEATURE }), state: 'spec-error' } };
+export const IncompleteEvidence: Story = { args: { state: 'incomplete' } };
+export const IncompleteCatalog: Story = { args: { at: catalog(), state: 'incomplete' } };
+export const CollectionsNotSupported: Story = { args: { at: tests({ tab: 'collections' }), state: 'populated', server: { legacy: true } } };
+export const MobileUnavailableReports: Story = { ...MOBILE };

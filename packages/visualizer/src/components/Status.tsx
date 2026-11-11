@@ -6,7 +6,7 @@ export function StatusDot({ status }: { status: ItemStatus }) {
 }
 export function StatusBadge({ status, label }: { status: ItemStatus; label?: string }) {
   return (
-    <Badge color={statusColor(status)} leftSection={<StatusDot status={status} />}>
+    <Badge color={statusColor(status)} size="sm" leftSection={<StatusDot status={status} />}>
       {label ?? STATUS_LABEL[status]}
     </Badge>
   );
@@ -27,12 +27,12 @@ export function SummaryBar({ noun, nounPlural, counts, verb }: { noun: string; n
       (counts['not-yet-run'] ? `, ${counts['not-yet-run']} not in this run` : '');
   return (
     <Stack gap="xs">
-      <Text size="xs">
+      <Text size="xs" c="dimmed">
         {unrun
           ? `${plural(counts.total, noun, nounPlural)} · not yet run`
           : `${nounPlural[0]!.toUpperCase() + nounPlural.slice(1)} ${counts.passed + counts.flaky}/${counts.total} ${verb}`}
       </Text>
-      <Progress.Root size="sm" role="img" aria-label={description}>
+      <Progress.Root size={6} radius="xl" role="img" aria-label={description}>
         {BAR_ORDER.map(
           (status) =>
             counts[status] > 0 && (

@@ -1,5 +1,17 @@
 import { SpecLogo } from '../components/SpecLogo';
-import { IconAlertTriangle, IconArrowRight, IconSearch, IconVideo, IconX } from '@tabler/icons-react';
+import {
+  IconAdjustmentsHorizontal,
+  IconAlertTriangle,
+  IconArrowRight,
+  IconChevronDown,
+  IconChevronRight,
+  IconFilterOff,
+  IconFlask,
+  IconInbox,
+  IconSearch,
+  IconVideo,
+  IconX
+} from '@tabler/icons-react';
 import {
   Accordion,
   Alert,
@@ -7,19 +19,22 @@ import {
   Badge,
   Box,
   Button,
-  Container,
+  Card,
+  Divider,
   Drawer,
   Flex,
   Group,
   List,
   MultiSelect,
   NativeSelect,
-  Paper,
+  NavLink,
   SimpleGrid,
+  Skeleton,
   Stack,
   Tabs,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
   VisuallyHidden
 } from '@mantine/core';
@@ -43,7 +58,8 @@ import {
   type TestSummary
 } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { Metric, PageHeader, Panel } from '../components/Page';
 import { attentionRank, hasRelease, needsAttention, type Assessment, type ReleaseIdentity } from '../evidence/applicability';
 import { ApplicabilityControls, VerdictBadge } from '../evidence/applicability-view';
 import { staticEvidence } from '../evidence/api';
@@ -53,7 +69,7 @@ import { Meter, StatusMark } from '../evidence/marks';
 import { SPEC_KINDS } from '../spec-kind';
 import { behaviorDocs, behaviorId, describeHit, testHasVideo } from '../find/behaviors';
 import { useDocSearch } from '../find/doc-search';
-import { hasFilters, passesFilters, withoutToken, type FilterKey, type ParsedSearch } from '../find/query';
+import { hasFilters, passesFilters, withoutToken, type FilterKey } from '../find/query';
 import type { FindDoc, Ranked } from '../find/rank';
 import { assessTests, releaseOf, useExplorerApplicability } from './applicability';
 import { useRunDetail, useTestCatalog } from './catalog';
@@ -169,7 +185,44 @@ function useListing(model: CatalogModel | null, search: ExplorerSearch, q: strin
   }, [model, search, found, docs, sort, inRun, assessments, release, run.isPending, run.isSuccess, run.data]);
   return listing;
 }
-/** The project home: the published spec kinds, the insight strip, the toolbar, the grouped list and the open test. */
+/** Every filter the explorer can narrow by, cleared. */
+const NO_NARROWING = {
+  q: undefined,
+  status: undefined,
+  env: undefined,
+  producer: undefined,
+  domain: undefined,
+  spec: undefined,
+  tag: undefined,
+  scope: undefined,
+  artifactTag: undefined,
+  inherited: undefined,
+  inRun: undefined,
+  video: undefined,
+  evidence: undefined
+} as const;
+/** The width of one figure column of the list, so the column headings sit over their figures. */
+const COLUMN = 64;
+/** A calm, centered message for a list with nothing to show: an icon, what is so, and one way on. */
+function Blank({ icon, title, children, action, role }: { icon: ReactNode; title?: string; children: ReactNode; action?: ReactNode; role?: 'status' }) {
+  return (
+    <Stack align="center" gap="xs" py={48} px="lg" role={role}>
+      <ThemeIcon size={44} radius="xl" variant="light" color="gray" mb={4}>
+        {icon}
+      </ThemeIcon>
+      {title && (
+        <Title order={3} ta="center">
+          {title}
+        </Title>
+      )}
+      <Text component="div" c="dimmed" ta="center" maw={460}>
+        {children}
+      </Text>
+      {action && <Box mt="xs">{action}</Box>}
+    </Stack>
+  );
+}
+/** The project home: the report in numbers, the tests found by searching and filtering, the open test, and the published spec kinds. */
 export function Explorer() {
   const evidence = useEvidence();
   const catalog = useTestCatalog();
@@ -189,13 +242,9 @@ export function Explorer() {
   const empty = model !== null && model.tests.length === 0;
   const split = !!search.test && search.tab !== 'runs' && search.tab !== 'artifacts' && search.tab !== 'collections' && search.tab !== 'compare' && search.tab !== 'health';
   return (
-    <Container size="xl" py="xl">
-      <Box aria-label="Test explorer" component="article" miw={0}>
-        <Box component="header" mb="lg">
-          <Title order={1} mb="xs">
-            {projectTitle()}
-          </Title>
-          <Text c="dimmed" mb="lg">Explore test outcomes, review recordings, and trace the evidence behind each result.</Text>
+    <>
+      <Stack aria-label="Test explorer" component="article" miw={0} gap="md">
+        <PageHeader title={projectTitle()} description="Explore test outcomes, review recordings, and trace the evidence behind each result.">
           {model && (model.tests.length > 0 || model.summary.runs > 0) && (
             <Tabs
               value={search.tab ?? 'tests'}
@@ -205,7 +254,7 @@ export function Explorer() {
                 <Tabs.Tab
                   value="tests"
                   rightSection={
-                    <Text span c="dimmed">
+                    <Text span size="xs" c="dimmed">
                       {model.tests.length}
                     </Text>
                   }
@@ -215,7 +264,7 @@ export function Explorer() {
                 <Tabs.Tab
                   value="runs"
                   rightSection={
-                    <Text span c="dimmed">
+                    <Text span size="xs" c="dimmed">
                       {model.summary.runs}
                     </Text>
                   }
@@ -229,69 +278,46 @@ export function Explorer() {
               </Tabs.List>
             </Tabs>
           )}
-        </Box>
+        </PageHeader>
         {evidence.unavailable && (
-          <Alert role="alert" color={'red'} my="sm">
+          <Alert role="alert" color="red" icon={<IconAlertTriangle size={18} aria-hidden="true" />}>
             {evidence.unavailable}
           </Alert>
         )}
         {catalog.notice && (
-          <Alert role="status" color={'blue'} my="sm">
+          <Alert role="status" color="blue">
             The server’s test history could not be read ({catalog.notice}). Showing what this page holds.
           </Alert>
         )}
-        {kinds.length > 0 && !search.tab && (
-          <Accordion variant="separated" mb="lg" role="region" aria-label="Published specs">
-            <Accordion.Item value="specs">
-              <Accordion.Control>Published specs · {kinds.reduce((count, entry) => count + entry.files.length, 0)} files</Accordion.Control>
-              <Accordion.Panel>
-                <Stack gap="sm">
-                  <Group justify="space-between" gap="sm">
-                    <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'health', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
-                      Why do these counts differ from the Tests?
-                    </Anchor>
-                  </Group>
-                  <Group gap="xs">
-                    {kinds.map(({ kind, files }) => (
-                      <Button key={kind.id} variant="default" leftSection={<SpecLogo kind={kind} />}
-                        rightSection={<Badge color="gray">{files.length}</Badge>}
-                        renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}>
-                        {kind.label}
-                      </Button>
-                    ))}
-                  </Group>
-                  {kinds.some(({ kind }) => kind.id === 'gherkin') && (
-                    <Anchor renderRoot={(props) => <Link {...props} to="/behaviors" search={{}} />}>
-                      <Group component="span" display="inline-flex" gap="xs">
-                        Behaviors: read what the project promises, then watch it
-                        <IconArrowRight size={16} aria-hidden="true" />
-                      </Group>
-                    </Anchor>
-                  )}
-                </Stack>
-              </Accordion.Panel>
-            </Accordion.Item>
-          </Accordion>
-        )}
-        {!model && !evidence.unavailable && (
-          <Text role="status" component="div" c="dimmed">
-            Loading tests…
-          </Text>
-        )}
+        {!model && !evidence.unavailable && <Loading />}
         {empty && model && model.summary.runs > 0 && search.tab !== 'runs' && (
-          <Text component="div" c="dimmed">
-            No test results recorded, but {model.summary.runs === 1 ? '1 run carries' : `${model.summary.runs} runs carry`} files. Open the Runs tab to see them.
-          </Text>
+          <Card p={0}>
+            <Blank
+              icon={<IconFlask size={22} aria-hidden="true" />}
+              action={
+                <Button renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'runs', test: undefined, layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+                  Open runs
+                </Button>
+              }
+            >
+              No test results recorded, but {model.summary.runs === 1 ? '1 run carries' : `${model.summary.runs} runs carry`} files. Open the Runs tab to see them.
+            </Blank>
+          </Card>
         )}
         {empty && !kinds.length && !(model && model.summary.runs > 0) && (
-          <Text component="div" c="dimmed">
-            No reports yet. Publish tests and specs to this project to populate its report.
-          </Text>
+          <Card p={0}>
+            <Blank icon={<IconInbox size={22} aria-hidden="true" />}>
+              <Text span inherit fw={600} c="var(--mantine-color-text)">
+                No reports yet.
+              </Text>{' '}
+              Publish tests and specs to this project to populate its report.
+            </Blank>
+          </Card>
         )}
         {empty && kinds.length > 0 && (
-          <Text component="div" c="dimmed">
-            No test results recorded yet.
-          </Text>
+          <Card p={0}>
+            <Blank icon={<IconFlask size={22} aria-hidden="true" />}>No test results recorded yet.</Blank>
+          </Card>
         )}
         {model &&
           listing &&
@@ -308,35 +334,59 @@ export function Explorer() {
           ) : empty ? null : (
             <>
               <InsightStrip model={model} scope={listing.scope} search={search} />
-              <Toolbar
-                model={model}
-                search={search}
-                listing={listing}
-                onSearch={(value) => go({ q: value || undefined }, { replace: true })}
-              />
-              {listing.runPending && (
-                <Text role="status" component="div" c="dimmed">
-                  Reading the tests of this run…
-                </Text>
-              )}
-              {listing.runMissing && (
-                <Alert role="status" color={'blue'} my="sm">
-                  That run is not in the report any more.
-                </Alert>
-              )}
-              <TestList tests={listing.shown} search={search} total={model.tests.length} hits={listing.hits} sort={search.sort ?? (listing.hits ? 'relevance' : 'spec')} assessments={listing.assessments} release={listing.release} />
+              <TestsPanel model={model} search={search} listing={listing} onSearch={(value) => go({ q: value || undefined }, { replace: true })} />
+              <MoreInsights scope={listing.scope} />
             </>
           ))}
-      </Box>
-      <Drawer opened={split} onClose={() => go({ test: undefined, layer: undefined })} title="Test detail" size="xl">
+        {kinds.length > 0 && !search.tab && (
+          <Accordion variant="contained" radius="lg" role="region" aria-label="Published specs">
+            <Accordion.Item value="specs" bg="var(--mantine-color-body)">
+              <Accordion.Control>
+                <Text span fw={500}>
+                  Published specs
+                </Text>
+                <Text span c="dimmed">
+                  {' '}
+                  · {kinds.reduce((count, entry) => count + entry.files.length, 0)} files
+                </Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="sm">
+                  <Group gap="xs">
+                    {kinds.map(({ kind, files }) => (
+                      <Button key={kind.id} leftSection={<SpecLogo kind={kind} />}
+                        rightSection={<Text span size="xs" c="dimmed">{files.length}</Text>}
+                        renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}>
+                        {kind.label}
+                      </Button>
+                    ))}
+                  </Group>
+                  <Group gap="lg">
+                    {kinds.some(({ kind }) => kind.id === 'gherkin') && (
+                      <Anchor renderRoot={(props) => <Link {...props} to="/behaviors" search={{}} />}>
+                        <Group component="span" display="inline-flex" gap={4}>
+                          Behaviors: read what the project promises, then watch it
+                          <IconArrowRight size={14} aria-hidden="true" />
+                        </Group>
+                      </Anchor>
+                    )}
+                    <Anchor c="dimmed" renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'health', test: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+                      Why do these counts differ from the Tests?
+                    </Anchor>
+                  </Group>
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        )}
+      </Stack>
+      <Drawer opened={split} onClose={() => go({ test: undefined, layer: undefined })} title="Test detail" size="64rem">
         <Box aria-label="Test detail" component="aside">
           {selected ? (
             <TestDetail test={selected} slot={slots.get(selected.key)} />
           ) : model ? (
             <Stack gap="sm">
-              <Alert color={'blue'} my="sm">
-                This test is not in the report any more. A source may be switched off, or its results were removed.
-              </Alert>
+              <Alert color="blue">This test is not in the report any more. A source may be switched off, or its results were removed.</Alert>
               <Anchor
                 renderRoot={(props) => (
                   <Link {...props} to="/" search={patched({ test: undefined, layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
@@ -346,13 +396,50 @@ export function Explorer() {
               </Anchor>
             </Stack>
           ) : (
-            <Text role="status" component="div" c="dimmed">
-              Loading the test…
-            </Text>
+            <Stack gap="md">
+              <Text role="status" component="div" c="dimmed">
+                Loading the test…
+              </Text>
+              <Skeleton h={28} w="60%" />
+              <Skeleton h={320} />
+              <Skeleton h={120} />
+            </Stack>
           )}
         </Box>
       </Drawer>
-    </Container>
+    </>
+  );
+}
+/** The page while the report is being read: the shape of the figures and the list, and the words that say so. */
+function Loading() {
+  return (
+    <>
+      <SimpleGrid cols={{ base: 2, lg: 4 }} spacing="md" aria-hidden="true">
+        {[0, 1, 2, 3].map((tile) => (
+          <Card key={tile} padding="md">
+            <Stack gap="xs">
+              <Skeleton h={10} w={72} />
+              <Skeleton h={22} w={56} />
+              <Skeleton h={8} />
+            </Stack>
+          </Card>
+        ))}
+      </SimpleGrid>
+      <Card padding="lg">
+        <Stack gap="md">
+          <Text role="status" component="div" c="dimmed">
+            Loading tests…
+          </Text>
+          {[72, 56, 64, 48, 60].map((width, row) => (
+            <Group key={row} gap="sm" wrap="nowrap" aria-hidden="true">
+              <Skeleton circle h={16} w={16} />
+              <Skeleton h={12} w={`${width}%`} />
+              <Skeleton h={12} w={48} ml="auto" />
+            </Group>
+          ))}
+        </Stack>
+      </Card>
+    </>
   );
 }
 function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: readonly TestSummary[]; search: ExplorerSearch }) {
@@ -370,65 +457,49 @@ function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: re
   const visibleEnvironments = environments.filter((group, index) => index < 1 || envs.includes(group.key));
   const last = scope.reduce((latest, test) => Math.max(latest, test.lastRecordedAtMs), 0);
   const status = (id: string) => go({ status: statuses.length === 1 && statuses[0] === id ? undefined : id });
+  const outcome = (id: 'failed' | 'passed' | 'not-run' | 'running', word: string, color: string, always: boolean) =>
+    (always || counts[id] > 0) && (
+      <Button
+        size="compact-xs"
+        color={color}
+        variant={statuses.includes(id) ? 'light' : 'subtle'}
+        aria-pressed={statuses.includes(id)}
+        disabled={id === 'failed' && !counts.failed}
+        onClick={() => status(id)}
+      >
+        {counts[id]} {word}
+      </Button>
+    );
   return (
-    <Box component="section" aria-label="Insights" mb="lg">
-      <Paper withBorder hiddenFrom="sm" mb="md">
-        <Group justify="space-between" gap="xs">
-          <Stack gap="xs">
+    <Box component="section" aria-label="Insights">
+      <Card hiddenFrom="sm" padding="md">
+        <Group justify="space-between" gap="xs" wrap="nowrap">
+          <Stack gap={2} miw={0} flex={1}>
             <Text fw={600}>{plural(scope.length, 'test', 'tests')}</Text>
-            <Text c="dimmed">{counts.failed} failed · {counts.passed} passed{counts.running ? ` · ${counts.running} running` : ''}{counts['not-run'] ? ` · ${counts['not-run']} not run` : ''}</Text>
+            <Text size="xs" c="dimmed">{counts.failed} failed · {counts.passed} passed{counts.running ? ` · ${counts.running} running` : ''}{counts['not-run'] ? ` · ${counts['not-run']} not run` : ''}</Text>
           </Stack>
-          <Button variant="subtle" aria-expanded={mobileInsights} onClick={() => setMobileInsights((open) => !open)}>
+          <Button variant="subtle" size="compact-sm" flex="none" aria-expanded={mobileInsights} onClick={() => setMobileInsights((open) => !open)}>
             {mobileInsights ? 'Hide insights' : 'View insights'}
           </Button>
         </Group>
-      </Paper>
-      <Box display={{ base: mobileInsights ? 'block' : 'none', sm: 'block' }}>
-        <SimpleGrid cols={{ base: 2, xl: 4 }} spacing="md">
-          <Paper withBorder>
-            <Stack gap="xs">
-              <Text c="dimmed">Tests</Text>
-              <Title order={2}>{scope.length.toLocaleString()}</Title>
+      </Card>
+      <Box display={{ base: mobileInsights ? 'block' : 'none', sm: 'block' }} mt={{ base: 'md', sm: 0 }}>
+        <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
+          <Metric label="Tests" value={scope.length.toLocaleString()}>
+            <Box py={4}>
               <Meter counts={counts} />
-              <Group gap="xs">
-                <Button
-                  color="red"
-                  variant={statuses.includes('failed') ? 'light' : 'subtle'}
-                  aria-pressed={statuses.includes('failed')}
-                  disabled={!counts.failed}
-                  onClick={() => status('failed')}
-                >
-                  {counts.failed} failed
-                </Button>
-                <Button
-                  color="green"
-                  variant={statuses.includes('passed') ? 'light' : 'subtle'}
-                  aria-pressed={statuses.includes('passed')}
-                  onClick={() => status('passed')}
-                >
-                  {counts.passed} passed
-                </Button>
-                {counts['not-run'] > 0 && (
-                  <Button aria-pressed={statuses.includes('not-run')} onClick={() => status('not-run')}>
-                    {counts['not-run']} not run
-                  </Button>
-                )}
-                {counts.running > 0 && (
-                  <Button aria-pressed={statuses.includes('running')} onClick={() => status('running')}>
-                    {counts.running} running
-                  </Button>
-                )}
-              </Group>
-            </Stack>
-          </Paper>
-          <Paper withBorder>
-            <Stack gap="xs">
-              <Text c="dimmed">Flaky</Text>
-              <Title order={2}>{flaky}</Title>
-              <Text size="xs" c="dimmed">
-                {flaky ? 'Passed and failed on one commit, or needed a retry' : 'None recorded'}
-              </Text>
+            </Box>
+            <Group gap={4} ml={-6}>
+              {outcome('failed', 'failed', 'red', true)}
+              {outcome('passed', 'passed', 'green', true)}
+              {outcome('not-run', 'not run', 'gray', false)}
+              {outcome('running', 'running', 'blue', false)}
+            </Group>
+          </Metric>
+          <Metric label="Flaky" value={flaky} detail={flaky ? 'Passed and failed on one commit, or needed a retry' : 'None recorded'}>
+            <Group gap={4} ml={-6} mt="auto">
               <Button
+                size="compact-xs"
                 color="orange"
                 variant={statuses.includes('flaky') ? 'light' : 'subtle'}
                 aria-pressed={statuses.includes('flaky')}
@@ -437,18 +508,20 @@ function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: re
               >
                 View flaky tests
               </Button>
-            </Stack>
-          </Paper>
-          <Paper withBorder>
-            <Stack gap="xs">
-              <Text c="dimmed">Duration</Text>
-              <Title order={2}>{durations ? formatMs(durations.avgMs) : '—'}</Title>
-              <Text size="xs" c="dimmed">
-                {durations
-                  ? `average · p95 ${formatMs(durations.p95Ms)} · ${averages.length.toLocaleString()} measured`
-                  : 'No durations recorded. Producers can send durationMs with each check.'}
-              </Text>
+            </Group>
+          </Metric>
+          <Metric
+            label="Duration"
+            value={durations ? formatMs(durations.avgMs) : '—'}
+            detail={
+              durations
+                ? `average · p95 ${formatMs(durations.p95Ms)} · ${averages.length.toLocaleString()} measured`
+                : 'No durations recorded. Producers can send durationMs with each check.'
+            }
+          >
+            <Group gap={6}>
               <Anchor
+                size="xs"
                 aria-label={`${model.summary.runs} runs`}
                 renderRoot={(props) => (
                   <Link
@@ -463,50 +536,46 @@ function InsightStrip({ model, scope, search }: { model: CatalogModel; scope: re
                 {model.summary.runs.toLocaleString()} runs
               </Anchor>
               <Text size="xs" c="dimmed">
-                {last ? `Last recorded ${ago(last, now)}` : 'Nothing recorded yet'}
+                · {last ? `Last recorded ${ago(last, now)}` : 'Nothing recorded yet'}
               </Text>
-            </Stack>
-          </Paper>
-          <Paper withBorder>
-            <Stack gap="xs">
-              <Text c="dimmed">Environments</Text>
-              <Title order={2}>{environments.length}</Title>
+            </Group>
+          </Metric>
+          <Metric label="Environments" value={environments.length}>
+            <Group gap={4} ml={-6}>
               {visibleEnvironments.map((group) => (
-                <Button key={group.key} variant={envs.includes(group.key) ? 'light' : 'subtle'}
-                  fullWidth justify="flex-start" aria-pressed={envs.includes(group.key)}
+                <Button key={group.key} size="compact-xs" variant={envs.includes(group.key) ? 'light' : 'subtle'}
+                  maw="100%" aria-pressed={envs.includes(group.key)}
                   onClick={() => go({ env: toggled(search.env, group.key) })}
                   title={`${group.label}: ${plural(group.tests.length, 'test', 'tests')} · ${group.counts.failed} failed · ${group.counts.passed} passed`}>
                   <Text span inherit truncate>{group.label}</Text>
                 </Button>
               ))}
               {environments.length > 1 && (
-                <Button variant="subtle" aria-expanded={allEnvironments} onClick={() => setAllEnvironments((open) => !open)}>
+                <Button size="compact-xs" variant="subtle" c="dimmed" aria-expanded={allEnvironments} onClick={() => setAllEnvironments((open) => !open)}>
                   {allEnvironments ? 'Show fewer' : `Show all (${environments.length})`}
                 </Button>
               )}
-            </Stack>
-          </Paper>
+            </Group>
+          </Metric>
         </SimpleGrid>
         {allEnvironments && (
-          <Paper withBorder mt="md" component="section" aria-label="All environment insights">
-            <Title order={3} mb="sm">All environments</Title>
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-              {environments.map((group) => (
-                <Button key={group.key} variant={envs.includes(group.key) ? 'light' : 'subtle'}
-                  h="auto" py="sm" justify="flex-start" aria-pressed={envs.includes(group.key)}
-                  onClick={() => go({ env: toggled(search.env, group.key) })}>
-                  <Stack align="flex-start" gap="xs">
-                    <Text fw={500}>{group.label}</Text>
-                    <Text size="xs" c="dimmed">{plural(group.tests.length, 'test', 'tests')} · {group.counts.failed} failed · {group.counts.passed} passed</Text>
-                  </Stack>
-                </Button>
-              ))}
-            </SimpleGrid>
-          </Paper>
+          <Box mt="md">
+            <Panel title="All environments" order={3} component="section" aria-label="All environment insights">
+              <SimpleGrid cols={{ base: 1, xs: 2, md: 3, lg: 5 }} spacing="xs">
+                {environments.map((group) => (
+                  <Button key={group.key} variant={envs.includes(group.key) ? 'light' : 'default'}
+                    h="auto" py="xs" justify="flex-start" aria-pressed={envs.includes(group.key)}
+                    onClick={() => go({ env: toggled(search.env, group.key) })}>
+                    <Stack align="flex-start" gap={2}>
+                      <Text fw={500}>{group.label}</Text>
+                      <Text size="xs" c="dimmed">{plural(group.tests.length, 'test', 'tests')} · {group.counts.failed} failed · {group.counts.passed} passed</Text>
+                    </Stack>
+                  </Button>
+                ))}
+              </SimpleGrid>
+            </Panel>
+          </Box>
         )}
-        <Box mt="md">
-          <MoreInsights scope={scope} />
-        </Box>
       </Box>
     </Box>
   );
@@ -540,37 +609,41 @@ function MoreInsights({ scope }: { scope: readonly TestSummary[] }) {
   if (!slowest.length && !flakiest.length && !failing.length) return null;
   const list = (title: string, tests: readonly TestSummary[], value: (test: TestSummary) => string) =>
     tests.length > 0 && (
-      <Stack gap="sm">
-        <Title order={3} mb="sm" c="dimmed">
+      <Stack gap={4}>
+        <Title order={3} size="xs" c="dimmed" fw={500} px="sm">
           {title}
         </Title>
-        <List spacing="xs" listStyleType="none" type="ordered">
+        <List spacing={0} listStyleType="none" type="ordered">
           {tests.map((test) => (
             <List.Item key={test.key}>
-              <Anchor
+              <NavLink
+                py={6}
+                leftSection={<StatusMark status={test.status} size={14} />}
+                label={test.title}
+                rightSection={
+                  <Text span size="xs" c="dimmed">
+                    {value(test)}
+                  </Text>
+                }
                 renderRoot={(props) => (
                   <Link {...props} to="/" search={patched({ test: test.key, layer: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
                 )}
-              >
-                <StatusMark status={test.status} size={12} />
-                <Flex component="span" direction="column" gap="xs" miw={0}>
-                  {test.title}
-                </Flex>
-                <Text span inherit>
-                  {value(test)}
-                </Text>
-              </Anchor>
+              />
             </List.Item>
           ))}
         </List>
       </Stack>
     );
   return (
-    <Accordion variant="separated" my="sm">
-      <Accordion.Item value="content">
-        <Accordion.Control>Slowest, flakiest and failing tests</Accordion.Control>
+    <Accordion variant="contained" radius="lg">
+      <Accordion.Item value="content" bg="var(--mantine-color-body)">
+        <Accordion.Control>
+          <Text span fw={500}>
+            Slowest, flakiest and failing tests
+          </Text>
+        </Accordion.Control>
         <Accordion.Panel>
-          <SimpleGrid cols={{ base: 1, md: 3 }}>
+          <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
             {list('Failing', failing, (test) => plural(test.stats.failed, 'failure', 'failures'))}
             {list('Flakiest', flakiest, (test) => (test.stats.flips ? plural(test.stats.flips, 'flip', 'flips') : 'flaky'))}
             {list('Slowest', slowest, (test) => formatMs(test.stats.durations?.avgMs))}
@@ -581,7 +654,8 @@ function MoreInsights({ scope }: { scope: readonly TestSummary[] }) {
   );
 }
 type Listing = NonNullable<ReturnType<typeof useListing>>;
-function Toolbar({
+/** The one panel of the home: find tests (search, grouping, order, filters), then the tests found. */
+function TestsPanel({
   model,
   search,
   listing,
@@ -593,6 +667,7 @@ function Toolbar({
   onSearch: (value: string) => void;
 }) {
   const go = useExplorerNavigate();
+  const searchId = useId();
   // Best match is the order of a search with words; without words the list is in spec order.
   const defaultSort: ExplorerSort = listing.hits ? 'relevance' : 'spec';
   const sort: ExplorerSort = search.sort ?? defaultSort;
@@ -619,241 +694,276 @@ function Toolbar({
     ...values(search.artifactTag).map((tag) => ({ label: `Artifact tag: #${tag}`, clear: { artifactTag: toggled(search.artifactTag, tag) } })),
     ...(search.inRun ? [{ label: `Run: ${runName(search.inRun)}`, clear: { inRun: undefined } }] : [])
   ];
+  const hasVideo = search.video === true || listing.parsed.filters.video;
+  const released = !!(search.release || search.releaseSha || search.releasePlatform);
+  // What the Filters control holds that is narrowing the list now.
+  const more = envs.length + values(search.producer).length + values(search.domain).length + values(search.scope).length + values(search.artifactTag).length + (released ? 1 : 0);
+  const [filters, setFilters] = useState(more > 0);
+  const filtersId = useId();
+  const clear = () => {
+    setDraft('');
+    go(NO_NARROWING);
+  };
   return (
-    <Paper withBorder aria-label="Find tests" component="section" mb="lg">
-      <Title order={2} mb="sm">Find tests</Title>
-      <Flex gap="sm" align="flex-end" wrap="wrap" mb="md">
-        <TextInput
-          flex={1}
-          miw={{ base: '100%', sm: '15rem' }}
-          type="search"
-          label="Search tests"
-          leftSection={<IconSearch size={16} aria-hidden="true" />}
-          aria-label="Search tests"
-          placeholder='Search titles, specs, tags… or filter: status:failed has:video "exact phrase"'
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            onSearch(event.target.value.trim());
-          }}
-        />
-        <Box component="label" flex={{ base: 1, sm: undefined }}>
-          <Text span inherit>
-            Group by
-          </Text>
-          <NativeSelect
-            aria-label="Group by"
-            value={search.group ?? 'spec'}
-            onChange={(event) => go({ group: event.target.value === 'spec' ? undefined : (event.target.value as TestGroup) })}
-          >
-            {TEST_GROUPS.map((group) => (
-              <option key={group} value={group}>
-                {GROUP_LABEL[group]}
-              </option>
-            ))}
-          </NativeSelect>
-        </Box>
-        <Box component="label" flex={{ base: 1, sm: undefined }}>
-          <Text span inherit>
-            Sort
-          </Text>
-          <NativeSelect
-            aria-label="Sort"
-            value={sort}
-            onChange={(event) => go({ sort: event.target.value === defaultSort ? undefined : (event.target.value as ExplorerSort) })}
-          >
-            {EXPLORER_SORTS.filter((option) => option !== 'relevance' || listing.hits !== null || sort === 'relevance').map((option) => (
-              <option key={option} value={option}>
-                {SORT_LABEL[option]}
-              </option>
-            ))}
-          </NativeSelect>
-        </Box>
-      </Flex>
-      <Flex role="group" aria-label="Test status" gap="xs" align="center" wrap="wrap" mb="sm">
-        {STATUS_FILTERS.map((filter) => {
-          const count = statusCount(filter.id);
-          if (filter.id === 'running' && count === 0 && !statuses.includes('running')) return null;
-          const pressed = filter.id === '' ? statuses.length === 0 : statuses.length === 1 && statuses[0] === filter.id;
-          return (
-            <Button
-              key={filter.id || 'all'}
-              type="button"
-              aria-pressed={pressed}
-              data-status={(count > 0 && filter.id) || undefined}
-              onClick={() => go({ status: filter.id || undefined })}
-              variant={pressed ? 'light' : 'subtle'}
-              rightSection={<Text span inherit>{count.toLocaleString()}</Text>}
+    <Card p={0} aria-label="Find tests" component="section">
+      <Stack gap="sm" p="lg" pb="md">
+        <Flex gap="sm" align="center" justify="space-between" wrap="wrap">
+          <Stack gap={0} miw={120}>
+            <Title order={2}>Tests</Title>
+            <Group gap={6} wrap="nowrap">
+              <Text role="status" c="dimmed">
+                {listing.shown.length === model.tests.length
+                  ? plural(model.tests.length, 'test', 'tests')
+                  : `${listing.shown.length.toLocaleString()} of ${plural(model.tests.length, 'test', 'tests')}`}
+              </Text>
+              {narrowed(search) && (
+                <Button type="button" size="compact-xs" onClick={clear} variant="subtle" leftSection={<IconX size={12} aria-hidden="true" />}>
+                  Clear filters
+                </Button>
+              )}
+            </Group>
+          </Stack>
+          <Flex gap="xs" align="center" wrap="wrap" flex={{ base: '1 1 100%', md: '0 1 auto' }}>
+            <Box flex={{ base: '1 1 100%', sm: '1 1 18rem' }} miw={0} w={{ md: '22rem' }}>
+              <Box component="label" htmlFor={searchId}>
+                <VisuallyHidden>Search tests</VisuallyHidden>
+              </Box>
+              <TextInput
+                id={searchId}
+                type="search"
+                leftSection={<IconSearch size={16} aria-hidden="true" />}
+                aria-label="Search tests"
+                placeholder="Search tests, or filter: status:failed has:video"
+                title='Search titles, specs, tags… or filter: status:failed has:video "exact phrase"'
+                value={draft}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  onSearch(event.target.value.trim());
+                }}
+              />
+            </Box>
+            <NativeSelect
+              flex={{ base: 1, sm: 'none' }}
+              aria-label="Group by"
+              leftSection={<Text span size="xs" c="dimmed">Group</Text>}
+              leftSectionWidth={56}
+              leftSectionPointerEvents="none"
+              value={search.group ?? 'spec'}
+              onChange={(event) => go({ group: event.target.value === 'spec' ? undefined : (event.target.value as TestGroup) })}
             >
-              {filter.label}{' '}
+              {TEST_GROUPS.map((group) => (
+                <option key={group} value={group}>
+                  {GROUP_LABEL[group]}
+                </option>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              flex={{ base: 1, sm: 'none' }}
+              aria-label="Sort"
+              leftSection={<Text span size="xs" c="dimmed">Sort</Text>}
+              leftSectionWidth={48}
+              leftSectionPointerEvents="none"
+              value={sort}
+              onChange={(event) => go({ sort: event.target.value === defaultSort ? undefined : (event.target.value as ExplorerSort) })}
+            >
+              {EXPLORER_SORTS.filter((option) => option !== 'relevance' || listing.hits !== null || sort === 'relevance').map((option) => (
+                <option key={option} value={option}>
+                  {SORT_LABEL[option]}
+                </option>
+              ))}
+            </NativeSelect>
+            <Button
+              variant={filters ? 'light' : 'default'}
+              aria-expanded={filters}
+              aria-controls={filtersId}
+              leftSection={<IconAdjustmentsHorizontal size={16} aria-hidden="true" />}
+              rightSection={more > 0 ? <Badge size="sm" circle variant="filled">{more}</Badge> : undefined}
+              onClick={() => setFilters((open) => !open)}
+            >
+              Filters
             </Button>
-          );
-        })}
-      </Flex>
-      <Flex gap="xs" align="center" wrap="wrap">
-        {model.facets.environments.length > 0 && (
-          <Flex role="group" aria-label="Environments" gap="xs" align="center" wrap="wrap">
-            {model.facets.environments.map(({ value }) => (
-              <Button
-                key={value}
-                type="button"
-                aria-pressed={envs.includes(value)}
-                onClick={() => go({ env: toggled(search.env, value) })}
-                variant={envs.includes(value) ? 'light' : 'subtle'}
-                rightSection={<Text span inherit>{(envCounts.get(value) ?? 0).toLocaleString()}</Text>}
-              >
-                {environmentLabel(value)}{' '}
+          </Flex>
+        </Flex>
+        <Flex gap={{ base: 4, sm: 'xs' }} align="center" wrap="wrap" justify={{ base: 'flex-start', sm: 'space-between' }}>
+          <Flex role="group" aria-label="Test status" gap={4} align="center" wrap="wrap" display={{ base: 'contents', sm: 'flex' }}>
+            {STATUS_FILTERS.map((filter) => {
+              const count = statusCount(filter.id);
+              if (filter.id === 'running' && count === 0 && !statuses.includes('running')) return null;
+              const pressed = filter.id === '' ? statuses.length === 0 : statuses.length === 1 && statuses[0] === filter.id;
+              return (
+                <Button
+                  key={filter.id || 'all'}
+                  type="button"
+                  size="compact-sm"
+                  aria-pressed={pressed}
+                  data-status={(count > 0 && filter.id) || undefined}
+                  onClick={() => go({ status: filter.id || undefined })}
+                  variant={pressed ? 'light' : 'subtle'}
+                  rightSection={<Text span size="xs" c="dimmed">{count.toLocaleString()}</Text>}
+                >
+                  {filter.label}{' '}
+                </Button>
+              );
+            })}
+          </Flex>
+          <Flex gap={4} align="center" wrap="wrap" display={{ base: 'contents', sm: 'flex' }}>
+            <Button
+              type="button"
+              size="compact-sm"
+              aria-pressed={hasVideo}
+              aria-label={`Has video ${plural(listing.withVideo, 'test', 'tests')}`}
+              onClick={() => {
+                if (listing.parsed.filters.video) {
+                  const token = listing.parsed.tokens.find((item) => item.key === 'video')!;
+                  const next = withoutToken(draft, token);
+                  setDraft(next);
+                  onSearch(next);
+                } else go({ video: search.video ? undefined : true });
+              }}
+              variant={hasVideo ? 'light' : 'subtle'}
+              leftSection={<IconVideo size={14} aria-hidden="true" />}
+              rightSection={<Text span size="xs" c="dimmed">{listing.withVideo.toLocaleString()}</Text>}
+            >
+              Has video{' '}
+            </Button>
+            <Button
+              type="button"
+              size="compact-sm"
+              aria-pressed={search.evidence === 'stale'}
+              aria-label={`Stale or unverified ${plural(listing.stale, 'test', 'tests')}`}
+              onClick={() => go({ evidence: search.evidence ? undefined : 'stale' })}
+              variant={search.evidence === 'stale' ? 'light' : 'subtle'}
+              leftSection={<IconAlertTriangle size={14} aria-hidden="true" />}
+              rightSection={<Text span size="xs" c="dimmed">{listing.stale.toLocaleString()}</Text>}
+            >
+              Stale or unverified{' '}
+            </Button>
+          </Flex>
+        </Flex>
+        <Box id={filtersId} display={filters ? undefined : 'none'}>
+          <Stack gap="sm" p="md" bg="var(--mantine-color-default-hover)" bdrs="md">
+            {model.facets.environments.length > 0 && (
+              <Stack gap={4}>
+                <Text size="xs" c="dimmed" fw={500}>
+                  Environment
+                </Text>
+                <Flex role="group" aria-label="Environments" gap={4} align="center" wrap="wrap" ml={-6}>
+                  {model.facets.environments.map(({ value }) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      size="compact-sm"
+                      aria-pressed={envs.includes(value)}
+                      onClick={() => go({ env: toggled(search.env, value) })}
+                      variant={envs.includes(value) ? 'filled' : 'subtle'}
+                      rightSection={<Text span size="xs" inherit opacity={0.65}>{(envCounts.get(value) ?? 0).toLocaleString()}</Text>}
+                    >
+                      {environmentLabel(value)}{' '}
+                    </Button>
+                  ))}
+                </Flex>
+              </Stack>
+            )}
+            <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="sm">
+              {model.facets.producers.length > 1 && (
+                <NativeSelect
+                  label="Producer"
+                  aria-label="Producer"
+                  value={values(search.producer)[0] ?? ''}
+                  onChange={(event) => go({ producer: event.target.value || undefined })}
+                >
+                  <option value="">All producers</option>
+                  {model.facets.producers.map(({ value, count }) => (
+                    <option key={value} value={value}>
+                      {value} ({count})
+                    </option>
+                  ))}
+                </NativeSelect>
+              )}
+              {model.facets.domains.length > 1 && (
+                <NativeSelect
+                  label="Domain"
+                  aria-label="Domain"
+                  value={values(search.domain)[0] ?? ''}
+                  onChange={(event) => go({ domain: event.target.value || undefined, spec: undefined })}
+                >
+                  <option value="">All domains</option>
+                  {model.facets.domains.map(({ value, count }) => (
+                    <option key={value} value={value}>
+                      {value === '(no spec)' ? 'No spec' : value} ({count})
+                    </option>
+                  ))}
+                </NativeSelect>
+              )}
+              {(model.facets.scopes?.length ?? 0) > 0 && (
+                <NativeSelect
+                  label="Recording scope"
+                  aria-label="Recording scope"
+                  value=""
+                  onChange={(event) => event.target.value && go({ scope: toggled(search.scope, event.target.value) })}
+                >
+                  <option value="">Any recording scope</option>
+                  {model.facets.scopes!.filter(({ value }) => !values(search.scope).includes(value)).map(({ value, count }) => (
+                    <option key={value} value={value}>
+                      {value === 'unknown' ? 'Scope unknown' : value} ({count})
+                    </option>
+                  ))}
+                </NativeSelect>
+              )}
+              {((model.facets.artifactTags?.length ?? 0) > 0 || values(search.artifactTag).length > 0) && (
+                <MultiSelect
+                  label="Artifact tag"
+                  aria-label="Artifact tag"
+                  placeholder={values(search.artifactTag).length ? undefined : 'Any artifact tag'}
+                  data={[
+                    ...(model.facets.artifactTags ?? []).map(({ value, count }) => ({ value, label: `#${value} (${count})` })),
+                    ...values(search.artifactTag)
+                      .filter((tag) => !model.facets.artifactTags?.some((facet) => facet.value === tag))
+                      .map((tag) => ({ value: tag, label: `#${tag} (0)` }))
+                  ]}
+                  value={values(search.artifactTag)}
+                  searchable
+                  clearable
+                  nothingFoundMessage="Nothing found"
+                  onChange={(next) => go({ artifactTag: joined(next) })}
+                />
+              )}
+            </SimpleGrid>
+            <ReleaseReading />
+          </Stack>
+        </Box>
+        {(listing.parsed.tokens.length > 0 || chips.length > 0) && (
+          <Flex gap={6} align="center" wrap="wrap" aria-label="Active filters">
+            <TypedFilters
+              parsed={listing.parsed}
+              query={draft}
+              onChange={(next) => {
+                setDraft(next);
+                onSearch(next);
+              }}
+            />
+            {chips.map((chip) => (
+              <Button key={chip.label} type="button" size="compact-sm" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light" rightSection={<IconX size={14} aria-hidden="true" />}>
+                {chip.label}{' '}
               </Button>
             ))}
           </Flex>
         )}
-        <Button
-          type="button"
-          aria-pressed={search.video === true || listing.parsed.filters.video}
-          aria-label={`Has video ${plural(listing.withVideo, 'test', 'tests')}`}
-          onClick={() => {
-            if (listing.parsed.filters.video) {
-              const token = listing.parsed.tokens.find((item) => item.key === 'video')!;
-              const next = withoutToken(draft, token);
-              setDraft(next);
-              onSearch(next);
-            } else go({ video: search.video ? undefined : true });
-          }}
-          variant={search.video === true || listing.parsed.filters.video ? 'light' : 'subtle'}
-          leftSection={<IconVideo size={16} aria-hidden="true" />}
-          rightSection={<Text span inherit>{listing.withVideo.toLocaleString()}</Text>}
-        >
-          Has video{' '}
-        </Button>
-        <Button
-          type="button"
-          aria-pressed={search.evidence === 'stale'}
-          aria-label={`Stale or unverified ${plural(listing.stale, 'test', 'tests')}`}
-          onClick={() => go({ evidence: search.evidence ? undefined : 'stale' })}
-          variant={search.evidence === 'stale' ? 'light' : 'subtle'}
-          leftSection={<IconAlertTriangle size={16} aria-hidden="true" />}
-          rightSection={<Text span inherit>{listing.stale.toLocaleString()}</Text>}
-        >
-          Stale or unverified{' '}
-        </Button>
-        {model.facets.producers.length > 1 && (
-          <Box component="label">
-            <VisuallyHidden>Producer</VisuallyHidden>
-            <NativeSelect
-              aria-label="Producer"
-              value={values(search.producer)[0] ?? ''}
-              onChange={(event) => go({ producer: event.target.value || undefined })}
-            >
-              <option value="">All producers</option>
-              {model.facets.producers.map(({ value, count }) => (
-                <option key={value} value={value}>
-                  {value} ({count})
-                </option>
-              ))}
-            </NativeSelect>
-          </Box>
+        <SearchNotes issues={listing.parsed.issues} semantic={listing.semantic} />
+        {listing.runPending && (
+          <Text role="status" component="div" c="dimmed">
+            Reading the tests of this run…
+          </Text>
         )}
-        {((model.facets.artifactTags?.length ?? 0) > 0 || values(search.artifactTag).length > 0) && (
-          <MultiSelect
-            aria-label="Artifact tag"
-            placeholder={values(search.artifactTag).length ? undefined : 'Any artifact tag'}
-            data={[
-              ...(model.facets.artifactTags ?? []).map(({ value, count }) => ({ value, label: `#${value} (${count})` })),
-              ...values(search.artifactTag)
-                .filter((tag) => !model.facets.artifactTags?.some((facet) => facet.value === tag))
-                .map((tag) => ({ value: tag, label: `#${tag} (0)` }))
-            ]}
-            value={values(search.artifactTag)}
-            searchable
-            clearable
-            nothingFoundMessage="Nothing found"
-            onChange={(next) => go({ artifactTag: joined(next) })}
-          />
+        {listing.runMissing && (
+          <Alert role="status" color="blue">
+            That run is not in the report any more.
+          </Alert>
         )}
-        {model.facets.domains.length > 1 && (
-          <Box component="label">
-            <VisuallyHidden>Domain</VisuallyHidden>
-            <NativeSelect
-              aria-label="Domain"
-              value={values(search.domain)[0] ?? ''}
-              onChange={(event) => go({ domain: event.target.value || undefined, spec: undefined })}
-            >
-              <option value="">All domains</option>
-              {model.facets.domains.map(({ value, count }) => (
-                <option key={value} value={value}>
-                  {value === '(no spec)' ? 'No spec' : value} ({count})
-                </option>
-              ))}
-            </NativeSelect>
-          </Box>
-        )}
-        {(model.facets.scopes?.length ?? 0) > 0 && (
-          <Box component="label">
-            <VisuallyHidden>Recording scope</VisuallyHidden>
-            <NativeSelect
-              aria-label="Recording scope"
-              value=""
-              onChange={(event) => event.target.value && go({ scope: toggled(search.scope, event.target.value) })}
-            >
-              <option value="">Any recording scope</option>
-              {model.facets.scopes!.filter(({ value }) => !values(search.scope).includes(value)).map(({ value, count }) => (
-                <option key={value} value={value}>
-                  {value === 'unknown' ? 'Scope unknown' : value} ({count})
-                </option>
-              ))}
-            </NativeSelect>
-          </Box>
-        )}
-      </Flex>
-      <Flex role="status" gap="xs" align="center" wrap="wrap">
-        <Text span inherit>
-          {listing.shown.length === model.tests.length
-            ? plural(model.tests.length, 'test', 'tests')
-            : `${listing.shown.length.toLocaleString()} of ${plural(model.tests.length, 'test', 'tests')}`}
-        </Text>
-        <TypedFilters
-          parsed={listing.parsed}
-          query={draft}
-          onChange={(next) => {
-            setDraft(next);
-            onSearch(next);
-          }}
-        />
-        {chips.map((chip) => (
-          <Button key={chip.label} type="button" onClick={() => go(chip.clear)} aria-label={`Remove ${chip.label}`} variant="light" rightSection={<IconX size={16} aria-hidden="true" />}>
-            {chip.label}{' '}
-          </Button>
-        ))}
-        {narrowed(search) && (
-          <Button
-            type="button"
-            onClick={() => {
-              setDraft('');
-              go({
-                q: undefined,
-                status: undefined,
-                env: undefined,
-                producer: undefined,
-                domain: undefined,
-                spec: undefined,
-                tag: undefined,
-                scope: undefined,
-                artifactTag: undefined,
-                inherited: undefined,
-                inRun: undefined,
-                video: undefined,
-                evidence: undefined
-              });
-            }}
-            variant="subtle"
-          >
-            Clear filters
-          </Button>
-        )}
-      </Flex>
-      <SearchNotes issues={listing.parsed.issues} semantic={listing.semantic} />
-      <ReleaseReading />
-    </Paper>
+      </Stack>
+      <Divider />
+      <TestList tests={listing.shown} search={search} total={model.tests.length} hits={listing.hits} sort={search.sort ?? (listing.hits ? 'relevance' : 'spec')} assessments={listing.assessments} release={listing.release} onClear={clear} />
+    </Card>
   );
 }
 /**
@@ -864,9 +974,13 @@ function ReleaseReading() {
   const applicability = useExplorerApplicability();
   const named = hasRelease(applicability.release) || !!applicability.release.platform;
   return (
-    <Accordion variant="separated" defaultValue={named ? 'release' : null} mt="sm">
-      <Accordion.Item value="release">
-        <Accordion.Control>Release the evidence is read against</Accordion.Control>
+    <Accordion variant="contained" defaultValue={named ? 'release' : null}>
+      <Accordion.Item value="release" bg="var(--mantine-color-body)">
+        <Accordion.Control>
+          <Text span fw={500}>
+            Release the evidence is read against
+          </Text>
+        </Accordion.Control>
         <Accordion.Panel>
           <ApplicabilityControls state={applicability} filter={false} />
         </Accordion.Panel>
@@ -881,7 +995,8 @@ function TestList({
   hits,
   sort,
   assessments,
-  release
+  release,
+  onClear
 }: {
   tests: readonly TestSummary[];
   search: ExplorerSearch;
@@ -890,6 +1005,7 @@ function TestList({
   sort: ExplorerSort;
   assessments: ReadonlyMap<string, Assessment>;
   release: ReleaseIdentity;
+  onClear: () => void;
 }) {
   // A reading is shown on every row only when the reader asked about evidence; otherwise only evidence known to be stale.
   const asked = search.evidence === 'stale' || sort === 'evidence' || hasRelease(release);
@@ -901,57 +1017,56 @@ function TestList({
   const setAll = (open: boolean) => setOverrides(new Map(groups.map((group) => [`${by}|${group.key}`, open])));
   if (!tests.length)
     return (
-      <Paper withBorder role="status">
-        <Stack gap="xs" align="flex-start">
-          <Title order={2}>{total ? 'No test matches these filters.' : 'No tests recorded yet.'}</Title>
-          <Text c="dimmed">{total ? 'Try a broader search or clear the filters above to return to the full test list.' : 'Published test results will appear here with their outcomes and recorded evidence.'}</Text>
-        </Stack>
-      </Paper>
+      <Blank
+        role="status"
+        icon={total ? <IconFilterOff size={22} aria-hidden="true" /> : <IconFlask size={22} aria-hidden="true" />}
+        title={total ? 'No test matches these filters.' : 'No tests recorded yet.'}
+        action={total ? <Button onClick={onClear}>Clear filters</Button> : undefined}
+      >
+        {total ? 'Try a broader search or clear the filters above to return to the full test list.' : 'Published test results will appear here with their outcomes and recorded evidence.'}
+      </Blank>
     );
   let parent: string | null = null;
   return (
-    <Box aria-label="Tests" component="section" mb="lg">
-      <Flex gap="xs" align="center" wrap="wrap">
-        <Text span inherit>
+    <Box aria-label="Tests" component="section" pb="xs">
+      <Flex gap="xs" align="center" px="lg" py={6} mih={36}>
+        <Text span size="xs" c="dimmed">
           {by === 'none'
             ? ''
             : `${plural(groups.length, GROUP_LABEL[by].toLowerCase(), by === 'status' ? 'statuses' : `${GROUP_LABEL[by].toLowerCase()}s`)}`}
         </Text>
         {by !== 'none' && (
-          <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
-            <Button type="button" onClick={() => setAll(true)} variant="subtle">
+          <Flex component="span" display="inline-flex" gap={0} align="center" wrap="wrap">
+            <Button type="button" size="compact-xs" onClick={() => setAll(true)} variant="subtle" c="dimmed">
               Expand all
             </Button>
-            <Button type="button" onClick={() => setAll(false)} variant="subtle">
+            <Button type="button" size="compact-xs" onClick={() => setAll(false)} variant="subtle" c="dimmed">
               Collapse all
             </Button>
           </Flex>
         )}
-        <Group aria-hidden="true" gap="md" ml="auto" visibleFrom="sm">
-          <Text span inherit>
-            Avg
-          </Text>
-          <Text span inherit>
-            Pass
-          </Text>
-          <Text span inherit>
-            Runs
-          </Text>
-          <Text span inherit>
-            Last
-          </Text>
+        <Group aria-hidden="true" gap={0} ml="auto" visibleFrom="sm" wrap="nowrap">
+          {['Avg', 'Pass', 'Runs', 'Last'].map((column) => (
+            <Text key={column} span size="xs" c="dimmed" fw={500} w={COLUMN} ta="right">
+              {column}
+            </Text>
+          ))}
         </Group>
       </Flex>
       {groups.map((group) => {
         const heading = by === 'spec' && group.parent !== parent ? group.parent : null;
         parent = group.parent;
         return (
-          <Stack key={group.key} gap="sm">
+          <Box key={group.key}>
             {heading && (
-              <Title order={3} mb="sm">
-                {heading === '(no spec)' ? 'No spec' : heading}
-              </Title>
+              <>
+                <Divider />
+                <Title order={3} size="xs" c="dimmed" fw={500} px="lg" pt="sm" pb={4}>
+                  {heading === '(no spec)' ? 'No spec' : heading}
+                </Title>
+              </>
             )}
+            {!heading && by !== 'none' && by !== 'spec' && <Divider />}
             <TestGroupSection
               group={group}
               by={by}
@@ -962,7 +1077,7 @@ function TestList({
               asked={asked}
               onToggle={() => setOverrides(new Map(overrides).set(`${by}|${group.key}`, !isOpen(group)))}
             />
-          </Stack>
+          </Box>
         );
       })}
     </Box>
@@ -990,13 +1105,13 @@ function TestGroupSection({
   const [shown, setShown] = useState(by === 'none' ? 100 : GROUP_ROWS);
   const now = useNow();
   const rows = (
-    <List spacing="xs" listStyleType="none">
+    <List spacing={0} listStyleType="none">
       {group.tests.slice(0, shown).map((test) => (
-        <TestRow key={test.key} test={test} selected={selected === test.key} now={now} hit={hits?.get(behaviorId(test.key))} assessment={assessments.get(test.key)} asked={asked} />
+        <TestRow key={test.key} test={test} selected={selected === test.key} now={now} hit={hits?.get(behaviorId(test.key))} assessment={assessments.get(test.key)} asked={asked} nested={by !== 'none'} />
       ))}
       {group.tests.length > shown && (
         <List.Item>
-          <Button variant="subtle" onClick={() => setShown(shown + (by === 'none' ? 100 : GROUP_ROWS))}>
+          <Button variant="subtle" size="compact-sm" c="dimmed" ml={by === 'none' ? 'sm' : 36} my={4} onClick={() => setShown(shown + (by === 'none' ? 100 : GROUP_ROWS))}>
             Show more ({group.tests.length - shown} more)
           </Button>
         </List.Item>
@@ -1004,35 +1119,46 @@ function TestGroupSection({
     </List>
   );
   return (
-    <Box component="section" aria-label={group.label} mb="md">
+    <Box component="section" aria-label={group.label} px={8} py={2}>
       {by === 'none' ? (
         rows
       ) : (
-        <Accordion variant="separated" value={open ? 'tests' : null} onChange={onToggle}>
-          <Accordion.Item value="tests">
-            <Accordion.Control>
-              <Group gap="md" justify="space-between">
-                <Stack gap="xs" miw={0}>
-                  <Text fw={600}>{group.label}</Text>
-                  {group.detail && (
-                    <Text ff="monospace" size="xs" c="dimmed">
-                      {group.detail}
-                    </Text>
-                  )}
-                </Stack>
-                <Group gap="xs">
-                  {group.counts.failed > 0 && <Badge color="red">{group.counts.failed} failed</Badge>}
-                  {group.counts['not-run'] > 0 && <Badge color="gray">{group.counts['not-run']} not run</Badge>}
-                  <Text size="xs" c="dimmed">
-                    {plural(group.tests.length, 'test', 'tests')}
-                    {group.avgMs !== null ? ` · avg ${formatMs(group.avgMs)}` : ''}
+        <>
+          <NavLink
+            component="button"
+            type="button"
+            aria-expanded={open}
+            onClick={onToggle}
+            py={8}
+            leftSection={open ? <IconChevronDown size={16} aria-hidden="true" /> : <IconChevronRight size={16} aria-hidden="true" />}
+            label={
+              <Group gap="xs" wrap="wrap" align="baseline">
+                <Text span fw={600}>
+                  {group.label}
+                </Text>
+                {group.detail && (
+                  <Text span ff="monospace" size="xs" c="dimmed" truncate visibleFrom="sm">
+                    {group.detail}
                   </Text>
-                </Group>
+                )}
               </Group>
-            </Accordion.Control>
-            <Accordion.Panel>{open && rows}</Accordion.Panel>
-          </Accordion.Item>
-        </Accordion>
+            }
+            rightSection={
+              <Group gap="sm" wrap="nowrap">
+                {group.counts.failed > 0 && <Badge size="sm" color="red">{group.counts.failed} failed</Badge>}
+                {group.counts['not-run'] > 0 && <Badge size="sm" color="gray">{group.counts['not-run']} not run</Badge>}
+                <Text span size="xs" c="dimmed" visibleFrom="xs">
+                  {plural(group.tests.length, 'test', 'tests')}
+                  {group.avgMs !== null ? ` · avg ${formatMs(group.avgMs)}` : ''}
+                </Text>
+                <Box w={72} visibleFrom="sm">
+                  <Meter counts={group.counts} />
+                </Box>
+              </Group>
+            }
+          />
+          {open && rows}
+        </>
       )}
     </Box>
   );
@@ -1043,7 +1169,8 @@ function TestRow({
   now,
   hit,
   assessment,
-  asked
+  asked,
+  nested
 }: {
   test: TestSummary;
   selected: boolean;
@@ -1051,18 +1178,66 @@ function TestRow({
   hit: Ranked | undefined;
   assessment: Assessment | undefined;
   asked: boolean;
+  /** Under a group heading, where rows sit in from its chevron. */
+  nested: boolean;
 }) {
   const why = hit ? describeHit(hit) : '';
   const failure = test.status === 'failed' ? test.outcomes.find((outcome) => outcome.status === 'failed')?.detail.split('\n')[0] : '';
+  const figure = (title: string, value: ReactNode) => (
+    <Text span title={title} size="xs" c="dimmed" w={COLUMN} ta="right">
+      {value}
+    </Text>
+  );
   return (
     <List.Item data-status={test.status}>
-      <Anchor
-        underline="never"
+      <NavLink
+        active={selected}
+        variant="light"
         aria-current={selected ? 'true' : undefined}
-        display="block"
-        bg={selected ? 'blue.0' : undefined}
-        p="sm"
-        c="text"
+        py={8}
+        pl={nested ? 36 : 'sm'}
+        bg={selected ? 'var(--mantine-color-primary-light)' : undefined}
+        c="var(--mantine-color-text)"
+        leftSection={<StatusMark status={test.status} size={16} />}
+        label={
+          <Group gap="xs" wrap="wrap" align="center">
+            <Text span fw={500}>
+              {test.title}
+            </Text>
+            <EnvironmentChips test={test} />
+            <Badges test={test} />
+            {assessment && (assessment.verdict === 'stale' || (asked && assessment.verdict !== 'applies')) && <VerdictBadge verdict={assessment.verdict} />}
+          </Group>
+        }
+        description={
+          failure || why ? (
+            <Stack component="span" gap={2} mt={2}>
+              {failure && (
+                <Text span size="xs" c="red" lineClamp={2}>
+                  {failure}
+                </Text>
+              )}
+              {why && (
+                <Text span size="xs" c="dimmed" data-why>
+                  {hit?.exact && (
+                    <Badge component="span" size="xs" color="blue" mr={6}>
+                      Exact
+                    </Badge>
+                  )}
+                  {why}
+                </Text>
+              )}
+            </Stack>
+          ) : undefined
+        }
+        rightSection={
+          <Group gap={0} visibleFrom="sm" wrap="nowrap">
+            {figure('Average duration', formatMs(test.stats.durations?.avgMs))}
+            {figure('Pass rate', percent(test.stats.passRate))}
+            {figure('Runs', test.stats.runs || '—')}
+            {figure('Last recorded', test.live ? 'now' : test.lastRecordedAtMs ? ago(test.lastRecordedAtMs, now).replace(' ago', '') : '—')}
+          </Group>
+        }
         renderRoot={(props) => (
           <Link
             {...props}
@@ -1072,48 +1247,7 @@ function TestRow({
             activeOptions={{ exact: true }}
           />
         )}
-      >
-        <Group gap="sm" wrap="nowrap" align="flex-start">
-          <StatusMark status={test.status} size={16} />
-          <Stack gap="xs" flex={1} miw={0}>
-            <Text fw={500}>{test.title}</Text>
-            <Group gap="xs">
-              <EnvironmentChips test={test} />
-              <Badges test={test} />
-              {assessment && (assessment.verdict === 'stale' || (asked && assessment.verdict !== 'applies')) && <VerdictBadge verdict={assessment.verdict} />}
-            </Group>
-            {failure && (
-              <Text size="xs" c="red.7" lineClamp={2}>
-                {failure}
-              </Text>
-            )}
-            {why && (
-              <Text size="xs" c="dimmed" data-why>
-                {hit?.exact && (
-                  <Badge component="span" color="blue" mr="xs">
-                    Exact
-                  </Badge>
-                )}
-                {why}
-              </Text>
-            )}
-          </Stack>
-          <Group gap="md" visibleFrom="sm">
-            <Text title="Average duration" size="xs" c="dimmed">
-              {formatMs(test.stats.durations?.avgMs)}
-            </Text>
-            <Text title="Pass rate" size="xs" c="dimmed">
-              {percent(test.stats.passRate)}
-            </Text>
-            <Text title="Runs" size="xs" c="dimmed">
-              {test.stats.runs || '—'}
-            </Text>
-            <Text title="Last recorded" size="xs" c="dimmed">
-              {test.live ? 'now' : test.lastRecordedAtMs ? ago(test.lastRecordedAtMs, now).replace(' ago', '') : '—'}
-            </Text>
-          </Group>
-        </Group>
-      </Anchor>
+      />
     </List.Item>
   );
 }

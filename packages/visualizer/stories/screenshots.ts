@@ -7,7 +7,7 @@ import { resolve, sep } from 'node:path';
 const out = resolve(process.argv[2] ?? '.atlas-workspace/story-screenshots');
 const filter = process.argv[3];
 const scheme = process.env.ATLAS_STORYBOOK_SCHEME === 'dark' ? 'dark' : 'light';
-const root = resolve('.atlas-workspace/storybook');
+const root = resolve(process.env.ATLAS_STORYBOOK_DIR ?? '.atlas-workspace/storybook');
 mkdirSync(out, { recursive: true });
 const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
   const path = resolve(root, '.' + decodeURIComponent(new URL(request.url).pathname));

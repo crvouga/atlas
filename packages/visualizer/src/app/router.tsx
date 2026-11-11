@@ -1,4 +1,5 @@
-import { Alert, Anchor, Button, Container, Stack, Text, Title } from '@mantine/core';
+import { Box, Button, Container, Group, Text } from '@mantine/core';
+import { IconAlertTriangle, IconArrowLeft, IconCompassOff, IconRefresh } from '@tabler/icons-react';
 import {
   Link,
   createBrowserHistory,
@@ -18,7 +19,8 @@ import { COVERAGE_ORDER } from '../evidence/behavior';
 import { BehaviorsPage } from '../evidence/behaviors-page';
 import { SpecPage } from '../evidence/spec-page';
 import { ExplorerSearchFields } from '../explorer/search';
-import { ProductPage } from '../views/ProductPage';
+import { GROUND } from '../ui/theme';
+import { CalmState, ProductPage } from '../views/ProductPage';
 import { AppShell } from './AppShell';
 const RootSearch = z.object({ run: z.string().min(1).optional().catch(undefined) });
 const ChartSearch = RootSearch.extend({
@@ -73,24 +75,41 @@ function routeTree() {
     validateSearch: (search) => RootSearch.parse(search),
     component: AppShell,
     errorComponent: ({ error, reset }) => (
-      <Container py="xl">
-        <Alert color="red" title="The page couldn’t be loaded">
-          <Stack>
-            <Text>{error instanceof Error ? error.message : String(error)}</Text>
-            <Button onClick={reset}>Try again</Button>
-            <Anchor renderRoot={(props) => <Link {...props} to="/" search={{}} />}>Back to reports</Anchor>
-          </Stack>
-        </Alert>
-      </Container>
+      <Box bg={GROUND} mih="100dvh">
+        <Container size="sm" py="xl">
+          <CalmState
+            icon={<IconAlertTriangle size={24} aria-hidden="true" />}
+            title="The page couldn’t be loaded"
+            action={
+              <Group gap="xs" justify="center">
+                <Button variant="filled" leftSection={<IconRefresh size={16} aria-hidden="true" />} onClick={reset}>
+                  Try again
+                </Button>
+                <Button leftSection={<IconArrowLeft size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/" search={{}} />}>
+                  Back to reports
+                </Button>
+              </Group>
+            }
+          >
+            <Text role="alert" inherit>
+              {error instanceof Error ? error.message : String(error)}
+            </Text>
+          </CalmState>
+        </Container>
+      </Box>
     ),
     notFoundComponent: () => (
-      <Container py="xl">
-        <Stack>
-          <Title order={1}>Page not found</Title>
-          <Text c="dimmed">This address is not part of the report viewer.</Text>
-          <Anchor renderRoot={(props) => <Link {...props} to="/" search={{}} />}>Back to reports</Anchor>
-        </Stack>
-      </Container>
+      <CalmState
+        icon={<IconCompassOff size={24} aria-hidden="true" />}
+        title="Page not found"
+        action={
+          <Button leftSection={<IconArrowLeft size={16} aria-hidden="true" />} renderRoot={(props) => <Link {...props} to="/" search={{}} />}>
+            Back to reports
+          </Button>
+        }
+      >
+        This address is not part of the report viewer.
+      </CalmState>
     )
   });
   const productRoute = createRoute({

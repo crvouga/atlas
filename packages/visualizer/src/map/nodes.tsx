@@ -24,6 +24,7 @@ export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNod
       p="xs"
       w="100%"
       h="100%"
+      radius="md"
       className={`nopan nodrag ${styles.node}`}
       data-status={state.status}
       data-selected={selected}
@@ -48,7 +49,7 @@ export const ScreenNode = memo(function ScreenNode({ data }: NodeProps<ScreenNod
           </Text>
         </Group>
         {state.confidence === 'assumed' && (
-          <Badge color="gray" size="sm">
+          <Badge color="gray" size="xs" variant="outline">
             Assumed
           </Badge>
         )}
@@ -66,7 +67,9 @@ export const GroupNode = memo(function GroupNode({ data }: NodeProps<GroupNodeTy
       w="100%"
       h="100%"
       p="xs"
-      bg="gray.0"
+      shadow="none"
+      radius="md"
+      className={styles.group}
       data-dimmed={dimmed}
       role="group"
       aria-label={`${state.name}${variant === 'parallel' ? ', parts that run side by side' : ''}`}
@@ -77,7 +80,7 @@ export const GroupNode = memo(function GroupNode({ data }: NodeProps<GroupNodeTy
           {state.name}
         </Text>
         {variant === 'parallel' && (
-          <Badge color="gray" size="xs">
+          <Badge color="gray" size="xs" variant="outline">
             Side by side
           </Badge>
         )}
@@ -100,9 +103,12 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
       )}
       {chart && <SummaryBar noun="screen" nounPlural="screens" counts={chart.screens} verb="working" />}
       {chart && (
-        <Text c="blue" size="xs">
-          Open {chart.name} <IconArrowRight size={16} aria-hidden="true" />
-        </Text>
+        <Group gap={4} wrap="nowrap" c="var(--mantine-color-anchor)">
+          <Text size="xs" fw={500} truncate>
+            Open {chart.name}
+          </Text>
+          <IconArrowRight size={14} aria-hidden="true" />
+        </Group>
       )}
       <Handles />
     </Stack>
@@ -111,6 +117,7 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
     <Card
       w="100%"
       h="100%"
+      radius="md"
       className={`nopan nodrag ${styles.node}`}
       data-dimmed={dimmed}
       aria-description={`${state.name}: open the ${chart.name} chart`}
@@ -119,7 +126,7 @@ export const ChartLinkNode = memo(function ChartLinkNode({ data }: NodeProps<Cha
       {body}
     </Card>
   ) : (
-    <Card w="100%" h="100%">
+    <Card w="100%" h="100%" radius="md">
       {body}
     </Card>
   );
@@ -133,6 +140,7 @@ export const ContextNode = memo(function ContextNode({ data }: NodeProps<Context
       w="100%"
       h="100%"
       p="sm"
+      radius="md"
       className={`nopan nodrag ${styles.node}`}
       data-dimmed={dimmed}
       aria-description={`${state.name}, in ${chart?.name ?? 'another chart'}. ${STATUS_LABEL[state.status]}.`}
@@ -170,6 +178,7 @@ export const SummaryNode = memo(function SummaryNode({ data }: NodeProps<Summary
       w="100%"
       h="100%"
       p="sm"
+      radius="md"
       className={`nopan nodrag ${styles.node}`}
       data-status={status}
       data-dimmed={dimmed}

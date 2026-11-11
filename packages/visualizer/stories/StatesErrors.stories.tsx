@@ -1,0 +1,18 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, behaviors, catalog, critiques, screen, spec, tests, type ScreenStory } from './support';
+const meta = { ...screen, title: 'States/Errors' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+export const UnknownRoute: Story = { args: { at: '/missing' } };
+export const MissingChart: Story = { args: { at: '/chart/missing' } };
+export const MissingSpec: Story = { args: { at: spec('gherkin', { spec: 'missing.feature' }) } };
+export const UnknownSpecKind: Story = { args: { at: spec('unknown') } };
+export const MissingTest: Story = { args: { at: tests({ test: JSON.stringify(['specs/missing.feature', 'missing']) }) } };
+export const MissingRun: Story = { args: { at: tests({ tab: 'runs', openRun: 'run:not-recorded' }) } };
+export const MissingCollection: Story = { args: { at: tests({ tab: 'collections', collection: 'rc-0000000000000000' }) } };
+export const MissingBehavior: Story = { args: { at: behaviors({ behavior: 'missing.feature#Missing' }) } };
+export const MissingCatalogState: Story = { args: { at: catalog({ state: 'coffee/missing' }) } };
+export const MissingCritique: Story = { args: { at: critiques({ critic: 'storybook-design', entry: 'coffee/missing@desktop-web' }) } };
+export const UnreadableAddress: Story = { args: { at: '/?view=tests&group=sideways&sort=upward&tab=elsewhere&rev=-3' } };
+export const MobileUnknownRoute: Story = { ...MOBILE, args: { at: '/missing' } };

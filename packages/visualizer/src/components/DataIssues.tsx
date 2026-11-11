@@ -1,5 +1,6 @@
 import type { DataIssue } from '@crvouga/atlas/schema';
 import { Alert, Button, Code, Drawer, Stack, Text, Title } from '@mantine/core';
+import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { useMemo } from 'react';
 import { useUiStore } from '../state/ui-store';
 const SEVERITY_LABEL = { error: 'Problem', warning: 'Warning', info: 'Note' } as const;
@@ -19,11 +20,16 @@ export function DataIssues({ issues }: { issues: DataIssue[] }) {
     : `${issues.length} data ${issues.length === 1 ? 'note' : 'notes'}`;
   return (
     <>
-      <Button color={problems ? 'orange' : 'gray'} onClick={() => setOpen(true)}>
+      <Button
+        variant={problems ? 'light' : 'default'}
+        color={problems ? 'orange' : 'gray'}
+        leftSection={problems ? <IconAlertTriangle size={16} aria-hidden="true" /> : <IconInfoCircle size={16} aria-hidden="true" />}
+        onClick={() => setOpen(true)}
+      >
         {label}
       </Button>
       <Drawer opened={open} onClose={() => setOpen(false)} title="What we couldn’t read">
-        <Stack>
+        <Stack gap="md">
           <Text c="dimmed">
             Everything else on the map is shown as usual. These are the parts of the spec and the runs that were skipped or guessed, file by
             file.
@@ -37,7 +43,9 @@ export function DataIssues({ issues }: { issues: DataIssue[] }) {
                   color={issue.severity === 'error' ? 'red' : issue.severity === 'warning' ? 'orange' : 'blue'}
                   title={SEVERITY_LABEL[issue.severity]}
                 >
-                  {issue.path && <Code>{issue.path}</Code>} {issue.message}
+                  <Text component="div">
+                    {issue.path && <Code>{issue.path}</Code>} {issue.message}
+                  </Text>
                 </Alert>
               ))}
             </Stack>

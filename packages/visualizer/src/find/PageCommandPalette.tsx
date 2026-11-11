@@ -1,7 +1,7 @@
 /** @module Settings command palette
  * The settings document uses the same page action inventory as the viewer, without loading report contexts.
  */
-import { Button, Text } from '@mantine/core';
+import { Button, Group, Text, ThemeIcon } from '@mantine/core';
 import { Spotlight, useSpotlight } from '@mantine/spotlight';
 import { IconCommand } from '@tabler/icons-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -50,11 +50,16 @@ export function PageCommandPalette() {
       <Spotlight.ActionsList id="settings-command-actions" role="listbox" aria-label="Settings actions">
         {matches.length === 0 && <Spotlight.Empty>No available commands match. Expand a settings section to reveal its controls.</Spotlight.Empty>}
         {matches.slice(0, shown).map(({ doc }) => <Spotlight.Action key={doc.id} id={doc.id} ref={node => { if (node) node.id = doc.id; }} data-selected={matches[Math.max(0, state.selected)]?.doc.id === doc.id || undefined} data-mantine-stop-propagation="true" role="option" aria-selected={matches[Math.max(0, state.selected)]?.doc.id === doc.id}
-          label={doc.title} description={doc.subtitle} leftSection={<IconCommand size={16} aria-hidden="true" />} onClick={() => {
+          label={doc.title} description={doc.subtitle} leftSection={<ThemeIcon variant="light" color="gray" size={28} radius="md" aria-hidden="true"><IconCommand size={16} /></ThemeIcon>} onClick={() => {
             actionStarted.current = true; pending.current = commands.find(command => command.id === doc.id) ?? null; setFinderOpen(false);
           }} />)}
       </Spotlight.ActionsList>
-      <Spotlight.Footer>{matches.length > shown && <Button data-mantine-stop-propagation="true" variant="subtle" onClick={() => setShown(shown + 40)}>Show more commands ({matches.length - shown} more)</Button>}<Text size="xs" c="dimmed" role="status">{notice || 'Cmd/Ctrl+K or Cmd/Ctrl+Shift+P · arrows choose · Enter runs · Escape closes. Form validation and confirmations still apply.'}</Text></Spotlight.Footer>
+      <Spotlight.Footer>
+        <Group justify="space-between" gap="sm">
+          <Text size="xs" c="dimmed" role="status" flex={1} miw={200}>{notice || 'Cmd/Ctrl+K or Cmd/Ctrl+Shift+P · arrows choose · Enter runs · Escape closes. Form validation and confirmations still apply.'}</Text>
+          {matches.length > shown && <Button data-mantine-stop-propagation="true" variant="subtle" size="compact-xs" onClick={() => setShown(shown + 40)}>Show more commands ({matches.length - shown} more)</Button>}
+        </Group>
+      </Spotlight.Footer>
     </Spotlight.Root>
   </>;
 }

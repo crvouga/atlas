@@ -1,6 +1,7 @@
 import type { SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
-import { Anchor, Box, Code, Container, List, Title } from '@mantine/core';
+import { Anchor, Box, Card, Code, List, SimpleGrid, Stack, Title } from '@mantine/core';
 import { useMemo } from 'react';
+import { Panel } from '../components/Page';
 import type { SpecKind } from '../spec-kind';
 import { CheckDetail, ResultRow, type CheckSelection, type SelectCheck } from './check-detail';
 import { Bounded } from './marks';
@@ -28,68 +29,69 @@ export function ModelPage({ file, text, kind, entry, selection, select }: Props)
   const visible = slots.filter((slot) => !runningOnly || slot.status === 'running');
   const toggle = (id: string) => select({ check: selection.check === id ? null : id, layer: null });
   const label = (title: string) => (moduleName && title.startsWith(`${moduleName} · `) ? title.slice(moduleName.length + 3) : title);
+  const groups = QUINT_GROUPS.map((group) => ({ ...group, declared: items.filter((item) => item.kind === group.kind) })).filter((group) => group.declared.length > 0);
   return (
-    <Container component="article" size="xl" w="100%" py="xl">
+    <Stack component="article" gap="md">
       <SpecHeader title={moduleName ?? file.split('/').at(-1)!} file={file} kind={kind} entry={entry} />
       <SourceText text={text} file={file} withResults />
       <Box component="section" id="spec-results" aria-label="Recorded results" tabIndex={-1}>
-        <TestFilter slots={slots} />
-        {visible.length > 0 && (
-          <Box component="section" mb="lg">
-            <Title order={2} mb="sm">
-              Traces
-            </Title>
-            <List spacing="xs" listStyleType="none">
-              <Bounded items={visible} size={40} more="More traces">
-                {(slot) => (
-                  <ResultRow
-                    key={slot.key}
-                    label={label(slot.title)}
-                    slot={slot}
-                    open={selection.check === slot.id}
-                    onToggle={() => toggle(slot.id)}
-                  >
-                    <CheckDetail
-                      slot={slot}
-                      layerId={selection.check === slot.id ? selection.layer : undefined}
-                      select={(patch) => select({ check: slot.id, ...patch })}
-                      reads="trace"
-                    />
-                  </ResultRow>
-                )}
-              </Bounded>
-            </List>
-          </Box>
-        )}
-        {QUINT_GROUPS.map((group) => {
-          const declared = items.filter((item) => item.kind === group.kind);
-          if (!declared.length) return null;
-          return (
-            <Box key={group.kind} component="section" mb="lg">
-              <Title order={2} mb="sm">
-                {group.label}
-              </Title>
-              <List spacing="xs" listStyleType="none">
-                {declared.map((item) => (
-                  <List.Item key={item.line}>
-                    <Anchor
-                      href={`#line-${item.line}`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        const leading = (text.match(/^(?:[^\S\r\n]*\r?\n)+/)?.[0].match(/\n/g) ?? []).length;
-                        const line = document.getElementById(`line-${item.line - leading}`) ?? document.querySelector('[data-source]');
-                        line?.scrollIntoView({ block: 'center' });
-                      }}
-                    >
-                      <Code>{item.text}</Code>
-                    </Anchor>
-                  </List.Item>
+        <Stack gap="md">
+          {(slots.length > 0 || runningOnly) && (
+            <Panel component="section" title={visible.length > 0 ? 'Traces' : undefined} actions={<TestFilter slots={slots} />}>
+              {visible.length > 0 && (
+                <List spacing="xs" listStyleType="none">
+                  <Bounded items={visible} size={40} more="More traces">
+                    {(slot) => (
+                      <ResultRow
+                        key={slot.key}
+                        label={label(slot.title)}
+                        slot={slot}
+                        open={selection.check === slot.id}
+                        onToggle={() => toggle(slot.id)}
+                      >
+                        <CheckDetail
+                          slot={slot}
+                          layerId={selection.check === slot.id ? selection.layer : undefined}
+                          select={(patch) => select({ check: slot.id, ...patch })}
+                          reads="trace"
+                        />
+                      </ResultRow>
+                    )}
+                  </Bounded>
+                </List>
+              )}
+            </Panel>
+          )}
+          {groups.length > 0 && (
+            <Card>
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+                {groups.map((group) => (
+                  <Stack key={group.kind} component="section" gap="xs" miw={0}>
+                    <Title order={2}>{group.label}</Title>
+                    <List spacing={6} listStyleType="none">
+                      {group.declared.map((item) => (
+                        <List.Item key={item.line}>
+                          <Anchor
+                            href={`#line-${item.line}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              const leading = (text.match(/^(?:[^\S\r\n]*\r?\n)+/)?.[0].match(/\n/g) ?? []).length;
+                              const line = document.getElementById(`line-${item.line - leading}`) ?? document.querySelector('[data-source]');
+                              line?.scrollIntoView({ block: 'center' });
+                            }}
+                          >
+                            <Code>{item.text}</Code>
+                          </Anchor>
+                        </List.Item>
+                      ))}
+                    </List>
+                  </Stack>
                 ))}
-              </List>
-            </Box>
-          );
-        })}
+              </SimpleGrid>
+            </Card>
+          )}
+        </Stack>
       </Box>
-    </Container>
+    </Stack>
   );
 }

@@ -7,9 +7,9 @@
  * Where there is no evidence the section says it is unknown. It reads the check's history only when it is on screen.
  */
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
-import { Alert, Anchor, Badge, Box, Group, List, Paper, Stack, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Card, Group, List, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 
 import { useTestHistory } from '../explorer/catalog';
 import type { Behavior } from './behavior';
@@ -18,9 +18,9 @@ import { scopedFigures, type SummaryLine } from './scoped-summary';
 
 function Line({ line }: { line: SummaryLine }) {
   return (
-    <Stack gap={0} data-tone={line.tone}>
+    <Stack gap={4} data-tone={line.tone}>
       <Group gap="xs" wrap="wrap">
-        <Text span inherit fw={600}>
+        <Text span fw={600}>
           {line.headline}
         </Text>
         {line.tone === 'weak' && (
@@ -29,12 +29,26 @@ function Line({ line }: { line: SummaryLine }) {
           </Badge>
         )}
       </Group>
-      <List listStyleType="none" c="dimmed">
+      <List listStyleType="none" c="dimmed" size="xs" spacing={2}>
         {line.qualifiers.map((qualifier) => (
           <List.Item key={qualifier}>{qualifier}</List.Item>
         ))}
       </List>
     </Stack>
+  );
+}
+
+/** One of the three answers, as a tile: its quiet label above what the evidence says. */
+function Tile({ label, children, ...rest }: { label: string; children: ReactNode; 'aria-label'?: string }) {
+  return (
+    <Card component="section" padding="md" shadow="none" {...rest}>
+      <Stack gap={6}>
+        <Text size="xs" c="dimmed" fw={500}>
+          {label}
+        </Text>
+        {children}
+      </Stack>
+    </Card>
   );
 }
 
@@ -53,58 +67,56 @@ export function ScopedSummary({ behavior }: { behavior: Behavior }) {
   );
   if (!slot || !subject) {
     return (
-      <Paper component="section" aria-label="Scoped summary" withBorder p="md">
-        <Title order={4} mb="xs">
-          Outcome, reliability and performance
-        </Title>
+      <Stack component="section" aria-label="Scoped summary" gap="xs">
+        <Title order={3}>Outcome, reliability and performance</Title>
         <Text component="div" c="dimmed">
           Nothing has been recorded for this behavior, so its outcome, reliability and product latency are unknown.
         </Text>
-      </Paper>
+      </Stack>
     );
   }
   return (
-    <Paper component="section" aria-label="Scoped summary" withBorder p="md">
-      <Stack gap="sm" miw={0}>
-        <Group gap="xs" wrap="wrap" justify="space-between">
-          <Title order={4}>Outcome, reliability and performance</Title>
-          <Text span c="dimmed">
-            {environment === null ? 'All environments pooled' : `In ${environmentLabel(environment)}`}
-          </Text>
-        </Group>
-        <Box>
-          <Text c="dimmed">Outcome</Text>
+    <Stack component="section" aria-label="Scoped summary" gap="sm" miw={0}>
+      <Group gap="xs" wrap="wrap" justify="space-between" align="baseline">
+        <Title order={3}>Outcome, reliability and performance</Title>
+        <Text span size="xs" c="dimmed">
+          {environment === null ? 'All environments pooled' : `In ${environmentLabel(environment)}`}
+        </Text>
+      </Group>
+      {history.isError && (
+        <Alert role="alert" color="red">
+          The history of this behavior could not be read, so its reliability and product latency are unknown.
+        </Alert>
+      )}
+      <SimpleGrid cols={{ base: 1, sm: history.isError ? 1 : 3 }} spacing="sm">
+        <Tile label="Outcome">
           <Text component="div" fw={600} data-outcome-headline>
             {outcomeHeadline({ layer: subject.layer, row: subject.row }, slot).text}
           </Text>
-        </Box>
-        {history.isError ? (
-          <Alert role="alert" color="red">
-            The history of this behavior could not be read, so its reliability and product latency are unknown.
-          </Alert>
-        ) : !figures ? (
-          <Text role="status" component="div" c="dimmed">
-            Reading the history…
-          </Text>
+        </Tile>
+        {history.isError ? null : !figures ? (
+          <Tile label="Reliability and performance">
+            <Text role="status" component="div" c="dimmed">
+              Reading the history…
+            </Text>
+          </Tile>
         ) : (
           <>
-            <Box aria-label="Reliability" component="section">
-              <Text c="dimmed">Reliability</Text>
+            <Tile label="Reliability" aria-label="Reliability">
               <Line line={figures.reliability} />
-            </Box>
-            <Box aria-label="Product latency" component="section">
-              <Text c="dimmed">Performance</Text>
+            </Tile>
+            <Tile label="Performance" aria-label="Product latency">
               {figures.latency.map((line) => (
                 <Line key={line.headline} line={line} />
               ))}
-            </Box>
+            </Tile>
           </>
         )}
-        <Text component="div" c="dimmed">
-          These describe the checks Atlas holds, not production. A passing recording is one clip of one run and does not approve the behavior.{' '}
-          <Anchor underline="always" renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', test: slot.key, layer: subject.layer.id }} />}>See reliability and latency detail</Anchor>
-        </Text>
-      </Stack>
-    </Paper>
+      </SimpleGrid>
+      <Text component="div" size="xs" c="dimmed">
+        These describe the checks Atlas holds, not production. A passing recording is one clip of one run and does not approve the behavior.{' '}
+        <Anchor size="xs" underline="always" renderRoot={(props) => <Link {...props} to="/" search={{ view: 'tests', test: slot.key, layer: subject.layer.id }} />}>See reliability and latency detail</Anchor>
+      </Text>
+    </Stack>
   );
 }

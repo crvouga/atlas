@@ -1,5 +1,5 @@
-import { IconCommand } from '@tabler/icons-react';
-import { Badge, Button, Group, Kbd, List, Modal, Stack, Text } from '@mantine/core';
+import { IconBolt, IconCommand, IconDeviceMobile, IconFileText, IconHistory, IconListCheck, IconRoute, type Icon } from '@tabler/icons-react';
+import { Badge, Button, Group, Kbd, Modal, Stack, Table, Text, ThemeIcon } from '@mantine/core';
 import { Spotlight, useSpotlight } from '@mantine/spotlight';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
@@ -33,6 +33,16 @@ const KIND_WORD: Record<FindKind, string> = {
   scenario: 'Scenario',
   action: 'Action',
   run: 'Run'
+};
+/** What kind of thing a result is, as a glyph beside it. The kind is also written on the row. */
+const KIND_ICON: Record<FindKind, Icon> = {
+  journey: IconRoute,
+  event: IconBolt,
+  screen: IconDeviceMobile,
+  spec: IconFileText,
+  scenario: IconListCheck,
+  action: IconBolt,
+  run: IconHistory
 };
 const SHORTCUTS: readonly {
   readonly keys: string;
@@ -324,12 +334,20 @@ export function Finder() {
                     onClick={() => { const command = commands.find(command => command.id === hit.doc.id); if (command) runCommand(command); else openTarget(hit.doc.target); }}
                     label={hit.doc.title}
                     description={[hit.snippet !== hit.doc.subtitle ? hit.snippet : '', hit.doc.subtitle, query.trim() ? describeHit(hit) : ''].filter(Boolean).join(' · ')}
-                    leftSection={hit.doc.group === 'Commands' ? <IconCommand size={16} aria-hidden="true" /> : hit.doc.status ? <StatusMark status={hit.doc.status} size={16} /> : undefined}
+                    leftSection={
+                      hit.doc.group !== 'Commands' && hit.doc.status ? (
+                        <StatusMark status={hit.doc.status} size={18} />
+                      ) : (
+                        <ThemeIcon variant="light" color="gray" size={28} radius="md" aria-hidden="true">
+                          {hit.doc.group === 'Commands' ? <IconCommand size={16} /> : (() => { const Glyph = KIND_ICON[hit.doc.kind]; return <Glyph size={16} />; })()}
+                        </ThemeIcon>
+                      )
+                    }
                     rightSection={
                       <Group gap="xs" wrap="nowrap">
-                        {hit.exact && <Badge color="blue">Exact</Badge>}
-                        {hit.partial && <Badge color="gray" variant="outline">Partial</Badge>}
-                        <Badge color="gray">{hit.doc.group === 'Commands' ? 'Command' : KIND_WORD[hit.doc.kind]}</Badge>
+                        {hit.exact && <Badge color="blue" size="sm">Exact</Badge>}
+                        {hit.partial && <Badge color="gray" variant="outline" size="sm">Partial</Badge>}
+                        <Text size="xs" c="dimmed">{hit.doc.group === 'Commands' ? 'Command' : KIND_WORD[hit.doc.kind]}</Text>
                       </Group>
                     }
                   />
@@ -367,9 +385,12 @@ export function Finder() {
                   See all {total} results
                 </Button>
               )}
-              <Text size="xs" c="dimmed">
-                ↵ run/open · &gt; commands · ⇧↵ all results · esc close
-              </Text>
+              <Group gap="sm" wrap="wrap" justify="flex-end" c="dimmed" fz="xs">
+                <Group gap={4} wrap="nowrap"><Kbd size="xs">↵</Kbd> run/open</Group>
+                <Group gap={4} wrap="nowrap"><Kbd size="xs">&gt;</Kbd> commands</Group>
+                <Group gap={4} wrap="nowrap"><Kbd size="xs">⇧↵</Kbd> all results</Group>
+                <Group gap={4} wrap="nowrap"><Kbd size="xs">esc</Kbd> close</Group>
+              </Group>
             </Group>
           </Group>
         </Spotlight.Footer>
@@ -383,16 +404,20 @@ export function Finder() {
         attributes={{ content: { 'aria-label': 'Keyboard shortcuts', 'data-atlas-command-palette': true, 'data-mantine-stop-propagation': true } }}
         closeButtonProps={{ 'aria-label': 'Close keyboard shortcuts', ...{ 'data-mantine-stop-propagation': true } }}
       >
-        <List spacing="md" listStyleType="none">
-          {SHORTCUTS.map((shortcut) => (
-            <List.Item key={shortcut.keys}>
-              <Group justify="space-between">
-                <Kbd>{shortcut.keys}</Kbd>
-                <Text>{shortcut.does}</Text>
-              </Group>
-            </List.Item>
-          ))}
-        </List>
+        <Table highlightOnHover={false} verticalSpacing="sm">
+          <Table.Tbody>
+            {SHORTCUTS.map((shortcut) => (
+              <Table.Tr key={shortcut.keys}>
+                <Table.Th scope="row" w="40%">
+                  <Kbd>{shortcut.keys}</Kbd>
+                </Table.Th>
+                <Table.Td>
+                  <Text>{shortcut.does}</Text>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
       </Modal>
     </>
   );

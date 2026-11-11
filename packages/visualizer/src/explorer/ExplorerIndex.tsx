@@ -1,6 +1,6 @@
 import { SpecLogo } from '../components/SpecLogo';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
-import { ActionIcon, Badge, Box, Group, NavLink, Stack, Title } from '@mantine/core';
+import { ActionIcon, Badge, Box, Group, NavLink, Stack, Text, Title } from '@mantine/core';
 /**
  * @module Project index
  *
@@ -23,16 +23,12 @@ function statusOf(counts: StatusCounts) {
 }
 /** A tally for an index row: failures in red, otherwise how many tests, quietly. */
 function Tally({ counts, tests }: { counts: StatusCounts; tests: number }) {
+  if (counts.failed) return <Badge size="sm" color="red">{counts.failed} failed</Badge>;
+  if (counts.running) return <Badge size="sm" color="blue">Running</Badge>;
   return (
-    <Badge size="xs" color={counts.failed ? 'red' : counts.running ? 'blue' : counts.passed === tests ? 'green' : 'gray'}>
-      {counts.failed
-        ? `${counts.failed} failed`
-        : counts.running
-          ? 'Running'
-          : counts.passed === tests
-            ? `${tests} passed`
-            : `${counts.passed}/${tests}`}
-    </Badge>
+    <Text span size="xs" c="dimmed">
+      {counts.passed === tests ? `${tests} passed` : `${counts.passed}/${tests}`}
+    </Text>
   );
 }
 function add(a: StatusCounts, b: StatusCounts): StatusCounts {
@@ -82,11 +78,11 @@ export function ProjectIndex() {
     (specCount <= OPEN_SPECS || chosenDomains.includes(domain) || specs.some((spec) => chosenSpecs.includes(spec.path)));
   const everything = !search.spec && !search.domain;
   return (
-    <Box component="nav" aria-label="Project specs" p="md">
+    <Box component="nav" aria-label="Project specs">
       <Stack gap="lg">
         {kinds.length > 0 && (
-          <Stack gap="xs">
-            <Title order={3} c="dimmed">
+          <Stack gap={2}>
+            <Title order={3} size="xs" c="dimmed" fw={500} px="sm" mb={4}>
               Specs
             </Title>
             {kinds.map((kind) => (
@@ -94,7 +90,8 @@ export function ProjectIndex() {
                 key={kind.id}
                 label={kind.label}
                 leftSection={<SpecLogo kind={kind} />}
-                rightSection={<Badge color="gray">{files.filter(kind.accepts).length} {files.filter(kind.accepts).length === 1 ? kind.one : kind.many}</Badge>}
+                py={6}
+                rightSection={<Text span size="xs" c="dimmed">{files.filter(kind.accepts).length} {files.filter(kind.accepts).length === 1 ? kind.one : kind.many}</Text>}
                 renderRoot={(props) => <Link {...props} to="/specs/$kind" params={{ kind: kind.id }} search={{}} />}
               />
             ))}
@@ -102,11 +99,12 @@ export function ProjectIndex() {
         )}
         {domains.length > 0 && (
           <Box component="section" aria-label="Tests by spec">
-            <Title order={3} c="dimmed" mb="sm">
+            <Title order={3} size="xs" c="dimmed" fw={500} px="sm" mb={4}>
               Tests
             </Title>
             <NavLink
               label="All tests"
+              py={6}
               active={everything}
               rightSection={model && <Tally counts={model.summary.counts} tests={model.summary.tests} />}
               aria-current={everything ? 'page' : undefined}
@@ -124,10 +122,11 @@ export function ProjectIndex() {
               const open = isOpen(domain, entry.specs);
               const chosen = chosenDomains.length === 1 && chosenDomains[0] === domain && !search.spec;
               return (
-                <Box key={domain} mt="sm">
+                <Box key={domain} mt={4}>
                   <Group wrap="nowrap" gap={0}>
                     <ActionIcon
                       color="gray"
+                      size="md"
                       aria-expanded={open}
                       aria-label={`${open ? 'Collapse' : 'Expand'} ${domain}`}
                       onClick={() => setToggled(new Map(toggled).set(domain, !open))}
@@ -136,6 +135,9 @@ export function ProjectIndex() {
                     </ActionIcon>
                     <NavLink
                       flex={1}
+                      miw={0}
+                      py={6}
+                      fw={500}
                       label={domain}
                       active={chosen}
                       rightSection={<Tally counts={entry.counts} tests={entry.tests} />}
@@ -152,7 +154,7 @@ export function ProjectIndex() {
                     />
                   </Group>
                   {open && (
-                    <Box pl="sm">
+                    <Box pl="lg">
                       {entry.specs.map((spec) => {
                         const chosen = chosenSpecs.length === 1 && chosenSpecs[0] === spec.path;
                         return (
@@ -160,6 +162,7 @@ export function ProjectIndex() {
                             key={spec.path}
                             label={spec.title}
                             title={spec.path}
+                            py={6}
                             active={chosen}
                             leftSection={<StatusMark status={statusOf(spec.counts)} size={14} />}
                             rightSection={<Tally counts={spec.counts} tests={spec.tests} />}

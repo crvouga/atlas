@@ -17,11 +17,11 @@ import { attachmentIdentity, isVideoAttachment, type CheckDetail } from '@crvoug
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
 import type { Attachment, Step } from '@crvouga/atlas/schema';
-import { Alert, Anchor, Badge, Box, Button, Code, Flex, Grid, Group, Image, List, Modal, NativeSelect, Stack, Switch, Text, Title } from '@mantine/core';
-import { IconAlertTriangle, IconPlayerPlay, IconPlayerSkipBack, IconPlayerSkipForward } from '@tabler/icons-react';
+import { Alert, Anchor, AspectRatio, Badge, Box, Button, Center, Code, Divider, Flex, Grid, Group, Image, List, Modal, NativeSelect, NavLink, ScrollArea, Skeleton, Stack, Switch, Text, ThemeIcon, Title } from '@mantine/core';
+import { IconAlertTriangle, IconApi, IconPlayerPlay, IconPlayerPlayFilled, IconPlayerSkipBack, IconPlayerSkipForward, IconVideoOff } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { reportJson } from '../evidence/api';
 import { attachmentSource } from '../evidence/artifacts';
@@ -33,7 +33,7 @@ import { StatusMark } from '../evidence/marks';
 import { patched } from './navigate';
 import { ReadPromise } from './parts';
 import { clock, TEXT_KIND_WORD, type RecordingFocus } from './recording-text';
-import { clipHints, playableVideo, playlistCounts, RECORDING_STATE_TEXT, recordingState, stepFrom, type PlaylistEntry } from './playlist-entries';
+import { clipHints, playableVideo, playlistCounts, RECORDING_STATE_TEXT, recordingState, stepFrom, type PlaylistEntry, type RecordingState } from './playlist-entries';
 
 /** Entries listed before "more"; the selected entry is always listed. */
 const LISTED = 50;
@@ -72,19 +72,47 @@ export function useEntryDetail(entry: PlaylistEntry, enabled: boolean) {
   });
 }
 
-/** The poster the catalog named for a clip, loaded only when its row is near the screen (`loading="lazy"`); a poster that will not load is left out. */
-function Poster({ entry, bundleKey }: { entry: PlaylistEntry; bundleKey: string }) {
+/** What stands in for a recording that cannot be watched, so a row never looks like it has a clip when it has none. */
+const THUMB_ICON: Record<Exclude<RecordingState, 'playable'>, typeof IconVideoOff> = { unplayable: IconVideoOff, 'api-only': IconApi, none: IconVideoOff };
+
+/**
+ * The picture of a result in a list: the poster the catalog named for its clip, loaded only when its row is near the
+ * screen (`loading="lazy"`), with a play mark and the declared length. Nothing is read to draw it: a clip with no
+ * declared poster shows the play mark alone, a poster that will not load is left out, and a result with nothing to
+ * watch shows a struck-out mark (or `fallback`) instead of a play mark. `w` is its width; it is always 16:9.
+ */
+export function ClipThumb({ entry, w = 96, length = true, fallback }: { entry: Pick<PlaylistEntry, 'videos' | 'backend' | 'environment' | 'layer'>; w?: number; /** False where the declared length is already said in words beside the picture. */ length?: boolean; /** Shown in place of the struck-out mark when the result has other evidence to look at (a screenshot, a trace). */ fallback?: ReactNode }) {
   const [broken, setBroken] = useState(false);
-  const url = attachmentSource({ name: 'poster', bundleKey }, entry.layer).url;
-  if (!url || broken) return null;
-  return <Image src={url} alt="" loading="lazy" decoding="async" w={80} fit="contain" radius="sm" data-poster onError={() => setBroken(true)} />;
+  const hints = clipHints(entry);
+  const state = recordingState(entry);
+  const url = hints.poster ? attachmentSource({ name: 'poster', bundleKey: hints.poster }, entry.layer).url : null;
+  const Missing = state === 'playable' ? null : THUMB_ICON[state];
+  return (
+    <AspectRatio component="span" display="block" ratio={16 / 9} w={w} miw={w} data-thumb={state}>
+      <Center component="span" pos="relative" bg="var(--mantine-color-default-hover)" bd="1px solid var(--mantine-color-default-border)" bdrs="sm" c="dimmed">
+        {url && !broken && <Image src={url} alt="" loading="lazy" decoding="async" pos="absolute" top={0} left={0} w="100%" h="100%" fit="cover" radius="sm" data-poster onError={() => setBroken(true)} />}
+        {Missing ? (
+          (fallback ?? <Missing size={Math.round(w / 5)} stroke={1.5} aria-hidden="true" />)
+        ) : (
+          <ThemeIcon component="span" pos="relative" size={Math.max(22, Math.round(w / 4))} radius="xl" color="dark" variant="filled" opacity={0.85}>
+            <IconPlayerPlayFilled size={Math.max(10, Math.round(w / 9))} aria-hidden="true" />
+          </ThemeIcon>
+        )}
+        {length && hints.durationMs ? (
+          <Badge component="span" pos="absolute" bottom={3} right={3} size="xs" radius="sm" color="dark" variant="filled" tt="none">
+            {duration(hints.durationMs)}
+          </Badge>
+        ) : null}
+      </Center>
+    </AspectRatio>
+  );
 }
 
 /** One step of the scenario: in words, with a control to show it in the recording and a mark while it is playing. */
 function ScenarioStep({ step }: { step: Step }) {
   const playing = useIsPlaying(step);
   return (
-    <List.Item aria-current={playing ? 'step' : undefined} data-playing={playing || undefined} {...(playing ? { bg: 'blue.0' } : {})}>
+    <List.Item aria-current={playing ? 'step' : undefined} data-playing={playing || undefined} {...(playing ? { bg: 'var(--mantine-color-primary-light)' } : {})}>
       <Group gap="xs" wrap="wrap">
         <Text span inherit>
           {step.kind && KEYWORDS.has(step.kind.toLowerCase()) ? `${step.kind.charAt(0).toUpperCase()}${step.kind.slice(1).toLowerCase()} ` : ''}
@@ -101,10 +129,10 @@ function ScenarioStep({ step }: { step: Step }) {
 /** The scenario in words: the steps the producer recorded for the recording shown, with the Gherkin keyword where it gave one. */
 function Scenario({ entry, detail, steps }: { entry: PlaylistEntry; detail: CheckDetail | undefined; steps: readonly Step[] }) {
   return (
-    <Stack gap="xs" component="section" aria-label="Scenario">
+    <Stack gap="sm" component="section" aria-label="Scenario">
       <Title order={3}>{entry.title}</Title>
       {steps.length > 0 && (
-        <List type="ordered" spacing="xs" aria-label="Steps">
+        <List type="ordered" spacing={6} size="sm" aria-label="Steps">
           {steps.map((step, index) => (
             <ScenarioStep key={`${step.id ?? step.name}:${index}`} step={step} />
           ))}
@@ -167,10 +195,10 @@ function Facts({ entry }: { entry: PlaylistEntry }) {
     <Stack gap="xs" aria-label="Recording facts">
       <Group gap="xs" wrap="wrap">
         <StatusMark status={entry.status} size={14} />
-        <Text span inherit fw={600} data-outcome={entry.status}>
+        <Text span size="sm" fw={600} data-outcome={entry.status}>
           {statusWord(entry.status)}
         </Text>
-        <Text span inherit c="dimmed">
+        <Text span size="sm" c="dimmed">
           {[environmentLabel(entry.environment), entry.producer, `recorded ${exactTime(entry.at)}`].join(' · ')}
         </Text>
       </Group>
@@ -184,7 +212,7 @@ function Facts({ entry }: { entry: PlaylistEntry }) {
         </Group>
       )}
       {entry.specPath && (
-        <Text component="div" c="dimmed">
+        <Text component="div" size="sm" c="dimmed">
           Spec <Code>{entry.specPath}</Code>
         </Text>
       )}
@@ -229,7 +257,8 @@ function Clip({
   onEnded,
   onFailed,
   onNext,
-  onClose
+  onClose,
+  transport
 }: {
   entry: PlaylistEntry;
   speed: number;
@@ -241,6 +270,8 @@ function Clip({
   onFailed: (id: string) => void;
   onNext: (() => void) | null;
   onClose: () => void;
+  /** The session's controls (previous, next, speed, advancing), shown directly under the player. */
+  transport: ReactNode;
 }) {
   const state = recordingState(entry);
   const detail = useEntryDetail(entry, state === 'playable');
@@ -298,9 +329,14 @@ function Clip({
     );
   } else if (detail.isPending) {
     body = (
-      <Text role="status" component="div" c="dimmed">
-        Loading the recording…
-      </Text>
+      <Stack gap="xs">
+        <AspectRatio ratio={16 / 9}>
+          <Skeleton radius="md" />
+        </AspectRatio>
+        <Text role="status" component="div" size="sm" c="dimmed">
+          Loading the recording…
+        </Text>
+      </Stack>
     );
   } else if (detail.isError || !url) {
     body = (
@@ -337,7 +373,10 @@ function Clip({
           aria-label={`Recording: ${movie!.description ?? movie!.name}`}
           maw="100%"
           w="100%"
-          mah="70vh"
+          mah="64vh"
+          bg="var(--mantine-color-dark-9)"
+          bdrs="md"
+          display="block"
           data-playing={entry.id}
           onLoadedMetadata={() => {
             const element = video.current!;
@@ -374,12 +413,12 @@ function Clip({
           })}
         </ClipVideo>
         {movie!.durationMs ? (
-          <Text component="div" c="dimmed">
+          <Text component="div" size="sm" c="dimmed">
             Length of the recording: {duration(movie!.durationMs)}
           </Text>
         ) : null}
         {captions.length > 0 && (
-          <Text component="div" c="dimmed">
+          <Text component="div" size="sm" c="dimmed">
             Captions are offered in the player's captions control: {captions.map((caption) => caption.description ?? caption.name).join(', ')}.
           </Text>
         )}
@@ -429,10 +468,12 @@ function Clip({
     >
       <Stack gap="md" miw={0} aria-label={`Now showing ${entry.title}`} component="section" data-clip={entry.id}>
         {body}
-        <Facts entry={entry} />
+        {transport}
         <MomentBar />
+        <Divider />
         <Scenario entry={entry} detail={detail.data} steps={steps} />
-        <Text component="div" c="dimmed">
+        <Facts entry={entry} />
+        <Text component="div" size="sm" c="dimmed">
           Illustrative recording of one run. Its length and speed are those of the recording, not production latency, and it does not approve the behavior for production.
         </Text>
         {developer}
@@ -493,10 +534,41 @@ export function WatchPlaylist({
     setChosen(entry.id);
   };
   const listed = entries.slice(0, Math.max(shown, activeAt + 1));
+  const speedId = useId();
+  const transport = active && (
+    <Stack gap={6}>
+      <Group role="group" aria-label="Playlist controls" align="center" justify="space-between" gap="sm" wrap="wrap">
+        <Group gap="xs" wrap="nowrap">
+          <Button type="button" variant="default" leftSection={<IconPlayerSkipBack size={16} aria-hidden="true" />} disabled={!previous} onClick={() => previous && select(previous, true)}>
+            Previous clip
+          </Button>
+          <Button type="button" variant="default" rightSection={<IconPlayerSkipForward size={16} aria-hidden="true" />} disabled={!next} onClick={() => next && select(next, true)}>
+            Next clip
+          </Button>
+          <Text span size="sm" c="dimmed" visibleFrom="xs" aria-hidden="true">
+            {activeAt + 1} of {entries.length}
+          </Text>
+        </Group>
+        <Group gap="md" wrap="wrap" align="center">
+          <Group gap={6} wrap="nowrap">
+            <Text component="label" htmlFor={speedId} size="sm">
+              Playback speed
+            </Text>
+            <NativeSelect id={speedId} size="xs" w={76} value={String(speed)} onChange={(event) => setSpeed(Number(event.currentTarget.value))} data={SPEEDS.map((value) => ({ value: String(value), label: `${value}×` }))} />
+          </Group>
+          <Switch size="sm" label="Play the next clip when one ends" checked={advance} onChange={(event) => setAdvance(event.currentTarget.checked)} />
+          <Switch size="sm" label="Repeat" description="Start over after the last clip, or replay a clip when not advancing" checked={repeat} onChange={(event) => setRepeat(event.currentTarget.checked)} />
+        </Group>
+      </Group>
+      <Text c="dimmed" component="div" size="xs">
+        Previous and next skip results with nothing to play; select one in the list to see why.
+      </Text>
+    </Stack>
+  );
   return (
-    <Modal opened onClose={onClose} title={title} size="xl" centered>
+    <Modal opened onClose={onClose} title={title} size="min(86rem, 96vw)" centered>
       <Stack gap="md">
-        <Text role="status" component="div" data-playlist-summary>
+        <Text role="status" component="div" size="sm" c="dimmed" data-playlist-summary>
           {plural(entries.length, 'result', 'results')}
           {total !== undefined && total > entries.length ? ` (the newest of ${total.toLocaleString()} matching)` : ''}: {counts.playable} with a recording
           {counts.unplayable > 0 ? `, ${counts.unplayable} whose recording is not available` : ''}
@@ -505,34 +577,11 @@ export function WatchPlaylist({
           {counts.failed > 0 ? ' kept in the playlist' : ''}.
         </Text>
         {entries.length === 0 && (
-          <Text component="div" c="dimmed">
+          <Text component="div" c="dimmed" ta="center" py="xl">
             No result is in this set, so there is nothing to watch.
           </Text>
         )}
-        {active && (
-          <Group role="group" aria-label="Playlist controls" align="flex-end" gap="md" wrap="wrap">
-            <Button type="button" variant="default" leftSection={<IconPlayerSkipBack size={16} aria-hidden="true" />} disabled={!previous} onClick={() => previous && select(previous, true)}>
-              Previous clip
-            </Button>
-            <Button type="button" variant="default" rightSection={<IconPlayerSkipForward size={16} aria-hidden="true" />} disabled={!next} onClick={() => next && select(next, true)}>
-              Next clip
-            </Button>
-            <NativeSelect
-              label="Playback speed"
-              value={String(speed)}
-              onChange={(event) => setSpeed(Number(event.currentTarget.value))}
-              data={SPEEDS.map((value) => ({ value: String(value), label: `${value}×` }))}
-            />
-            <Switch label="Play the next clip when one ends" checked={advance} onChange={(event) => setAdvance(event.currentTarget.checked)} />
-            <Switch label="Repeat" description="Start over after the last clip, or replay a clip when not advancing" checked={repeat} onChange={(event) => setRepeat(event.currentTarget.checked)} />
-          </Group>
-        )}
-        {active && (
-          <Text c="dimmed" component="div" size="sm">
-            Previous and next skip results with nothing to play; select one in the list to see why.
-          </Text>
-        )}
-        <Grid gap="md">
+        <Grid gap="lg">
           <Grid.Col span={{ base: 12, md: 8 }}>
             {active && (
               <Clip
@@ -550,49 +599,58 @@ export function WatchPlaylist({
                 onFailed={(id) => setFailedIds((held) => new Set(held).add(id))}
                 onNext={next ? () => select(next, true) : null}
                 onClose={onClose}
+                transport={transport}
               />
             )}
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 4 }}>
             <Stack gap="xs" component="section" aria-label="Playlist">
-              <Title order={3}>Playlist</Title>
-              <List spacing="xs" listStyleType="none">
-                {listed.map((entry, index) => {
-                  const state = recordingState(entry);
-                  const here = entry.id === active?.id;
-                  const hints = clipHints(entry);
-                  return (
-                    <List.Item key={entry.id} data-entry={entry.id} data-status={entry.status} data-recording-state={state}>
-                      <Button
-                        type="button"
-                        variant={here ? 'light' : 'subtle'}
-                        fullWidth
-                        h="auto"
-                        py="xs"
-                        justify="flex-start"
-                        aria-current={here ? 'true' : undefined}
-                        aria-label={`${index + 1}. ${entry.title}, ${statusWord(entry.status)}, ${failedIds.has(entry.id) ? 'could not be loaded' : RECORDING_STATE_TEXT[state].label}${hints.durationMs ? `, ${duration(hints.durationMs)} long` : ''}`}
-                        onClick={() => select(entry, state === 'playable')}
-                      >
-                        <Flex component="span" gap="xs" wrap="nowrap" align="flex-start">
-                          <StatusMark status={entry.status} size={14} />
-                          {hints.poster && <Poster entry={entry} bundleKey={hints.poster} />}
-                          <Flex component="span" direction="column" align="flex-start">
-                            <Text span inherit ta="left">
+              <Group justify="space-between" align="baseline">
+                <Title order={3}>Playlist</Title>
+                <Text size="sm" c="dimmed">
+                  {plural(entries.length, 'clip', 'clips')}
+                </Text>
+              </Group>
+              <ScrollArea.Autosize mah={{ base: 360, md: '72vh' }} type="auto" scrollbars="y" offsetScrollbars="y">
+                <List listStyleType="none">
+                  {listed.map((entry, index) => {
+                    const state = recordingState(entry);
+                    const here = entry.id === active?.id;
+                    const hints = clipHints(entry);
+                    return (
+                      <Box component="li" key={entry.id} mt={index > 0 ? 4 : 0} data-entry={entry.id} data-status={entry.status} data-recording-state={state}>
+                        <NavLink
+                          component="button"
+                          type="button"
+                          active={here}
+                          variant="light"
+                          p="xs"
+                          bdrs="md"
+                          aria-current={here ? 'true' : undefined}
+                          aria-label={`${index + 1}. ${entry.title}, ${statusWord(entry.status)}, ${failedIds.has(entry.id) ? 'could not be loaded' : RECORDING_STATE_TEXT[state].label}${hints.durationMs ? `, ${duration(hints.durationMs)} long` : ''}`}
+                          onClick={() => select(entry, state === 'playable')}
+                          leftSection={<ClipThumb entry={entry} w={104} length={false} />}
+                          label={
+                            <Text span size="sm" fw={500} lineClamp={2}>
                               {entry.title}
                             </Text>
-                            <Text span inherit c="dimmed" size="xs" ta="left">
-                              {statusWord(entry.status)} · {environmentLabel(entry.environment)} ·{' '}
-                              {failedIds.has(entry.id) ? 'Could not be loaded' : RECORDING_STATE_TEXT[state].label}
-                              {hints.durationMs ? ` · ${duration(hints.durationMs)} recording` : ''}
-                            </Text>
-                          </Flex>
-                        </Flex>
-                      </Button>
-                    </List.Item>
-                  );
-                })}
-              </List>
+                          }
+                          description={
+                            <Flex component="span" gap={6} align="center" wrap="nowrap" mt={2}>
+                              <StatusMark status={entry.status} size={12} />
+                              <Text span inherit>
+                                {statusWord(entry.status)} · {environmentLabel(entry.environment)} ·{' '}
+                                {failedIds.has(entry.id) ? 'Could not be loaded' : RECORDING_STATE_TEXT[state].label}
+                                {hints.durationMs ? ` · ${duration(hints.durationMs)} recording` : ''}
+                              </Text>
+                            </Flex>
+                          }
+                        />
+                      </Box>
+                    );
+                  })}
+                </List>
+              </ScrollArea.Autosize>
               {entries.length > listed.length && (
                 <Button type="button" variant="subtle" onClick={() => setShown(listed.length + LISTED)}>
                   Show more ({entries.length - listed.length} more)

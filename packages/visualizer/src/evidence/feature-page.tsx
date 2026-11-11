@@ -1,12 +1,12 @@
 import type { SpecEvidence } from '@crvouga/atlas/reports/evidence-view';
-import { Alert, Box, Container, Group, List, Stack, Text, Title } from '@mantine/core';
+import { Alert, Box, Card, Divider, Grid, Group, List, Stack, Text, Title } from '@mantine/core';
 import { useMemo } from 'react';
 import { outlinePath, type SpecKind } from '../spec-kind';
 import { CheckDetail, PlainSteps, ResultRow, type CheckSelection, type SelectCheck } from './check-detail';
 import { assessBehavior, hasRelease, needsAttention, type Assessment } from './applicability';
 import { ApplicabilityControls, useApplicabilityState, VerdictBadge } from './applicability-view';
 import { coverageCounts, featureBehaviors, type RevisionSource } from './behavior';
-import { BehaviorPanel, CoverageBadge, CoverageSummary } from './behavior-panel';
+import { BehaviorPanel, CoverageBadge, CoverageSummary, VideoMark } from './behavior-panel';
 import { useEvidence } from './evidence-context';
 import { featureModel, scenarioLabel, type FeatureModel, type FeatureScenario } from './gherkin';
 import { Bounded } from './marks';
@@ -80,7 +80,8 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
           label={label}
           slot={slot}
           badge={
-            <Group gap="xs" wrap="wrap">
+            <Group gap="xs" wrap="nowrap">
+              {behavior.demo && <VideoMark />}
               <CoverageBadge state={behavior.state} />
               {assessed && (assessed.verdict === 'stale' || (assessed.verdict === 'unknown' && hasRelease(release))) && <VerdictBadge verdict={assessed.verdict} />}
             </Group>
@@ -116,7 +117,7 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
       );
     });
   return (
-    <Container component="article" size="xl" w="100%" py="xl">
+    <Stack component="article" gap="md">
       <SpecHeader
         title={feature?.name || file.split('/').at(-1)!}
         file={file}
@@ -125,82 +126,95 @@ export function FeaturePage({ file, text, kind, entry, selection, select }: Prop
         planned={feature ? planned : undefined}
       >
         {feature?.description && (
-          <Text component="div" c="dimmed">
+          <Text component="div" c="dimmed" maw={720}>
             {feature.description}
           </Text>
         )}
       </SpecHeader>
       <CoverageSummary counts={counts} total={behaviors.all.length} />
-      {behaviors.all.length > 0 && <ApplicabilityControls state={applicability} stale={staleCount} total={behaviors.all.length} />}
-      <SourceText text={text} file={file} withResults />
-      <Box component="section" id="spec-results" aria-label="Recorded results" tabIndex={-1}>
-        <TestFilter slots={slots} />
-        {error && (
-          <Alert role="alert" color={'red'} my="sm">
-            This feature could not be parsed: {error}
-          </Alert>
-        )}
-        {feature?.rules.map((rule, index) => (
-          <Box key={index} component="section" mb="lg">
-            {rule.name !== null && (
-              <Title order={2} mb="sm">
-                {rule.name}
-              </Title>
-            )}
-            {rule.description && (
-              <Text component="div" c="dimmed">
-                {rule.description}
-              </Text>
-            )}
-            {rule.scenarios
-              .filter((scenario) => scenario.background)
-              .map((scenario, at) => (
-                <Stack key={at} gap="sm" miw={0}>
-                  <Text component="div" c="dimmed">
-                    Before each scenario
-                    {scenario.name ? `: ${scenario.name}` : ''}
-                  </Text>
-                  <PlainSteps steps={scenario.steps} />
+      <Grid gap="md" align="flex-start">
+        <Grid.Col span={{ base: 12, xl: 5 }}>
+          <SourceText text={text} file={file} withResults />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, xl: 7 }}>
+          <Box component="section" id="spec-results" aria-label="Recorded results" tabIndex={-1}>
+            <Card>
+              <Stack gap="md">
+                <Stack gap="xs">
+                  <Group justify="space-between" align="center" gap="xs">
+                    {feature && <Title order={2}>Behaviors</Title>}
+                    <TestFilter slots={slots} />
+                  </Group>
+                  {behaviors.all.length > 0 && <ApplicabilityControls compact state={applicability} stale={staleCount} total={behaviors.all.length} />}
                 </Stack>
-              ))}
-            <List spacing="xs" listStyleType="none">
-              {rule.scenarios.filter((scenario) => !scenario.background).map(rows)}
-            </List>
-          </Box>
-        ))}
-        {leftOver.length > 0 && (
-          <Box component="section" mb="lg">
-            <Title order={2} mb="sm">
-              {feature ? 'Other recorded results' : 'Recorded results'}
-            </Title>
-            {feature && (
-              <Text component="div" c="dimmed">
-                Recorded against this file under a name no scenario has now.
-              </Text>
-            )}
-            <List spacing="xs" listStyleType="none">
-              <Bounded items={leftOver} size={40} more="More results">
-                {(slot) => (
-                  <ResultRow
-                    key={slot.key}
-                    label={feature ? scenarioLabel(feature.name, slot.title) : slot.title}
-                    slot={slot}
-                    open={selection.check === slot.id}
-                    onToggle={() => toggle(slot.id)}
-                  >
-                    <CheckDetail
-                      slot={slot}
-                      layerId={selection.check === slot.id ? selection.layer : undefined}
-                      select={(patch) => select({ check: slot.id, ...patch })}
-                      reads="steps"
-                    />
-                  </ResultRow>
+                {error && (
+                  <Alert role="alert" color={'red'}>
+                    This feature could not be parsed: {error}
+                  </Alert>
                 )}
-              </Bounded>
-            </List>
+                {feature?.rules.map((rule, index) => (
+                  <Stack key={index} component="section" gap="xs">
+                    {index > 0 && <Divider />}
+                    {rule.name !== null && <Title order={3}>{rule.name}</Title>}
+                    {rule.description && (
+                      <Text component="div" c="dimmed">
+                        {rule.description}
+                      </Text>
+                    )}
+                    {rule.scenarios
+                      .filter((scenario) => scenario.background)
+                      .map((scenario, at) => (
+                        <Card key={at} padding="sm" shadow="none" bg="var(--mantine-color-default-hover)">
+                          <Stack gap={6} miw={0} fz="sm">
+                            <Text component="div" size="xs" c="dimmed" fw={500}>
+                              Before each scenario
+                              {scenario.name ? `: ${scenario.name}` : ''}
+                            </Text>
+                            <PlainSteps steps={scenario.steps} />
+                          </Stack>
+                        </Card>
+                      ))}
+                    <List spacing="xs" listStyleType="none">
+                      {rule.scenarios.filter((scenario) => !scenario.background).map(rows)}
+                    </List>
+                  </Stack>
+                ))}
+                {leftOver.length > 0 && (
+                  <Stack component="section" gap="xs">
+                    {feature && <Divider />}
+                    <Title order={feature ? 3 : 2}>{feature ? 'Other recorded results' : 'Recorded results'}</Title>
+                    {feature && (
+                      <Text component="div" c="dimmed">
+                        Recorded against this file under a name no scenario has now.
+                      </Text>
+                    )}
+                    <List spacing="xs" listStyleType="none">
+                      <Bounded items={leftOver} size={40} more="More results">
+                        {(slot) => (
+                          <ResultRow
+                            key={slot.key}
+                            label={feature ? scenarioLabel(feature.name, slot.title) : slot.title}
+                            slot={slot}
+                            open={selection.check === slot.id}
+                            onToggle={() => toggle(slot.id)}
+                          >
+                            <CheckDetail
+                              slot={slot}
+                              layerId={selection.check === slot.id ? selection.layer : undefined}
+                              select={(patch) => select({ check: slot.id, ...patch })}
+                              reads="steps"
+                            />
+                          </ResultRow>
+                        )}
+                      </Bounded>
+                    </List>
+                  </Stack>
+                )}
+              </Stack>
+            </Card>
           </Box>
-        )}
-      </Box>
-    </Container>
+        </Grid.Col>
+      </Grid>
+    </Stack>
   );
 }

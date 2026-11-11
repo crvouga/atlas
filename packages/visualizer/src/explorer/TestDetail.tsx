@@ -1,5 +1,5 @@
 import { IconX, IconCircleFilled } from '@tabler/icons-react';
-import { Alert, Anchor, Badge, Box, Button, Code, Flex, SimpleGrid, Stack, Table, Text, Title, VisuallyHidden } from '@mantine/core';
+import { Alert, Anchor, Badge, Box, Button, Code, Divider, Flex, Group, Paper, SimpleGrid, Stack, Table, Tabs, Text, Title, VisuallyHidden } from '@mantine/core';
 /**
  * @module Test detail
  *
@@ -12,7 +12,8 @@ import type { CheckSlot } from '@crvouga/atlas/reports/evidence-view';
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import { formatMs, runKey, type TestResultEntry, type TestSummary } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { statusColor } from '../ui/theme';
 import { assessTest } from '../evidence/applicability';
 import { ApplicabilitySummary } from '../evidence/applicability-view';
 import { CheckDetail } from '../evidence/check-detail';
@@ -23,7 +24,7 @@ import { outcomeHeadline, selectedResult } from '../evidence/outcome';
 import { useTestHistory } from './catalog';
 import { releaseOf } from './applicability';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
-import { Badges, ReadPromise, runName } from './parts';
+import { Badges, Fact, ReadPromise, runName } from './parts';
 import { Reliability } from './Reliability';
 import { ProductLatency } from './ProductLatency';
 import { usePinnedResult, type PinnedResult } from './pinned';
@@ -55,22 +56,22 @@ function Scope({ pinned, slot }: { pinned: PinnedResult; slot: CheckSlot | undef
   const now = useNow();
   if (pinned.state === 'none')
     return (
-      <Flex aria-label="Evidence scope" role="group" gap="xs" align="center" wrap="wrap" mb="lg">
-        <Badge variant="light">Latest combined evidence</Badge>
-        <Text span inherit c="dimmed">
+      <Flex aria-label="Evidence scope" role="group" gap="xs" align="center" wrap="wrap">
+        <Badge variant="default">Latest combined evidence</Badge>
+        <Text span size="xs" c="dimmed" flex={1} miw={240}>
           The newest result of each environment, which can come from different runs. Open a run to see exactly what it recorded.
         </Text>
       </Flex>
     );
   if (pinned.state === 'loading')
     return (
-      <Text role="status" component="div" c="dimmed" mb="lg">
+      <Text role="status" component="div" c="dimmed">
         Reading the result of the run you opened…
       </Text>
     );
   if (pinned.state === 'missing')
     return (
-      <Alert color="blue" title="That result is not available" mb="lg">
+      <Alert color="blue" title="That result is not available">
         <Stack gap="xs">
           <Text span inherit>
             {pinned.reason} No other result is shown in its place.
@@ -90,7 +91,7 @@ function Scope({ pinned, slot }: { pinned: PinnedResult; slot: CheckSlot | undef
   );
   const key = runKey(layer);
   return (
-    <Alert color="blue" title={`This run: ${runName(key)}`} mb="lg">
+    <Alert color="blue" title={`This run: ${runName(key)}`}>
       <Stack gap="xs">
         <Flex gap="xs" align="center" wrap="wrap">
           <Text span inherit fw={600}>
@@ -142,6 +143,15 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
   const [recordingLayer, setRecordingLayer] = useState<string | undefined>(undefined);
   const [moment, setMoment] = useState<number | null>(null);
   const [rows, setRows] = useState(HISTORY_ROWS);
+  // A link to a reliability scope opens on the figures it describes.
+  const scoped = !!(search.relOpen || search.relEnv || search.relProducer || search.relBranch || search.relParam || search.relSince || search.relUntil || search.relRevision);
+  const [tab, setTab] = useState(scoped ? 'reliability' : 'evidence');
+  // Opening another result (from the history or the executions) shows what it recorded.
+  const shownLayer = useRef(layer);
+  useEffect(() => {
+    if (shownLayer.current !== layer) setTab('evidence');
+    shownLayer.current = layer;
+  }, [layer]);
   const entries = history.data?.history ?? [];
   const selected = slot && (!layer || pinned.state === 'ready') ? selectedResult(slot, pinned.state === 'ready' ? pinned.entry : undefined, source) : undefined;
   const stats = test.stats;
@@ -168,37 +178,58 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
       </Suspense>
     );
   }
+  const facts: [string, ReactNode][] = [
+    ['Pass rate', percent(stats.passRate)],
+    [
+      'Results',
+      <>
+        {stats.results}{' '}
+        <Text span inherit fw={400} c="dimmed">
+          ({stats.passed} passed{stats.failed ? `, ${stats.failed} failed` : ''})
+        </Text>
+      </>
+    ],
+    ['Runs', stats.runs],
+    ['Flips', stats.flips],
+    ['Average', formatMs(d?.avgMs)],
+    ['p50', formatMs(d?.p50Ms)],
+    ['p95', formatMs(d?.p95Ms)],
+    ['Min – max', d ? `${formatMs(d.minMs)} – ${formatMs(d.maxMs)}` : '—'],
+    ['Last', formatMs(d?.lastMs)],
+    ['Last passed', stats.lastPassedAtMs ? ago(stats.lastPassedAtMs, now) : '—'],
+    ['Last failed', stats.lastFailedAtMs ? ago(stats.lastFailedAtMs, now) : '—'],
+    ['First seen', stats.firstSeenMs ? ago(stats.firstSeenMs, now) : '—']
+  ];
   return (
-    <Box aria-label={test.title} component="article">
-      <Flex gap="xs" align="center" wrap="wrap" justify="flex-end">
-        <Anchor
-          aria-label="Close the test"
-          renderRoot={(props) => (
-            <Link {...props} to="/" search={patched({ test: undefined, layer: undefined, clip: undefined, clipAt: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
-          )}
-        >
-          <IconX size={20} aria-hidden="true" />
-        </Anchor>
-      </Flex>
-      <Box component="header" mb="lg">
+    <Stack aria-label={test.title} component="article" gap="lg">
+      <Stack component="header" gap="xs">
         {test.spec && (
-          <Text component="div" c="dimmed">
+          <Group gap={6} c="dimmed" fz="xs">
             {test.spec!.domain && (
-              <Anchor
-                renderRoot={(props) => (
-                  <Link
-                    {...props}
-                    to="/"
-                    search={patched({ domain: test.spec!.domain, spec: undefined })}
-                    resetScroll={false}
-                    activeOptions={{ exact: true }}
-                  />
-                )}
-              >
-                {test.spec!.domain}
-              </Anchor>
+              <>
+                <Anchor
+                  size="xs"
+                  c="dimmed"
+                  renderRoot={(props) => (
+                    <Link
+                      {...props}
+                      to="/"
+                      search={patched({ domain: test.spec!.domain, spec: undefined })}
+                      resetScroll={false}
+                      activeOptions={{ exact: true }}
+                    />
+                  )}
+                >
+                  {test.spec!.domain}
+                </Anchor>
+                <Text span inherit aria-hidden="true">
+                  /
+                </Text>
+              </>
             )}
             <Anchor
+              size="xs"
+              c="dimmed"
               renderRoot={(props) => (
                 <Link
                   {...props}
@@ -211,250 +242,73 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
             >
               {test.spec!.title}
             </Anchor>
-          </Text>
+          </Group>
         )}
-        <Title order={2} mb="sm">
+        <Title order={2} size="h1">
           {test.title}
         </Title>
         <Flex gap="xs" align="center" wrap="wrap">
-          <StatusMark status={test.status} />
-          <Text data-status={test.status} span inherit fw={600}>
+          <Badge size="lg" color={statusColor(test.status)} data-status={test.status} leftSection={<StatusMark status={test.status} size={14} />}>
             {statusWord(test.status)}
-          </Text>
-          <Text span inherit c="dimmed">
+          </Badge>
+          <Text span c="dimmed">
             worst current result of {plural(test.outcomes.length, 'source', 'sources')}
           </Text>
           {stats.flaky && (
-            <Text title={stats.flakyReason} span inherit>
+            <Text title={stats.flakyReason} span c="orange">
               Flaky: {stats.flakyReason}
             </Text>
           )}
           <Badges test={test} />
         </Flex>
         {selected && slot && (
-          <Text component="p" role="status" fw={600} data-outcome-headline>
+          <Text component="p" m={0} role="status" fw={600} data-outcome-headline>
             {outcomeHeadline(selected, slot).text}
           </Text>
         )}
-        {test.spec && <Code c="dimmed">{test.spec!.path}</Code>}
-        <Box>
+        <Group gap="sm" c="dimmed" fz="xs">
+          {test.spec && (
+            <>
+              <Text span inherit ff="monospace">
+                {test.spec!.path}
+              </Text>
+              <Divider orientation="vertical" visibleFrom="xs" />
+            </>
+          )}
+          <Text span inherit ff="monospace" title="Check id">
+            {test.id}
+          </Text>
+          {test.spec && <Divider orientation="vertical" visibleFrom="xs" />}
           <ReadPromise specPath={test.spec?.path ?? null} check={test.id} />
-        </Box>
-        <Code title="Check id" c="dimmed">
-          {test.id}
-        </Code>
-      </Box>
+        </Group>
+      </Stack>
 
       <Scope pinned={pinned} slot={slot} />
 
-      <Box aria-label="Evidence applicability" component="section" mb="lg">
-        <Title order={3} mb="sm" c="dimmed">
-          Does this evidence apply?
-        </Title>
-        <ApplicabilitySummary assessment={applicability} release={release} />
-      </Box>
+      <Tabs value={tab} onChange={(value) => setTab(value ?? 'evidence')} keepMounted>
+        <Tabs.List aria-label="About this test">
+          <Tabs.Tab value="evidence">Evidence</Tabs.Tab>
+          <Tabs.Tab value="results">Results</Tabs.Tab>
+          <Tabs.Tab value="statistics">Statistics</Tabs.Tab>
+          <Tabs.Tab value="reliability">Reliability</Tabs.Tab>
+          <Tabs.Tab value="latency">Product latency</Tabs.Tab>
+          <Tabs.Tab
+            value="history"
+            rightSection={
+              entries.length ? (
+                <Text span size="xs" c="dimmed">
+                  {entries.length}
+                </Text>
+              ) : undefined
+            }
+          >
+            History
+          </Tabs.Tab>
+        </Tabs.List>
 
-      <Box aria-label="Current results" component="section" mb="lg">
-        <Title order={3} mb="sm" c="dimmed">
-          Current result per environment
-        </Title>
-        {test.outcomes.length === 0 ? (
-          <Text component="div" c="dimmed">
-            No completed result recorded yet.
-          </Text>
-        ) : (
-          <Table.ScrollContainer minWidth={600}>
-            <Table>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th scope="col">Environment</Table.Th>
-                  <Table.Th scope="col">Producer</Table.Th>
-                  <Table.Th scope="col">Status</Table.Th>
-                  <Table.Th scope="col">Duration</Table.Th>
-                  <Table.Th scope="col">Branch</Table.Th>
-                  <Table.Th scope="col">Commit</Table.Th>
-                  <Table.Th scope="col">Recorded</Table.Th>
-                  <Table.Th scope="col">
-                    <VisuallyHidden>Run</VisuallyHidden>
-                  </Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {test.outcomes.map((outcome) => (
-                  <Table.Tr
-                    key={`${outcome.layer}|${outcome.producer}|${outcome.environment}|${JSON.stringify(outcome.parameters)}`}
-                    data-status={outcome.status}
-                  >
-                    <Table.Td>
-                      {environmentLabel(outcome.environment)}
-                      {Object.entries(outcome.parameters).map(([name, value]) => (
-                        <Text key={name} span inherit c="dimmed">
-                          {' '}
-                          {name}: {value}
-                        </Text>
-                      ))}
-                    </Table.Td>
-                    <Table.Td>{outcome.producer}</Table.Td>
-                    <Table.Td>
-                      <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
-                        <StatusMark status={outcome.status} size={12} />
-                        {statusWord(outcome.status)}
-                      </Flex>
-                    </Table.Td>
-                    <Table.Td>{formatMs(outcome.durationMs)}</Table.Td>
-                    <Table.Td title={outcome.branch ?? ''} c="dimmed">
-                      {outcome.branch ?? '—'}
-                    </Table.Td>
-                    <Table.Td>
-                      <Code>{shortSha(outcome.sha) ?? '—'}</Code>
-                    </Table.Td>
-                    <Table.Td title={exactTime(outcome.at)}>{ago(outcome.at, now)}</Table.Td>
-                    <Table.Td>
-                      {outcome.runUrl ? (
-                        <Anchor href={outcome.runUrl} target="_blank" rel="noreferrer">
-                          CI run
-                        </Anchor>
-                      ) : null}
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
-        )}
-      </Box>
-
-      <Box aria-label="Statistics" component="section" mb="lg">
-        <Title order={3} mb="sm" c="dimmed">
-          How it has gone
-        </Title>
-        <Text component="div" c="dimmed" mb="sm">
-          Durations here are test execution time: setup, waits, retries and any demo pacing included. They do not say how quickly the product
-          responded; see Product latency.
-        </Text>
-        <SimpleGrid component="dl" cols={{ base: 2, sm: 3 }}>
-          <Stack gap="sm">
-            <Box component="dt">Pass rate</Box>
-            <Box component="dd" m={0}>
-              {percent(stats.passRate)}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">Results</Box>
-            <Box component="dd" m={0}>
-              {stats.results}{' '}
-              <Text span inherit>
-                ({stats.passed} passed{stats.failed ? `, ${stats.failed} failed` : ''})
-              </Text>
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">Runs</Box>
-            <Box component="dd" m={0}>
-              {stats.runs}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">Flips</Box>
-            <Box component="dd" m={0}>
-              {stats.flips}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">Average</Box>
-            <Box component="dd" m={0}>
-              {formatMs(d?.avgMs)}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">p50</Box>
-            <Box component="dd" m={0}>
-              {formatMs(d?.p50Ms)}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">p95</Box>
-            <Box component="dd" m={0}>
-              {formatMs(d?.p95Ms)}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">Min – max</Box>
-            <Box component="dd" m={0}>
-              {d ? `${formatMs(d.minMs)} – ${formatMs(d.maxMs)}` : '—'}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">Last</Box>
-            <Box component="dd" m={0}>
-              {formatMs(d?.lastMs)}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">Last passed</Box>
-            <Box component="dd" m={0}>
-              {stats.lastPassedAtMs ? ago(stats.lastPassedAtMs, now) : '—'}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">Last failed</Box>
-            <Box component="dd" m={0}>
-              {stats.lastFailedAtMs ? ago(stats.lastFailedAtMs, now) : '—'}
-            </Box>
-          </Stack>
-          <Stack gap="sm">
-            <Box component="dt">First seen</Box>
-            <Box component="dd" m={0}>
-              {stats.firstSeenMs ? ago(stats.firstSeenMs, now) : '—'}
-            </Box>
-          </Stack>
-        </SimpleGrid>
-        {stats.branches.length > 0 && (
-          <Text component="div" c="dimmed">
-            Branches: {stats.branches.join(', ')}
-          </Text>
-        )}
-        {!d && (
-          <Text component="div" c="dimmed">
-            No test duration recorded. Producers can send <Code>durationMs</Code> with each check.
-          </Text>
-        )}
-        {entries.length > 1 && <Trend entries={entries} />}
-      </Box>
-
-      {!history.isError && <Reliability testKey={test.key} entries={history.data === null ? [] : history.data?.history} />}
-
-      <ProductLatency entries={entries} />
-
-      {(test.tags.length > 0 || Object.keys(test.labels).length > 0) && (
-        <Box aria-label="Tags and labels" component="section" mb="lg">
-          <Title order={3} mb="sm" c="dimmed">
-            Tags and labels
-          </Title>
-          <Flex gap="xs" align="center" wrap="wrap">
-            {test.tags.map((tag) => (
-              <Anchor
-                key={tag}
-                renderRoot={(props) => (
-                  <Link {...props} to="/" search={patched({ tag })} resetScroll={false} activeOptions={{ exact: true }} />
-                )}
-              >
-                {tag}
-              </Anchor>
-            ))}
-            {Object.entries(test.labels).map(([name, value]) => (
-              <Text key={name} span inherit>
-                {name}: {value}
-              </Text>
-            ))}
-          </Flex>
-        </Box>
-      )}
-
-      <Box aria-label="Evidence" component="section" mb="lg">
-        <Title order={3} mb="sm" c="dimmed">
-          {layer ? 'What this run recorded' : 'What the current result carries'}
-        </Title>
+        <Tabs.Panel value="evidence" pt="md">
+          <Stack aria-label="Evidence" component="section" gap="sm">
+            <Title order={3}>{layer ? 'What this run recorded' : 'What the current result carries'}</Title>
         {slot && (!layer || pinned.state === 'ready') ? (
           <CheckDetail
             slot={slot}
@@ -490,101 +344,275 @@ export function TestDetail({ test, slot }: { test: TestSummary; slot: CheckSlot 
             The evidence of this result is not loaded in this page.
           </Text>
         )}
-      </Box>
+          </Stack>
+        </Tabs.Panel>
 
-      <Box aria-label="History" component="section" mb="lg">
-        <Title order={3} mb="sm" c="dimmed">
-          History{entries.length ? ` · ${plural(entries.length, 'result', 'results')}` : ''}
-        </Title>
-        {history.isPending && (
-          <Text role="status" component="div" c="dimmed">
-            Reading the history…
-          </Text>
-        )}
-        {history.isError && (
-          <Alert role="alert" color={'red'} my="sm">
-            The history could not be read. {history.error.message}
-          </Alert>
-        )}
-        {entries.length > 0 && (
-          <Table.ScrollContainer minWidth={600}>
-            <Table>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th scope="col">Recorded</Table.Th>
-                  <Table.Th scope="col">Environment</Table.Th>
-                  <Table.Th scope="col">Status</Table.Th>
-                  <Table.Th scope="col">Duration</Table.Th>
-                  <Table.Th scope="col">Branch</Table.Th>
-                  <Table.Th scope="col">Commit</Table.Th>
-                  <Table.Th scope="col">Detail</Table.Th>
-                  <Table.Th scope="col">
-                    <VisuallyHidden>Evidence</VisuallyHidden>
-                  </Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {entries.slice(0, rows).map((entry) => (
-                  <Table.Tr
-                    key={`${entry.layer}|${entry.kind}|${entry.producer}|${entry.environment}|${JSON.stringify(entry.parameters)}`}
-                    data-status={entry.status}
-                  >
-                    <Table.Td title={exactTime(entry.at)}>
-                      {entry.runUrl ? (
-                        <Anchor href={entry.runUrl} target="_blank" rel="noreferrer">
-                          {ago(entry.at, now)}
-                        </Anchor>
-                      ) : (
-                        ago(entry.at, now)
-                      )}
-                    </Table.Td>
-                    <Table.Td>{environmentLabel(entry.environment)}</Table.Td>
-                    <Table.Td>
-                      <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
-                        <StatusMark status={entry.status} size={12} />
-                        {statusWord(entry.status)}
-                      </Flex>
-                    </Table.Td>
-                    <Table.Td>{formatMs(entry.durationMs)}</Table.Td>
-                    <Table.Td title={entry.branch ?? ''} c="dimmed">
-                      {entry.branch ?? '—'}
-                    </Table.Td>
-                    <Table.Td>
-                      <Code>{shortSha(entry.sha) ?? '—'}</Code>
-                    </Table.Td>
-                    <Table.Td title={entry.detail} c="dimmed">
-                      {entry.detail.split('\n')[0]}
-                    </Table.Td>
-                    <Table.Td>
-                      <Anchor
-                        aria-label={`Open the ${statusWord(entry.status)} result recorded ${ago(entry.at, now)} in ${environmentLabel(entry.environment)}`}
-                        aria-current={entry.layer === layer ? 'true' : undefined}
-                        renderRoot={(props) => (
-                          <Link
-                            {...props}
-                            to="/"
-                            search={patched({ layer: entry.layer })}
-                            resetScroll={false}
-                            activeOptions={{ exact: true }}
-                          />
-                        )}
-                      >
-                        Open this result
-                      </Anchor>
-                    </Table.Td>
-                  </Table.Tr>
+        <Tabs.Panel value="results" pt="md">
+          <Stack gap="lg">
+            <Stack aria-label="Current results" component="section" gap="xs">
+              <Title order={3}>Current result per environment</Title>
+              {test.outcomes.length === 0 ? (
+                <Text component="div" c="dimmed">
+                  No completed result recorded yet.
+                </Text>
+              ) : (
+                <Table.ScrollContainer minWidth={600}>
+                  <Table>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th scope="col">Environment</Table.Th>
+                        <Table.Th scope="col">Producer</Table.Th>
+                        <Table.Th scope="col">Status</Table.Th>
+                        <Table.Th scope="col">Duration</Table.Th>
+                        <Table.Th scope="col">Branch</Table.Th>
+                        <Table.Th scope="col">Commit</Table.Th>
+                        <Table.Th scope="col">Recorded</Table.Th>
+                        <Table.Th scope="col">
+                          <VisuallyHidden>Run</VisuallyHidden>
+                        </Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {test.outcomes.map((outcome) => (
+                        <Table.Tr
+                          key={`${outcome.layer}|${outcome.producer}|${outcome.environment}|${JSON.stringify(outcome.parameters)}`}
+                          data-status={outcome.status}
+                        >
+                          <Table.Td fw={500}>
+                            {environmentLabel(outcome.environment)}
+                            {Object.entries(outcome.parameters).map(([name, value]) => (
+                              <Text key={name} span inherit fw={400} c="dimmed">
+                                {' '}
+                                {name}: {value}
+                              </Text>
+                            ))}
+                          </Table.Td>
+                          <Table.Td>{outcome.producer}</Table.Td>
+                          <Table.Td>
+                            <Flex component="span" display="inline-flex" gap={6} align="center" wrap="nowrap">
+                              <StatusMark status={outcome.status} size={14} />
+                              {statusWord(outcome.status)}
+                            </Flex>
+                          </Table.Td>
+                          <Table.Td>{formatMs(outcome.durationMs)}</Table.Td>
+                          <Table.Td title={outcome.branch ?? ''} c="dimmed">
+                            {outcome.branch ?? '—'}
+                          </Table.Td>
+                          <Table.Td>
+                            <Code>{shortSha(outcome.sha) ?? '—'}</Code>
+                          </Table.Td>
+                          <Table.Td title={exactTime(outcome.at)} c="dimmed">
+                            {ago(outcome.at, now)}
+                          </Table.Td>
+                          <Table.Td>
+                            {outcome.runUrl ? (
+                              <Anchor href={outcome.runUrl} target="_blank" rel="noreferrer">
+                                CI run
+                              </Anchor>
+                            ) : null}
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </Table.ScrollContainer>
+              )}
+            </Stack>
+
+            <Stack aria-label="Evidence applicability" component="section" gap="xs">
+              <Title order={3}>Does this evidence apply?</Title>
+              <ApplicabilitySummary assessment={applicability} release={release} />
+            </Stack>
+
+            {(test.tags.length > 0 || Object.keys(test.labels).length > 0) && (
+              <Stack aria-label="Tags and labels" component="section" gap="xs">
+                <Title order={3}>Tags and labels</Title>
+                <Flex gap={6} align="center" wrap="wrap">
+                  {test.tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="default"
+                      renderRoot={(props) => <Link {...props} to="/" search={patched({ tag })} resetScroll={false} activeOptions={{ exact: true }} />}
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                  {Object.entries(test.labels).map(([name, value]) => (
+                    <Badge key={name} color="gray">
+                      {name}: {value}
+                    </Badge>
+                  ))}
+                </Flex>
+              </Stack>
+            )}
+          </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="statistics" pt="md">
+          <Stack aria-label="Statistics" component="section" gap="sm">
+            <Stack gap={2}>
+              <Title order={3}>How it has gone</Title>
+              <Text component="div" c="dimmed">
+                Durations here are test execution time: setup, waits, retries and any demo pacing included. They do not say how quickly the product
+                responded; see Product latency.
+              </Text>
+            </Stack>
+            <Paper withBorder>
+              <SimpleGrid component="dl" cols={{ base: 2, sm: 4 }} m={0} spacing="md">
+                {facts.map(([label, value]) => (
+                  <Fact key={label} label={label}>
+                    {value}
+                  </Fact>
                 ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
-        )}
-        {entries.length > rows && (
-          <Button type="button" onClick={() => setRows(rows + HISTORY_ROWS)} variant="subtle">
-            Show more ({entries.length - rows} more)
-          </Button>
-        )}
-      </Box>
-    </Box>
+              </SimpleGrid>
+            </Paper>
+            {stats.branches.length > 0 && (
+              <Text component="div" c="dimmed">
+                Branches: {stats.branches.join(', ')}
+              </Text>
+            )}
+            {!d && (
+              <Text component="div" c="dimmed">
+                No test duration recorded. Producers can send <Code>durationMs</Code> with each check.
+              </Text>
+            )}
+            {entries.length > 1 && <Trend entries={entries} />}
+          </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="reliability" pt="md">
+          {!history.isError && <Reliability testKey={test.key} entries={history.data === null ? [] : history.data?.history} />}
+          {history.isError && (
+            <Text component="div" c="dimmed">
+              Reliability needs the history, which could not be read.
+            </Text>
+          )}
+        </Tabs.Panel>
+
+        <Tabs.Panel value="latency" pt="md">
+          <ProductLatency entries={entries} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="history" pt="md">
+          <Stack aria-label="History" component="section" gap="xs">
+            <Title order={3}>History{entries.length ? ` · ${plural(entries.length, 'result', 'results')}` : ''}</Title>
+            {history.isPending && (
+              <Text role="status" component="div" c="dimmed">
+                Reading the history…
+              </Text>
+            )}
+            {history.isError && (
+              <Alert role="alert" color="red">
+                The history could not be read. {history.error.message}
+              </Alert>
+            )}
+            {!history.isPending && !history.isError && entries.length === 0 && (
+              <Text component="div" c="dimmed">
+                No earlier results are held for this test.
+              </Text>
+            )}
+            {entries.length > 0 && (
+              <Table.ScrollContainer minWidth={600}>
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th scope="col">Recorded</Table.Th>
+                      <Table.Th scope="col">Environment</Table.Th>
+                      <Table.Th scope="col">Status</Table.Th>
+                      <Table.Th scope="col">Duration</Table.Th>
+                      <Table.Th scope="col">Branch</Table.Th>
+                      <Table.Th scope="col">Commit</Table.Th>
+                      <Table.Th scope="col">Detail</Table.Th>
+                      <Table.Th scope="col">
+                        <VisuallyHidden>Evidence</VisuallyHidden>
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {entries.slice(0, rows).map((entry) => (
+                      <Table.Tr
+                        key={`${entry.layer}|${entry.kind}|${entry.producer}|${entry.environment}|${JSON.stringify(entry.parameters)}`}
+                        data-status={entry.status}
+                        bg={entry.layer === layer ? 'var(--mantine-color-primary-light)' : undefined}
+                      >
+                        <Table.Td title={exactTime(entry.at)}>
+                          {entry.runUrl ? (
+                            <Anchor href={entry.runUrl} target="_blank" rel="noreferrer">
+                              {ago(entry.at, now)}
+                            </Anchor>
+                          ) : (
+                            ago(entry.at, now)
+                          )}
+                        </Table.Td>
+                        <Table.Td>{environmentLabel(entry.environment)}</Table.Td>
+                        <Table.Td>
+                          <Flex component="span" display="inline-flex" gap={6} align="center" wrap="nowrap">
+                            <StatusMark status={entry.status} size={14} />
+                            {statusWord(entry.status)}
+                          </Flex>
+                        </Table.Td>
+                        <Table.Td>{formatMs(entry.durationMs)}</Table.Td>
+                        <Table.Td title={entry.branch ?? ''} c="dimmed">
+                          {entry.branch ?? '—'}
+                        </Table.Td>
+                        <Table.Td>
+                          <Code>{shortSha(entry.sha) ?? '—'}</Code>
+                        </Table.Td>
+                        <Table.Td title={entry.detail} c="dimmed" maw={260}>
+                          <Text span inherit lineClamp={2}>
+                            {entry.detail.split('\n')[0]}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Anchor
+                            aria-label={`Open the ${statusWord(entry.status)} result recorded ${ago(entry.at, now)} in ${environmentLabel(entry.environment)}`}
+                            aria-current={entry.layer === layer ? 'true' : undefined}
+                            renderRoot={(props) => (
+                              <Link
+                                {...props}
+                                to="/"
+                                search={patched({ layer: entry.layer })}
+                                resetScroll={false}
+                                activeOptions={{ exact: true }}
+                              />
+                            )}
+                          >
+                            Open this result
+                          </Anchor>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            )}
+            {entries.length > rows && (
+              <Box>
+                <Button type="button" size="compact-sm" onClick={() => setRows(rows + HISTORY_ROWS)} variant="subtle" c="dimmed">
+                  Show more ({entries.length - rows} more)
+                </Button>
+              </Box>
+            )}
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
+
+      <Divider />
+      <Group justify="center">
+        <Anchor
+          c="dimmed"
+          aria-label="Close the test"
+          renderRoot={(props) => (
+            <Link {...props} to="/" search={patched({ test: undefined, layer: undefined, clip: undefined, clipAt: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+          )}
+        >
+          <Group component="span" display="inline-flex" gap={4}>
+            <IconX size={14} aria-hidden="true" />
+            Close
+          </Group>
+        </Anchor>
+      </Group>
+    </Stack>
   );
 }
 /** The duration of each completed result over time, and a strip of every outcome, oldest on the left. */
@@ -599,10 +627,10 @@ function Trend({ entries }: { entries: readonly TestResultEntry[] }) {
   const y = (ms: number) => height - pad - (ms / max) * (height - 2 * pad);
   const points = timed.map((entry, index) => `${x(index).toFixed(1)},${y(entry.durationMs!).toFixed(1)}`).join(' ');
   return (
-    <Stack gap="sm">
+    <Stack gap="xs">
       {timed.length > 1 && (
-        <Box component="figure" m={0}>
-          <Box component="figcaption">
+        <Box component="figure" m={0} maw={480}>
+          <Box component="figcaption" fz="xs" c="dimmed" mb={4}>
             Test duration over the last {plural(timed.length, 'result', 'results')} · max {formatMs(max)}
           </Box>
           <svg
@@ -611,14 +639,15 @@ function Trend({ entries }: { entries: readonly TestResultEntry[] }) {
             aria-label={`Durations from ${formatMs(timed[0]!.durationMs)} to ${formatMs(timed.at(-1)!.durationMs)}`}
             preserveAspectRatio="none"
           >
-            <line x1={pad} x2={width - pad} y1={height - pad} y2={height - pad} stroke="var(--mantine-color-gray-3)" />
-            <polyline points={points} fill="none" stroke="var(--mantine-color-blue-7)" strokeWidth={2} />
+            <line x1={pad} x2={width - pad} y1={height - pad} y2={height - pad} stroke="var(--mantine-color-default-border)" />
+            <polyline points={points} fill="none" stroke="var(--mantine-color-dimmed)" strokeWidth={1.5} />
             {timed.map((entry, index) => (
               <circle
                 key={index}
                 cx={x(index)}
                 cy={y(entry.durationMs!)}
                 r={entry.status === 'failed' ? 3 : index === timed.length - 1 ? 2.5 : 0}
+                fill={entry.status === 'failed' ? 'var(--mantine-color-red-6)' : 'var(--mantine-color-text)'}
                 data-status={entry.status}
               >
                 <title>{`${exactTime(entry.at)} · ${environmentLabel(entry.environment)} · ${statusWord(entry.status)} · ${formatMs(entry.durationMs)}`}</title>
@@ -643,20 +672,21 @@ function Trend({ entries }: { entries: readonly TestResultEntry[] }) {
       <Flex
         role="img"
         aria-label={`Outcomes, oldest first: ${oldest.map((entry) => statusWord(entry.status)).join(', ')}`}
-        gap="xs"
+        gap={3}
         align="center"
         wrap="wrap"
       >
         {oldest.map((entry, index) => (
           <Text
             key={index}
-            c={entry.status === 'passed' ? 'green' : entry.status === 'failed' ? 'red' : 'gray'}
+            c={statusColor(entry.status)}
+            lh={1}
             data-status={entry.status}
             title={`${exactTime(entry.at)} · ${environmentLabel(entry.environment)} · ${statusWord(entry.status)}${entry.durationMs !== null ? ` · ${formatMs(entry.durationMs)}` : ''}`}
             span
             inherit
           >
-            <IconCircleFilled size={12} aria-hidden="true" />
+            <IconCircleFilled size={10} aria-hidden="true" />
           </Text>
         ))}
       </Flex>

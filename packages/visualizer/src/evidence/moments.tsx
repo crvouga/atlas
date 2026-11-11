@@ -394,14 +394,33 @@ export function MomentBar() {
     <Stack gap="xs" component="section" aria-label="Recording moments" data-moments>
       {videos.length > 1 && (
         <NativeSelect
+          w="fit-content"
+          maw="100%"
           label="Recording the steps are shown in"
           value={selected.id}
           onChange={(event) => playback.select(event.currentTarget.value)}
           data={videos.map((video) => ({ value: video.id, label: label(video.attachment) }))}
         />
       )}
+      <Group gap="xs" wrap="wrap">
+        {failed && (
+          <Button
+            type="button"
+            variant="light"
+            color="red"
+            size="compact-sm"
+            leftSection={<IconAlertTriangle size={14} aria-hidden="true" />}
+            onClick={() => setJump(playback.seekFailure().text)}
+          >
+            Jump to the failing moment
+          </Button>
+        )}
+        <Button type="button" variant="default" size="compact-sm" leftSection={<IconLink size={14} aria-hidden="true" />} onClick={() => void copy()}>
+          Copy link to this moment
+        </Button>
+      </Group>
       {playback.stepCount > 0 && (
-        <Text component="div" c="dimmed" data-alignment={timing && !timing.problem ? 'recorded' : 'unavailable'}>
+        <Text component="div" c="dimmed" size="xs" data-alignment={timing && !timing.problem ? 'recorded' : 'unavailable'}>
           {timing && !timing.problem
             ? timing.checkStartMs !== undefined
               ? `Steps are placed in ${label(selected.attachment)} from its recorded timing: the check starts ${clock(timing.checkStartMs)} into the recording.`
@@ -410,7 +429,7 @@ export function MomentBar() {
         </Text>
       )}
       {paced && playback.stepCount > 0 && (
-        <Text component="div" c="dimmed" data-pacing>
+        <Text component="div" c="dimmed" size="xs" data-pacing>
           Paced recording
           {timing && timing.pauses.length > 0
             ? `: ${timing.pauses.length === 1 ? 'a pause' : `${timing.pauses.length} pauses`} totalling ${duration(paused)} ${timing.pauses.length === 1 ? 'was' : 'were'} put into the recording${reasons.length ? ` (${reasons.join(', ')})` : ''}. `
@@ -418,24 +437,8 @@ export function MomentBar() {
           The time between steps includes deliberate pauses; it is pacing, not application latency.
         </Text>
       )}
-      <Group gap="xs" wrap="wrap">
-        {failed && (
-          <Button
-            type="button"
-            variant="light"
-            color="red"
-            leftSection={<IconAlertTriangle size={16} aria-hidden="true" />}
-            onClick={() => setJump(playback.seekFailure().text)}
-          >
-            Jump to the failing moment
-          </Button>
-        )}
-        <Button type="button" variant="default" leftSection={<IconLink size={16} aria-hidden="true" />} onClick={() => void copy()}>
-          Copy link to this moment
-        </Button>
-      </Group>
       {copied === 'copied' && (
-        <Text component="div" role="status" c="dimmed">
+        <Text component="div" role="status" c="dimmed" size="xs">
           Link copied. It names this run, this recording and this position, and opens that run even when a newer one exists.
         </Text>
       )}
@@ -443,12 +446,12 @@ export function MomentBar() {
         <TextInput label="Link to this moment" description="Copy it from here." readOnly value={copied} onFocus={(event) => event.currentTarget.select()} />
       )}
       {jump && !notice && (
-        <Text component="div" role="status" c="dimmed">
+        <Text component="div" role="status" c="dimmed" size="xs">
           {jump}
         </Text>
       )}
       {notice && (
-        <Alert color="orange" role="status" data-moment-notice>
+        <Alert color="orange" role="status" p="xs" data-moment-notice>
           {notice.text}
         </Alert>
       )}

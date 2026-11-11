@@ -11,7 +11,11 @@ const preview: Preview = {
   parameters: {
     layout: 'fullscreen',
     a11y: { test: 'error' },
-    options: { storySort: { order: ['Screens', 'States', 'Administration'] } },
+    options: { storySort: { order: [
+      'Tests', ['Explorer', 'Test detail'], 'Runs', 'Recordings', ['Artifacts', 'Playlist'], 'Compare', 'Catalog health', 'Collections',
+      'Behaviors', ['Index', 'Coverage states', 'Workspace'], 'Specs', ['Gherkin', 'Quint', 'DMN', 'Alloy', 'OpenSLO'], 'Statecharts', 'UI catalog', 'Needs polish',
+      'Shell', 'States', ['Empty', 'Loading', 'Unavailable', 'Errors'], 'Settings', 'Foundations', ['Theme', 'Controls', 'Data display', 'Compositions']
+    ] } },
     viewport: { options: {
       desktop: { name: 'Desktop', styles: { width: '1440px', height: '1000px' } },
       mobile: { name: 'Mobile', styles: { width: '390px', height: '844px' } }

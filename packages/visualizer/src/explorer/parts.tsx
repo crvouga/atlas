@@ -1,4 +1,6 @@
-import { Anchor, Badge, Flex } from '@mantine/core';
+import { IconListDetails, IconPhoto, IconPlayerPlay, IconRoute, IconVideo } from '@tabler/icons-react';
+import { Anchor, Badge, Box, Flex, Stack, Text } from '@mantine/core';
+import type { ReactNode } from 'react';
 import { statusColor } from '../ui/theme';
 /**
  * @module Explorer parts
@@ -52,10 +54,26 @@ export function Badges({ test }: { test: TestSummary }) {
     } => badge !== null
   );
   if (!badges.length) return null;
+  const icon: Record<string, ReactNode> = {
+    video: <IconVideo size={12} aria-hidden="true" />,
+    image: <IconPhoto size={12} aria-hidden="true" />,
+    trace: <IconRoute size={12} aria-hidden="true" />,
+    steps: <IconListDetails size={12} aria-hidden="true" />,
+    live: <IconPlayerPlay size={12} aria-hidden="true" />
+  };
   return (
-    <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
+    <Flex component="span" display="inline-flex" gap={6} align="center" wrap="wrap">
       {badges.map((badge) => (
-        <Badge key={badge.id} color={badge.id === 'flaky' ? 'orange' : 'gray'} data-badge={badge.id} title={badge.title}>
+        <Badge
+          key={badge.id}
+          size="sm"
+          component="span"
+          variant={badge.id === 'flaky' || badge.id === 'live' ? 'light' : 'default'}
+          color={badge.id === 'flaky' ? 'orange' : badge.id === 'live' ? 'blue' : 'gray'}
+          leftSection={icon[badge.id]}
+          data-badge={badge.id}
+          title={badge.title}
+        >
           {badge.label}
         </Badge>
       ))}
@@ -67,19 +85,39 @@ export function EnvironmentChips({ test }: { test: TestSummary }) {
   const environments = environmentStatuses(test);
   if (!environments.length) return null;
   return (
-    <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
+    <Flex component="span" display="inline-flex" gap={6} align="center" wrap="wrap">
       {environments.map(({ environment, status }) => (
         <Badge
           key={environment ?? 'none'}
+          size="sm"
+          component="span"
+          variant="default"
           color={statusColor(status)}
           data-status={status}
           title={`${environmentLabel(environment)}: ${status}`}
+          leftSection={<StatusMark status={status} size={10} />}
         >
-          <StatusMark status={status} size={10} />
           {environmentLabel(environment)}
         </Badge>
       ))}
     </Flex>
+  );
+}
+
+/**
+ * One fact of a description list: a quiet label over its value, so a grid of them aligns. Render inside a
+ * `SimpleGrid component="dl"`.
+ */
+export function Fact({ label, children, title }: { label: ReactNode; children: ReactNode; title?: string }) {
+  return (
+    <Stack gap={2} miw={0}>
+      <Text component="dt" size="xs" c="dimmed" fw={500}>
+        {label}
+      </Text>
+      <Box component="dd" m={0} fz="sm" fw={600} title={title}>
+        {children}
+      </Box>
+    </Stack>
   );
 }
 

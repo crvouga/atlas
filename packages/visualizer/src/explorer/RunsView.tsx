@@ -1,5 +1,5 @@
-import { IconAlertTriangle, IconArrowLeft, IconCheck, IconPlayerPlay, IconVideo } from '@tabler/icons-react';
-import { Alert, Anchor, Badge, Box, Button, Code, Flex, Group, List, NativeSelect, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
+import { IconAlertTriangle, IconArrowLeft, IconArrowsExchange, IconCheck, IconExternalLink, IconFilterOff, IconHistory, IconListSearch, IconPlayerPlay, IconSearch, IconVideo } from '@tabler/icons-react';
+import { Alert, Anchor, Badge, Box, Button, Card, Center, Code, Divider, Flex, Group, List, NativeSelect, NavLink, Skeleton, Stack, Table, Text, TextInput, Title, VisuallyHidden } from '@mantine/core';
 /**
  * @module Runs view
  *
@@ -16,7 +16,9 @@ import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import type { FilterName } from '@crvouga/atlas/reports/artifact-query';
 import { formatMs, type RunResult, type RunSummary } from '@crvouga/atlas/reports/test-catalog';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Panel } from '../components/Page';
+import { statusColor } from '../ui/theme';
 import { behaviorDocs, behaviorId, describeHit, forRuns, resultDoc, runDoc } from '../find/behaviors';
 import { useDocSearch } from '../find/doc-search';
 import { hasFilters, passesFilters, type ParsedSearch, type SearchFilters } from '../find/query';
@@ -36,6 +38,40 @@ import { filtered, filterOf, NO_FILTERS } from './search';
 const RUN_ROWS = 50;
 const NO_RESULTS: readonly RunResult[] = [];
 const RESULT_ROWS = 200;
+/**
+ * A calm, centered state inside a panel: a dimmed mark, one sentence and at most one action. Other attributes (a
+ * `role`, a `data-` mark) land on its root, so what a page says when it has nothing to show stays findable.
+ */
+export function EmptyState({ icon, children, action, ...rest }: { icon?: ReactNode; children: ReactNode; action?: ReactNode; role?: 'status' | 'note'; [mark: `data-${string}`]: unknown }) {
+  return (
+    <Stack align="center" gap="sm" py={48} px="lg" {...rest}>
+      {icon && (
+        <Center c="dimmed" aria-hidden="true">
+          {icon}
+        </Center>
+      )}
+      <Text component="div" size="sm" c="dimmed" ta="center" maw={520}>
+        {children}
+      </Text>
+      {action}
+    </Stack>
+  );
+}
+/** What a panel shows while its content is read: the sentence a screen reader hears, over rows shaped like what is coming. */
+export function Reading({ children, rows = 4 }: { children: ReactNode; rows?: number }) {
+  return (
+    <Stack gap="sm">
+      <Text role="status" component="div" size="sm" c="dimmed">
+        {children}
+      </Text>
+      <Stack gap="xs" aria-hidden="true">
+        {Array.from({ length: rows }, (_, row) => (
+          <Skeleton key={row} h={36} radius="sm" />
+        ))}
+      </Stack>
+    </Stack>
+  );
+}
 /** The Runs tab: the run list, or the run opened in it. */
 export function RunsView() {
   const search = useExplorerSearch();
@@ -63,9 +99,9 @@ function Counts({ run }: { run: RunSummary }) {
       </Text>
     );
   return (
-    <Text span inherit>
+    <Flex component="span" display="inline-flex" gap="xs" wrap="wrap">
       {run.counts.failed > 0 && (
-        <Text span inherit fw={600}>
+        <Text span inherit fw={600} c={`${statusColor('failed')}.7`}>
           {run.counts.failed} failed
         </Text>
       )}
@@ -73,16 +109,16 @@ function Counts({ run }: { run: RunSummary }) {
         {run.counts.passed} passed
       </Text>
       {run.counts['not-run'] > 0 && (
-        <Text span inherit>
+        <Text span inherit c="dimmed">
           {run.counts['not-run']} not run
         </Text>
       )}
       {run.counts.running > 0 && (
-        <Text data-status="running" span inherit>
+        <Text data-status="running" span inherit c={`${statusColor('running')}.7`}>
           {run.counts.running} running
         </Text>
       )}
-    </Text>
+    </Flex>
   );
 }
 /** Who holds a video, for a person: the test, one of its tries, or a step (in a try). */
@@ -142,7 +178,7 @@ function StoredVideos({ verification }: { verification: RunVerification | null }
       </Text>
     );
   return (
-    <Text component="div" size="xs" c="orange.9" title={at} data-stored-videos="unavailable">
+    <Text component="div" size="xs" c="orange" title={at} data-stored-videos="unavailable">
       <IconAlertTriangle size={16} aria-hidden="true" /> Recording unavailable: {verification.gaps} of {plural(verification.checked, 'stored video', 'stored videos')} failed the read-back ({verification.problems.join(', ')}).
     </Text>
   );
@@ -196,9 +232,9 @@ function RunVideos({ run, verification }: { run: RunSummary; verification: RunVe
   );
 }
 /** The Has video filter: a toggle named by its meaning and the count of what it matches. */
-function HasVideo({ count, pressed, noun, onToggle }: { count: number; pressed: boolean; noun: [string, string]; onToggle: () => void }) {
+function HasVideo({ count, pressed, noun, onToggle, size }: { count: number; pressed: boolean; noun: [string, string]; onToggle: () => void; size?: 'xs' }) {
   return (
-    <Button type="button" aria-pressed={pressed} aria-label={`Has video ${plural(count, noun[0], noun[1])}`} onClick={onToggle} variant="light" leftSection={<IconVideo size={16} aria-hidden="true" />} rightSection={<Text span inherit>{count}</Text>}>
+    <Button type="button" size={size} aria-pressed={pressed} aria-label={`Has video ${plural(count, noun[0], noun[1])}`} onClick={onToggle} variant={pressed ? 'light' : 'default'} leftSection={<IconVideo size={16} aria-hidden="true" />} rightSection={<Text span inherit c="dimmed">{count}</Text>}>
       Has video{' '}
     </Button>
   );
@@ -210,12 +246,14 @@ function SearchBox({ label, placeholder, parsed, onSearch }: { label: string; pl
   // The address may change from elsewhere (a link, back, a chip): follow it.
   useEffect(() => setDraft((current) => (current.trim() === (search.q ?? '').trim() ? current : (search.q ?? ''))), [search.q]);
   return (
-    <Flex gap="xs" align="center" wrap="wrap">
+    <Flex gap="xs" align="center" wrap="wrap" flex={1}>
       <TextInput
         type="search"
+        leftSection={<IconSearch size={16} aria-hidden="true" />}
         aria-label={label}
         placeholder={placeholder}
         value={draft}
+        flex={1}
         miw={{ base: '100%', sm: '20rem' }}
         onChange={(event) => {
           setDraft(event.target.value);
@@ -259,7 +297,7 @@ const FILTER_WORDS: Partial<Record<FilterName, string>> = { artifactTag: 'tag', 
 export function NotApplied({ names, noun }: { names: readonly FilterName[]; noun: string }) {
   if (!names.length) return null;
   return (
-    <Alert role="status" color="blue" my="sm" data-not-applied>
+    <Alert role="status" color="blue" data-not-applied>
       This server cannot filter {noun} by {names.map((name) => FILTER_WORDS[name] ?? name).join(', ')}, so the list below is not narrowed by {names.length > 1 ? 'them' : 'it'}. Update the server to use{' '}
       {names.length > 1 ? 'these filters' : 'this filter'}.
     </Alert>
@@ -298,154 +336,216 @@ function RunTable() {
   }, [runs.data, docs, found.hits, parsed.filters, sortValue]);
   if (runs.isPending)
     return (
-      <Text role="status" component="div" c="dimmed">
-        Reading the runs…
-      </Text>
+      <Panel title="Runs">
+        <Reading>Reading the runs…</Reading>
+      </Panel>
     );
   if (runs.isError)
     return (
-      <Alert role="alert" color={'red'} my="sm">
-        The runs could not be read. {runs.error.message}
-      </Alert>
+      <Panel title="Runs">
+        <Alert role="alert" color={'red'}>
+          The runs could not be read. {runs.error.message}
+        </Alert>
+      </Panel>
     );
   const everything = runs.data.runs;
   const list = visible;
   const withVideo = runs.data.withVideo;
   const noun = narrow ? 'matching' : '';
   const hasVideoNow = video || parsed.filters.video;
+  const typed = parsed.tokens.length > 0 || parsed.issues.length > 0 || found.status !== 'idle';
   return (
-    <Box aria-label="Runs" component="section" mb="lg">
-      {(narrow || everything.length > 0) && (
-        <FilterBar
-          facets={runs.data.facets}
-          search={search}
-          tab="runs"
-          extra={
-            withVideo !== undefined || video ? (
-              <HasVideo count={withVideo ?? list.length} pressed={hasVideoNow} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} />
-            ) : undefined
-          }
-        />
-      )}
-      <NotApplied names={runs.data.notApplied} noun="runs" />
-      {(parsed.tokens.length > 0 || parsed.issues.length > 0 || found.status !== 'idle') && (
-        <>
-          <Flex gap="xs" align="center" wrap="wrap">
-            <TypedFilters parsed={parsed} query={search.q ?? ''} onChange={(next) => go({ q: next || undefined }, { replace: true })} />
-          </Flex>
-          <SearchNotes issues={parsed.issues} semantic={found.status} />
-        </>
-      )}
-      {!everything.length && !narrow && (
-        <Text component="div" c="dimmed">
-          No runs recorded yet.
-        </Text>
-      )}
-      {everything.length > 0 && (
-        <Flex gap="xs" align="center" wrap="wrap" role="status">
-          <Text span inherit>
-            {runs.data.total > everything.length
-              ? `The newest ${everything.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
-              : searching || list.length !== everything.length
-                ? `${list.length.toLocaleString()} of ${plural(everything.length, 'run', 'runs')} ${noun}`.trim()
-                : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
-          </Text>
-          <NativeSelect
-            aria-label="Sort runs"
-            value={sortValue}
-            onChange={(event) => go({ sort: event.target.value === (found.hits ? 'relevance' : 'recent') ? undefined : (event.target.value as 'recent' | 'failures' | 'relevance') })}
+    <Stack aria-label="Runs" component="section" gap="md">
+      <Panel
+        flush
+        title="Runs"
+        description={
+          everything.length > 0 ? (
+            <Text role="status" component="div" size="sm" c="dimmed">
+              {runs.data.total > everything.length
+                ? `The newest ${everything.length} of ${plural(runs.data.total, 'run', 'runs')} ${noun}`.trim()
+                : searching || list.length !== everything.length
+                  ? `${list.length.toLocaleString()} of ${plural(everything.length, 'run', 'runs')} ${noun}`.trim()
+                  : `${plural(list.length, 'run', 'runs')} ${noun}`.trim()}
+            </Text>
+          ) : undefined
+        }
+        actions={
+          everything.length > 0 ? (
+            <NativeSelect
+              aria-label="Sort runs"
+              value={sortValue}
+              onChange={(event) => go({ sort: event.target.value === (found.hits ? 'relevance' : 'recent') ? undefined : (event.target.value as 'recent' | 'failures' | 'relevance') })}
+            >
+              {RUN_SORTS.filter((option) => option.id !== 'relevance' || found.hits !== null).map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </NativeSelect>
+          ) : undefined
+        }
+      >
+        {(narrow || everything.length > 0 || runs.data.notApplied.length > 0 || typed) && (
+          <Stack px="lg" pb="md" pt={4} gap="sm">
+            {(narrow || everything.length > 0) && (
+              <FilterBar
+                facets={runs.data.facets}
+                search={search}
+                tab="runs"
+                extra={
+                  withVideo !== undefined || video ? (
+                    <HasVideo count={withVideo ?? list.length} pressed={hasVideoNow} noun={['run', 'runs']} onToggle={() => go({ video: video ? undefined : true })} />
+                  ) : undefined
+                }
+              />
+            )}
+            <NotApplied names={runs.data.notApplied} noun="runs" />
+            {typed && (
+              <>
+                <Flex gap="xs" align="center" wrap="wrap">
+                  <TypedFilters parsed={parsed} query={search.q ?? ''} onChange={(next) => go({ q: next || undefined }, { replace: true })} />
+                </Flex>
+                <SearchNotes issues={parsed.issues} semantic={found.status} />
+              </>
+            )}
+          </Stack>
+        )}
+        {!everything.length && !narrow && <EmptyState icon={<IconHistory size={28} stroke={1.5} aria-hidden="true" />}>No runs recorded yet.</EmptyState>}
+        {!list.length && narrow && (
+          <EmptyState
+            role="status"
+            data-no-match
+            icon={<IconFilterOff size={28} stroke={1.5} aria-hidden="true" />}
+            action={
+              <Button type="button" variant="light" onClick={() => go(NO_FILTERS)}>
+                Clear filters
+              </Button>
+            }
           >
-            {RUN_SORTS.filter((option) => option.id !== 'relevance' || found.hits !== null).map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </Flex>
-      )}
-      {!list.length && narrow && (
-        <Stack gap="xs" align="flex-start" role="status" data-no-match>
-          <Text component="div" c="dimmed">
             No run matches these filters.
             {video && withVideo === undefined && ' This server does not report which runs have recordings.'}
-          </Text>
-          <Button type="button" variant="light" onClick={() => go(NO_FILTERS)}>
-            Clear filters
-          </Button>
-        </Stack>
-      )}
-      <Table.ScrollContainer minWidth={600}>
-        <Table data-runs>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th scope="col">Run / ended</Table.Th>
-              <Table.Th scope="col">Branch</Table.Th>
-              <Table.Th scope="col">Commit</Table.Th>
-              <Table.Th scope="col">Environments</Table.Th>
-              <Table.Th scope="col">Tests</Table.Th>
-              <Table.Th scope="col">Outcomes</Table.Th>
-              <Table.Th scope="col">Span</Table.Th>
-              <Table.Th scope="col">Video</Table.Th>
-              <Table.Th scope="col">Tags</Table.Th>
-              <Table.Th scope="col">
-                <VisuallyHidden>CI run</VisuallyHidden>
-              </Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {list.slice(0, shown).map((run) => (
-              <Table.Tr key={run.key} data-status={run.counts.failed ? 'failed' : run.tests === 0 ? 'not-run' : 'passed'}>
-                <Table.Td title={exactTime(run.endedAtMs)}>
-                  <Anchor
-                    aria-label={`Open run ${runLabel(run)}`}
-                    renderRoot={(props) => (
-                      <Link {...props} to="/" search={patched({ openRun: run.key, layer: undefined, artifact: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
-                    )}
-                  >
-                    {runLabel(run)}
-                  </Anchor>
-                  <Text c="dimmed" fz="xs">{ago(run.endedAtMs, now)}</Text>
-                  <WhyMatched hit={found.hits?.get(`runs:${run.key}`)} />
-                </Table.Td>
-                <Table.Td title={run.branch ?? ''} c="dimmed">
-                  {run.branch ?? '—'}
-                </Table.Td>
-                <Table.Td>
-                  <Code>{shortSha(run.sha) ?? '—'}</Code> <Freshness run={run} />
-                </Table.Td>
-                <Table.Td>{run.environments.map((env) => environmentLabel(env)).join(', ') || '—'}</Table.Td>
-                <Table.Td>{run.tests}</Table.Td>
-                <Table.Td>
-                  <Text span inherit>
-                    <Meter counts={run.counts} />
-                  </Text>
-                  <Counts run={run} />
-                </Table.Td>
-                <Table.Td>{formatMs(run.spanMs)}</Table.Td>
-                <Table.Td>
-                  <RunVideos run={run} verification={verificationOfRun(stored.data, run.key)} />
-                  <RunRecordings run={run} />
-                </Table.Td>
-                <Table.Td data-tags>{run.artifactTags?.map((tag) => `#${tag}`).join(' ') || '—'}</Table.Td>
-                <Table.Td>
-                  {run.runUrl ? (
-                    <Anchor href={run.runUrl} target="_blank" rel="noreferrer">
-                      CI run
-                    </Anchor>
-                  ) : null}
-                </Table.Td>
+          </EmptyState>
+        )}
+        <Table.ScrollContainer minWidth={980}>
+          <Table data-runs verticalSpacing="sm" highlightOnHover {...(list.length ? {} : { display: 'none' })}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th scope="col" pl="lg">
+                  Run / ended
+                </Table.Th>
+                <Table.Th scope="col">Branch and commit</Table.Th>
+                <Table.Th scope="col">Environments</Table.Th>
+                <Table.Th scope="col" ta="right">
+                  Tests
+                </Table.Th>
+                <Table.Th scope="col">Outcomes</Table.Th>
+                <Table.Th scope="col">Span</Table.Th>
+                <Table.Th scope="col">Video</Table.Th>
+                <Table.Th scope="col">Tags</Table.Th>
+                <Table.Th scope="col" pr="lg">
+                  <VisuallyHidden>CI run</VisuallyHidden>
+                </Table.Th>
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Table.ScrollContainer>
-      {list.length > shown && (
-        <Button type="button" onClick={() => setShown(shown + RUN_ROWS)} variant="subtle">
-          Show more ({list.length - shown} more)
-        </Button>
-      )}
-    </Box>
+            </Table.Thead>
+            <Table.Tbody>
+              {list.slice(0, shown).map((run) => (
+                <Table.Tr key={run.key} data-status={run.counts.failed ? 'failed' : run.tests === 0 ? 'not-run' : 'passed'}>
+                  <Table.Td title={exactTime(run.endedAtMs)} pl="lg" miw={200}>
+                    <Group gap="sm" wrap="nowrap" align="flex-start">
+                      <Box pt={3}>
+                        <StatusMark status={runStatus(run)} size={14} />
+                      </Box>
+                      <Stack gap={2} miw={0}>
+                        <Anchor
+                          fw={500}
+                          aria-label={`Open run ${runLabel(run)}`}
+                          renderRoot={(props) => (
+                            <Link {...props} to="/" search={patched({ openRun: run.key, layer: undefined, artifact: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+                          )}
+                        >
+                          {runLabel(run)}
+                        </Anchor>
+                        <Text c="dimmed" fz="xs">
+                          {ago(run.endedAtMs, now)}
+                        </Text>
+                        <WhyMatched hit={found.hits?.get(`runs:${run.key}`)} />
+                      </Stack>
+                    </Group>
+                  </Table.Td>
+                  <Table.Td title={run.branch ?? ''}>
+                    <Stack gap={2}>
+                      <Group gap={6} wrap="nowrap">
+                        <Text span size="sm" c="dimmed">
+                          {run.branch ?? '—'}
+                        </Text>
+                        <Code>{shortSha(run.sha) ?? '—'}</Code>
+                      </Group>
+                      <Text span size="xs">
+                        <Freshness run={run} />
+                      </Text>
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td maw={220}>{run.environments.map((env) => environmentLabel(env)).join(', ') || '—'}</Table.Td>
+                  <Table.Td ta="right">{run.tests}</Table.Td>
+                  <Table.Td miw={180}>
+                    <Stack gap={6}>
+                      <Meter counts={run.counts} />
+                      <Text span size="xs">
+                        <Counts run={run} />
+                      </Text>
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td c="dimmed" miw={110}>
+                    {formatMs(run.spanMs)}
+                  </Table.Td>
+                  <Table.Td maw={320}>
+                    <Stack gap={4} align="flex-start">
+                      <RunVideos run={run} verification={verificationOfRun(stored.data, run.key)} />
+                      <RunRecordings run={run} />
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td data-tags miw={110}>
+                    {run.artifactTags?.length ? (
+                      <Group gap={4} wrap="wrap">
+                        {run.artifactTags.map((tag) => (
+                          <Badge key={tag} component="span" size="sm" variant="light" tt="none">
+                            #{tag}
+                          </Badge>
+                        ))}
+                      </Group>
+                    ) : (
+                      <Text span c="dimmed">
+                        —
+                      </Text>
+                    )}
+                  </Table.Td>
+                  <Table.Td pr="lg">
+                    {run.runUrl ? (
+                      <Anchor href={run.runUrl} target="_blank" rel="noreferrer" size="sm">
+                        CI run
+                      </Anchor>
+                    ) : null}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+        {list.length > shown && (
+          <Center p="sm">
+            <Button type="button" onClick={() => setShown(shown + RUN_ROWS)} variant="subtle">
+              Show more ({list.length - shown} more)
+            </Button>
+          </Center>
+        )}
+      </Panel>
+    </Stack>
   );
+}
+/** How a run went as one mark: failed when anything failed, running while anything runs, passed only when something passed. A run of no checks, or of none that ran, is not shown as passed. */
+function runStatus(run: RunSummary): 'failed' | 'running' | 'passed' | 'none' {
+  return run.counts.failed > 0 ? 'failed' : run.counts.running > 0 ? 'running' : run.counts.passed > 0 ? 'passed' : 'none';
 }
 /** The videos of one result and who holds them, as text (the whole row is one link, so nothing here is interactive). */
 function ResultVideos({ videos }: { videos: readonly VideoRef[] | undefined }) {
@@ -528,51 +628,51 @@ function RunDetailView({ runKey }: { runKey: string }) {
   }, [filtered, shown]);
   const back = (
     <Anchor
+      size="sm"
+      c="dimmed"
       renderRoot={(props) => (
         <Link {...props} to="/" search={patched({ openRun: undefined, layer: undefined, artifact: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
       )}
     >
       <Text aria-hidden="true" span inherit>
-        <IconArrowLeft size={16} aria-hidden="true" />
+        <IconArrowLeft size={14} aria-hidden="true" />
       </Text>{' '}
       All runs
     </Anchor>
   );
   if (detail.isPending)
     return (
-      <>
-        {back}
-        <Text role="status" component="div" c="dimmed">
-          Reading the run…
-        </Text>
-      </>
+      <Card>
+        <Stack gap="md">
+          {back}
+          <Reading>Reading the run…</Reading>
+        </Stack>
+      </Card>
     );
   if (detail.isError)
     return (
-      <>
-        {back}
-        <Alert role="alert" color={'red'} my="sm">
-          The run could not be read. {detail.error.message}
-        </Alert>
-      </>
+      <Card>
+        <Stack gap="md">
+          {back}
+          <Alert role="alert" color={'red'}>
+            The run could not be read. {detail.error.message}
+          </Alert>
+        </Stack>
+      </Card>
     );
   if (!detail.data)
     return (
-      <>
-        {back}
-        <Alert color={'blue'} my="sm">
-          That run is not in the report any more.
-        </Alert>
-      </>
+      <Card>
+        <Stack gap="md">
+          {back}
+          <Alert color={'blue'}>That run is not in the report any more.</Alert>
+        </Stack>
+      </Card>
     );
   const { run } = detail.data;
-  return (
-    <Box aria-label={`Run ${runLabel(run)}`} component="section" mb="lg">
-      {back}
-      <Title order={2} mb="sm">
-        Run {runLabel(run)}
-      </Title>
-      <Text component="div">
+  const facts: ReactNode[] = [
+    run.branch || run.sha ? (
+      <Group gap={6} wrap="nowrap">
         {run.branch && (
           <Text span inherit>
             {run.branch}
@@ -580,190 +680,245 @@ function RunDetailView({ runKey }: { runKey: string }) {
         )}
         {run.sha && <Code>{shortSha(run.sha)}</Code>}
         <Freshness run={run} />
-        <Text title={exactTime(run.endedAtMs)} span inherit>
-          ended {ago(run.endedAtMs, now)}
-        </Text>
-        <Text span inherit>
-          took {formatMs(run.spanMs)}
-        </Text>
-        {run.environments.length > 0 && (
-          <Text span inherit>
-            {run.environments.map((env) => environmentLabel(env)).join(', ')}
-          </Text>
-        )}
-        <Text span inherit>
-          {run.producers.join(', ')}
-        </Text>
-        {run.totalDurationMs !== null && (
-          <Text span inherit>
-            {formatMs(run.totalDurationMs)} of test time
-          </Text>
-        )}
+      </Group>
+    ) : run.freshness ? (
+      <Freshness run={run} />
+    ) : null,
+    <Text title={exactTime(run.endedAtMs)} span inherit>
+      ended {ago(run.endedAtMs, now)}
+    </Text>,
+    <Text span inherit>
+      took {formatMs(run.spanMs)}
+    </Text>,
+    run.environments.length > 0 ? (
+      <Text span inherit>
+        {run.environments.map((env) => environmentLabel(env)).join(', ')}
       </Text>
-      <Stack gap="sm">
-        <Text span inherit>
-          <Meter counts={run.counts} />
-        </Text>
-        <Text span inherit>
-          {run.tests === 0 ? 'No tests' : plural(run.tests, 'test', 'tests')}
-        </Text>
-        <Counts run={run} />
-      </Stack>
-      {run.videos && (
-        <Text component="div" data-run-videos>
-          <IconVideo size={16} aria-hidden="true" /> {plural(run.videos.recordings, 'video', 'videos')}
-          {run.videos.references !== run.videos.recordings + run.videos.unavailable && ` from ${plural(run.videos.references, 'reference', 'references')}`}
-          <Unavailable videos={run.videos} />
-        </Text>
-      )}
-      <StoredVideos verification={verificationOfRun(stored.data, run.key)} />
-      <RunArtifacts detail={detail.data} />
-      <Flex gap="xs" align="center" wrap="wrap">
-        <Anchor
-          renderRoot={(props) => (
-            <Link
-              {...props}
-              to="/"
-              search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined, layer: undefined, artifact: undefined })}
-              resetScroll={false}
-              activeOptions={{ exact: true }}
-            />
-          )}
-        >
-          Show these tests in the explorer
-        </Anchor>
-        {run.runUrl && (
-          <Anchor href={run.runUrl} target="_blank" rel="noreferrer">
-            Open the CI run
-          </Anchor>
-        )}
-        {(['base', 'cand'] as const).map((side) => (
-          <Anchor
-            key={side}
-            renderRoot={(props) => (
-              <Link {...props} to="/" search={patched({ tab: 'compare', [side]: run.key, openRun: undefined, layer: undefined, artifact: undefined, pair: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
-            )}
-          >
-            {side === 'base' ? 'Compare with this run as the baseline' : 'Compare with this run as the candidate'}
-          </Anchor>
-        ))}
-      </Flex>
-      <Flex gap="xs" align="center" wrap="wrap">
-        <SearchBox
-          label="Search this run"
-          placeholder='Search this run… or filter: status:failed has:video "exact phrase"'
-          parsed={found.parsed}
-          onSearch={(value) => go({ q: value || undefined }, { replace: true })}
-        />
-      </Flex>
-      <SearchNotes issues={found.parsed.issues} semantic={found.status} />
-      {(search.q || found.parsed.tokens.length > 0) && (
-        <Text role="status" size="sm" c="dimmed">
-          {filtered.length.toLocaleString()} of {plural(results.length, 'result', 'results')} match
-        </Text>
-      )}
-      <Flex role="group" aria-label="Result status" gap="xs" align="center" wrap="wrap">
-        {RESULT_FILTERS.map((filter) => (
-          <Button
-            key={filter.id || 'all'}
-            type="button"
-            aria-pressed={status === filter.id}
-            data-status={filter.id || undefined}
-            onClick={() => setStatus(filter.id)}
-            variant="light"
-            rightSection={<Text span inherit>{filter.id ? narrowedResults.filter((result) => result.status === filter.id).length : narrowedResults.length}</Text>}
-          >
-            {filter.label}{' '}
-          </Button>
-        ))}
-      </Flex>
-      {(run.videos || video) && (
-        <Flex gap="xs" align="center" wrap="wrap">
-          <HasVideo
-            count={results.filter((result) => (videoCounts(result.videos)?.recordings ?? 0) > 0).length}
-            pressed={video || found.parsed.filters.video}
-            noun={['result', 'results']}
-            onToggle={() => go({ video: video ? undefined : true })}
-          />
-        </Flex>
-      )}
-      {!filtered.length && (
-        <Text component="div" c="dimmed">
-          No result matches.
-        </Text>
-      )}
-      {filtered.length > 0 && (
-        <Button type="button" variant="filled" my="sm" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => watch.open()}>
-          Watch these {plural(filtered.length, 'result', 'results')}
-        </Button>
-      )}
-      {watch.watching && <WatchPlaylist entries={playlist} initial={watch.clip} onSelect={watch.select} onClose={watch.close} />}
-      {bySpec.map(([spec, list]) => (
-        <Box key={spec} data-open aria-label={spec || 'No spec'} component="section" mb="lg">
-          <Button data-static variant="default" fullWidth h="auto" py="sm" justify="flex-start">
-            <Flex component="span" direction="column" gap="xs" miw={0}>
-              <Code>{spec || 'No spec'}</Code>
-            </Flex>
-            <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
-              {plural(list.length, 'result', 'results')}
-            </Flex>
-          </Button>
-          <List spacing="xs" listStyleType="none">
-            {list.map((result) => (
-              <List.Item key={`${result.key}|${result.environment}|${result.producer}|${result.layer}`} data-status={result.status}>
-                <Anchor
-                  display="flex"
-                  p="sm"
-                  underline="never"
-                  renderRoot={(props) => (
-                    <Link
-                      {...props}
-                      to="/"
-                      search={patched({ tab: undefined, openRun: undefined, artifact: undefined, test: result.key, layer: result.layer })}
-                      resetScroll={false}
-                      activeOptions={{ exact: true }}
-                    />
-                  )}
-                >
-                  <StatusMark status={result.status} size={14} />
-                  <Flex component="span" direction="column" gap="xs" miw={0}>
-                    <Flex component="span" direction="column" gap="xs" miw={0}>
-                      {result.title}
-                    </Flex>
-                    <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap" c="dimmed">
-                      <Text span inherit>
-                        {environmentLabel(result.environment)}
-                      </Text>
-                      <Text span inherit>
-                        {result.producer}
-                      </Text>
-                      <Text span inherit>
-                        {statusWord(result.status)}
-                      </Text>
-                      <ResultVideos videos={result.videos} />
-                    </Flex>
-                    {result.status === 'failed' && result.detail && (
-                      <Text span inherit c="red.7" size="xs" lineClamp={2}>
-                        {result.detail.split('\n')[0]}
-                      </Text>
-                    )}
-                  </Flex>
-                  <Group data-one gap="md" ml="auto" visibleFrom="sm">
-                    <Text span inherit>
-                      {formatMs(result.durationMs)}
-                    </Text>
-                  </Group>
-                </Anchor>
-              </List.Item>
+    ) : null,
+    run.producers.length > 0 ? (
+      <Text span inherit>
+        {run.producers.join(', ')}
+      </Text>
+    ) : null,
+    run.totalDurationMs !== null ? (
+      <Text span inherit>
+        {formatMs(run.totalDurationMs)} of test time
+      </Text>
+    ) : null
+  ].filter((fact) => fact !== null);
+  return (
+    <Stack aria-label={`Run ${runLabel(run)}`} component="section" gap="md">
+      <Card>
+        <Stack gap="md">
+          <Group justify="space-between" align="flex-start" gap="md">
+            <Stack gap={6} flex={1} miw={{ base: '100%', sm: 320 }}>
+              {back}
+              <Group gap="sm" wrap="nowrap" align="center">
+                <StatusMark status={runStatus(run)} size={20} />
+                <Title order={2}>Run {runLabel(run)}</Title>
+              </Group>
+            </Stack>
+            <Group gap="xs">
+              {run.runUrl && (
+                <Button component="a" href={run.runUrl} target="_blank" rel="noreferrer" rightSection={<IconExternalLink size={14} aria-hidden="true" />}>
+                  Open the CI run
+                </Button>
+              )}
+              <Button
+                leftSection={<IconListSearch size={16} aria-hidden="true" />}
+                renderRoot={(props) => (
+                  <Link
+                    {...props}
+                    to="/"
+                    search={patched({ tab: undefined, openRun: undefined, inRun: run.key, test: undefined, layer: undefined, artifact: undefined })}
+                    resetScroll={false}
+                    activeOptions={{ exact: true }}
+                  />
+                )}
+              >
+                Show these tests in the explorer
+              </Button>
+            </Group>
+          </Group>
+          <Group component="div" gap="sm" c="dimmed" fz="sm" wrap="wrap">
+            {facts.map((fact, at) => (
+              <Group key={at} gap="sm" wrap="nowrap">
+                {at > 0 && <Divider orientation="vertical" />}
+                {fact}
+              </Group>
             ))}
-          </List>
-        </Box>
-      ))}
-      {filtered.length > shown && (
-        <Button type="button" onClick={() => setShown(shown + RESULT_ROWS)} variant="subtle">
-          Show more ({filtered.length - shown} more)
-        </Button>
-      )}
-    </Box>
+          </Group>
+          <Stack gap={6}>
+            <Meter counts={run.counts} />
+            <Group gap="sm" fz="sm">
+              <Text span inherit fw={600}>
+                {run.tests === 0 ? 'No tests' : plural(run.tests, 'test', 'tests')}
+              </Text>
+              <Counts run={run} />
+            </Group>
+          </Stack>
+          {(run.videos || verificationOfRun(stored.data, run.key)) && (
+            <Stack gap={4}>
+              {run.videos && (
+                <Text component="div" size="sm" data-run-videos>
+                  <IconVideo size={16} aria-hidden="true" /> {plural(run.videos.recordings, 'video', 'videos')}
+                  {run.videos.references !== run.videos.recordings + run.videos.unavailable && ` from ${plural(run.videos.references, 'reference', 'references')}`}
+                  <Unavailable videos={run.videos} />
+                </Text>
+              )}
+              <StoredVideos verification={verificationOfRun(stored.data, run.key)} />
+            </Stack>
+          )}
+          <Divider />
+          <Group gap="xs" wrap="wrap">
+            <Text size="sm" c="dimmed" aria-hidden="true">
+              <IconArrowsExchange size={16} aria-hidden="true" />
+            </Text>
+            {(['base', 'cand'] as const).map((side) => (
+              <Anchor
+                key={side}
+                size="sm"
+                renderRoot={(props) => (
+                  <Link {...props} to="/" search={patched({ tab: 'compare', [side]: run.key, openRun: undefined, layer: undefined, artifact: undefined, pair: undefined, video: undefined })} resetScroll={false} activeOptions={{ exact: true }} />
+                )}
+              >
+                {side === 'base' ? 'Compare with this run as the baseline' : 'Compare with this run as the candidate'}
+              </Anchor>
+            ))}
+          </Group>
+        </Stack>
+      </Card>
+      <RunArtifacts detail={detail.data} />
+      <Panel
+        flush
+        order={3}
+        title="Results"
+        description={
+          search.q || found.parsed.tokens.length > 0 ? (
+            <Text role="status" size="sm" c="dimmed">
+              {filtered.length.toLocaleString()} of {plural(results.length, 'result', 'results')} match
+            </Text>
+          ) : (
+            <Text size="sm" c="dimmed">
+              Grouped by spec. Each opens the test as this run recorded it.
+            </Text>
+          )
+        }
+        actions={
+          filtered.length > 0 ? (
+            <Button type="button" variant="filled" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => watch.open()}>
+              Watch these {plural(filtered.length, 'result', 'results')}
+            </Button>
+          ) : undefined
+        }
+      >
+        <Stack px="lg" pb="md" pt={4} gap="sm">
+          <Flex gap="xs" align="center" wrap="wrap">
+            <SearchBox
+              label="Search this run"
+              placeholder='Search this run… or filter: status:failed has:video "exact phrase"'
+              parsed={found.parsed}
+              onSearch={(value) => go({ q: value || undefined }, { replace: true })}
+            />
+          </Flex>
+          <SearchNotes issues={found.parsed.issues} semantic={found.status} />
+          <Group gap="xs" wrap="wrap">
+            <Group gap={6} role="group" aria-label="Result status">
+              {RESULT_FILTERS.map((filter) => (
+                <Button
+                  key={filter.id || 'all'}
+                  type="button"
+                  size="xs"
+                  aria-pressed={status === filter.id}
+                  data-status={filter.id || undefined}
+                  onClick={() => setStatus(filter.id)}
+                  variant={status === filter.id ? 'light' : 'default'}
+                  rightSection={<Text span inherit c="dimmed">{filter.id ? narrowedResults.filter((result) => result.status === filter.id).length : narrowedResults.length}</Text>}
+                >
+                  {filter.label}{' '}
+                </Button>
+              ))}
+            </Group>
+            {(run.videos || video) && (
+              <HasVideo
+                size="xs"
+                count={results.filter((result) => (videoCounts(result.videos)?.recordings ?? 0) > 0).length}
+                pressed={video || found.parsed.filters.video}
+                noun={['result', 'results']}
+                onToggle={() => go({ video: video ? undefined : true })}
+              />
+            )}
+          </Group>
+        </Stack>
+        {watch.watching && <WatchPlaylist entries={playlist} initial={watch.clip} onSelect={watch.select} onClose={watch.close} />}
+        {!filtered.length && <EmptyState icon={<IconFilterOff size={28} stroke={1.5} aria-hidden="true" />}>No result matches.</EmptyState>}
+        {bySpec.map(([spec, list]) => (
+          <Box key={spec} data-open aria-label={spec || 'No spec'} component="section">
+            <Divider />
+            <Group justify="space-between" gap="sm" px="lg" py="xs" bg="var(--mantine-color-default-hover)" wrap="nowrap">
+              <Code bg="transparent" fw={600}>
+                {spec || 'No spec'}
+              </Code>
+              <Text span size="xs" c="dimmed">
+                {plural(list.length, 'result', 'results')}
+              </Text>
+            </Group>
+            <List listStyleType="none" px="xs" py={4}>
+              {list.map((result) => (
+                <Box component="li" key={`${result.key}|${result.environment}|${result.producer}|${result.layer}`} data-status={result.status}>
+                  <NavLink
+                    py={6}
+                    renderRoot={(props) => (
+                      <Link
+                        {...props}
+                        to="/"
+                        search={patched({ tab: undefined, openRun: undefined, artifact: undefined, test: result.key, layer: result.layer })}
+                        resetScroll={false}
+                        activeOptions={{ exact: true }}
+                      />
+                    )}
+                    leftSection={<StatusMark status={result.status} size={16} />}
+                    label={result.title}
+                    description={
+                      <>
+                        <Flex component="span" display="inline-flex" gap="xs" align="center" wrap="wrap">
+                          <Text span inherit>
+                            {environmentLabel(result.environment)}
+                          </Text>
+                          <Text span inherit>
+                            {result.producer}
+                          </Text>
+                          <Text span inherit>
+                            {statusWord(result.status)}
+                          </Text>
+                          <ResultVideos videos={result.videos} />
+                        </Flex>
+                        {result.status === 'failed' && result.detail && (
+                          <Text span inherit display="block" c="red" lineClamp={2}>
+                            {result.detail.split('\n')[0]}
+                          </Text>
+                        )}
+                      </>
+                    }
+                    rightSection={
+                      <Text span size="xs" c="dimmed" data-one visibleFrom="sm">
+                        {formatMs(result.durationMs)}
+                      </Text>
+                    }
+                  />
+                </Box>
+              ))}
+            </List>
+          </Box>
+        ))}
+        {filtered.length > shown && (
+          <Center p="sm">
+            <Button type="button" onClick={() => setShown(shown + RESULT_ROWS)} variant="subtle">
+              Show more ({filtered.length - shown} more)
+            </Button>
+          </Center>
+        )}
+      </Panel>
+    </Stack>
   );
 }

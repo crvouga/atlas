@@ -10,17 +10,19 @@
  */
 import { COMPARE_GROUP_TEXT, COMPARE_GROUPS, compareRuns, type CompareGroup, type ComparedResult } from '@crvouga/atlas/reports/run-compare';
 import { formatMs, type RunDetail, type RunSummary } from '@crvouga/atlas/reports/test-catalog';
-import { Alert, Anchor, Badge, Box, Button, Code, Drawer, Flex, Group, List, NativeSelect, Paper, SimpleGrid, Stack, Table, Text, Title, VisuallyHidden } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Center, Code, Drawer, Flex, Group, List, NativeSelect, Paper, SimpleGrid, Stack, Table, Text, Title, VisuallyHidden } from '@mantine/core';
 import { IconArrowsExchange } from '@tabler/icons-react';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
+import { Panel } from '../components/Page';
 import { ago, duration, exactTime, plural, shortSha, statusWord, useNow } from '../evidence/format';
-import { StatusMark } from '../evidence/marks';
+import { Meter, StatusMark } from '../evidence/marks';
 import { useRunDetail, useRunList } from './catalog';
 import { ComparePair } from './ComparePair';
 import { patched, useExplorerNavigate, useExplorerSearch } from './navigate';
 import { runName } from './parts';
+import { EmptyState, Reading } from './RunsView';
 
 const ROWS = 100;
 
@@ -63,11 +65,14 @@ function RunPicker({ label, value, runs, onChange }: { label: string; value: str
 
 function RunCard({ role, run }: { role: string; run: RunSummary }) {
   return (
-    <Paper withBorder p="md" component="section" aria-label={`${role} run`} data-compare-run={role.toLowerCase()}>
+    <Paper withBorder p="md" radius="md" component="section" aria-label={`${role} run`} data-compare-run={role.toLowerCase()}>
       <Stack gap="xs">
-        <Title order={3}>
-          {role}: {nameOf(run)}
-        </Title>
+        <Group gap="xs" wrap="nowrap" align="center">
+          <StatusMark status={run.counts.failed > 0 ? 'failed' : run.counts.running > 0 ? 'running' : run.counts.passed > 0 ? 'passed' : 'none'} size={16} />
+          <Title order={3}>
+            {role}: {nameOf(run)}
+          </Title>
+        </Group>
         <Text component="div" size="sm">
           {[run.branch, run.sha ? shortSha(run.sha) : null].filter(Boolean).join(' @ ') || 'No branch or commit recorded'}
           {run.freshness && (
@@ -80,11 +85,12 @@ function RunCard({ role, run }: { role: string; run: RunSummary }) {
         <Text component="div" size="sm" c="dimmed" title={exactTime(run.endedAtMs)}>
           Ended {exactTime(run.endedAtMs)} · took {formatMs(run.spanMs)} · {plural(run.layers, 'layer', 'layers')}
         </Text>
+        <Meter counts={run.counts} />
         <Text component="div" size="sm">
           {plural(run.tests, 'test', 'tests')}: {run.counts.passed} passed, {run.counts.failed} failed, {run.counts['not-run']} not run
           {run.counts.running > 0 ? `, ${run.counts.running} running` : ''}
         </Text>
-        <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'runs', openRun: run.key, pair: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+        <Anchor size="sm" renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'runs', openRun: run.key, pair: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
           Open this run
         </Anchor>
       </Stack>
@@ -100,7 +106,7 @@ function Outcome({ result }: { result: ComparedResult['baseline'] }) {
       </Text>
     );
   return (
-    <Group gap="xs" wrap="nowrap" data-outcome={result.status}>
+    <Group gap={6} wrap="nowrap" data-outcome={result.status}>
       <StatusMark status={result.status} size={14} />
       <Text span inherit>
         {statusWord(result.status)}
@@ -115,8 +121,10 @@ function Outcome({ result }: { result: ComparedResult['baseline'] }) {
 function Row({ item }: { item: ComparedResult }) {
   return (
     <Table.Tr data-group={item.group}>
-      <Table.Td>
-        <Text component="div">{item.title}</Text>
+      <Table.Td pl="lg">
+        <Text component="div" fw={500}>
+          {item.title}
+        </Text>
         {item.specPath && (
           <Text component="div" size="xs" c="dimmed">
             <Code>{item.specPath}</Code>
@@ -143,13 +151,13 @@ function Row({ item }: { item: ComparedResult }) {
         <Badge color={GROUP_COLOR[item.group]} variant="light" tt="none">
           {COMPARE_GROUP_TEXT[item.group].label}
         </Badge>
-        <Text component="div" size="xs" c="dimmed" mt="xs">
+        <Text component="div" size="xs" c="dimmed" mt={4}>
           {item.summary}
         </Text>
       </Table.Td>
-      <Table.Td>
+      <Table.Td pr="lg" ta="right">
         <Button
-          variant="light"
+          size="xs"
           aria-label={`Compare ${item.title}`}
           renderRoot={(props) => <Link {...props} to="/" search={patched({ pair: item.id })} resetScroll={false} activeOptions={{ exact: true }} />}
         >
@@ -197,59 +205,76 @@ function Comparison({ baseline, candidate }: { baseline: RunDetail; candidate: R
           </List>
         </Alert>
       )}
-      <Text role="status" component="div" data-compare-summary>
-        {plural(total, 'behavior', 'behaviors')} across the two runs:{' '}
-        {COMPARE_GROUPS.filter((name) => comparison.counts[name] > 0)
-          .map((name) => `${comparison.counts[name]} ${COMPARE_GROUP_TEXT[name].label.toLowerCase()}`)
-          .join(', ') || 'none'}
-        .
-      </Text>
-      <Flex role="group" aria-label="Kind of change" gap="xs" align="center" wrap="wrap">
-        <Button type="button" variant="light" aria-pressed={!group} onClick={() => go({ change: undefined })}>
-          All {total}
-        </Button>
-        {COMPARE_GROUPS.filter((name) => comparison.counts[name] > 0).map((name) => (
-          <Button key={name} type="button" variant="light" aria-pressed={group === name} title={COMPARE_GROUP_TEXT[name].meaning} onClick={() => go({ change: group === name ? undefined : name })}>
-            {COMPARE_GROUP_TEXT[name].label} {comparison.counts[name]}
-          </Button>
-        ))}
-      </Flex>
-      {group && (
-        <Text component="div" size="sm" c="dimmed">
-          {COMPARE_GROUP_TEXT[group].meaning}
-        </Text>
-      )}
-      {total === 0 ? (
-        <Text component="div" c="dimmed">
-          Neither run recorded a result, so there is nothing to compare.
-        </Text>
-      ) : (
-        <Table.ScrollContainer minWidth={720}>
-          <Table data-compare-results>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th scope="col">Behavior</Table.Th>
-                <Table.Th scope="col">Baseline</Table.Th>
-                <Table.Th scope="col">Candidate</Table.Th>
-                <Table.Th scope="col">Change</Table.Th>
-                <Table.Th scope="col">
-                  <VisuallyHidden>Open</VisuallyHidden>
-                </Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {listed.slice(0, shown).map((item) => (
-                <Row key={item.id} item={item} />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
-      )}
-      {listed.length > shown && (
-        <Button type="button" variant="subtle" onClick={() => setShown(shown + ROWS)}>
-          Show more ({listed.length - shown} more)
-        </Button>
-      )}
+      <Panel
+        flush
+        title="What changed"
+        description={
+          <Text role="status" component="div" size="sm" c="dimmed" data-compare-summary>
+            {plural(total, 'behavior', 'behaviors')} across the two runs:{' '}
+            {COMPARE_GROUPS.filter((name) => comparison.counts[name] > 0)
+              .map((name) => `${comparison.counts[name]} ${COMPARE_GROUP_TEXT[name].label.toLowerCase()}`)
+              .join(', ') || 'none'}
+            .
+          </Text>
+        }
+      >
+        <Stack gap="xs" px="lg" pb="md" pt={4}>
+          <Flex role="group" aria-label="Kind of change" gap={6} align="center" wrap="wrap">
+            <Button type="button" size="xs" variant={!group ? 'light' : 'default'} aria-pressed={!group} onClick={() => go({ change: undefined })}>
+              All{' '}
+              <Text span inherit c="dimmed" ml={6}>
+                {total}
+              </Text>
+            </Button>
+            {COMPARE_GROUPS.filter((name) => comparison.counts[name] > 0).map((name) => (
+              <Button key={name} type="button" size="xs" variant={group === name ? 'light' : 'default'} aria-pressed={group === name} title={COMPARE_GROUP_TEXT[name].meaning} onClick={() => go({ change: group === name ? undefined : name })}>
+                {COMPARE_GROUP_TEXT[name].label}{' '}
+                <Text span inherit c={GROUP_COLOR[name] === 'gray' ? 'dimmed' : GROUP_COLOR[name]} ml={6}>
+                  {comparison.counts[name]}
+                </Text>
+              </Button>
+            ))}
+          </Flex>
+          {group && (
+            <Text component="div" size="sm" c="dimmed">
+              {COMPARE_GROUP_TEXT[group].meaning}
+            </Text>
+          )}
+        </Stack>
+        {total === 0 ? (
+          <EmptyState icon={<IconArrowsExchange size={28} stroke={1.5} aria-hidden="true" />}>Neither run recorded a result, so there is nothing to compare.</EmptyState>
+        ) : (
+          <Table.ScrollContainer minWidth={760}>
+            <Table data-compare-results verticalSpacing="sm" highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th scope="col" pl="lg">
+                    Behavior
+                  </Table.Th>
+                  <Table.Th scope="col">Baseline</Table.Th>
+                  <Table.Th scope="col">Candidate</Table.Th>
+                  <Table.Th scope="col">Change</Table.Th>
+                  <Table.Th scope="col" pr="lg">
+                    <VisuallyHidden>Open</VisuallyHidden>
+                  </Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {listed.slice(0, shown).map((item) => (
+                  <Row key={item.id} item={item} />
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        )}
+        {listed.length > shown && (
+          <Center p="sm">
+            <Button type="button" variant="subtle" onClick={() => setShown(shown + ROWS)}>
+              Show more ({listed.length - shown} more)
+            </Button>
+          </Center>
+        )}
+      </Panel>
       <Drawer opened={!!search.pair} onClose={() => go({ pair: undefined })} title="Compare a behavior" size="xl">
         {opened ? (
           <ComparePair item={opened} comparison={comparison} layers={{ baseline: baseline.layers, candidate: candidate.layers }} onClose={() => go({ pair: undefined })} />
@@ -271,70 +296,70 @@ export function CompareView() {
   const baseline = useRunDetail(search.base);
   const candidate = useRunDetail(search.cand);
   const picked = search.base && search.cand;
+  const sides = [
+    { role: 'Baseline', label: 'Baseline run', key: search.base, detail: baseline, set: (key: string | undefined) => go({ base: key, pair: undefined, change: undefined }) },
+    { role: 'Candidate', label: 'Candidate run', key: search.cand, detail: candidate, set: (key: string | undefined) => go({ cand: key, pair: undefined, change: undefined }) }
+  ] as const;
   return (
-    <Box aria-label="Compare runs" component="section" mb="lg">
-      <Title order={2} mb="sm">
-        Compare two runs
-      </Title>
-      <Text component="div" c="dimmed" mb="md">
-        Choose a baseline and a candidate run. Behaviors are paired by the check they record, not by title. Both runs are pinned in the address, so a newer run never replaces either, and a link reproduces the comparison.
-      </Text>
-      <Group align="flex-end" gap="md" wrap="wrap" mb="md">
-        <RunPicker label="Baseline run" value={search.base} runs={runs.data?.runs ?? []} onChange={(key) => go({ base: key, pair: undefined, change: undefined })} />
-        <RunPicker label="Candidate run" value={search.cand} runs={runs.data?.runs ?? []} onChange={(key) => go({ cand: key, pair: undefined, change: undefined })} />
-        <Button
-          type="button"
-          variant="default"
-          leftSection={<IconArrowsExchange size={16} aria-hidden="true" />}
-          disabled={!search.base && !search.cand}
-          onClick={() => go({ base: search.cand, cand: search.base, pair: undefined, change: undefined })}
-        >
-          Swap baseline and candidate
-        </Button>
-      </Group>
-      {runs.isError && (
-        <Alert role="alert" color="red" my="sm">
-          The runs could not be listed. {runs.error.message}
-        </Alert>
-      )}
-      {!picked && (
-        <Text component="div" c="dimmed" role="status">
-          {runs.isPending ? 'Reading the runs…' : (runs.data?.runs.length ?? 0) < 1 ? 'No runs recorded yet, so there is nothing to compare.' : 'Choose both runs to compare them. You can also open a run in the Runs tab and use it as the baseline or the candidate.'}
-        </Text>
-      )}
-      {picked && (baseline.isPending || candidate.isPending) && (
-        <Text role="status" component="div" c="dimmed">
-          Reading the two runs…
-        </Text>
-      )}
-      {picked && (baseline.isError || candidate.isError) && (
-        <Alert role="alert" color="red" my="sm">
-          A run could not be read. {baseline.error?.message ?? candidate.error?.message}
-          <Group mt="xs">
-            <Button
-              type="button"
-              variant="light"
-              onClick={() => {
-                void baseline.refetch();
-                void candidate.refetch();
-              }}
-            >
-              Try again
-            </Button>
-          </Group>
-        </Alert>
-      )}
-      {picked && baseline.isSuccess && baseline.data === null && <Missing side="baseline" keyed={search.base!} />}
-      {picked && candidate.isSuccess && candidate.data === null && <Missing side="candidate" keyed={search.cand!} />}
-      {picked && baseline.data && candidate.data && (
-        <Stack gap="md">
-          <SimpleGrid cols={{ base: 1, sm: 2 }}>
-            <RunCard role="Baseline" run={baseline.data.run} />
-            <RunCard role="Candidate" run={candidate.data.run} />
-          </SimpleGrid>
-          <Comparison baseline={baseline.data} candidate={candidate.data} />
-        </Stack>
-      )}
-    </Box>
+    <Stack aria-label="Compare runs" component="section" gap="md">
+      <Panel
+        title="Compare two runs"
+        description={
+          <Text component="div" size="sm" c="dimmed" maw={760}>
+            Choose a baseline and a candidate run. Behaviors are paired by the check they record, not by title. Both runs are pinned in the address, so a newer run never replaces either, and a link reproduces the comparison.
+          </Text>
+        }
+        actions={
+          <Button
+            type="button"
+            variant="default"
+            leftSection={<IconArrowsExchange size={16} aria-hidden="true" />}
+            disabled={!search.base && !search.cand}
+            onClick={() => go({ base: search.cand, cand: search.base, pair: undefined, change: undefined })}
+          >
+            Swap baseline and candidate
+          </Button>
+        }
+      >
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          {sides.map((side) => (
+            <Stack key={side.role} gap="sm" miw={0}>
+              <RunPicker label={side.label} value={side.key} runs={runs.data?.runs ?? []} onChange={side.set} />
+              {picked && side.detail.data && <RunCard role={side.role} run={side.detail.data.run} />}
+              {picked && side.detail.isSuccess && side.detail.data === null && <Missing side={side.role.toLowerCase()} keyed={side.key!} />}
+            </Stack>
+          ))}
+        </SimpleGrid>
+        {runs.isError && (
+          <Alert role="alert" color="red">
+            The runs could not be listed. {runs.error.message}
+          </Alert>
+        )}
+        {!picked && (
+          <EmptyState role="status" icon={<IconArrowsExchange size={28} stroke={1.5} aria-hidden="true" />}>
+            {runs.isPending ? 'Reading the runs…' : (runs.data?.runs.length ?? 0) < 1 ? 'No runs recorded yet, so there is nothing to compare.' : 'Choose both runs to compare them. You can also open a run in the Runs tab and use it as the baseline or the candidate.'}
+          </EmptyState>
+        )}
+        {picked && (baseline.isPending || candidate.isPending) && <Reading rows={2}>Reading the two runs…</Reading>}
+        {picked && (baseline.isError || candidate.isError) && (
+          <Alert role="alert" color="red">
+            A run could not be read. {baseline.error?.message ?? candidate.error?.message}
+            <Group mt="xs">
+              <Button
+                type="button"
+                variant="light"
+                onClick={() => {
+                  void baseline.refetch();
+                  void candidate.refetch();
+                }}
+              >
+                Try again
+              </Button>
+            </Group>
+          </Alert>
+        )}
+      </Panel>
+      {picked && baseline.data && candidate.data && <Comparison baseline={baseline.data} candidate={candidate.data} />}
+    </Stack>
   );
 }

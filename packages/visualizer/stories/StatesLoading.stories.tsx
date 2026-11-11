@@ -1,0 +1,18 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { FEATURE, MOBILE, behaviors, catalog, chart, critiques, screen, spec, tests, type ScreenStory } from './support';
+const meta = { ...screen, title: 'States/Loading', args: { at: tests(), state: 'loading' } } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const FILE = spec('gherkin', { spec: FEATURE });
+export const LoadingTests: Story = {};
+export const LoadingRuns: Story = { args: { at: tests({ tab: 'runs' }) } };
+export const LoadingArtifacts: Story = { args: { at: tests({ tab: 'artifacts' }) } };
+export const LoadingHome: Story = { args: { at: '/' } };
+export const LoadingChart: Story = { args: { at: chart() } };
+export const LoadingSpec: Story = { args: { at: FILE } };
+export const StalledSpec: Story = { args: { at: FILE, state: 'stalled' } };
+export const LoadingBehaviors: Story = { args: { at: behaviors() } };
+export const LoadingCatalog: Story = { args: { at: catalog() } };
+export const LoadingCritiques: Story = { args: { at: critiques() } };
+export const MobileLoadingTests: Story = { ...MOBILE };

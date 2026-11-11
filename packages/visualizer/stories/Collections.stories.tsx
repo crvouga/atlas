@@ -1,0 +1,12 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, pick, screen, tests, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Collections' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const collections = (params: Record<string, string | number | boolean> = {}) => tests({ tab: 'collections', ...params });
+export const Collections: Story = { args: { at: collections() } };
+export const OpenedCollection: Story = { args: { at: collections({ collection: pick.collection }) } };
+export const EarlierRevision: Story = { args: { at: collections({ collection: pick.collection, rev: 1 }) } };
+export const MobileCollections: Story = { ...MOBILE, args: { at: collections() } };
+export const MobileOpenedCollection: Story = { ...MOBILE, args: { at: collections({ collection: pick.collection }) } };

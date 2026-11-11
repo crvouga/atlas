@@ -1,0 +1,18 @@
+import type { Meta } from '@storybook/react-vite';
+import type { Screen } from './fixture';
+import { MOBILE, RELEASE, REVIEW_FEATURE, behaviors, pick, screen, type ScreenStory } from './support';
+const meta = { ...screen, title: 'Behaviors/Workspace' } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = ScreenStory;
+const workspace = (behavior: string, params: Record<string, string | number | boolean> = {}) => behaviors({ behavior, workspace: true, ...params });
+const PAYS = `${REVIEW_FEATURE}#Pays at the counter`;
+export const BehaviorWorkspace: Story = { args: { at: workspace(pick.behavior) } };
+export const WorkspaceWithRecording: Story = { args: { at: workspace(`${REVIEW_FEATURE}#Opens the menu`) } };
+export const WorkspaceFailed: Story = { args: { at: workspace(PAYS) } };
+export const WorkspacePinnedToRun: Story = { args: { at: workspace(PAYS, { layer: pick.review.layer }) } };
+export const WorkspaceSharedMoment: Story = { args: { at: workspace(PAYS, { layer: pick.review.layer, clip: pick.review.clip, clipAt: 1200 }) } };
+export const WorkspaceNoRecording: Story = { args: { at: workspace(pick.behaviors['no-recording'] ?? '') } };
+export const WorkspaceUnexecuted: Story = { args: { at: workspace(pick.behaviors.unexecuted ?? '') } };
+export const WorkspaceReleaseScoped: Story = { args: { at: workspace(PAYS, { ...RELEASE }) } };
+export const WorkspaceFromFilteredIndex: Story = { args: { at: workspace(PAYS, { q: 'pays', coverage: 'failed' }) } };
+export const MobileBehaviorWorkspace: Story = { ...MOBILE, args: { at: workspace(PAYS) } };

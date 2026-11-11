@@ -11,12 +11,13 @@
 import { environmentLabel } from '@crvouga/atlas/reports/layer-axes';
 import type { ReviewCollectionDetail, ReviewCollectionList, ReviewNote } from '@crvouga/atlas/reports/review-collection';
 import type { ArtifactResult } from '@crvouga/atlas/reports/test-catalog';
-import { Alert, Anchor, Badge, Button, Group, Modal, NativeSelect, Paper, PasswordInput, Stack, Switch, Table, Text, Textarea, TextInput, Title } from '@mantine/core';
-import { IconDownload, IconLock, IconPlayerPlay } from '@tabler/icons-react';
+import { Alert, Anchor, Badge, Button, Card, Divider, Group, Modal, NativeSelect, PasswordInput, SimpleGrid, Stack, Switch, Table, Text, Textarea, TextInput, Title } from '@mantine/core';
+import { IconArrowLeft, IconDownload, IconFolders, IconLock, IconPlayerPlay } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 
+import { Panel } from '../components/Page';
 import { readProblem } from '../evidence/artifact-tags';
 import { reportAssetUrl, reportJson, ReportsError } from '../evidence/api';
 import { exactTime, plural, shortSha, statusWord } from '../evidence/format';
@@ -24,7 +25,8 @@ import { StatusMark } from '../evidence/marks';
 import { formatTimecode, parseTagsField, parseTimecode, sourceSpread } from './collection-model';
 import { patched, useExplorerNavigate, useExplorerSearch, useWatchAddress } from './navigate';
 import { runName } from './parts';
-import { WatchPlaylist } from './playlist';
+import { ClipThumb, WatchPlaylist } from './playlist';
+import { EmptyState, Reading } from './RunsView';
 import { entriesFromCollection, RECORDING_STATE_TEXT, recordingState } from './playlist-entries';
 
 /** The token that may publish, kept for as long as this page is open and nowhere else. */
@@ -71,68 +73,88 @@ export function CollectionsView() {
 
 function CollectionList() {
   const answer = useQuery({ queryKey: ['review-collections'], queryFn: ({ signal }) => reportJson<ReviewCollectionList>('/review-collections', signal), retry: false, staleTime: 5000 });
+  const about = (
+    <Text size="sm" c="dimmed">
+      A review collection is a curated, frozen set of recordings with notes and gaps. It is not a test run and has no status of its own.
+    </Text>
+  );
   if (answer.isPending)
     return (
-      <Text role="status" component="div" c="dimmed">
-        Reading the review collections…
-      </Text>
+      <Panel title="Review collections">
+        <Reading>Reading the review collections…</Reading>
+      </Panel>
     );
   if (answer.isError) {
     const missing = answer.error instanceof ReportsError && answer.error.status === 404;
     return (
-      <Alert role={missing ? 'status' : 'alert'} color={missing ? 'blue' : 'red'} my="sm">
-        <Stack gap="xs" align="flex-start">
-          <Text>{missing ? 'This server does not keep review collections. Update it to publish and share curated reviews.' : `The review collections could not be read. ${answer.error.message}`}</Text>
-          {!missing && (
-            <Button type="button" onClick={() => void answer.refetch()}>
-              Try again
-            </Button>
-          )}
-        </Stack>
-      </Alert>
+      <Panel title="Review collections">
+        <Alert role={missing ? 'status' : 'alert'} color={missing ? 'blue' : 'red'}>
+          <Stack gap="xs" align="flex-start">
+            <Text>{missing ? 'This server does not keep review collections. Update it to publish and share curated reviews.' : `The review collections could not be read. ${answer.error.message}`}</Text>
+            {!missing && (
+              <Button type="button" onClick={() => void answer.refetch()}>
+                Try again
+              </Button>
+            )}
+          </Stack>
+        </Alert>
+      </Panel>
     );
   }
   const { collections } = answer.data;
   return (
-    <Stack component="section" aria-label="Review collections" gap="sm" mb="lg">
-      <Text c="dimmed">A review collection is a curated, frozen set of recordings with notes and gaps. It is not a test run and has no status of its own.</Text>
+    <Panel flush component="section" aria-label="Review collections" title="Review collections" description={about}>
       {collections.length === 0 ? (
-        <Text component="div" c="dimmed">
-          No review collection has been published yet. Filter the Artifacts tab to the recordings to review and choose Freeze as review collection.
-        </Text>
+        <EmptyState icon={<IconFolders size={28} stroke={1.5} aria-hidden="true" />}>No review collection has been published yet. Filter the Artifacts tab to the recordings to review and choose Freeze as review collection.</EmptyState>
       ) : (
-        <Table.ScrollContainer minWidth={600}>
-          <Table data-collections>
+        <Table.ScrollContainer minWidth={640}>
+          <Table data-collections verticalSpacing="sm" highlightOnHover>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th scope="col">Collection</Table.Th>
+                <Table.Th scope="col" pl="lg">
+                  Collection
+                </Table.Th>
                 <Table.Th scope="col">Audience</Table.Th>
-                <Table.Th scope="col">Entries</Table.Th>
-                <Table.Th scope="col">Gaps</Table.Th>
+                <Table.Th scope="col" ta="right">
+                  Entries
+                </Table.Th>
+                <Table.Th scope="col" ta="right">
+                  Gaps
+                </Table.Th>
                 <Table.Th scope="col">Revision</Table.Th>
-                <Table.Th scope="col">Published</Table.Th>
+                <Table.Th scope="col" pr="lg">
+                  Published
+                </Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {collections.map((item) => (
                 <Table.Tr key={item.id}>
-                  <Table.Td>
-                    <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'collections', collection: item.id, rev: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>{item.title}</Anchor>
-                    {item.purpose && (
-                      <Text c="dimmed" fz="xs">
-                        {item.purpose}
-                      </Text>
-                    )}
-                    {item.tags.length > 0 && <Text fz="xs">{item.tags.map((tag) => `#${tag}`).join(' ')}</Text>}
+                  <Table.Td pl="lg">
+                    <Stack gap={2}>
+                      <Anchor fw={500} renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'collections', collection: item.id, rev: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+                        {item.title}
+                      </Anchor>
+                      {item.purpose && (
+                        <Text c="dimmed" fz="xs">
+                          {item.purpose}
+                        </Text>
+                      )}
+                      {item.tags.length > 0 && (
+                        <Text fz="xs" c="dimmed">
+                          {item.tags.map((tag) => `#${tag}`).join(' ')}
+                        </Text>
+                      )}
+                    </Stack>
                   </Table.Td>
                   <Table.Td>{item.audience ?? '—'}</Table.Td>
-                  <Table.Td>{item.entries}</Table.Td>
-                  <Table.Td>{item.gaps}</Table.Td>
+                  <Table.Td ta="right">{item.entries}</Table.Td>
+                  <Table.Td ta="right">{item.gaps}</Table.Td>
                   <Table.Td>
                     {item.revision}
                     {item.revisions > 1 ? ` of ${item.revisions}` : ''}
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td pr="lg" c="dimmed">
                     {item.createdBy}, {exactTime(item.createdAtMs)}
                   </Table.Td>
                 </Table.Tr>
@@ -141,7 +163,7 @@ function CollectionList() {
           </Table>
         </Table.ScrollContainer>
       )}
-    </Stack>
+    </Panel>
   );
 }
 
@@ -164,30 +186,35 @@ function CollectionPage({ id, revision }: { id: string; revision: number | undef
     staleTime: 0
   });
   const back = (
-    <Anchor renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'collections', collection: undefined, rev: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+    <Anchor size="sm" c="dimmed" renderRoot={(props) => <Link {...props} to="/" search={patched({ tab: 'collections', collection: undefined, rev: undefined })} resetScroll={false} activeOptions={{ exact: true }} />}>
+      <Text aria-hidden="true" span inherit>
+        <IconArrowLeft size={14} aria-hidden="true" />{' '}
+      </Text>
       All review collections
     </Anchor>
   );
   if (detail.isPending)
     return (
-      <Text role="status" component="div" c="dimmed">
-        Reading the review collection…
-      </Text>
+      <Card>
+        <Reading>Reading the review collection…</Reading>
+      </Card>
     );
   if (detail.isError) {
     const missing = detail.error instanceof ReportsError && detail.error.status === 404;
     return (
-      <Alert role={missing ? 'status' : 'alert'} color={missing ? 'blue' : 'red'} my="sm">
-        <Stack gap="xs" align="flex-start">
-          <Text>{missing ? 'No review collection has that address, or that revision of it.' : `The review collection could not be read. ${detail.error.message}`}</Text>
-          {!missing && (
-            <Button type="button" onClick={() => void detail.refetch()}>
-              Try again
-            </Button>
-          )}
-          {back}
-        </Stack>
-      </Alert>
+      <Card>
+        <Alert role={missing ? 'status' : 'alert'} color={missing ? 'blue' : 'red'}>
+          <Stack gap="xs" align="flex-start">
+            <Text>{missing ? 'No review collection has that address, or that revision of it.' : `The review collection could not be read. ${detail.error.message}`}</Text>
+            {!missing && (
+              <Button type="button" onClick={() => void detail.refetch()}>
+                Try again
+              </Button>
+            )}
+            {back}
+          </Stack>
+        </Alert>
+      </Card>
     );
   }
   const { collection, revisions, availability, reviews, reviewed } = detail.data;
@@ -203,57 +230,71 @@ function CollectionPage({ id, revision }: { id: string; revision: number | undef
   const exportHref = reportAssetUrl(`/review-collections/export?id=${encodeURIComponent(collection.id)}&revision=${collection.revision}`);
   const shareLink = typeof window === 'undefined' ? '' : window.location.href;
   return (
-    <Stack component="section" aria-label="Review collection" gap="md" mb="lg">
-      {back}
-      <Stack gap="xs">
-        <Title order={2}>{collection.title}</Title>
-        {collection.purpose && <Text>{collection.purpose}</Text>}
-        <Text c="dimmed" component="div">
-          {collection.audience ? `For ${collection.audience}. ` : ''}Published by {collection.createdBy}, {exactTime(collection.createdAtMs)}.
-          {collection.tags.length > 0 ? ` ${collection.tags.map((tag) => `#${tag}`).join(' ')}` : ''}
-        </Text>
-        <Group gap="sm" align="flex-end" data-revision={collection.revision}>
-          <Badge variant="light" leftSection={<IconLock size={14} aria-hidden="true" />}>
-            Frozen, revision {collection.revision} of {newest}
-          </Badge>
-          {revisions.length > 1 && (
-            <NativeSelect
-              label="Revision"
-              value={String(collection.revision)}
-              onChange={(event) => go({ rev: Number(event.currentTarget.value) === newest ? undefined : Number(event.currentTarget.value) })}
-              data={revisions.map((value) => ({ value: String(value), label: value === newest ? `${value} (newest)` : String(value) }))}
-            />
-          )}
-        </Group>
-      </Stack>
-      <Alert color="blue" role="note" data-curation>
-        <Text>
-          This is a review collection, not a test run. Its {plural(collection.entries.length, 'entry', 'entries')} {collection.entries.length === 1 ? 'was' : 'were'} recorded in {plural(spread.runs, 'run', 'runs')}
-          {spread.runs > 1 ? ' and are not one execution' : ''}; each shows the status it was recorded with. Membership and order are fixed: later runs and tag changes do not alter this revision, and a change is a new revision.
-          Notes and reviewed marks are curation. They do not change any result and are not an approval.
-          {revision && revision !== newest ? ` You are reading revision ${collection.revision}; revision ${newest} is newer.` : ''}
-        </Text>
-      </Alert>
-      <Group gap="sm" align="flex-end" wrap="wrap">
-        <Button type="button" variant="filled" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => watch.open()} disabled={collection.entries.length === 0}>
-          Watch these {plural(collection.entries.length, 'entry', 'entries')}
-        </Button>
-        <Button component="a" href={exportHref} download leftSection={<IconDownload size={16} aria-hidden="true" />}>
-          Download manifest
-        </Button>
-        <TextInput label="Share link" description="Opening it needs the same read access as this report." value={shareLink} readOnly onFocus={(event) => event.currentTarget.select()} miw={280} />
-      </Group>
-      <TokenField token={token} onChange={setToken} />
+    <Stack component="section" aria-label="Review collection" gap="md">
+      <Card>
+        <Stack gap="md">
+          <Group justify="space-between" align="flex-start" gap="md">
+            <Stack gap={6} flex={1} miw={{ base: '100%', sm: 320 }}>
+              {back}
+              <Title order={2}>{collection.title}</Title>
+              {collection.purpose && <Text size="sm">{collection.purpose}</Text>}
+            </Stack>
+            <Group gap="xs">
+              <Button component="a" href={exportHref} download leftSection={<IconDownload size={16} aria-hidden="true" />}>
+                Download manifest
+              </Button>
+              <Button type="button" variant="filled" leftSection={<IconPlayerPlay size={16} aria-hidden="true" />} onClick={() => watch.open()} disabled={collection.entries.length === 0}>
+                Watch these {plural(collection.entries.length, 'entry', 'entries')}
+              </Button>
+            </Group>
+          </Group>
+          <Group gap="sm" align="center" wrap="wrap" data-revision={collection.revision}>
+            <Badge variant="light" leftSection={<IconLock size={12} aria-hidden="true" />}>
+              Frozen, revision {collection.revision} of {newest}
+            </Badge>
+            <Text c="dimmed" size="sm" component="div">
+              {collection.audience ? `For ${collection.audience}. ` : ''}Published by {collection.createdBy}, {exactTime(collection.createdAtMs)}.
+              {collection.tags.length > 0 ? ` ${collection.tags.map((tag) => `#${tag}`).join(' ')}` : ''}
+            </Text>
+          </Group>
+          <Alert color="blue" role="note" data-curation>
+            <Text size="sm">
+              This is a review collection, not a test run. Its {plural(collection.entries.length, 'entry', 'entries')} {collection.entries.length === 1 ? 'was' : 'were'} recorded in {plural(spread.runs, 'run', 'runs')}
+              {spread.runs > 1 ? ' and are not one execution' : ''}; each shows the status it was recorded with. Membership and order are fixed: later runs and tag changes do not alter this revision, and a change is a new revision.
+              Notes and reviewed marks are curation. They do not change any result and are not an approval.
+              {revision && revision !== newest ? ` You are reading revision ${collection.revision}; revision ${newest} is newer.` : ''}
+            </Text>
+          </Alert>
+          <Divider />
+          <SimpleGrid cols={{ base: 1, sm: revisions.length > 1 ? 3 : 2 }} spacing="md">
+            {revisions.length > 1 && (
+              <NativeSelect
+                label="Revision"
+                value={String(collection.revision)}
+                onChange={(event) => go({ rev: Number(event.currentTarget.value) === newest ? undefined : Number(event.currentTarget.value) })}
+                data={revisions.map((value) => ({ value: String(value), label: value === newest ? `${value} (newest)` : String(value) }))}
+              />
+            )}
+            <TextInput label="Share link" description="Opening it needs the same read access as this report." value={shareLink} readOnly onFocus={(event) => event.currentTarget.select()} />
+            <TokenField token={token} onChange={setToken} />
+          </SimpleGrid>
+        </Stack>
+      </Card>
       {watch.watching && <WatchPlaylist title={collection.title} entries={playlist} initial={watch.clip} onSelect={watch.select} onClose={watch.close} />}
       {notesOf(undefined).length > 0 && (
-        <Stack gap="xs" component="section" aria-label="Notes on the collection">
-          <Title order={3}>Notes on the collection</Title>
-          {notesOf(undefined).map((note) => (
-            <NoteLine key={note.id} note={note} />
-          ))}
-        </Stack>
+        <Panel component="section" aria-label="Notes on the collection" order={3} title="Notes on the collection">
+          <Stack gap="xs">
+            {notesOf(undefined).map((note) => (
+              <NoteLine key={note.id} note={note} />
+            ))}
+          </Stack>
+        </Panel>
       )}
-      {collection.entries.length === 0 && <Text c="dimmed">This revision has no entries, only gaps.</Text>}
+      {collection.entries.length === 0 && (
+        <Card>
+          <EmptyState>This revision has no entries, only gaps.</EmptyState>
+        </Card>
+      )}
       <Stack gap="md" data-entries>
         {collection.gaps.filter((gap) => gap.after === 0).map((gap) => <GapItem key={gap.id} note={gap.note} />)}
         {collection.entries.map((entry, index) => {
@@ -265,65 +306,74 @@ function CollectionPage({ id, revision }: { id: string; revision: number | undef
           const tries = entry.snapshot.attemptStatuses ?? [];
           return (
             <Stack key={entry.id} gap="md">
-              <Paper withBorder p="md" component="section" aria-label={`Entry ${index + 1}: ${entry.snapshot.title}`} data-entry={entry.id} data-status={entry.snapshot.status} data-availability={standing?.state ?? 'unverified'}>
-                <Stack gap="xs">
-                  <Group justify="space-between" align="flex-start" wrap="wrap">
-                    <Title order={3}>
-                      {index + 1}.{' '}
-                      <Anchor
-                        inherit
-                        renderRoot={(props) => (
-                          <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, collection: undefined, rev: undefined, test: entry.snapshot.testKey, layer: entry.source.layer })} resetScroll={false} activeOptions={{ exact: true }} />
-                        )}
-                      >
-                        {entry.snapshot.title}
-                      </Anchor>
-                    </Title>
-                    <Group gap="xs">
-                      <Text span>
-                        <StatusMark status={entry.snapshot.status} size={14} /> {statusWord(entry.snapshot.status)} as recorded
+              <Card component="section" aria-label={`Entry ${index + 1}: ${entry.snapshot.title}`} data-entry={entry.id} data-status={entry.snapshot.status} data-availability={standing?.state ?? 'unverified'}>
+                <Group align="flex-start" gap="lg" wrap="wrap">
+                  <Stack gap="xs" w={{ base: '100%', sm: 240 }}>
+                    <ClipThumb entry={playable} w={240} />
+                    <Group gap="sm" align="center" justify="space-between">
+                      <Text span fz="sm" c="dimmed">
+                        {RECORDING_STATE_TEXT[state].label}
                       </Text>
-                      <Badge variant="outline" color={AVAILABILITY[standing?.state ?? 'unverified'].color}>
-                        {AVAILABILITY[standing?.state ?? 'unverified'].label}
-                      </Badge>
+                      {state === 'playable' && (
+                        <Button type="button" size="compact-sm" variant="light" leftSection={<IconPlayerPlay size={14} aria-hidden="true" />} onClick={() => watch.open(entry.id)}>
+                          Watch entry {index + 1}
+                        </Button>
+                      )}
                     </Group>
-                  </Group>
-                  {entry.caption && <Text>{entry.caption}</Text>}
-                  <Text c="dimmed" fz="sm" component="div">
-                    Recorded {exactTime(entry.snapshot.recordedAtMs)} · {environmentLabel(entry.snapshot.environment)} · {entry.snapshot.producer} · run {runName(entry.snapshot.run)}
-                    {entry.snapshot.sha ? ` · commit ${shortSha(entry.snapshot.sha)}` : ''}
-                    {entry.snapshot.branch ? ` · ${entry.snapshot.branch}` : ''} · layer {entry.source.layer.slice(0, 12)}
-                  </Text>
-                  {tries.length > 0 && (
-                    <Text fz="sm" component="div" data-tries>
-                      Tries, in order: {tries.map((status) => statusWord(status)).join(', then ')}
+                  </Stack>
+                  <Stack gap="xs" flex={1} miw={{ base: '100%', sm: 320 }}>
+                    <Group justify="space-between" align="flex-start" wrap="wrap">
+                      <Title order={3}>
+                        {index + 1}.{' '}
+                        <Anchor
+                          inherit
+                          renderRoot={(props) => (
+                            <Link {...props} to="/" search={patched({ tab: undefined, openRun: undefined, collection: undefined, rev: undefined, test: entry.snapshot.testKey, layer: entry.source.layer })} resetScroll={false} activeOptions={{ exact: true }} />
+                          )}
+                        >
+                          {entry.snapshot.title}
+                        </Anchor>
+                      </Title>
+                      <Group gap="xs">
+                        <Group gap={6} wrap="nowrap">
+                          <StatusMark status={entry.snapshot.status} size={14} />
+                          <Text span size="sm" fw={500}>
+                            {statusWord(entry.snapshot.status)} as recorded
+                          </Text>
+                        </Group>
+                        <Badge variant="outline" color={AVAILABILITY[standing?.state ?? 'unverified'].color}>
+                          {AVAILABILITY[standing?.state ?? 'unverified'].label}
+                        </Badge>
+                      </Group>
+                    </Group>
+                    {entry.caption && <Text size="sm">{entry.caption}</Text>}
+                    <Text c="dimmed" fz="sm" component="div">
+                      Recorded {exactTime(entry.snapshot.recordedAtMs)} · {environmentLabel(entry.snapshot.environment)} · {entry.snapshot.producer} · run {runName(entry.snapshot.run)}
+                      {entry.snapshot.sha ? ` · commit ${shortSha(entry.snapshot.sha)}` : ''}
+                      {entry.snapshot.branch ? ` · ${entry.snapshot.branch}` : ''} · layer {entry.source.layer.slice(0, 12)}
                     </Text>
-                  )}
-                  {standing && standing.state !== 'available' && (
-                    <Alert color="yellow" role="status" title={standing.state === 'unavailable' ? 'This source is no longer available' : 'This source could not be verified'}>
-                      {standing.reason} What it was when frozen is kept here.
-                    </Alert>
-                  )}
-                  <Group gap="sm" align="center">
-                    <Text span fz="sm" c="dimmed">
-                      {RECORDING_STATE_TEXT[state].label}
-                    </Text>
-                    {state === 'playable' && (
-                      <Button type="button" size="compact-sm" variant="light" leftSection={<IconPlayerPlay size={14} aria-hidden="true" />} onClick={() => watch.open(entry.id)}>
-                        Watch entry {index + 1}
-                      </Button>
+                    {tries.length > 0 && (
+                      <Text fz="sm" component="div" data-tries>
+                        Tries, in order: {tries.map((status) => statusWord(status)).join(', then ')}
+                      </Text>
                     )}
-                  </Group>
-                  <ReviewControls
-                    entry={entry.id}
-                    label={`entry ${index + 1}`}
-                    reviewed={mark}
-                    notes={notes}
-                    onMark={(on) => record({ entry: entry.id, kind: on ? 'reviewed' : 'unreviewed' })}
-                    onNote={(body) => record({ entry: entry.id, ...body })}
-                  />
-                </Stack>
-              </Paper>
+                    {standing && standing.state !== 'available' && (
+                      <Alert color="yellow" role="status" title={standing.state === 'unavailable' ? 'This source is no longer available' : 'This source could not be verified'}>
+                        {standing.reason} What it was when frozen is kept here.
+                      </Alert>
+                    )}
+                    <Divider />
+                    <ReviewControls
+                      entry={entry.id}
+                      label={`entry ${index + 1}`}
+                      reviewed={mark}
+                      notes={notes}
+                      onMark={(on) => record({ entry: entry.id, kind: on ? 'reviewed' : 'unreviewed' })}
+                      onNote={(body) => record({ entry: entry.id, ...body })}
+                    />
+                  </Stack>
+                </Group>
+              </Card>
               {collection.gaps.filter((gap) => gap.after === index + 1).map((gap) => <GapItem key={gap.id} note={gap.note} />)}
             </Stack>
           );
@@ -413,7 +463,7 @@ function ReviewControls({
       ))}
       <form onSubmit={(event) => void submit(event)} aria-label={`Add a note to ${label}`}>
         <Group align="flex-end" gap="sm" wrap="wrap">
-          <Textarea label="Note" value={text} onChange={(event) => setText(event.currentTarget.value)} autosize minRows={1} maxLength={4000} miw={240} />
+          <Textarea label="Note" value={text} onChange={(event) => setText(event.currentTarget.value)} autosize minRows={1} maxLength={4000} miw={240} flex={1} />
           <TextInput
             label="Time in the recording"
             description="m:ss, optional"

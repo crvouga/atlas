@@ -4,9 +4,10 @@
  * Full-screen inspection of the current catalog selection. Only the active image is loaded here;
  * navigation keeps the search order and never turns missing pictures into evidence.
  */
-import { Anchor, Box, Button, Center, Group, Image, Loader, Modal, ScrollArea, Stack, Text } from '@mantine/core';
+import { Anchor, Box, Button, Center, Divider, Group, Image, Loader, Modal, ScrollArea, Stack, Text } from '@mantine/core';
 import { useMergedRef, useResizeObserver } from '@mantine/hooks';
 import { IconArrowLeft, IconArrowRight, IconZoomIn, IconZoomOut } from '@tabler/icons-react';
+import { IconAction } from './IconAction';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 /** One inspectable picture, retaining its profile and coverage description. */
@@ -50,19 +51,12 @@ export function ImageInspection({ image, shortcuts = true }: { image: GalleryIma
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
   }, [scale, shortcuts, status]);
-  return <Stack h="100%" gap="sm" miw={0}>
-    <Group gap="xs" aria-label="Image zoom">
-      <Button variant="default" leftSection={<IconZoomOut size={16} aria-hidden="true" />} disabled={status !== 'loaded' || scale <= 0.1} onClick={() => changeZoom(scale / 1.25)}>Zoom out</Button>
-      <Text role="status" aria-label="Zoom level" w="4ch" ta="center">{Math.round(scale * 100)}%</Text>
-      <Button variant="default" leftSection={<IconZoomIn size={16} aria-hidden="true" />} disabled={status !== 'loaded' || scale >= 8} onClick={() => changeZoom(scale * 1.25)}>Zoom in</Button>
-      <Button variant={zoom === null ? 'filled' : 'default'} disabled={status !== 'loaded'} onClick={() => changeZoom(null)}>Fit to screen</Button>
-      <Button variant={zoom === 1 ? 'filled' : 'default'} disabled={status !== 'loaded'} onClick={() => changeZoom(1)}>Actual size</Button>
-      <Anchor href={image.source} target="_blank" rel="noreferrer noopener">Open original</Anchor>
-    </Group>
-    <Box ref={viewportRef} pos="relative" flex={1} mih={0} miw={0} role="group" aria-label={`${image.name}: image frame`} aria-busy={status === 'loading'}>
-      <ScrollArea pos="absolute" inset={0} h="100%" w="100%" type="auto" viewportRef={scroll} opacity={status === 'loaded' ? 1 : 0}
-        viewportProps={{ tabIndex: status === 'loaded' ? 0 : -1, role: 'region', 'aria-label': 'Image inspection area' }}>
-        <Image key={attempt} src={image.source} alt={image.name} aria-hidden={status !== 'loaded'} fit="contain" maw="none"
+  const ready = status === 'loaded';
+  return <Stack h="100%" gap={0} miw={0}>
+    <Box ref={viewportRef} pos="relative" flex={1} mih={0} miw={0} bg="var(--mantine-color-default-hover)" role="group" aria-label={`${image.name}: image frame`} aria-busy={status === 'loading'}>
+      <ScrollArea pos="absolute" inset={0} h="100%" w="100%" type="auto" viewportRef={scroll} opacity={ready ? 1 : 0}
+        viewportProps={{ tabIndex: ready ? 0 : -1, role: 'region', 'aria-label': 'Image inspection area' }}>
+        <Image key={attempt} src={image.source} alt={image.name} aria-hidden={!ready} fit="contain" maw="none"
           w={dimensions.width ? dimensions.width * scale : '100%'} h={dimensions.height ? dimensions.height * scale : '100%'} mx="auto" decoding="async"
           onLoad={(event) => {
             const img = event.currentTarget;
@@ -72,16 +66,29 @@ export function ImageInspection({ image, shortcuts = true }: { image: GalleryIma
           }} onError={() => setStatus('error')} />
       </ScrollArea>
       {status === 'loading' && <Center pos="absolute" inset={0} p="sm">
-        <Stack align="center" gap="xs" role="status"><Loader size="sm" /><Text size="sm">Loading image…</Text></Stack>
+        <Stack align="center" gap="xs" role="status"><Loader size="sm" color="gray" /><Text size="sm" c="dimmed">Loading image…</Text></Stack>
       </Center>}
       {status === 'error' && <Center pos="absolute" inset={0} p="sm">
         <Stack align="center" gap="xs" role="alert">
-          <Text size="sm" ta="center">Image could not be loaded</Text>
-          <Button variant="default" onClick={() => { setStatus('loading'); setAttempt(attempt + 1); }}>Try again</Button>
+          <Text size="sm" c="dimmed" ta="center">Image could not be loaded</Text>
+          <Button size="xs" onClick={() => { setStatus('loading'); setAttempt(attempt + 1); }}>Try again</Button>
         </Stack>
       </Center>}
     </Box>
-    <Text c="dimmed" size="sm">Scroll or swipe to pan when zoomed. + / − to zoom, 0 to fit. Use the navigation controls to browse images.</Text>
+    <Group justify="space-between" gap="sm" px="sm" py={6} flex="0 0 auto">
+      <Group gap={2} wrap="nowrap" aria-label="Image zoom">
+        <IconAction label="Zoom out" disabled={!ready || scale <= 0.1} onClick={() => changeZoom(scale / 1.25)}><IconZoomOut size={16} aria-hidden="true" /></IconAction>
+        <Text role="status" aria-label="Zoom level" size="sm" fw={500} w="5ch" ta="center">{Math.round(scale * 100)}%</Text>
+        <IconAction label="Zoom in" disabled={!ready || scale >= 8} onClick={() => changeZoom(scale * 1.25)}><IconZoomIn size={16} aria-hidden="true" /></IconAction>
+        <Divider orientation="vertical" mx={6} />
+        <Button size="compact-sm" variant={zoom === null ? 'light' : 'subtle'} color="gray" aria-pressed={zoom === null} disabled={!ready} onClick={() => changeZoom(null)}>Fit to screen</Button>
+        <Button size="compact-sm" variant={zoom === 1 ? 'light' : 'subtle'} color="gray" aria-pressed={zoom === 1} disabled={!ready} onClick={() => changeZoom(1)}>Actual size</Button>
+      </Group>
+      <Group gap="sm" wrap="nowrap">
+        <Text c="dimmed" size="xs" visibleFrom="lg">Scroll or swipe to pan when zoomed. + / − to zoom, 0 to fit. Use the navigation controls to browse images.</Text>
+        <Anchor href={image.source} target="_blank" rel="noreferrer noopener" size="xs">Open original</Anchor>
+      </Group>
+    </Group>
   </Stack>;
 }
 
@@ -102,16 +109,18 @@ export function GalleryProvider({ images, children, details, onImageChange, acti
       <Modal.Overlay />
       <Modal.Content p={0}>
         <Stack h="100dvh" gap={0}>
-          <Modal.Header><Modal.Title>Image gallery</Modal.Title><Modal.CloseButton aria-label="Close image gallery" /></Modal.Header>
-          {selected && <Modal.Body flex={1} mih={0}>
-            <Stack h="100%" gap="sm">
-              <Group justify="space-between">
-                <Stack gap={0}><Text fw={700}>{selected.name}</Text><Text size="sm" c="dimmed">{selected.description}</Text></Stack>
-                {actions}
-                <Group gap="xs" aria-label="Gallery navigation">
-                  <Button variant="default" leftSection={<IconArrowLeft size={16} aria-hidden="true" />} disabled={position === 0} onClick={() => move(-1)}>Previous image</Button>
-                  <Text role="status" aria-live="polite" aria-atomic="true">Image {position + 1} of {items.length}</Text>
-                  <Button rightSection={<IconArrowRight size={16} aria-hidden="true" />} disabled={position >= items.length - 1} onClick={() => move(1)}>Next image</Button>
+          <Modal.Header py="xs"><Modal.Title>Image gallery</Modal.Title><Modal.CloseButton aria-label="Close image gallery" /></Modal.Header>
+          {selected && <Modal.Body flex={1} mih={0} p={0}>
+            <Stack h="100%" gap={0}>
+              <Group justify="space-between" gap="sm" px="md" py="xs">
+                <Stack gap={0} miw={0}><Text fw={600} size="sm" truncate>{selected.name}</Text><Text size="xs" c="dimmed">{selected.description}</Text></Stack>
+                <Group gap="sm" wrap="nowrap">
+                  <Group gap={4} wrap="nowrap" aria-label="Gallery navigation">
+                    <IconAction label="Previous image" disabled={position === 0} onClick={() => move(-1)}><IconArrowLeft size={16} aria-hidden="true" /></IconAction>
+                    <Text role="status" aria-live="polite" aria-atomic="true" size="sm" c="dimmed">Image {position + 1} of {items.length}</Text>
+                    <IconAction label="Next image" disabled={position >= items.length - 1} onClick={() => move(1)}><IconArrowRight size={16} aria-hidden="true" /></IconAction>
+                  </Group>
+                  {actions}
                 </Group>
               </Group>
               <Box flex={1} mih={0}><ImageInspection key={`${selected.source}|${selected.name}`} image={selected} /></Box>

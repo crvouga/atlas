@@ -62,12 +62,12 @@ export function CollectionPanel({ standalone = false }: { standalone?: boolean }
   }
   const summary = queue.data;
   if (standalone && !runtimeConfig()?.api) return <Text role="status" c="dimmed">Collection status is available when connected to an Atlas server.</Text>;
-  if (standalone && queue.isPending) return <Text role="status">Loading collection status…</Text>;
+  if (standalone && queue.isPending) return <Text role="status" c="dimmed">Loading collection status…</Text>;
   if (!summary?.definition) return standalone ? <Text role="status" c="dimmed">No collection definition has been published for this project.</Text> : null;
   const due = summary.tiers.failed + summary.tiers.empty + summary.tiers.unknown + summary.tiers.stale;
   const active = summary.shards.filter(shard => shard.status === 'active').length;
   return (
-    <Accordion variant="contained" defaultValue={standalone ? 'collection' : null}>
+    <Accordion defaultValue={standalone ? 'collection' : null}>
       <Accordion.Item value="collection">
         <Accordion.Control>
           Collection of {summary.definition.name}: {due === 0 && summary.held === 0 ? 'nothing left to collect' : `${plural(due, 'unit', 'units')} to collect, ${summary.held} being collected`}, {plural(active, 'active shard', 'active shards')}
@@ -77,11 +77,11 @@ export function CollectionPanel({ standalone = false }: { standalone?: boolean }
             {queue.isError && <Alert color="orange" title="Collection status may be out of date">The last refresh failed. <Button variant="subtle" onClick={() => void queue.refetch()}>Try again</Button></Alert>}
             <Group gap="xs" role="status" aria-label="Queue by tier">
               {TIERS.map(({ tier, label, color }) => (
-                <Badge key={tier} variant="light" color={color}>{summary.tiers[tier]} {label}</Badge>
+                <Badge key={tier} size="sm" variant={color === 'gray' ? 'default' : 'light'} color={color}>{summary.tiers[tier]} {label}</Badge>
               ))}
-              <Badge variant="light" color="blue">{summary.held} being collected</Badge>
+              <Badge size="sm" variant="light" color="blue">{summary.held} being collected</Badge>
             </Group>
-            <Text fz="sm">
+            <Text fz="sm" c="dimmed">
               {summary.definition.states} states in {plural(summary.definition.profiles, 'profile', 'profiles')}: {plural(summary.definition.items, 'item', 'items')} in {plural(summary.definition.units, 'work unit', 'work units')}.{' '}
               {summary.throughput.unitsPerMinute > 0
                 ? `${summary.throughput.unitsPerMinute.toFixed(1)} units a minute over the last ten minutes${summary.throughput.etaMs !== null ? `; about ${duration(summary.throughput.etaMs)} to empty the queue` : ''}.`
@@ -134,7 +134,7 @@ export function CollectionPanel({ standalone = false }: { standalone?: boolean }
                     {summary.shards.map(shard => (
                       <Table.Tr key={shard.shard} data-shard={shard.shard}>
                         <Table.Td>{shard.shard}</Table.Td>
-                        <Table.Td><Badge variant="light" color={SHARD_COLOR[shard.status]}>{shard.status === 'active' ? 'Active' : shard.status === 'idle' ? 'Idle' : 'Lost: its claim expired'}</Badge></Table.Td>
+                        <Table.Td><Badge size="sm" variant={shard.status === 'idle' ? 'default' : 'light'} color={SHARD_COLOR[shard.status]}>{shard.status === 'active' ? 'Active' : shard.status === 'idle' ? 'Idle' : 'Lost: its claim expired'}</Badge></Table.Td>
                         <Table.Td>{shard.done}</Table.Td>
                         <Table.Td>{shard.failed}</Table.Td>
                         <Table.Td><time dateTime={new Date(shard.lastSeenAtMs).toISOString()} title={exactTime(shard.lastSeenAtMs)}>{ago(shard.lastSeenAtMs, now)}</time></Table.Td>

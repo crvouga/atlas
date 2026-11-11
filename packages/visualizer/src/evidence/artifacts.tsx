@@ -4,7 +4,19 @@ import { effectiveScope } from '@crvouga/atlas/reports/evidence-scope';
 import type { LayerHeader, LayerRow } from '@crvouga/atlas/reports/evidence-types';
 import { contentTypeOf } from '@crvouga/atlas/reports/media-types';
 import type { Annotation, Attachment, Attempt, Step } from '@crvouga/atlas/schema';
-import { Accordion, Alert, Anchor, Badge, Box, Code, Flex, Image, List, Stack, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Anchor, Badge, Box, Button, Code, Divider, Group, Image, List, Paper, ScrollArea, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import {
+  IconBrowser,
+  IconDownload,
+  IconExternalLink,
+  IconFile,
+  IconFileText,
+  IconFileTypePdf,
+  IconFileZip,
+  IconMovie,
+  IconMusic,
+  IconPhoto
+} from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArtifactTagList, ArtifactTagsProvider, TagFilterBar, useFilteredAttachments } from './artifact-tags';
@@ -29,6 +41,8 @@ export type ArtifactRenderer = {
       url: string | null;
       path: string | null;
       type: string;
+      /** True when the card is one tile of a grid of pictures, so a picture keeps to a thumbnail's height. */
+      tile?: boolean;
     }
   ) => ReactNode;
   /** Wide renderers take a whole row of the gallery. */
@@ -37,6 +51,21 @@ export type ArtifactRenderer = {
 const mediaType = (attachment: Attachment) =>
   (attachment.contentType ?? contentTypeOf(attachment.name)).split(';')[0]!.trim().toLowerCase();
 const label = (attachment: Attachment) => attachment.description ?? attachment.name;
+/**
+ * The frame a recording or a picture is letterboxed in: a dark neutral ground in both color schemes, the full width
+ * of its container and a bounded height. Spread it on a `<video>` (`Box component="video"`) so every player looks alike.
+ */
+export const MEDIA_FRAME = { display: 'block', w: '100%', maw: '100%', mah: 'min(70vh, 40rem)', bg: 'dark.9', bdrs: 'md' } as const;
+function fileIcon(type: string) {
+  if (type.startsWith('image/')) return IconPhoto;
+  if (type.startsWith('video/')) return IconMovie;
+  if (type.startsWith('audio/')) return IconMusic;
+  if (type === 'application/pdf') return IconFileTypePdf;
+  if (type === 'text/html' || type === 'application/xhtml+xml') return IconBrowser;
+  if (/(zip|tar|gzip|compressed|archive)/.test(type)) return IconFileZip;
+  if (type.startsWith('text/') || /(json|xml|yaml|x-ndjson|x-diff)/.test(type)) return IconFileText;
+  return IconFile;
+}
 /** A video that plays inline; when the file cannot be loaded or this browser cannot play it, it says so and offers the file, instead of an empty player. */
 function VideoPlayer({ attachment, url }: { attachment: Attachment; url: string }) {
   const [failed, setFailed] = useState(false);
@@ -61,8 +90,7 @@ function VideoPlayer({ attachment, url }: { attachment: Attachment; url: string 
       preload="metadata"
       aria-label={label(attachment)}
       component="video"
-      maw="100%"
-      w="100%"
+      {...MEDIA_FRAME}
       onError={() => setFailed(true)}
       {...moments}
     />
@@ -79,7 +107,7 @@ function TextValue({ attachment, path }: { attachment: Attachment; path: string 
   const raw = attachment.text ?? stored.data;
   if (raw === undefined)
     return (
-      <Text component="div" c="dimmed">
+      <Text component="div" c="dimmed" size="xs">
         {stored.isError ? 'Could not be read.' : 'Loading…'}
       </Text>
     );
@@ -87,9 +115,11 @@ function TextValue({ attachment, path }: { attachment: Attachment; path: string 
   const pretty = /json/.test(mediaType(attachment)) ? tryPretty(shown) : shown;
   return (
     <>
-      <Code block>{pretty}</Code>
+      <ScrollArea.Autosize mah="24rem" type="auto">
+        <Code block>{pretty}</Code>
+      </ScrollArea.Autosize>
       {shown.length < raw.length && (
-        <Text component="div" c="dimmed">
+        <Text component="div" c="dimmed" size="xs">
           Showing the first 200 000 characters.
         </Text>
       )}
@@ -108,10 +138,23 @@ export const artifactRenderers: ArtifactRenderer[] = [
   {
     id: 'image',
     matches: (_, type) => type.startsWith('image/') && type !== 'image/svg+xml',
-    render: (a, { url }) =>
+    render: (a, { url, tile }) =>
       url ? (
-        <Anchor href={url} target="_blank" rel="noreferrer">
-          <Image src={url} alt={label(a)} loading="lazy" width={a.width} height={a.height} fit="contain" maw="100%" />
+        <Anchor href={url} target="_blank" rel="noreferrer" display="block">
+          <Image
+            src={url}
+            alt={label(a)}
+            loading="lazy"
+            width={a.width}
+            height={a.height}
+            fit="contain"
+            maw="100%"
+            w="100%"
+            h={tile ? '9rem' : 'auto'}
+            mah={tile ? undefined : 'min(70vh, 40rem)'}
+            bg="dark.9"
+            radius="sm"
+          />
         </Anchor>
       ) : null
   },
@@ -119,7 +162,21 @@ export const artifactRenderers: ArtifactRenderer[] = [
   {
     id: 'svg',
     matches: (_, type) => type === 'image/svg+xml',
-    render: (a, { url }) => (url ? <Image src={url} alt={label(a)} loading="lazy" fit="contain" maw="100%" /> : null)
+    render: (a, { url, tile }) =>
+      url ? (
+        <Image
+          src={url}
+          alt={label(a)}
+          loading="lazy"
+          fit="contain"
+          maw="100%"
+          w="100%"
+          h={tile ? '9rem' : 'auto'}
+          mah={tile ? undefined : 'min(70vh, 40rem)'}
+          bg="var(--mantine-color-default-hover)"
+          radius="sm"
+        />
+      ) : null
   },
   {
     id: 'video',
@@ -130,7 +187,7 @@ export const artifactRenderers: ArtifactRenderer[] = [
   {
     id: 'audio',
     matches: (_, type) => type.startsWith('audio/'),
-    render: (a, { url }) => (url ? <audio src={url} controls preload="none" aria-label={label(a)} /> : null)
+    render: (a, { url }) => (url ? <Box component="audio" src={url} controls preload="none" aria-label={label(a)} display="block" w="100%" /> : null)
   },
   // A page snapshot runs nothing: the frame has no permissions and the file is served sandboxed.
   {
@@ -138,14 +195,14 @@ export const artifactRenderers: ArtifactRenderer[] = [
     wide: true,
     matches: (_, type) => type === 'text/html' || type === 'application/xhtml+xml',
     render: (a, { url }) =>
-      url ? <Box component="iframe" w="100%" h="32rem" bd="0" sandbox="" src={url} title={label(a)} loading="lazy" /> : null
+      url ? <Box component="iframe" display="block" w="100%" h="32rem" bd="1px solid var(--mantine-color-default-border)" bdrs="sm" sandbox="" src={url} title={label(a)} loading="lazy" /> : null
   },
   {
     id: 'pdf',
     wide: true,
     matches: (_, type) => type === 'application/pdf',
     render: (a, { url }) =>
-      url ? <Box component="iframe" w="100%" h="32rem" bd="0" sandbox="" src={url} title={label(a)} loading="lazy" /> : null
+      url ? <Box component="iframe" display="block" w="100%" h="32rem" bd="1px solid var(--mantine-color-default-border)" bdrs="sm" sandbox="" src={url} title={label(a)} loading="lazy" /> : null
   },
   {
     id: 'text',
@@ -175,11 +232,27 @@ export function attachmentSource(attachment: Attachment, layer: string): { path:
  * nothing can preview says so in words. Pass `link` for a control that opens this one artifact, `note` for how it
  * relates to the rest of the report, and `selected` to mark the one a link pointed at (it scrolls into view).
  */
-export function ArtifactCard({ attachment, layer, link, note, selected }: { attachment: Attachment; layer: string; link?: ReactNode; note?: ReactNode; selected?: boolean }) {
+export function ArtifactCard({
+  attachment,
+  layer,
+  link,
+  note,
+  selected,
+  tile
+}: {
+  attachment: Attachment;
+  layer: string;
+  link?: ReactNode;
+  note?: ReactNode;
+  selected?: boolean;
+  /** One tile of a grid of pictures: the picture keeps to a thumbnail's height and the caption is compact. */
+  tile?: boolean;
+}) {
   const type = mediaType(attachment);
   const { path, url } = attachmentSource(attachment, layer);
   const renderer = artifactRenderers.find((candidate) => candidate.matches(attachment, type));
-  const body = renderer?.render(attachment, { url, path, type });
+  const body = renderer?.render(attachment, { url, path, type, tile });
+  const Icon = fileIcon(type);
   const item = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (selected) item.current?.scrollIntoView?.({ block: 'center' });
@@ -188,66 +261,114 @@ export function ArtifactCard({ attachment, layer, link, note, selected }: { atta
   // A recording says what it shows before it is played; evidence that declared a scope of its own says so too.
   const scoped = isVideoAttachment(attachment) || attachment.scope !== undefined;
   return (
-    <List.Item
+    <Paper
+      component="li"
+      display="block"
       ref={item}
+      withBorder
+      radius="md"
+      p={tile ? 'xs' : 'sm'}
+      miw={0}
       data-wide={renderer?.wide || undefined}
       data-role={attachment.role ?? roleOfType(type)}
       data-selected={selected || undefined}
-      {...(selected ? { bg: 'blue.0', p: 'sm', bd: '2px solid var(--mantine-color-blue-6)' } : {})}
+      bg={selected ? 'var(--mantine-color-primary-light)' : undefined}
     >
-      {scoped && <ScopeNotice scope={scope} name={attachment.name} />}
-      {body}
-      <Box component="figcaption">
-        <Text span inherit fw={600}>
-          {attachment.name}
-        </Text>
-        {selected && <Badge variant="light">Selected</Badge>}
-        {attachment.role && (
-          <Text span inherit>
-            {attachment.role}
+      <Stack gap="xs" miw={0}>
+        {scoped && <ScopeNotice scope={scope} name={attachment.name} />}
+        {body}
+        <Group component="figcaption" gap="sm" wrap="nowrap" align="center" miw={0}>
+          {!tile && (
+            <ThemeIcon variant="default" size="lg" radius="md" c="dimmed" visibleFrom="xs">
+              <Icon size={18} stroke={1.5} aria-hidden="true" />
+            </ThemeIcon>
+          )}
+          <Stack gap={0} flex={1} miw={0}>
+            <Group gap={6} wrap="wrap" align="center">
+              <Text span fw={600} lineClamp={tile ? 1 : undefined} title={attachment.name}>
+                {attachment.name}
+              </Text>
+              {selected && (
+                <Badge variant="light" size="sm">
+                  Selected
+                </Badge>
+              )}
+              {attachment.role && (
+                <Badge variant="default" size="sm">
+                  {attachment.role}
+                </Badge>
+              )}
+            </Group>
+            <Text span c="dimmed" size="xs" lineClamp={tile ? 1 : undefined}>
+              {[type, sizeOf(attachment.bytes), attachment.durationMs ? duration(attachment.durationMs) : ''].filter(Boolean).join(' · ')}
+            </Text>
+          </Stack>
+          {url && (
+            <Button
+              component="a"
+              href={url}
+              download={attachment.name}
+              target="_blank"
+              rel="noreferrer"
+              variant="subtle"
+              size="compact-sm"
+              leftSection={body ? <IconDownload size={14} aria-hidden="true" /> : <IconExternalLink size={14} aria-hidden="true" />}
+            >
+              {body ? 'Download' : 'Open'}
+            </Button>
+          )}
+          {link}
+        </Group>
+        {!url && attachment.text === undefined && (
+          <Alert role={selected ? 'alert' : undefined} color="orange" data-unavailable>
+            {attachment.uri
+              ? 'No file to show. This file is only given by an address that is not a web address, so Atlas will not follow it. Ask the producer for a web address or to upload the file.'
+              : 'No file to show. The report lists this file, but it was never stored, so it cannot be shown or downloaded. Publish it again with the file attached.'}
+          </Alert>
+        )}
+        {url && !renderer && (
+          <Text component="div" c="dimmed" size="xs" data-no-preview>
+            Atlas has no preview for this kind of file. Open or download it to inspect it.
           </Text>
         )}
-        <Text span inherit>
-          {[type, sizeOf(attachment.bytes), attachment.durationMs ? duration(attachment.durationMs) : ''].filter(Boolean).join(' · ')}
-        </Text>
-        {url && (
-          <Anchor href={url} download={attachment.name} target="_blank" rel="noreferrer">
-            {body ? 'Download' : 'Open'}
-          </Anchor>
-        )}
-        {link}
-      </Box>
-      {!url && attachment.text === undefined && (
-        <Alert role={selected ? 'alert' : undefined} color="orange" data-unavailable my="xs">
-          {attachment.uri
-            ? 'No file to show. This file is only given by an address that is not a web address, so Atlas will not follow it. Ask the producer for a web address or to upload the file.'
-            : 'No file to show. The report lists this file, but it was never stored, so it cannot be shown or downloaded. Publish it again with the file attached.'}
-        </Alert>
-      )}
-      {url && !renderer && (
-        <Text component="div" c="dimmed" data-no-preview>
-          Atlas has no preview for this kind of file. Open or download it to inspect it.
-        </Text>
-      )}
-      {note}
-      <ArtifactTagList attachment={attachment} />
-    </List.Item>
+        {note}
+        <ArtifactTagList attachment={attachment} />
+      </Stack>
+    </Paper>
   );
 }
+/** Pictures are tiles of a grid; recordings, pages and text take a whole row; a file nothing previews is a row with its name and a download. */
+function groupOf(attachment: Attachment): 'wide' | 'tile' | 'file' {
+  const type = mediaType(attachment);
+  const renderer = artifactRenderers.find((candidate) => candidate.matches(attachment, type));
+  if (!renderer || !attachmentSourceKnown(attachment)) return renderer?.id === 'text' ? 'wide' : 'file';
+  if (renderer.wide) return 'wide';
+  return type.startsWith('image/') ? 'tile' : 'file';
+}
+const attachmentSourceKnown = (attachment: Attachment) => Boolean(attachment.bundleKey) || safeUri(attachment.uri) !== null;
 export function Attachments({ attachments: all, layer }: { attachments: readonly Attachment[]; layer: string }) {
   const attachments = useFilteredAttachments(all);
   if (!attachments.length) return null;
   return (
-    <Box aria-label="Attachments" component="section" mb="lg">
-      <Title order={4} mb="sm">
-        {plural(attachments.length, 'attachment', 'attachments')}
-      </Title>
-      <List spacing="xs" listStyleType="none">
-        {attachments.map((attachment, index) => (
-          <ArtifactCard key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} />
-        ))}
-      </List>
-    </Box>
+    <Stack aria-label="Attachments" component="section" gap="sm" miw={0}>
+      <Title order={3}>{plural(attachments.length, 'attachment', 'attachments')}</Title>
+      {(['wide', 'tile', 'file'] as const).map((group) => {
+        const items = attachments.flatMap((attachment, index) => (groupOf(attachment) === group ? [{ attachment, index }] : []));
+        if (!items.length) return null;
+        const cards = items.map(({ attachment, index }) => (
+          <ArtifactCard key={`${attachment.id ?? attachment.name}:${index}`} attachment={attachment} layer={layer} tile={group === 'tile'} />
+        ));
+        return group === 'tile' ? (
+          <SimpleGrid key={group} component="ul" cols={{ base: 2, sm: 3 }} spacing="sm" p={0} m={0}>
+            {cards}
+          </SimpleGrid>
+        ) : (
+          <Stack key={group} component="ul" gap="sm" p={0} m={0}>
+            {cards}
+          </Stack>
+        );
+      })}
+    </Stack>
   );
 }
 const STEP_STATUS: Record<string, 'passed' | 'failed' | 'running' | 'not-run'> = {
@@ -276,7 +397,7 @@ export function Timeline({ steps, layer }: { steps: readonly Step[]; layer: stri
     return children;
   }, [steps]);
   const render = (parent: string | null): ReactNode => (
-    <List spacing="xs" listStyleType="none" type="ordered">
+    <List spacing={2} listStyleType="none" type="ordered" pl={parent === null ? 0 : 'lg'}>
       {(tree.get(parent) ?? []).map((step, index) => (
         <TimelineStep key={`${step.id ?? step.name}:${index}`} step={step} layer={layer}>
           {step.id && tree.has(step.id) && render(step.id)}
@@ -285,13 +406,11 @@ export function Timeline({ steps, layer }: { steps: readonly Step[]; layer: stri
     </List>
   );
   return (
-    <Box aria-label="Timeline" component="section" mb="lg">
-      <Title order={4} mb="sm">
-        {plural(steps.length, 'step', 'steps')}
-      </Title>
+    <Stack aria-label="Timeline" component="section" gap="sm" miw={0}>
+      <Title order={3}>{plural(steps.length, 'step', 'steps')}</Title>
       <MomentBar />
       {render(null)}
-    </Box>
+    </Stack>
   );
 }
 /** One step of the timeline: its outcome and times, a control to show it in the recording when there is one, and what it carries. */
@@ -304,34 +423,57 @@ function TimelineStep({ step, layer, children }: { step: Step; layer: string; ch
       data-status={status ?? step.status ?? 'none'}
       data-playing={playing || undefined}
       aria-current={playing ? 'step' : undefined}
-      {...(playing ? { bg: 'blue.0' } : {})}
+      bg={playing ? 'var(--mantine-color-primary-light)' : undefined}
+      bdrs="sm"
+      px="xs"
+      py={6}
     >
-      <Flex gap="xs" align="center" wrap="wrap">
-        <StatusMark status={status ?? 'none'} size={14} />
-        <Text span inherit>
-          {step.name}
-        </Text>
-        {step.kind && (
-          <Text span inherit>
-            {step.kind}
-          </Text>
-        )}
-        {step.status && !status && (
-          <Text span inherit>
-            {step.status}
-          </Text>
-        )}
-        {playing && <Badge variant="light">Playing now</Badge>}
-        <Box flex={1} />
-        <SeekStep step={step} />
-        <Text span inherit c="dimmed">
-          {[step.offsetMs !== undefined ? `+${duration(step.offsetMs)}` : '', duration(step.durationMs)].filter(Boolean).join(' · ')}
-        </Text>
-      </Flex>
-      {step.detail && <Text component="div">{step.detail}</Text>}
-      {step.annotations && <Notes notes={step.annotations} />}
-      {step.attachments && <Attachments attachments={step.attachments} layer={layer} />}
-      {children}
+      <Stack gap="xs" miw={0}>
+        <Group gap="xs" wrap="nowrap" align="flex-start">
+          <Box pt={3} lh={1}>
+            <StatusMark status={status ?? 'none'} size={14} />
+          </Box>
+          <Group gap={6} wrap="wrap" align="center" flex={1} miw={0}>
+            <Text span fw={playing || status === 'failed' ? 600 : undefined}>
+              {step.name}
+            </Text>
+            {step.kind && (
+              <Badge variant="default" size="xs">
+                {step.kind}
+              </Badge>
+            )}
+            {step.status && !status && (
+              <Badge color="gray" size="xs">
+                {step.status}
+              </Badge>
+            )}
+            {playing && (
+              <Badge variant="light" size="sm">
+                Playing now
+              </Badge>
+            )}
+          </Group>
+          <Group gap="xs" wrap="wrap" justify="flex-end" align="center">
+            <SeekStep step={step} />
+            <Text span c="dimmed" size="xs">
+              {[step.offsetMs !== undefined ? `+${duration(step.offsetMs)}` : '', duration(step.durationMs)].filter(Boolean).join(' · ')}
+            </Text>
+          </Group>
+        </Group>
+        {step.detail &&
+          (status === 'failed' ? (
+            <Code block c="red.7" ml="lg">
+              {step.detail}
+            </Code>
+          ) : (
+            <Text component="div" c="dimmed" ml="lg">
+              {step.detail}
+            </Text>
+          ))}
+        {step.annotations && <Notes notes={step.annotations} />}
+        {step.attachments && <Attachments attachments={step.attachments} layer={layer} />}
+        {children}
+      </Stack>
     </List.Item>
   );
 }
@@ -340,10 +482,10 @@ export function Notes({ notes }: { notes: readonly Annotation[] }) {
   return (
     <List aria-label="Annotations" spacing="xs" listStyleType="none">
       {notes.map((note, index) => (
-        <Alert key={index} color={'blue'} my="sm">
-          <Text data-level={note.level ?? 'info'} span inherit>
+        <Alert key={index} color={note.level === 'error' ? 'red' : note.level === 'warning' ? 'orange' : 'gray'} p="xs">
+          <Text data-level={note.level ?? 'info'} span inherit fw={600} tt="capitalize">
             {note.level && ['info', 'warning', 'error'].includes(note.level) ? note.level : note.type}
-          </Text>
+          </Text>{' '}
           <Text span inherit>
             {note.message}
             {note.source?.file && (
@@ -369,35 +511,45 @@ const NO_FILES: readonly Attachment[] = [];
 function Tries({ attempts, layer }: { attempts: readonly Attempt[]; layer: string }) {
   if (!attempts.length) return null;
   return (
-    <Box aria-label="Tries" component="section" mb="lg">
-      <Title order={4} mb="sm">
-        {plural(attempts.length, 'try', 'tries')}
-      </Title>
-      <List spacing="xs" listStyleType="none" type="ordered">
+    <Stack aria-label="Tries" component="section" gap="sm" miw={0}>
+      <Title order={3}>{plural(attempts.length, 'try', 'tries')}</Title>
+      <List spacing="sm" listStyleType="none" type="ordered">
         {attempts.map((attempt) => (
           <List.Item key={attempt.index} data-attempt={attempt.index}>
-            <Flex gap="xs" align="center" wrap="wrap">
-              <StatusMark status={attempt.status} size={14} />
-              <Text span inherit>
-                Try {attempt.index + 1}
-              </Text>
-              <Box flex={1} />
-              <Text span inherit c="dimmed">
-                {duration(attempt.durationMs)}
-              </Text>
-            </Flex>
-            {attempt.detail && <Text component="div">{attempt.detail}</Text>}
-            <ScopeProvider scope={attempt.scope}>
-              {/* A try is placed in its own recording with that recording's own timing, never in another try's. */}
-              <MomentPlayback steps={attempt.steps} attachments={attempt.attachments ?? NO_FILES} layer={layer}>
-                {attempt.steps && attempt.steps.length > 0 ? <Timeline steps={attempt.steps} layer={layer} /> : <MomentBar />}
-                {attempt.attachments && <Attachments attachments={attempt.attachments} layer={layer} />}
-              </MomentPlayback>
-            </ScopeProvider>
+            <Paper withBorder radius="md" p="sm">
+              <Stack gap="sm" miw={0}>
+                <Group gap="xs" align="center" wrap="nowrap">
+                  <StatusMark status={attempt.status} size={14} />
+                  <Text span fw={600} flex={1}>
+                    Try {attempt.index + 1}
+                  </Text>
+                  <Text span c="dimmed" size="xs">
+                    {duration(attempt.durationMs)}
+                  </Text>
+                </Group>
+                {attempt.detail &&
+                  (attempt.status === 'failed' ? (
+                    <Code block c="red.7">
+                      {attempt.detail}
+                    </Code>
+                  ) : (
+                    <Text component="div" c="dimmed">
+                      {attempt.detail}
+                    </Text>
+                  ))}
+                <ScopeProvider scope={attempt.scope}>
+                  {/* A try is placed in its own recording with that recording's own timing, never in another try's. */}
+                  <MomentPlayback steps={attempt.steps} attachments={attempt.attachments ?? NO_FILES} layer={layer}>
+                    {attempt.steps && attempt.steps.length > 0 ? <Timeline steps={attempt.steps} layer={layer} /> : <MomentBar />}
+                    {attempt.attachments && <Attachments attachments={attempt.attachments} layer={layer} />}
+                  </MomentPlayback>
+                </ScopeProvider>
+              </Stack>
+            </Paper>
           </List.Item>
         ))}
       </List>
-    </Box>
+    </Stack>
   );
 }
 /** What is not known: kept, and shown as it is, so nothing a tool recorded is out of reach. */
@@ -405,7 +557,7 @@ function Raw({ extensions }: { extensions: Readonly<Record<string, unknown>> }) 
   const names = Object.keys(extensions);
   if (!names.length) return null;
   return (
-    <Accordion variant="separated" my="sm">
+    <Accordion variant="separated">
       <Accordion.Item value="content">
         <Accordion.Control>
           {plural(names.length, 'extension', 'extensions')}: {names.join(', ')}
@@ -426,27 +578,34 @@ function Facts({ holder }: { holder: EvidenceHolder }) {
   });
   if (!labels.length && !tags.length && !links.length) return null;
   return (
-    <Stack gap="sm">
-      <List aria-label="Facts" spacing="xs" listStyleType="none">
-        {tags.map((tag) => (
-          <List.Item key={`t:${tag}`}>{tag}</List.Item>
-        ))}
+    <Stack gap="xs" component="section" aria-label="Recorded facts">
+      <Title order={3}>Facts</Title>
+      <Group component="ul" aria-label="Facts" gap="xs" p={0} m={0} align="stretch">
         {labels.map(([name, value]) => (
-          <List.Item key={`l:${name}`}>
-            {name}
-            <Text span inherit fw={600}>
+          <Paper component="li" display="block" key={`l:${name}`} withBorder radius="md" px="sm" py={6}>
+            <Text span c="dimmed" size="xs" display="block">
+              {name}
+            </Text>{' '}
+            <Text span inherit fw={600} fz="sm">
               {value}
             </Text>
-          </List.Item>
+          </Paper>
+        ))}
+        {tags.map((tag) => (
+          <Box component="li" display="flex" key={`t:${tag}`}>
+            <Badge variant="default" size="lg" my="auto">
+              {tag}
+            </Badge>
+          </Box>
         ))}
         {links.map((link) => (
-          <List.Item key={`k:${link.url}`}>
-            <Anchor href={link.url} target="_blank" rel="noreferrer">
+          <Box component="li" display="flex" key={`k:${link.url}`}>
+            <Anchor href={link.url} target="_blank" rel="noreferrer" my="auto">
               {link.name ?? link.rel ?? link.url}
             </Anchor>
-          </List.Item>
+          </Box>
         ))}
-      </List>
+      </Group>
     </Stack>
   );
 }
@@ -487,15 +646,19 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
   if (!wanted) return null;
   if (detail.isLoading)
     return (
-      <Text role="status" component="div" c="dimmed">
-        Loading what this result carries…
-      </Text>
+      <Stack gap="xs">
+        <Text role="status" component="div" c="dimmed">
+          Loading what this result carries…
+        </Text>
+        <Skeleton height="1rem" radius="sm" />
+        <Skeleton height="1rem" radius="sm" w="70%" />
+      </Stack>
     );
   if (detail.isError || !detail.data)
     return (
-      <Text role="alert" component="div" c="dimmed">
+      <Alert role="alert" color="red">
         What this result carries could not be read.
-      </Text>
+      </Alert>
     );
   const { check, run, inheritedScope } = detail.data;
   const declared = effectiveScope(check.scope, inheritedScope);
@@ -504,7 +667,7 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
   );
   return (
     <ArtifactTagsProvider layer={layer.id} kind={row.kind} check={row.id} holders={[check, run]}>
-      <Stack aria-label="Evidence" gap="sm" miw={0}>
+      <Stack aria-label="Evidence" gap="md" miw={0}>
         <TagFilterBar holders={[check, run]} />
         {requested.clip !== undefined && requested.layer === layer.id && ![...videosIn(check), ...videosIn(run)].some((video) => attachmentIdentity(video) === requested.clip) && (
           <Alert role="status" color="orange" title="The recording this link names is not in this result" data-moment-missing>
@@ -521,12 +684,11 @@ export function ResultEvidence({ layer, row }: { layer: LayerHeader; row: LayerR
           <Evidence holder={check} layer={layer.id} steps owner={momentOwner(layer.id, row.kind, row.id)} />
         </ScopeProvider>
         {hasRun && (
-          <Box aria-label="From the run" component="section" mb="lg">
-            <Title order={4} mb="sm">
-              From the run
-            </Title>
+          <Stack aria-label="From the run" component="section" gap="md" miw={0}>
+            <Divider />
+            <Title order={3}>From the run</Title>
             <Evidence holder={run} layer={layer.id} />
-          </Box>
+          </Stack>
         )}
       </Stack>
     </ArtifactTagsProvider>

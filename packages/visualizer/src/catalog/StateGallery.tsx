@@ -5,13 +5,14 @@
  * Item navigation uses the index's complete filtered order, independently of the selected profile.
  */
 import type { UiCapture, UiCatalogState, UiCell } from '@crvouga/atlas/reports/ui-catalog';
-import { Badge, Box, Button, Code, Group, NativeSelect, Modal, Pagination, Paper, Stack, Table, Text, Title } from '@mantine/core';
-import { IconArrowLeft, IconArrowRight, IconArrowsMaximize } from '@tabler/icons-react';
-import { useEffect, useRef } from 'react';
+import { ActionIcon, Badge, Box, Button, Card, Code, Divider, Group, NativeSelect, Modal, Pagination, Stack, Table, Text, Title } from '@mantine/core';
+import { IconArrowLeft, IconArrowRight, IconArrowsMaximize, IconCamera, IconChevronLeft, IconChevronRight, IconListDetails } from '@tabler/icons-react';
+import { useEffect, useId, useRef } from 'react';
 
 import { ago, exactTime, plural, shortSha, useNow } from '../evidence/format';
 import { StatusMark } from '../evidence/marks';
 import { GalleryProvider, ImageInspection, useGallery } from './Gallery';
+import { IconAction } from './IconAction';
 import { galleryImage, Picture } from './Picture';
 import { ScreenActions } from './ScreenActions';
 import { useCatalogNavigate, useCatalogSearch } from './search';
@@ -36,16 +37,20 @@ function Origin({ capture, now }: { capture: UiCapture; now: number }) {
   );
 }
 
+function CoverageLine({ cell }: { cell: UiCell }) {
+  return <Group gap="xs">
+    <StatusMark status={coverageStatus(cell.coverage)} size={16} />
+    <Text size="sm" fw={600}>{coverageWord(cell.coverage)}</Text>
+    {cell.expected === 'undeclared' && <Badge variant="default" size="sm">Not in the expected set</Badge>}
+    {cell.expected === 'declared' && cell.coverage !== 'captured' && <Badge variant="default" size="sm">Expected</Badge>}
+    {cell.capture?.image?.width && cell.capture.image.height && <Text size="sm" c="dimmed">{cell.capture.image.width}×{cell.capture.image.height}</Text>}
+  </Group>;
+}
+
 function CaptureDetails({ cell }: { cell: UiCell }) {
   const now = useNow();
   return <Stack gap="xs">
-    <Group gap="xs">
-      <StatusMark status={coverageStatus(cell.coverage)} size={16} />
-      <Text fw={600}>{coverageWord(cell.coverage)}</Text>
-      {cell.expected === 'undeclared' && <Badge variant="outline">Not in the expected set</Badge>}
-      {cell.expected === 'declared' && cell.coverage !== 'captured' && <Badge variant="outline">Expected</Badge>}
-      {cell.capture?.image?.width && cell.capture.image.height && <Text size="sm" c="dimmed">{cell.capture.image.width}×{cell.capture.image.height}</Text>}
-    </Group>
+    <CoverageLine cell={cell} />
     {cell.capture?.detail && <Text size="sm" role="note">{cell.capture.detail}</Text>}
     {cell.capture ? <Origin capture={cell.capture} now={now} /> : cell.planned ? <Text c="dimmed" size="xs">Expected by plan layer <Code>{cell.planned.layer.slice(0, 12)}</Code> in backend <Code>{cell.planned.backend}</Code>. Nothing has been captured.</Text> : null}
   </Stack>;
@@ -57,11 +62,13 @@ function ItemDetails({ state }: { state: UiCatalogState }) {
     ['Feature flags', state.flags.join(', ')], ['Surfaces covered', state.covers.join(', ')], ['Producers', state.producers.join(', ')],
     ...Object.entries(state.attributes ?? {})
   ];
-  return <Table.ScrollContainer minWidth={320}>
-    <Table aria-label="Declared facts"><Table.Tbody>
-      {facts.map(([name, value]) => <Table.Tr key={name}><Table.Th scope="row">{name}</Table.Th><Table.Td>{value || <Text span c="dimmed">Not declared</Text>}</Table.Td></Table.Tr>)}
-    </Table.Tbody></Table>
-  </Table.ScrollContainer>;
+  return <Card padding={0} shadow="none">
+    <Table.ScrollContainer minWidth={320}>
+      <Table aria-label="Declared facts" horizontalSpacing="md"><Table.Tbody>
+        {facts.map(([name, value]) => <Table.Tr key={name}><Table.Th scope="row" w="36%" fw={500} c="dimmed">{name}</Table.Th><Table.Td>{value || <Text span inherit c="dimmed">Not declared</Text>}</Table.Td></Table.Tr>)}
+      </Table.Tbody></Table>
+    </Table.ScrollContainer>
+  </Card>;
 }
 
 interface StateGalleryProps {
@@ -81,6 +88,8 @@ function FocusedGallery({ state, states, profile, scope, onProfile, onSelect, on
   const panel = search.panel === 'facts' || search.panel === 'captures' ? search.panel : null;
   const closePanel = () => go({ panel: undefined }, { replace: true });
   const heading = useRef<HTMLHeadingElement>(null);
+  const profileId = useId();
+  const now = useNow();
   const navigation = useRef<HTMLDivElement>(null);
   const index = states.findIndex(item => item.id === state.id);
   const cell = state.cells.find(cell => cell.profile.key === profile) ?? state.cells.find(cell => galleryImage(cell, state.title)) ?? state.cells[0];
@@ -103,58 +112,77 @@ function FocusedGallery({ state, states, profile, scope, onProfile, onSelect, on
       select(index + (event.key === 'ArrowLeft' ? 0 : 2));
     }
   }}>
-    <Group justify="space-between" align="flex-start">
-      <Stack gap="xs">
-        <Button variant="subtle" leftSection={<IconArrowLeft size={16} aria-hidden="true" />} onClick={onClose}>Back to catalog</Button>
-        <Title ref={heading} tabIndex={-1} order={1}>{state.title}</Title>
-        <Text c="dimmed" size="sm">{state.id}{state.route ? ` · ${state.route}` : ''}</Text>
-        <Group gap="xs">
-          <Button variant="default" onClick={() => go({ panel: 'facts' })}>Item details</Button>
-          <Button variant="default" onClick={() => go({ panel: 'captures' })}>Capture details</Button>
-        </Group>
-        <ScreenActions state={state} cell={cell} />
-      </Stack>
-      <Stack component="nav" aria-label="Catalog item navigation" gap="xs" tabIndex={-1} ref={navigation}>
-        <Text role="status" aria-live="polite" aria-atomic="true">{index >= 0 ? `Item ${index + 1} of ${states.length}: ${state.title}` : `${state.title} is outside the current filters.`}</Text>
-        {index >= 0 && <>
-          <Group gap="xs">
-            <Button variant="default" aria-label="Previous item in catalog" leftSection={<IconArrowLeft size={16} aria-hidden="true" />} disabled={index === 0} onClick={() => select(index)}>Previous item</Button>
-            <Button aria-label="Next item in catalog" rightSection={<IconArrowRight size={16} aria-hidden="true" />} disabled={index === states.length - 1} onClick={() => select(index + 2)}>Next item</Button>
-          </Group>
-          <Pagination total={states.length} value={index + 1} onChange={select} layout="responsive" withControls={false}
-            formatLabel={({ page, totalPages }) => `Item ${page} of ${totalPages}`}
-            getItemProps={page => ({ 'aria-label': `Go to item ${page}: ${states[page - 1]!.title}`, 'aria-current': page === index + 1 ? 'page' : undefined })} />
-        </>}
-      </Stack>
-    </Group>
-    <Text size="sm" c="dimmed">{scope ? <>Current catalog search: <Code>{scope}</Code>. </> : 'All catalog items. '}Left / Right for items; Escape to return to the catalog.</Text>
-    <Paper withBorder p="sm">
+    <Card>
       <Stack gap="sm">
-        <Group justify="space-between" align="flex-end">
-          <NativeSelect label="Image profile" value={cell?.profile.key ?? ''} onChange={event => onProfile(event.currentTarget.value)}
-            data={state.cells.map(cell => ({ value: cell.profile.key, label: `${cell.profile.label} · ${coverageWord(cell.coverage)}` }))} />
+        <Group justify="space-between" align="flex-start" gap="md">
+          <Stack gap={6} align="flex-start" flex={1} miw={{ base: '100%', sm: 280 }}>
+            <Button variant="subtle" color="gray" size="compact-sm" ml={-8} leftSection={<IconArrowLeft size={16} aria-hidden="true" />} onClick={onClose}>Back to catalog</Button>
+            <Title ref={heading} tabIndex={-1} order={1}>{state.title}</Title>
+            <Text c="dimmed" size="sm">{state.id}{state.route ? ` · ${state.route}` : ''}</Text>
+          </Stack>
+          <Stack component="nav" aria-label="Catalog item navigation" gap="xs" align="flex-end" maw="100%" tabIndex={-1} ref={navigation}>
+            <Group gap="xs" wrap="nowrap" maw="100%">
+              <Text role="status" aria-live="polite" aria-atomic="true" size="sm" c="dimmed" truncate>{index >= 0 ? `Item ${index + 1} of ${states.length}: ${state.title}` : `${state.title} is outside the current filters.`}</Text>
+              {index >= 0 && <ActionIcon.Group>
+                <IconAction variant="default" label="Previous item in catalog" tip="Previous item" disabled={index === 0} onClick={() => select(index)}><IconArrowLeft size={16} aria-hidden="true" /></IconAction>
+                <IconAction variant="default" label="Next item in catalog" tip="Next item" disabled={index === states.length - 1} onClick={() => select(index + 2)}><IconArrowRight size={16} aria-hidden="true" /></IconAction>
+              </ActionIcon.Group>}
+            </Group>
+            {index >= 0 && <Pagination total={states.length} value={index + 1} onChange={select} layout="responsive" withControls={false} size="sm"
+              formatLabel={({ page, totalPages }) => `Item ${page} of ${totalPages}`}
+              getItemProps={page => ({ 'aria-label': `Go to item ${page}: ${states[page - 1]!.title}`, 'aria-current': page === index + 1 ? 'page' : undefined })} />}
+          </Stack>
+        </Group>
+        <Divider />
+        <Group justify="space-between" gap="sm">
           <Group gap="xs">
-            <Button variant="default" disabled={imageIndex <= 0} onClick={() => onProfile(images[imageIndex - 1]!.cell.profile.key)}>Previous image</Button>
-            <Text role="status">{imageIndex >= 0 ? `Image ${imageIndex + 1} of ${images.length}` : 'No image for this profile'}</Text>
-            <Button variant="default" disabled={imageIndex >= images.length - 1 || images.length === 0} onClick={() => onProfile(images[imageIndex + 1]!.cell.profile.key)}>Next image</Button>
-            {image && <Button leftSection={<IconArrowsMaximize size={16} aria-hidden="true" />} onClick={() => gallery?.open(image)}>Open full-screen</Button>}
+            <Button size="xs" leftSection={<IconListDetails size={14} aria-hidden="true" />} onClick={() => go({ panel: 'facts' })}>Item details</Button>
+            <Button size="xs" leftSection={<IconCamera size={14} aria-hidden="true" />} onClick={() => go({ panel: 'captures' })}>Capture details</Button>
+          </Group>
+          <Text size="xs" c="dimmed">{scope ? <>Current catalog search: <Code>{scope}</Code>. </> : 'All catalog items. '}Left / Right for items; Escape to return to the catalog.</Text>
+        </Group>
+      </Stack>
+    </Card>
+    <Card padding={0}>
+      <Group justify="space-between" gap="sm" px="sm" py="xs">
+        <Group gap="sm" wrap="nowrap" miw={0}>
+          <Text component="label" htmlFor={profileId} size="sm" c="dimmed" visibleFrom="sm">Image profile</Text>
+          <NativeSelect id={profileId} aria-label="Image profile" value={cell?.profile.key ?? ''} onChange={event => onProfile(event.currentTarget.value)}
+            data={state.cells.map(cell => ({ value: cell.profile.key, label: `${cell.profile.label} · ${coverageWord(cell.coverage)}` }))} />
+        </Group>
+        <Group gap="xs" wrap="nowrap">
+          <Group gap={2} wrap="nowrap">
+            <IconAction label="Previous image" disabled={imageIndex <= 0} onClick={() => onProfile(images[imageIndex - 1]!.cell.profile.key)}><IconChevronLeft size={16} aria-hidden="true" /></IconAction>
+            <Text role="status" size="sm" c="dimmed">{imageIndex >= 0 ? `Image ${imageIndex + 1} of ${images.length}` : 'No image for this profile'}</Text>
+            <IconAction label="Next image" disabled={imageIndex >= images.length - 1 || images.length === 0} onClick={() => onProfile(images[imageIndex + 1]!.cell.profile.key)}><IconChevronRight size={16} aria-hidden="true" /></IconAction>
+          </Group>
+          <Divider orientation="vertical" />
+          <Group gap={2} wrap="nowrap">
+            {image && <IconAction label="Open full-screen" onClick={() => gallery?.open(image)}><IconArrowsMaximize size={16} aria-hidden="true" /></IconAction>}
+            <ScreenActions state={state} cell={cell} compact />
           </Group>
         </Group>
-        <Box h="65dvh" mih={360} flex="0 0 auto" miw={0} role="group" aria-label="Selected image">
-          {image ? <ImageInspection key={`${state.id}|${cell!.profile.key}`} image={image} shortcuts={!gallery?.opened && !panel} />
-            : <Picture cell={cell} title={state.title} height="100%" emptyMessage={cell ? undefined : 'No profiles have been recorded.'} />}
-        </Box>
-        {cell && <Group gap="xs"><StatusMark status={coverageStatus(cell.coverage)} size={16} /><Text size="sm">{coverageWord(cell.coverage)}</Text><Text size="sm" c="dimmed">{cell.capture?.image?.width && cell.capture.image.height ? `${cell.capture.image.width}×${cell.capture.image.height}` : cell.capture?.detail || 'Use Capture details for provenance and diagnostics.'}</Text></Group>}
-      </Stack>
-    </Paper>
+      </Group>
+      <Box h="65dvh" mih={360} flex="0 0 auto" miw={0} role="group" aria-label="Selected image">
+        {image ? <ImageInspection key={`${state.id}|${cell!.profile.key}`} image={image} shortcuts={!gallery?.opened && !panel} />
+          : <Picture cell={cell} title={state.title} height="100%" emptyMessage={cell ? undefined : 'No profiles have been recorded.'} />}
+      </Box>
+      {cell && <Stack gap={6} px="md" py="sm" aria-label="Selected capture">
+        <CoverageLine cell={cell} />
+        {cell.capture?.detail && <Text size="sm">{cell.capture.detail}</Text>}
+        {cell.capture ? <Origin capture={cell.capture} now={now} /> : <Text size="xs" c="dimmed">Use Capture details for provenance and diagnostics.</Text>}
+      </Stack>}
+    </Card>
     <Modal opened={!!panel} onClose={closePanel} title={panel === 'captures' ? `Capture details: ${state.title}` : `Item details: ${state.title}`} size="lg"
       closeButtonProps={{ 'aria-label': 'Close screen details' }} onKeyDown={event => { if ((event.target as HTMLElement).closest('[data-atlas-command-palette]')) return; event.stopPropagation(); if (event.key === 'Escape') { event.preventDefault(); closePanel(); } }}>
-      {panel === 'facts' ? <ItemDetails state={state} /> : panel === 'captures' ? <Stack gap="lg">
-        {state.cells.map(profile => <Stack key={profile.profile.key} gap="xs" component="section" aria-label={`${state.title} in ${profile.profile.label}`}>
-          <Title order={2}>{profile.profile.label}</Title><CaptureDetails cell={profile} />
-        </Stack>)}
-      </Stack> : null}
-      <ScreenActions state={state} cell={cell} share={false} />
+      <Stack gap="md">
+        {panel === 'facts' ? <ItemDetails state={state} /> : panel === 'captures' ? <Stack gap="sm">
+          {state.cells.map(profile => <Card key={profile.profile.key} padding="md" shadow="none" component="section" aria-label={`${state.title} in ${profile.profile.label}`}>
+            <Stack gap="xs"><Title order={2} size="h5">{profile.profile.label}</Title><CaptureDetails cell={profile} /></Stack>
+          </Card>)}
+        </Stack> : null}
+        <ScreenActions state={state} cell={cell} share={false} />
+      </Stack>
     </Modal>
   </Stack>;
 }
@@ -163,7 +191,7 @@ function FocusedGallery({ state, states, profile, scope, onProfile, onSelect, on
 export function StateGallery(props: StateGalleryProps) {
   const images = props.state.cells.flatMap(cell => { const image = galleryImage(cell, props.state.title); return image ? [image] : []; });
   const cell = props.state.cells.find(cell => cell.profile.key === props.profile) ?? props.state.cells.find(cell => galleryImage(cell, props.state.title)) ?? props.state.cells[0];
-  return <GalleryProvider images={images} actions={<ScreenActions state={props.state} cell={cell} share={false} />} onImageChange={image => {
+  return <GalleryProvider images={images} actions={<ScreenActions state={props.state} cell={cell} share={false} compact />} onImageChange={image => {
     const cell = props.state.cells.find(cell => galleryImage(cell, props.state.title)?.name === image.name && galleryImage(cell, props.state.title)?.source === image.source);
     if (cell) props.onProfile(cell.profile.key);
   }}>

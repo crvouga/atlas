@@ -1,16 +1,17 @@
 /** @module Rich catalog search
  * One keyboard-operated chip input for product terms, recorded facets and sorting, backed by the URL.
  */
-import { ActionIcon, Badge, Combobox, Group, Pill, PillsInput, NativeSelect, SimpleGrid, ScrollArea, Stack, Text, useCombobox } from '@mantine/core';
-import { IconSearch, IconX } from '@tabler/icons-react';
-import { useMemo, useRef } from 'react';
+import { ActionIcon, Badge, Box, Combobox, Flex, Group, Pill, PillsInput, NativeSelect, ScrollArea, Stack, Text, VisuallyHidden, useCombobox } from '@mantine/core';
+import { IconArrowsSort, IconSearch, IconX } from '@tabler/icons-react';
+import { useId, useMemo, useRef, type ReactNode } from 'react';
 import type { UiCatalog } from '@crvouga/atlas/reports/ui-catalog';
 import { addCatalogTokens, catalogChipLabel, catalogTokens, catalogToken, CATALOG_SORTS, CLEAR_CATALOG_SEARCH, suggestCatalog } from './query';
 import { useCatalogNavigate } from './search';
 
-/** Rich search with live previews; Enter/Tab commits terms and Backspace reopens the last chip for editing. */
-export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues }: { catalog: UiCatalog; expression: string; draft: string; onDraft: (value: string, base?: string) => void; issues: readonly string[] }) {
+/** Rich search with live previews; Enter/Tab commits terms and Backspace reopens the last chip for editing. `end` closes the toolbar row (the layout control). */
+export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues, end }: { catalog: UiCatalog; expression: string; draft: string; onDraft: (value: string, base?: string) => void; issues: readonly string[]; end?: ReactNode }) {
   const go = useCatalogNavigate();
+  const id = useId();
   const field = useRef<HTMLInputElement>(null);
   const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
   const selected = useMemo(() => catalogTokens(expression), [expression]);
@@ -29,12 +30,12 @@ export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues }
   const chosen = (name: string) => selected.find(token => token.field === name)?.value ?? '';
   const remove = (index: number) => set(selected.filter((_, at) => at !== index).map(token => token.raw).join(' '));
   return (
-    <Stack gap="xs" component="section" aria-label="Catalog search">
+    <Stack gap={6} component="section" aria-label="Catalog search">
+      <Flex gap="sm" direction={{ base: 'column', md: 'row' }} align={{ base: 'stretch', md: 'flex-start' }}>
+      <Box flex={1} miw={0}>
       <Combobox store={combobox} onOptionSubmit={add} withinPortal={false} keepMounted={false}>
         <Combobox.DropdownTarget>
           <PillsInput
-            label="Search catalog"
-            description="Combine terms, filters and sorting. Every search term must match. Close spellings and common related terms work too."
             error={issues.length ? issues.join(' ') : undefined}
             leftSection={<IconSearch size={16} aria-hidden="true" />}
             rightSection={(expression || draft) ? <ActionIcon variant="subtle" aria-label="Clear catalog search" onClick={() => { set(''); onDraft(''); field.current?.focus(); }}><IconX size={16} aria-hidden="true" /></ActionIcon> : undefined}
@@ -74,6 +75,7 @@ export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues }
           </PillsInput>
         </Combobox.DropdownTarget>
         <Combobox.Dropdown>
+          <Combobox.Header><Text size="xs" c="dimmed">Combine terms, filters and sorting. Every search term must match. Close spellings and common related terms work too.</Text></Combobox.Header>
           <ScrollArea.Autosize mah="40vh" type="auto">
             <Combobox.Options aria-label="Search suggestions">
               {draft.trim() && <Combobox.Option value={draft.trim()}><Text>Search for “{draft.trim()}”</Text><Text size="xs" c="dimmed">Add your own words or a complete filter expression</Text></Combobox.Option>}
@@ -94,11 +96,19 @@ export function UiCatalogFilters({ catalog, expression, draft, onDraft, issues }
           <Combobox.Footer><Text size="xs" c="dimmed">Up/Down to choose · Enter or Tab to add · Backspace to edit the last chip · Escape to close</Text></Combobox.Footer>
         </Combobox.Dropdown>
       </Combobox>
-      <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="sm">
-        <NativeSelect label="Area" value={chosen('area')} onChange={event => choose('area', event.currentTarget.value)} data={[{ value: '', label: 'All areas' }, ...catalog.facets.areas.map(facet => ({ value: facet.value, label: `${facet.label ?? facet.value} (${facet.count})` }))]} />
-        <NativeSelect label="Profile" value={chosen('profile')} onChange={event => choose('profile', event.currentTarget.value)} data={[{ value: '', label: 'All profiles' }, ...catalog.profiles.map(profile => ({ value: profile.key, label: profile.label }))]} />
-        <NativeSelect label="Sort by" value={chosen('sort') || 'relevance'} onChange={event => choose('sort', event.currentTarget.value)} data={Object.entries(CATALOG_SORTS).map(([value, label]) => ({ value, label }))} />
-      </SimpleGrid>
+      </Box>
+      <Group gap="sm" wrap="nowrap" align="flex-start">
+        <VisuallyHidden renderRoot={props => <label {...props} htmlFor={`${id}-area`} />}>Area</VisuallyHidden>
+        <VisuallyHidden renderRoot={props => <label {...props} htmlFor={`${id}-profile`} />}>Profile</VisuallyHidden>
+        <VisuallyHidden renderRoot={props => <label {...props} htmlFor={`${id}-sort`} />}>Sort by</VisuallyHidden>
+        <Group gap="sm" wrap="nowrap" grow flex={1} w={{ md: 480 }}>
+          <NativeSelect id={`${id}-area`} value={chosen('area')} onChange={event => choose('area', event.currentTarget.value)} data={[{ value: '', label: 'All areas' }, ...catalog.facets.areas.map(facet => ({ value: facet.value, label: `${facet.label ?? facet.value} (${facet.count})` }))]} />
+          <NativeSelect id={`${id}-profile`} value={chosen('profile')} onChange={event => choose('profile', event.currentTarget.value)} data={[{ value: '', label: 'All profiles' }, ...catalog.profiles.map(profile => ({ value: profile.key, label: profile.label }))]} />
+          <NativeSelect id={`${id}-sort`} leftSection={<IconArrowsSort size={16} aria-hidden="true" />} value={chosen('sort') || 'relevance'} onChange={event => choose('sort', event.currentTarget.value)} data={Object.entries(CATALOG_SORTS).map(([value, label]) => ({ value, label }))} />
+        </Group>
+        {end}
+      </Group>
+      </Flex>
       <Text size="xs" c="dimmed">Search recorded names and facts. Try kind:error for product error screens; coverage:failed for failed captures. Type sort: to choose an order.</Text>
     </Stack>
   );
