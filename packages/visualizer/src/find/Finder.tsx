@@ -347,7 +347,7 @@ export function Finder() {
                       <Group gap="xs" wrap="nowrap">
                         {hit.exact && <Badge color="blue" size="sm">Exact</Badge>}
                         {hit.partial && <Badge variant="default" size="sm">Partial</Badge>}
-                        <Text size="xs" inherit>{hit.doc.group === 'Commands' ? 'Command' : KIND_WORD[hit.doc.kind]}</Text>
+                        <Text size="xs">{hit.doc.group === 'Commands' ? 'Command' : KIND_WORD[hit.doc.kind]}</Text>
                       </Group>
                     }
                   />

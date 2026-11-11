@@ -128,7 +128,7 @@ function FocusedGallery({ state, states, profile, scope, onProfile, onSelect, on
                 <IconAction variant="default" label="Next item in catalog" tip="Next item" disabled={index === states.length - 1} onClick={() => select(index + 2)}><IconArrowRight size={16} aria-hidden="true" /></IconAction>
               </ActionIcon.Group>}
             </Group>
-            {index >= 0 && <Pagination total={states.length} value={index + 1} onChange={select} layout="responsive" withControls={false} size="sm"
+            {index >= 0 && <Pagination total={states.length} value={index + 1} onChange={select} withControls={false} size="sm"
               formatLabel={({ page, totalPages }) => `Item ${page} of ${totalPages}`}
               getItemProps={page => ({ 'aria-label': `Go to item ${page}: ${states[page - 1]!.title}`, 'aria-current': page === index + 1 ? 'page' : undefined })} />}
           </Stack>
